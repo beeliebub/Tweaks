@@ -1,0 +1,26 @@
+name: Tweaks
+version: '1.0-SNAPSHOT'
+
+main: me.beeliebub.tweaks.Tweaks
+api-version: '26.1.1'
+load: POSTWORLD
+
+commands:
+  home:
+    description: Teleport to a saved home.
+  sethome:
+    description: Set a home at your current location.
+  delhome:
+    description: Delete a saved home.
+  homes:
+    description: List all your saved homes.
+  warp:
+    description: Teleport to a warp.
+  setwarp:
+    description: Set a warp.
+  delwarp:
+    description: Delete a warp.
+  warps:
+    description: List all warps.
+  spawn:
+    description: Teleport to the world spawn.
