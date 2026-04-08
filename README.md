@@ -40,8 +40,8 @@ max-homes: 15
 
 ## Requirements
 
-- **Minecraft Version**: 1.20.x or newer (Supports Paper/Spigot API).
-- **Java**: 21 or newer.
+- **Minecraft Version**: 26.1.1 (Supports Paper API).
+- **Java**: 25 or newer.
 
 ## Building
 
