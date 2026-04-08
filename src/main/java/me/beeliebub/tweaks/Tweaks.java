@@ -10,8 +10,6 @@ public class Tweaks extends JavaPlugin {
     @Override
     public void onEnable() {
 
-        // Generate a README.md file in the root directory
-
         saveDefaultConfig();
         maxHomes = getConfig().getInt("max-homes", 3);
         
