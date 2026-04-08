@@ -1,6 +1,5 @@
 package me.beeliebub.tweaks;
 
-import me.beeliebub.tweaks.Point;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -15,9 +14,11 @@ public class StorageManager {
     private final JavaPlugin plugin;
     private final File homesDir;
     private final File warpsFile;
+    private final File invDir;
 
     private final Map<UUID, Map<String, Point>> homes = new ConcurrentHashMap<>();
     private final Map<String, Point> warps = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<String, String>> inventoryCache = new ConcurrentHashMap<>();
 
     public StorageManager(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -26,6 +27,11 @@ public class StorageManager {
         this.homesDir = new File(plugin.getDataFolder(), "homes");
         if (!homesDir.exists()) {
             homesDir.mkdirs();
+        }
+
+        this.invDir = new File(plugin.getDataFolder(), "inventories");
+        if (!invDir.exists()) {
+            invDir.mkdirs();
         }
 
         loadData();
@@ -178,4 +184,43 @@ public class StorageManager {
             }
         }
     }
+
+    public void loadPlayerInventoriesAsync(UUID player) {
+        CompletableFuture.runAsync(() -> {
+            File file = new File(invDir, player.toString() + ".yml");
+            Map<String, String> data = new ConcurrentHashMap<>();
+
+            if (file.exists()) {
+                YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
+                for (String profileKey : config.getKeys(false)) {
+                    data.put(profileKey, config.getString(profileKey));
+                }
+            }
+            inventoryCache.put(player, data);
+        });
+    }
+
+    public void unloadAndSavePlayerInventoriesAsync(UUID player) {
+        Map<String, String> data = inventoryCache.remove(player);
+        if (data == null || data.isEmpty()) return;
+
+        CompletableFuture.runAsync(() -> {
+            File file = new File(invDir, player.toString() + ".yml");
+            YamlConfiguration config = new YamlConfiguration();
+
+            data.forEach(config::set);
+
+            try { config.save(file); } catch (IOException e) { e.printStackTrace(); }
+        });
+    }
+
+    public void cacheInventory(UUID player, String profile, String base64) {
+        inventoryCache.computeIfAbsent(player, k -> new ConcurrentHashMap<>()).put(profile, base64);
+    }
+
+    public String getCachedInventory(UUID player, String profile) {
+        Map<String, String> data = inventoryCache.get(player);
+        return data != null ? data.get(profile) : null;
+    }
+
 }
