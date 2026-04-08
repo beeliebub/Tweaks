@@ -27,7 +27,7 @@ public class Tweaks extends JavaPlugin {
 
         getCommand("spawn").setExecutor(new SpawnCommand(storageManager));
 
-        getServer().getPluginManager().registerEvents(new EndPortalListener(), this);
+        getServer().getPluginManager().registerEvents(new EndPortalListener(this), this);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
     }
