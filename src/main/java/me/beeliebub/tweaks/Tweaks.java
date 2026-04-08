@@ -27,6 +27,7 @@ public class Tweaks extends JavaPlugin {
 
         getCommand("spawn").setExecutor(new SpawnCommand(storageManager));
         getCommand("nv").setExecutor(new NightVisionCommand());
+        getCommand("config").setExecutor(new ConfigCommand(this));
 
         getServer().getPluginManager().registerEvents(new EndPortalListener(this), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(storageManager), this);

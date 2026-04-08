@@ -26,3 +26,5 @@ commands:
     description: Teleport to the world spawn.
   nv:
     description: Toggle night vision.
+  config:
+    description: Update config options.

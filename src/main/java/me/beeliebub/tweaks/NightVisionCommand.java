@@ -27,7 +27,7 @@ public class NightVisionCommand implements CommandExecutor {
         }
 
         else {
-            player.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION, Integer.MAX_VALUE, 0, false));
+            player.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION, Integer.MAX_VALUE, 0, false, false));
             player.sendMessage(Component.text("Night vision enabled!", NamedTextColor.GREEN));
             return true;
         }
