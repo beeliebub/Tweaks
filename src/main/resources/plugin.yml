@@ -24,3 +24,5 @@ commands:
     description: List all warps.
   spawn:
     description: Teleport to the world spawn.
+  nv:
+    description: Toggle night vision.
