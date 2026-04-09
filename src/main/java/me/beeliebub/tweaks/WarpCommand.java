@@ -28,11 +28,6 @@ public class WarpCommand implements CommandExecutor {
             return true;
         }
 
-        if (!player.hasPermission("tweaks.warp")) {
-            player.sendMessage(Component.text("No permission.").color(NamedTextColor.RED));
-            return true;
-        }
-
         if (args.length != 1) {
             player.sendMessage(Component.text("Usage: /warp <name>").color(NamedTextColor.YELLOW));
             return true;
