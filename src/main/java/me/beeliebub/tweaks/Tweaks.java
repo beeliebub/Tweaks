@@ -1,5 +1,8 @@
 package me.beeliebub.tweaks;
 
+import me.beeliebub.tweaks.commands.*;
+import me.beeliebub.tweaks.listeners.*;
+import me.beeliebub.tweaks.managers.*;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class Tweaks extends JavaPlugin {
@@ -32,6 +35,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new EndPortalListener(this), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(storageManager), this);
         getServer().getPluginManager().registerEvents(new TrampleListener(), this);
+        getServer().getPluginManager().registerEvents(new TabManager(), this);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
     }

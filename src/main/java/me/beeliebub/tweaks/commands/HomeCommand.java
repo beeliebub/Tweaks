@@ -1,5 +1,7 @@
-package me.beeliebub.tweaks;
+package me.beeliebub.tweaks.commands;
 
+import me.beeliebub.tweaks.Point;
+import me.beeliebub.tweaks.managers.StorageManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;

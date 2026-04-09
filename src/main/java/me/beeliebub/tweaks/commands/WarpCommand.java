@@ -1,5 +1,7 @@
-package me.beeliebub.tweaks;
+package me.beeliebub.tweaks.commands;
 
+import me.beeliebub.tweaks.managers.StorageManager;
+import me.beeliebub.tweaks.Point;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
@@ -10,11 +12,11 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Optional;
 
-public class SpawnCommand implements CommandExecutor {
+public class WarpCommand implements CommandExecutor {
 
     private final StorageManager manager;
 
-    public SpawnCommand(StorageManager manager) {
+    public WarpCommand(StorageManager manager) {
         this.manager = manager;
     }
 
@@ -22,22 +24,28 @@ public class SpawnCommand implements CommandExecutor {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
 
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can teleport to spawn.").color(NamedTextColor.RED));
+            sender.sendMessage(Component.text("Only players can use warps.").color(NamedTextColor.RED));
             return true;
         }
 
-        String warpName = "spawn";
+        if (args.length != 1) {
+            player.sendMessage(Component.text("Usage: /warp <name>").color(NamedTextColor.YELLOW));
+            return true;
+        }
+
+        String warpName = args[0];
         Optional<Point> pointOpt = manager.getWarp(warpName);
         if (pointOpt.isEmpty()) {
-            player.sendMessage(Component.text("Spawn has not been set!").color(NamedTextColor.RED));
+            player.sendMessage(Component.text("Warp '" + warpName + "' does not exist!").color(NamedTextColor.RED));
             return true;
         }
 
         pointOpt.get().toLocation().ifPresentOrElse(loc -> {
-            player.sendMessage(Component.text("Teleporting to spawn...").color(NamedTextColor.GREEN));
+            player.sendMessage(Component.text("Warping to '" + warpName + "'...").color(NamedTextColor.GREEN));
             player.teleportAsync(loc);
-        }, () -> player.sendMessage(Component.text("The world for spawn is not loaded.").color(NamedTextColor.RED)));
+        }, () -> player.sendMessage(Component.text("The world for this warp is not loaded.").color(NamedTextColor.RED)));
 
         return true;
     }
+
 }

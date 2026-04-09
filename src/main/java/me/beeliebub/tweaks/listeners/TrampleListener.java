@@ -1,4 +1,4 @@
-package me.beeliebub.tweaks;
+package me.beeliebub.tweaks.listeners;
 
 import org.bukkit.Material;
 import org.bukkit.block.Block;

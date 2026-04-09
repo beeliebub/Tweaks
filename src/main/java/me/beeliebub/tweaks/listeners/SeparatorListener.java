@@ -1,5 +1,7 @@
-package me.beeliebub.tweaks;
+package me.beeliebub.tweaks.listeners;
 
+import me.beeliebub.tweaks.InventoryUtil;
+import me.beeliebub.tweaks.managers.StorageManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
