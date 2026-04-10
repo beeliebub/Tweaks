@@ -46,6 +46,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new TabManager(), this);
         getServer().getPluginManager().registerEvents(nickCommand, this);
         getServer().getPluginManager().registerEvents(backCommand, this);
+        getServer().getPluginManager().registerEvents(new MobGriefListener(), this);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
     }
