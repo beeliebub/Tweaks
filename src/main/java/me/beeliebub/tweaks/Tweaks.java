@@ -20,6 +20,7 @@ public class Tweaks extends JavaPlugin {
         storageManager = new StorageManager(this);
         NickCommand nickCommand = new NickCommand(this);
         TPACommand tpaCommand = new TPACommand(this);
+        BackCommand backCommand = new BackCommand(this);
         
         getCommand("home").setExecutor(new HomeCommand(storageManager));
         getCommand("sethome").setExecutor(new SetHomeCommand(storageManager, maxHomes));
@@ -37,12 +38,14 @@ public class Tweaks extends JavaPlugin {
         getCommand("tpahere").setExecutor(tpaCommand);
         getCommand("tpaccept").setExecutor(tpaCommand);
         getCommand("tpdeny").setExecutor(tpaCommand);
+        getCommand("back").setExecutor(backCommand);
 
         getServer().getPluginManager().registerEvents(new EndPortalListener(this), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(storageManager), this);
         getServer().getPluginManager().registerEvents(new TrampleListener(), this);
         getServer().getPluginManager().registerEvents(new TabManager(), this);
         getServer().getPluginManager().registerEvents(nickCommand, this);
+        getServer().getPluginManager().registerEvents(backCommand, this);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
     }

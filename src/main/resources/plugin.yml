@@ -36,3 +36,5 @@ commands:
     description: Accept an incoming TPA request
   tpdeny:
     description: Deny an incoming TPA request
+  back:
+    description: Return to your previous location
