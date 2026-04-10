@@ -1,4 +1,4 @@
-package me.beeliebub.tweaks.managers;
+package me.beeliebub.tweaks.combos;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;

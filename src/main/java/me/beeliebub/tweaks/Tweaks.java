@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks;
 
+import me.beeliebub.tweaks.combos.*;
 import me.beeliebub.tweaks.commands.*;
 import me.beeliebub.tweaks.listeners.*;
 import me.beeliebub.tweaks.managers.*;
@@ -12,6 +13,10 @@ public class Tweaks extends JavaPlugin {
 
     @Override
     public void onEnable() {
+
+        NickCommand nickCommand = new NickCommand(this);
+        getCommand("nick").setExecutor(nickCommand);
+        getServer().getPluginManager().registerEvents(nickCommand, this);
 
         saveDefaultConfig();
         maxHomes = getConfig().getInt("max-homes", 3);
