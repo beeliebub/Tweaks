@@ -14,33 +14,35 @@ public class Tweaks extends JavaPlugin {
     @Override
     public void onEnable() {
 
-        NickCommand nickCommand = new NickCommand(this);
-        getCommand("nick").setExecutor(nickCommand);
-        getServer().getPluginManager().registerEvents(nickCommand, this);
-
         saveDefaultConfig();
         maxHomes = getConfig().getInt("max-homes", 3);
         
         storageManager = new StorageManager(this);
+        NickCommand nickCommand = new NickCommand(this);
+        TPACommand tpaCommand = new TPACommand(this);
         
         getCommand("home").setExecutor(new HomeCommand(storageManager));
         getCommand("sethome").setExecutor(new SetHomeCommand(storageManager, maxHomes));
         getCommand("delhome").setExecutor(new DelHomeCommand(storageManager));
         getCommand("homes").setExecutor(new HomesCommand(storageManager));
-
         getCommand("warp").setExecutor(new WarpCommand(storageManager));
         getCommand("setwarp").setExecutor(new SetWarpCommand(storageManager));
         getCommand("delwarp").setExecutor(new DelWarpCommand(storageManager));
         getCommand("warps").setExecutor(new WarpsCommand(storageManager));
-
         getCommand("spawn").setExecutor(new SpawnCommand(storageManager));
         getCommand("nv").setExecutor(new NightVisionCommand());
         getCommand("config").setExecutor(new ConfigCommand(this));
+        getCommand("nick").setExecutor(nickCommand);
+        getCommand("tpa").setExecutor(tpaCommand);
+        getCommand("tpahere").setExecutor(tpaCommand);
+        getCommand("tpaccept").setExecutor(tpaCommand);
+        getCommand("tpdeny").setExecutor(tpaCommand);
 
         getServer().getPluginManager().registerEvents(new EndPortalListener(this), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(storageManager), this);
         getServer().getPluginManager().registerEvents(new TrampleListener(), this);
         getServer().getPluginManager().registerEvents(new TabManager(), this);
+        getServer().getPluginManager().registerEvents(nickCommand, this);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
     }

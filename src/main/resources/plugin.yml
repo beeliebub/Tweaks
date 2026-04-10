@@ -28,3 +28,11 @@ commands:
     description: Toggle night vision.
   config:
     description: Update config options.
+  tpa:
+    description: Request to teleport to a player
+  tpahere:
+    description: Request a player to teleport to you
+  tpaccept:
+    description: Accept an incoming TPA request
+  tpdeny:
+    description: Deny an incoming TPA request
