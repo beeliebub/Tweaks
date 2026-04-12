@@ -28,6 +28,7 @@ public class BackCommand implements CommandExecutor, Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onTeleport(PlayerTeleportEvent event) {
+        if (event.getCause() == PlayerTeleportEvent.TeleportCause.UNKNOWN) return;
         Location from = event.getFrom();
         String serialized = from.getWorld().getName()
                 + "," + from.getX()

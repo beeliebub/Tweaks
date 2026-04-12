@@ -3,4 +3,12 @@ max-homes: 15
 
 # Worlds where the end portal is disabled.
 disabled-end-portal-worlds:
-  - jass:archive
+  - "jass:archive"
+
+# Worlds where fly is enabled by default.
+fly-worlds:
+  - "jass:archive"
+  - "jass:lobby"
+
+# Flight permission advancement
+fly-advancement: "jass:test"

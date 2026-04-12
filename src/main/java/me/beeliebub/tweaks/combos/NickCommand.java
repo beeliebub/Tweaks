@@ -54,7 +54,8 @@ public class NickCommand implements CommandExecutor, Listener {
                              @NotNull String label, @NotNull String @NotNull [] args) {
 
         if (args.length == 0) {
-            sender.sendMessage(Component.text("Usage: /nick <nickname> | /nick off [player]", NamedTextColor.YELLOW));
+            sender.sendMessage(Component.text("Usage: /nick <nickname> | /nick off [player]")
+                    .color(NamedTextColor.YELLOW));
             return true;
         }
 
@@ -69,7 +70,7 @@ public class NickCommand implements CommandExecutor, Listener {
 
         if (args.length == 2) {
             if (!sender.hasPermission("tweaks.admin.nick")) {
-                sender.sendMessage(Component.text("No permission.", NamedTextColor.RED));
+                sender.sendMessage(Component.text("No permission.").color(NamedTextColor.RED));
                 return true;
             }
 
@@ -78,8 +79,10 @@ public class NickCommand implements CommandExecutor, Listener {
             Player onlineTarget = Bukkit.getPlayerExact(targetName);
             if (onlineTarget != null) {
                 clearNickname(onlineTarget);
-                sender.sendMessage(Component.text("Removed nickname for " + onlineTarget.getName() + ".", NamedTextColor.GREEN));
-                onlineTarget.sendMessage(Component.text("Your nickname has been removed by an admin.", NamedTextColor.YELLOW));
+                sender.sendMessage(Component.text("Removed nickname for " + onlineTarget.getName() + ".")
+                        .color(NamedTextColor.GREEN));
+                onlineTarget.sendMessage(Component.text("Your nickname has been removed by an admin.")
+                        .color(NamedTextColor.YELLOW));
                 return true;
             }
 
@@ -87,7 +90,8 @@ public class NickCommand implements CommandExecutor, Listener {
             OfflinePlayer offlineTarget = Bukkit.getOfflinePlayer(targetName);
 
             if (!offlineTarget.hasPlayedBefore()) {
-                sender.sendMessage(Component.text("Player '" + targetName + "' has never joined the server.", NamedTextColor.RED));
+                sender.sendMessage(Component.text("Player '" + targetName + "' has never joined the server.")
+                        .color(NamedTextColor.RED));
                 return true;
             }
 
@@ -95,50 +99,61 @@ public class NickCommand implements CommandExecutor, Listener {
             savePendingRemovalsAsync();
 
             String resolvedName = offlineTarget.getName() != null ? offlineTarget.getName() : targetName;
-            sender.sendMessage(Component.text("Nickname removal queued for " + resolvedName + ". It will be cleared on their next login.", NamedTextColor.GREEN));
+            sender.sendMessage(Component.text("Nickname removal queued for " + resolvedName
+                            + ". It will be cleared on their next login.")
+                    .color(NamedTextColor.GREEN));
             return true;
         }
 
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Console usage: /nick off <player>", NamedTextColor.RED));
+            sender.sendMessage(Component.text("Console usage: /nick off <player>")
+                    .color(NamedTextColor.RED));
+            return true;
+        }
+
+        if (!player.hasPermission("tweaks.nick")) {
+            player.sendMessage(Component.text("No permission.").color(NamedTextColor.RED));
             return true;
         }
 
         if (!player.getPersistentDataContainer().has(nickKey)) {
-            player.sendMessage(Component.text("You don't have a nickname set.", NamedTextColor.YELLOW));
+            player.sendMessage(Component.text("You don't have a nickname set.")
+                    .color(NamedTextColor.YELLOW));
             return true;
         }
 
         clearNickname(player);
-        player.sendMessage(Component.text("Nickname removed!", NamedTextColor.GREEN));
+        player.sendMessage(Component.text("Nickname removed!").color(NamedTextColor.GREEN));
         return true;
     }
 
     private boolean handleSet(CommandSender sender, String[] args) {
 
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can set nicknames.", NamedTextColor.RED));
+            sender.sendMessage(Component.text("Only players can set nicknames.")
+                    .color(NamedTextColor.RED));
+            return true;
+        }
+
+        if (!player.hasPermission("tweaks.nick")) {
+            player.sendMessage(Component.text("No permission.").color(NamedTextColor.RED));
             return true;
         }
 
         String rawInput = String.join(" ", args);
         Component nickname = COLOR_SERIALIZER.deserialize(rawInput);
-
         player.getPersistentDataContainer().set(nickKey, PersistentDataType.STRING, rawInput);
-
         player.displayName(nickname);
-        player.playerListName(nickname);
 
-        player.sendMessage(Component.text("Nickname set to ", NamedTextColor.GREEN)
+        player.sendMessage(Component.text("Nickname set to ").color(NamedTextColor.GREEN)
                 .append(nickname)
-                .append(Component.text("!", NamedTextColor.GREEN)));
+                .append(Component.text("!").color(NamedTextColor.GREEN)));
         return true;
     }
 
     private void clearNickname(Player player) {
         player.getPersistentDataContainer().remove(nickKey);
         player.displayName(null);
-        player.playerListName(null);
     }
 
     @EventHandler(priority = EventPriority.LOW)
@@ -147,7 +162,8 @@ public class NickCommand implements CommandExecutor, Listener {
         UUID uuid = player.getUniqueId();
 
         if (pendingRemovals.remove(uuid)) {
-            clearNickname(player);
+            player.getPersistentDataContainer().remove(nickKey);
+            player.displayName(null);
             savePendingRemovalsAsync();
             return;
         }
@@ -158,18 +174,16 @@ public class NickCommand implements CommandExecutor, Listener {
         if (rawNick != null && !rawNick.isEmpty()) {
             Component nickname = COLOR_SERIALIZER.deserialize(rawNick);
             player.displayName(nickname);
-            player.playerListName(nickname);
         }
     }
-
 
     private void loadPendingRemovals() {
         if (!pendingFile.exists()) return;
 
         YamlConfiguration config = YamlConfiguration.loadConfiguration(pendingFile);
-        List<String> UUIDs = config.getStringList("pending");
+        List<String> uuids = config.getStringList("pending");
 
-        for (String raw : UUIDs) {
+        for (String raw : uuids) {
             try {
                 pendingRemovals.add(UUID.fromString(raw));
             } catch (IllegalArgumentException ignored) {

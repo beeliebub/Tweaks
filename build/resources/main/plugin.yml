@@ -1,5 +1,5 @@
 name: Tweaks
-version: '1.2-SNAPSHOT'
+version: '1.2.1-SNAPSHOT'
 
 main: me.beeliebub.tweaks.Tweaks
 api-version: '26.1.1'
@@ -40,3 +40,5 @@ commands:
     description: Deny an incoming TPA request
   back:
     description: Return to your previous location
+  fly:
+    description: Toggle flight mode

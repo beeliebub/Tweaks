@@ -18,10 +18,17 @@ public class Tweaks extends JavaPlugin {
         maxHomes = getConfig().getInt("max-homes", 3);
         
         storageManager = new StorageManager(this);
+        TabManager tabManager = new TabManager();
         NickCommand nickCommand = new NickCommand(this);
         TPACommand tpaCommand = new TPACommand(this);
         BackCommand backCommand = new BackCommand(this);
         FlyCommand flyCommand = new FlyCommand(this);
+
+        // TODO this REALLY needs to be cleaned up...
+
+        getServer().getPluginManager().registerEvents(tabManager, this);
+        getCommand("nick").setExecutor(nickCommand);
+        getServer().getPluginManager().registerEvents(nickCommand, this);
         
         getCommand("home").setExecutor(new HomeCommand(storageManager));
         getCommand("sethome").setExecutor(new SetHomeCommand(storageManager, maxHomes));
@@ -34,7 +41,6 @@ public class Tweaks extends JavaPlugin {
         getCommand("spawn").setExecutor(new SpawnCommand(storageManager));
         getCommand("nv").setExecutor(new NightVisionCommand());
         getCommand("config").setExecutor(new ConfigCommand(this));
-        getCommand("nick").setExecutor(nickCommand);
         getCommand("tpa").setExecutor(tpaCommand);
         getCommand("tpahere").setExecutor(tpaCommand);
         getCommand("tpaccept").setExecutor(tpaCommand);
@@ -45,8 +51,6 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new EndPortalListener(this), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(storageManager), this);
         getServer().getPluginManager().registerEvents(new TrampleListener(), this);
-        getServer().getPluginManager().registerEvents(new TabManager(), this);
-        getServer().getPluginManager().registerEvents(nickCommand, this);
         getServer().getPluginManager().registerEvents(backCommand, this);
         getServer().getPluginManager().registerEvents(new MobGriefListener(), this);
         getServer().getPluginManager().registerEvents(flyCommand, this);
