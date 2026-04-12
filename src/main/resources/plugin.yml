@@ -40,3 +40,5 @@ commands:
     description: Deny an incoming TPA request
   back:
     description: Return to your previous location
+  fly:
+    description: Toggle flight mode

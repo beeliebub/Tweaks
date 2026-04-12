@@ -28,6 +28,8 @@ commands:
     description: Toggle night vision.
   config:
     description: Update config options.
+  nick:
+    description: Set or remove your nickname
   tpa:
     description: Request to teleport to a player
   tpahere:
