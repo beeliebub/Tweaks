@@ -49,7 +49,7 @@ public class Tweaks extends JavaPlugin {
         getCommand("fly").setExecutor(flyCommand);
 
         getServer().getPluginManager().registerEvents(new EndPortalListener(this), this);
-        getServer().getPluginManager().registerEvents(new SeparatorListener(storageManager), this);
+        getServer().getPluginManager().registerEvents(new SeparatorListener(this, storageManager), this);
         getServer().getPluginManager().registerEvents(new TrampleListener(), this);
         getServer().getPluginManager().registerEvents(backCommand, this);
         getServer().getPluginManager().registerEvents(new MobGriefListener(), this);

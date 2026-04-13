@@ -186,8 +186,8 @@ public class StorageManager {
         }
     }
 
-    public void loadPlayerInventoriesAsync(UUID player) {
-        CompletableFuture.runAsync(() -> {
+    public CompletableFuture<Void> loadPlayerInventoriesAsync(UUID player) {
+        return CompletableFuture.runAsync(() -> {
             File file = new File(invDir, player.toString() + ".yml");
             Map<String, String> data = new ConcurrentHashMap<>();
 
