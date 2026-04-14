@@ -12,3 +12,12 @@ fly-worlds:
 
 # Flight permission advancement
 fly-advancement: "jass:test"
+
+# Namespaced key of the custom enchantments.
+telekinesis: "jass:test1"
+smelter: "jass:test2"
+lumberjack: "jass:test3"
+tunneller: "jass:test5"
+spawner-pickup: "jass:test6"
+egg-collector: "jass:test7"
+replant: "jass:test8"
