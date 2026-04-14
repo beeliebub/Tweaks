@@ -3,6 +3,7 @@ package me.beeliebub.tweaks;
 import me.beeliebub.tweaks.combos.*;
 import me.beeliebub.tweaks.commands.*;
 import me.beeliebub.tweaks.enchantments.EggCollector;
+import me.beeliebub.tweaks.enchantments.GemConnoisseur;
 import me.beeliebub.tweaks.enchantments.Lumberjack;
 import me.beeliebub.tweaks.enchantments.Replant;
 import me.beeliebub.tweaks.enchantments.Smelter;
@@ -68,6 +69,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new SpawnerPickup(this), this);
         getServer().getPluginManager().registerEvents(new EggCollector(this), this);
         getServer().getPluginManager().registerEvents(new Replant(this, telekinesis), this);
+        getServer().getPluginManager().registerEvents(new GemConnoisseur(this), this);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
     }
