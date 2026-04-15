@@ -69,7 +69,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new SpawnerPickup(this), this);
         getServer().getPluginManager().registerEvents(new EggCollector(this), this);
         getServer().getPluginManager().registerEvents(new Replant(this, telekinesis), this);
-        getServer().getPluginManager().registerEvents(new GemConnoisseur(this), this);
+        getServer().getPluginManager().registerEvents(new GemConnoisseur(this, telekinesis), this);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
     }

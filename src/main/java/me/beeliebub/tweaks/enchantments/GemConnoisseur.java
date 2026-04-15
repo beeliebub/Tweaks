@@ -26,11 +26,13 @@ public class GemConnoisseur implements Listener {
 
     private final Enchantment enchantment;
     private final Map<Integer, Map<String, Map<Material, Integer>>> rates;
+    private final Telekinesis telekinesis;
 
-    public GemConnoisseur(Tweaks plugin) {
+    public GemConnoisseur(Tweaks plugin, Telekinesis telekinesis) {
         String raw = plugin.getConfig().getString("gem-connoisseur");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.rates = loadRates(plugin);
+        this.telekinesis = telekinesis;
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -112,6 +114,7 @@ public class GemConnoisseur implements Listener {
 
         ThreadLocalRandom random = ThreadLocalRandom.current();
         int fortuneLevel = tool.getEnchantmentLevel(Enchantment.FORTUNE);
+        boolean routeToInventory = telekinesis != null && telekinesis.hasEnchant(tool);
 
         for (Map.Entry<Material, Integer> entry : materialRates.entrySet()) {
             int oneIn = entry.getValue();
@@ -124,7 +127,15 @@ public class GemConnoisseur implements Listener {
                 if (bonus > 0) amount += bonus;
             }
 
-            block.getWorld().dropItemNaturally(block.getLocation(), new ItemStack(entry.getKey(), amount));
+            ItemStack drop = new ItemStack(entry.getKey(), amount);
+            if (routeToInventory) {
+                Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
+                for (ItemStack remaining : leftover.values()) {
+                    block.getWorld().dropItemNaturally(block.getLocation(), remaining);
+                }
+            } else {
+                block.getWorld().dropItemNaturally(block.getLocation(), drop);
+            }
         }
     }
 
