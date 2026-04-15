@@ -74,11 +74,15 @@ public class Replant implements Listener {
 
         BlockData data = block.getBlockData();
         if (!(data instanceof Ageable ageable)) return;
-        if (ageable.getAge() < ageable.getMaximumAge()) return;
 
         Player player = event.getPlayer();
         ItemStack tool = player.getInventory().getItemInMainHand();
         if (tool.isEmpty() || !tool.containsEnchantment(enchantment)) return;
+
+        if (ageable.getAge() < ageable.getMaximumAge()) {
+            event.setCancelled(true);
+            return;
+        }
 
         Collection<ItemStack> drops = block.getDrops(tool, player);
         List<ItemStack> remaining = new ArrayList<>(drops.size());
