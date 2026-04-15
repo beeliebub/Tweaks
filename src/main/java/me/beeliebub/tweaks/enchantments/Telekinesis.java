@@ -3,8 +3,10 @@ package me.beeliebub.tweaks.enchantments;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
+import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -12,11 +14,22 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Deque;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Level;
 
 public class Telekinesis implements Listener {
+
+    private static final BlockFace[] CHORUS_FACES = {
+            BlockFace.UP, BlockFace.DOWN, BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST
+    };
 
     private final Enchantment enchantment;
 
@@ -57,15 +70,78 @@ public class Telekinesis implements Listener {
 
         Block block = event.getBlock();
         Collection<ItemStack> drops = block.getDrops(tool, player);
-        if (drops.isEmpty()) return;
-
-        event.setDropItems(false);
-
-        for (ItemStack drop : drops) {
-            Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
-            for (ItemStack remaining : leftover.values()) {
-                block.getWorld().dropItemNaturally(block.getLocation(), remaining);
+        if (!drops.isEmpty()) {
+            event.setDropItems(false);
+            for (ItemStack drop : drops) {
+                giveOrDrop(player, block, drop);
             }
+        }
+
+        chainBreakPlants(block, player, tool);
+    }
+
+    private void chainBreakPlants(Block origin, Player player, ItemStack tool) {
+        List<Block> chain = new ArrayList<>();
+        switch (origin.getType()) {
+            case SUGAR_CANE, CACTUS, BAMBOO ->
+                    collectLinear(origin, BlockFace.UP, EnumSet.of(origin.getType()), chain);
+            case KELP, KELP_PLANT ->
+                    collectLinear(origin, BlockFace.UP, EnumSet.of(Material.KELP, Material.KELP_PLANT), chain);
+            case TWISTING_VINES, TWISTING_VINES_PLANT ->
+                    collectLinear(origin, BlockFace.UP, EnumSet.of(Material.TWISTING_VINES, Material.TWISTING_VINES_PLANT), chain);
+            case WEEPING_VINES, WEEPING_VINES_PLANT ->
+                    collectLinear(origin, BlockFace.DOWN, EnumSet.of(Material.WEEPING_VINES, Material.WEEPING_VINES_PLANT), chain);
+            case VINE ->
+                    collectLinear(origin, BlockFace.DOWN, EnumSet.of(Material.VINE), chain);
+            case POINTED_DRIPSTONE -> {
+                collectLinear(origin, BlockFace.UP, EnumSet.of(Material.POINTED_DRIPSTONE), chain);
+                collectLinear(origin, BlockFace.DOWN, EnumSet.of(Material.POINTED_DRIPSTONE), chain);
+            }
+            case CHORUS_PLANT -> collectChorus(origin, chain);
+            default -> {
+                return;
+            }
+        }
+
+        for (Block b : chain) {
+            Collection<ItemStack> chainDrops = b.getDrops(tool, player);
+            b.setType(Material.AIR, false);
+            for (ItemStack drop : chainDrops) {
+                giveOrDrop(player, b, drop);
+            }
+        }
+    }
+
+    private void collectLinear(Block origin, BlockFace face, Set<Material> valid, List<Block> out) {
+        Block current = origin.getRelative(face);
+        while (valid.contains(current.getType())) {
+            out.add(current);
+            current = current.getRelative(face);
+        }
+    }
+
+    private void collectChorus(Block origin, List<Block> out) {
+        Deque<Block> stack = new ArrayDeque<>();
+        Set<Block> visited = new HashSet<>();
+        stack.push(origin);
+        visited.add(origin);
+        while (!stack.isEmpty()) {
+            Block b = stack.pop();
+            for (BlockFace face : CHORUS_FACES) {
+                Block neighbor = b.getRelative(face);
+                if (!visited.add(neighbor)) continue;
+                if (neighbor.getType() == Material.CHORUS_PLANT) {
+                    out.add(neighbor);
+                    stack.push(neighbor);
+                }
+            }
+        }
+    }
+
+    private void giveOrDrop(Player player, Block block, ItemStack drop) {
+        Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
+        for (ItemStack remaining : leftover.values()) {
+            block.getWorld().dropItemNaturally(block.getLocation(), remaining);
         }
     }
 }
