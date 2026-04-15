@@ -47,9 +47,7 @@ public class SeparatorListener implements Listener {
     }
 
     private boolean hasEnderChestData(UUID player) {
-        return storage.getCachedInventory(player, EC_PREFIX + PROFILE_STANDARD) != null
-                || storage.getCachedInventory(player, EC_PREFIX + PROFILE_LOBBY) != null
-                || storage.getCachedInventory(player, EC_PREFIX + PROFILE_ARCHIVE) != null;
+        return storage.getCachedInventory(player, EC_PREFIX + PROFILE_STANDARD) != null || storage.getCachedInventory(player, EC_PREFIX + PROFILE_LOBBY) != null || storage.getCachedInventory(player, EC_PREFIX + PROFILE_ARCHIVE) != null;
     }
 
     private void migrateEnderChest(Player player) {
@@ -67,7 +65,12 @@ public class SeparatorListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerDeath(PlayerDeathEvent event) {
-        recentDeaths.add(event.getPlayer().getUniqueId());
+        Player player = event.getPlayer();
+        UUID uuid = player.getUniqueId();
+        recentDeaths.add(uuid);
+
+        String currentProfile = getProfileForWorldKey(player.getWorld().getKey().asString());
+        storage.cacheInventory(uuid, currentProfile, InventoryUtil.toBase64(new ItemStack[player.getInventory().getSize()]));
     }
 
     @EventHandler
@@ -75,11 +78,9 @@ public class SeparatorListener implements Listener {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
 
-        storage.loadPlayerInventoriesAsync(uuid).thenRun(() ->
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (player.isOnline()) migrateEnderChest(player);
-                })
-        );
+        storage.loadPlayerInventoriesAsync(uuid).thenRun(() -> Bukkit.getScheduler().runTask(plugin, () -> {
+            if (player.isOnline()) migrateEnderChest(player);
+        }));
     }
 
     @EventHandler
@@ -91,10 +92,8 @@ public class SeparatorListener implements Listener {
 
         String currentProfile = getProfileForWorldKey(player.getWorld().getKey().asString());
 
-        storage.cacheInventory(uuid, currentProfile,
-                InventoryUtil.toBase64(player.getInventory().getContents()));
-        storage.cacheInventory(uuid, EC_PREFIX + currentProfile,
-                InventoryUtil.toBase64(player.getEnderChest().getContents()));
+        storage.cacheInventory(uuid, currentProfile, InventoryUtil.toBase64(player.getInventory().getContents()));
+        storage.cacheInventory(uuid, EC_PREFIX + currentProfile, InventoryUtil.toBase64(player.getEnderChest().getContents()));
 
         storage.unloadAndSavePlayerInventoriesAsync(uuid);
     }
@@ -111,8 +110,7 @@ public class SeparatorListener implements Listener {
         boolean justDied = recentDeaths.remove(uuid);
 
         if (!justDied) {
-            storage.cacheInventory(uuid, fromProfile,
-                    InventoryUtil.toBase64(player.getInventory().getContents()));
+            storage.cacheInventory(uuid, fromProfile, InventoryUtil.toBase64(player.getInventory().getContents()));
         }
         player.getInventory().clear();
 
@@ -121,8 +119,7 @@ public class SeparatorListener implements Listener {
             player.getInventory().setContents(InventoryUtil.fromBase64(invData));
         }
 
-        storage.cacheInventory(uuid, EC_PREFIX + fromProfile,
-                InventoryUtil.toBase64(player.getEnderChest().getContents()));
+        storage.cacheInventory(uuid, EC_PREFIX + fromProfile, InventoryUtil.toBase64(player.getEnderChest().getContents()));
         player.getEnderChest().clear();
 
         String ecData = storage.getCachedInventory(uuid, EC_PREFIX + toProfile);
@@ -130,7 +127,6 @@ public class SeparatorListener implements Listener {
             player.getEnderChest().setContents(InventoryUtil.fromBase64(ecData));
         }
 
-        player.sendMessage(Component.text("Inventory profile switched to: " + toProfile)
-                .color(NamedTextColor.YELLOW));
+        player.sendMessage(Component.text("Inventory profile switched to: " + toProfile).color(NamedTextColor.YELLOW));
     }
 }
