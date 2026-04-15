@@ -41,6 +41,10 @@ public class EggCollector implements Listener {
         this.counterKey = new NamespacedKey(plugin, "egg_collector_count");
     }
 
+    public Enchantment getEnchantment() {
+        return enchantment;
+    }
+
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
         if (raw == null || raw.isBlank()) {
             plugin.getLogger().warning("No 'egg-collector' key configured; egg-collector enchant disabled.");

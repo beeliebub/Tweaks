@@ -2,6 +2,7 @@ package me.beeliebub.tweaks;
 
 import me.beeliebub.tweaks.combos.*;
 import me.beeliebub.tweaks.commands.*;
+import me.beeliebub.tweaks.enchantments.AnvilListener;
 import me.beeliebub.tweaks.enchantments.EggCollector;
 import me.beeliebub.tweaks.enchantments.GemConnoisseur;
 import me.beeliebub.tweaks.enchantments.Lumberjack;
@@ -66,8 +67,11 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(smelter, this);
         getServer().getPluginManager().registerEvents(new Lumberjack(this, telekinesis), this);
         getServer().getPluginManager().registerEvents(new Tunneller(this, telekinesis, smelter), this);
-        getServer().getPluginManager().registerEvents(new SpawnerPickup(this), this);
-        getServer().getPluginManager().registerEvents(new EggCollector(this), this);
+        SpawnerPickup spawnerPickup = new SpawnerPickup(this);
+        EggCollector eggCollector = new EggCollector(this);
+        getServer().getPluginManager().registerEvents(spawnerPickup, this);
+        getServer().getPluginManager().registerEvents(eggCollector, this);
+        getServer().getPluginManager().registerEvents(new AnvilListener(spawnerPickup, eggCollector), this);
         getServer().getPluginManager().registerEvents(new Replant(this, telekinesis), this);
         getServer().getPluginManager().registerEvents(new GemConnoisseur(this, telekinesis), this);
 

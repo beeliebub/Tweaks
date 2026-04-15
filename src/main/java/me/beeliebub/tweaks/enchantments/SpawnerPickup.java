@@ -41,6 +41,10 @@ public class SpawnerPickup implements Listener {
         this.counterKey = new NamespacedKey(plugin, "spawner_pickup_count");
     }
 
+    public Enchantment getEnchantment() {
+        return enchantment;
+    }
+
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
         if (raw == null || raw.isBlank()) {
             plugin.getLogger().warning("No 'spawner-pickup' key configured; spawner-pickup enchant disabled.");
