@@ -11,6 +11,7 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Tag;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.type.Leaves;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -22,6 +23,7 @@ import org.bukkit.inventory.meta.Damageable;
 import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -31,6 +33,12 @@ import java.util.logging.Level;
 public class Lumberjack implements Listener {
 
     private static final int MAX_LOGS = 256;
+    private static final int MAX_LEAF_DISTANCE = 6;
+    private static final int[][] FACE_OFFSETS = {
+            {1, 0, 0}, {-1, 0, 0},
+            {0, 1, 0}, {0, -1, 0},
+            {0, 0, 1}, {0, 0, -1}
+    };
 
     private final Enchantment enchantment;
     private final Telekinesis telekinesis;
@@ -39,6 +47,14 @@ public class Lumberjack implements Listener {
         String raw = plugin.getConfig().getString("lumberjack");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.telekinesis = telekinesis;
+    }
+
+    public Enchantment getEnchantment() {
+        return enchantment;
+    }
+
+    public Set<Block> collectConnectedLogs(Block start, Material logType) {
+        return findConnectedLogs(start, logType);
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -97,13 +113,23 @@ public class Lumberjack implements Listener {
             return;
         }
 
+        Set<Block> leaves = findTreeLeaves(logs);
+
         boolean routeToInventory = telekinesis != null && telekinesis.hasEnchant(tool);
         for (Block log : logs) {
             if (log.equals(origin)) continue;
             if (routeToInventory) {
-                breakIntoInventory(log, logType, tool, player);
+                breakIntoInventory(log, tool, player);
             } else {
                 log.breakNaturally(tool);
+            }
+        }
+
+        for (Block leaf : leaves) {
+            if (routeToInventory) {
+                breakIntoInventory(leaf, tool, player);
+            } else {
+                leaf.breakNaturally(tool);
             }
         }
 
@@ -113,17 +139,56 @@ public class Lumberjack implements Listener {
         }
     }
 
-    private void breakIntoInventory(Block log, Material logType, ItemStack tool, Player player) {
-        Collection<ItemStack> drops = log.getDrops(tool, player);
-        Location loc = log.getLocation();
-        log.getWorld().playEffect(loc, Effect.STEP_SOUND, logType);
-        log.setType(Material.AIR);
+    private void breakIntoInventory(Block block, ItemStack tool, Player player) {
+        Material type = block.getType();
+        Collection<ItemStack> drops = block.getDrops(tool, player);
+        Location loc = block.getLocation();
+        block.getWorld().playEffect(loc, Effect.STEP_SOUND, type);
+        block.setType(Material.AIR);
         for (ItemStack drop : drops) {
             Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
             for (ItemStack remaining : leftover.values()) {
                 loc.getWorld().dropItemNaturally(loc, remaining);
             }
         }
+    }
+
+    private Set<Block> findTreeLeaves(Set<Block> logs) {
+        Set<Block> leaves = new HashSet<>();
+        Deque<Block> queue = new ArrayDeque<>();
+        Map<Block, Integer> distance = new HashMap<>();
+
+        for (Block log : logs) {
+            for (int[] offset : FACE_OFFSETS) {
+                Block neighbor = log.getRelative(offset[0], offset[1], offset[2]);
+                if (!Tag.LEAVES.isTagged(neighbor.getType())) continue;
+                if (isPersistentLeaf(neighbor)) continue;
+                if (leaves.add(neighbor)) {
+                    distance.put(neighbor, 1);
+                    queue.add(neighbor);
+                }
+            }
+        }
+
+        while (!queue.isEmpty()) {
+            Block current = queue.poll();
+            int d = distance.get(current);
+            if (d >= MAX_LEAF_DISTANCE) continue;
+            for (int[] offset : FACE_OFFSETS) {
+                Block neighbor = current.getRelative(offset[0], offset[1], offset[2]);
+                if (!Tag.LEAVES.isTagged(neighbor.getType())) continue;
+                if (isPersistentLeaf(neighbor)) continue;
+                if (leaves.add(neighbor)) {
+                    distance.put(neighbor, d + 1);
+                    queue.add(neighbor);
+                }
+            }
+        }
+        return leaves;
+    }
+
+    private boolean isPersistentLeaf(Block block) {
+        return block.getBlockData() instanceof Leaves data && data.isPersistent();
     }
 
     private Set<Block> findConnectedLogs(Block start, Material logType) {

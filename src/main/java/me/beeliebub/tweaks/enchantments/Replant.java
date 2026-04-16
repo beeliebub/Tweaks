@@ -6,8 +6,10 @@ import me.beeliebub.tweaks.Tweaks;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Ageable;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.enchantments.Enchantment;
@@ -20,8 +22,10 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Level;
 
 public class Replant implements Listener {
@@ -34,15 +38,42 @@ public class Replant implements Listener {
             Material.NETHER_WART, Material.NETHER_WART
     );
 
+    private static final Map<Material, Material> LOG_SAPLINGS = Map.ofEntries(
+            Map.entry(Material.OAK_LOG, Material.OAK_SAPLING),
+            Map.entry(Material.SPRUCE_LOG, Material.SPRUCE_SAPLING),
+            Map.entry(Material.BIRCH_LOG, Material.BIRCH_SAPLING),
+            Map.entry(Material.JUNGLE_LOG, Material.JUNGLE_SAPLING),
+            Map.entry(Material.ACACIA_LOG, Material.ACACIA_SAPLING),
+            Map.entry(Material.DARK_OAK_LOG, Material.DARK_OAK_SAPLING),
+            Map.entry(Material.MANGROVE_LOG, Material.MANGROVE_PROPAGULE),
+            Map.entry(Material.CHERRY_LOG, Material.CHERRY_SAPLING),
+            Map.entry(Material.PALE_OAK_LOG, Material.PALE_OAK_SAPLING)
+    );
+
+    private static final Set<Material> SAPLING_SOIL = EnumSet.of(
+            Material.GRASS_BLOCK,
+            Material.DIRT,
+            Material.COARSE_DIRT,
+            Material.PODZOL,
+            Material.MYCELIUM,
+            Material.ROOTED_DIRT,
+            Material.MOSS_BLOCK,
+            Material.MUD,
+            Material.MUDDY_MANGROVE_ROOTS,
+            Material.FARMLAND
+    );
+
     private final Tweaks plugin;
     private final Enchantment enchantment;
     private final Telekinesis telekinesis;
+    private final Lumberjack lumberjack;
 
-    public Replant(Tweaks plugin, Telekinesis telekinesis) {
+    public Replant(Tweaks plugin, Telekinesis telekinesis, Lumberjack lumberjack) {
         this.plugin = plugin;
         String raw = plugin.getConfig().getString("replant");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.telekinesis = telekinesis;
+        this.lumberjack = lumberjack;
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -67,17 +98,56 @@ public class Replant implements Listener {
         if (enchantment == null) return;
         if (!event.isDropItems()) return;
 
+        Player player = event.getPlayer();
+        ItemStack tool = player.getInventory().getItemInMainHand();
+        if (tool.isEmpty() || !tool.containsEnchantment(enchantment)) return;
+
         Block block = event.getBlock();
-        Material cropType = block.getType();
+        Material blockType = block.getType();
+
+        if (Tag.LOGS.isTagged(blockType)) {
+            handleTreeReplant(tool, block, blockType);
+            return;
+        }
+
+        handleCropReplant(event, player, tool, block, blockType);
+    }
+
+    private void handleTreeReplant(ItemStack tool, Block origin, Material logType) {
+        if (lumberjack == null) return;
+        Enchantment lumberjackEnchant = lumberjack.getEnchantment();
+        if (lumberjackEnchant == null || !tool.containsEnchantment(lumberjackEnchant)) return;
+
+        Material saplingType = LOG_SAPLINGS.get(logType);
+        if (saplingType == null) return;
+
+        Set<Block> logs = lumberjack.collectConnectedLogs(origin, logType);
+        if (logs.size() <= 1) return;
+
+        List<Location> basePositions = new ArrayList<>();
+        for (Block log : logs) {
+            if (SAPLING_SOIL.contains(log.getRelative(BlockFace.DOWN).getType())) {
+                basePositions.add(log.getLocation());
+            }
+        }
+        if (basePositions.isEmpty()) return;
+
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            for (Location loc : basePositions) {
+                Block b = loc.getBlock();
+                if (!b.getType().isAir()) continue;
+                if (!SAPLING_SOIL.contains(b.getRelative(BlockFace.DOWN).getType())) continue;
+                b.setType(saplingType);
+            }
+        });
+    }
+
+    private void handleCropReplant(BlockBreakEvent event, Player player, ItemStack tool, Block block, Material cropType) {
         Material seedType = CROP_SEEDS.get(cropType);
         if (seedType == null) return;
 
         BlockData data = block.getBlockData();
         if (!(data instanceof Ageable ageable)) return;
-
-        Player player = event.getPlayer();
-        ItemStack tool = player.getInventory().getItemInMainHand();
-        if (tool.isEmpty() || !tool.containsEnchantment(enchantment)) return;
 
         if (ageable.getAge() < ageable.getMaximumAge()) {
             event.setCancelled(true);

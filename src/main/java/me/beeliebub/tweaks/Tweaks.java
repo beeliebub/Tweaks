@@ -66,14 +66,15 @@ public class Tweaks extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(telekinesis, this);
         getServer().getPluginManager().registerEvents(smelter, this);
-        getServer().getPluginManager().registerEvents(new Lumberjack(this, telekinesis), this);
+        Lumberjack lumberjack = new Lumberjack(this, telekinesis);
+        getServer().getPluginManager().registerEvents(lumberjack, this);
         getServer().getPluginManager().registerEvents(new Tunneller(this, telekinesis, smelter), this);
         SpawnerPickup spawnerPickup = new SpawnerPickup(this);
         EggCollector eggCollector = new EggCollector(this);
         getServer().getPluginManager().registerEvents(spawnerPickup, this);
         getServer().getPluginManager().registerEvents(eggCollector, this);
         getServer().getPluginManager().registerEvents(new AnvilListener(spawnerPickup, eggCollector), this);
-        getServer().getPluginManager().registerEvents(new Replant(this, telekinesis), this);
+        getServer().getPluginManager().registerEvents(new Replant(this, telekinesis, lumberjack), this);
         getServer().getPluginManager().registerEvents(new GemConnoisseur(this, telekinesis), this);
         getServer().getPluginManager().registerEvents(new Efficacy(this), this);
 
