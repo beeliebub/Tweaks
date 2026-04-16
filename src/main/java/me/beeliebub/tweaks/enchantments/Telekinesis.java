@@ -104,8 +104,11 @@ public class Telekinesis implements Listener {
         }
 
         for (Block b : chain) {
+            Material replacement = (b.getType() == Material.KELP || b.getType() == Material.KELP_PLANT)
+                    ? Material.WATER
+                    : Material.AIR;
             Collection<ItemStack> chainDrops = b.getDrops(tool, player);
-            b.setType(Material.AIR, false);
+            b.setType(replacement, false);
             for (ItemStack drop : chainDrops) {
                 giveOrDrop(player, b, drop);
             }
