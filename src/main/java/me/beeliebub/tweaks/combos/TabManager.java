@@ -19,21 +19,25 @@ public class TabManager implements Listener {
 
     private static final String ARCHIVE_WORLD_KEY = "jass:archive";
     private static final String LOBBY_WORLD_KEY   = "jass:lobby";
+    private static final String PI_WORLD_KEY      = "jass:pi";
 
     private static final String PROFILE_LOBBY    = "lobby";
     private static final String PROFILE_STANDARD = "standard";
     private static final String PROFILE_ARCHIVE  = "archive";
+    private static final String PROFILE_PI       = "pi";
 
     private static final Map<String, String> SORT_KEYS = Map.of(
             PROFILE_LOBBY,    "a",
             PROFILE_STANDARD, "b",
-            PROFILE_ARCHIVE,  "c"
+            PROFILE_ARCHIVE,  "c",
+            PROFILE_PI,       "d"
     );
 
     private static final Map<String, Component> PROFILE_TAGS = Map.of(
             PROFILE_LOBBY,    Component.text("[Lobby] ",    NamedTextColor.AQUA),
             PROFILE_STANDARD, Component.text("[Survival] ", NamedTextColor.GREEN),
-            PROFILE_ARCHIVE,  Component.text("[Archive] ",  NamedTextColor.GOLD)
+            PROFILE_ARCHIVE,  Component.text("[Archive] ",  NamedTextColor.GOLD),
+            PROFILE_PI,       Component.text("[Pi] ",       NamedTextColor.LIGHT_PURPLE)
     );
 
     private final Scoreboard scoreboard;
@@ -45,6 +49,7 @@ public class TabManager implements Listener {
     private String getProfileForWorldKey(String worldKey) {
         if (worldKey.equalsIgnoreCase(ARCHIVE_WORLD_KEY)) return PROFILE_ARCHIVE;
         if (worldKey.equalsIgnoreCase(LOBBY_WORLD_KEY))   return PROFILE_LOBBY;
+        if (worldKey.equalsIgnoreCase(PI_WORLD_KEY))      return PROFILE_PI;
         return PROFILE_STANDARD;
     }
 

@@ -27,10 +27,12 @@ public class SeparatorListener implements Listener {
 
     private static final String ARCHIVE_WORLD_KEY = "jass:archive";
     private static final String LOBBY_WORLD_KEY = "jass:lobby";
+    private static final String PI_WORLD_KEY = "jass:pi";
 
     private static final String PROFILE_ARCHIVE = "archive";
     private static final String PROFILE_LOBBY = "lobby";
     private static final String PROFILE_STANDARD = "standard";
+    private static final String PROFILE_PI = "pi";
 
     private static final String EC_PREFIX = "ec_";
     private final Set<UUID> recentDeaths = ConcurrentHashMap.newKeySet();
@@ -43,11 +45,15 @@ public class SeparatorListener implements Listener {
     private String getProfileForWorldKey(String worldKey) {
         if (worldKey.equalsIgnoreCase(ARCHIVE_WORLD_KEY)) return PROFILE_ARCHIVE;
         if (worldKey.equalsIgnoreCase(LOBBY_WORLD_KEY)) return PROFILE_LOBBY;
+        if (worldKey.equalsIgnoreCase(PI_WORLD_KEY)) return PROFILE_PI;
         return PROFILE_STANDARD;
     }
 
     private boolean hasEnderChestData(UUID player) {
-        return storage.getCachedInventory(player, EC_PREFIX + PROFILE_STANDARD) != null || storage.getCachedInventory(player, EC_PREFIX + PROFILE_LOBBY) != null || storage.getCachedInventory(player, EC_PREFIX + PROFILE_ARCHIVE) != null;
+        return storage.getCachedInventory(player, EC_PREFIX + PROFILE_STANDARD) != null
+                || storage.getCachedInventory(player, EC_PREFIX + PROFILE_LOBBY) != null
+                || storage.getCachedInventory(player, EC_PREFIX + PROFILE_ARCHIVE) != null
+                || storage.getCachedInventory(player, EC_PREFIX + PROFILE_PI) != null;
     }
 
     private void migrateEnderChest(Player player) {
