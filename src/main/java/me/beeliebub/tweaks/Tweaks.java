@@ -4,6 +4,7 @@ import me.beeliebub.tweaks.combos.*;
 import me.beeliebub.tweaks.commands.*;
 import me.beeliebub.tweaks.enchantments.AnvilListener;
 import me.beeliebub.tweaks.enchantments.EggCollector;
+import me.beeliebub.tweaks.enchantments.Efficacy;
 import me.beeliebub.tweaks.enchantments.GemConnoisseur;
 import me.beeliebub.tweaks.enchantments.Lumberjack;
 import me.beeliebub.tweaks.enchantments.Replant;
@@ -74,6 +75,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new AnvilListener(spawnerPickup, eggCollector), this);
         getServer().getPluginManager().registerEvents(new Replant(this, telekinesis), this);
         getServer().getPluginManager().registerEvents(new GemConnoisseur(this, telekinesis), this);
+        getServer().getPluginManager().registerEvents(new Efficacy(this), this);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
     }
