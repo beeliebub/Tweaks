@@ -5,14 +5,16 @@ import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.block.Container;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayDeque;
@@ -20,10 +22,12 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.logging.Level;
 
 public class Telekinesis implements Listener {
@@ -33,6 +37,7 @@ public class Telekinesis implements Listener {
     };
 
     private final Enchantment enchantment;
+    private final Map<UUID, Location> pendingTelekinesis = new HashMap<>();
 
     public Telekinesis(Tweaks plugin) {
         String raw = plugin.getConfig().getString("telekinesis");
@@ -70,23 +75,25 @@ public class Telekinesis implements Listener {
         if (!hasEnchant(tool)) return;
 
         Block block = event.getBlock();
-        Collection<ItemStack> drops = block.getDrops(tool, player);
-        if (!drops.isEmpty()) {
-            event.setDropItems(false);
-            if (block.getState() instanceof Container container) {
-                for (ItemStack content : container.getInventory().getContents()) {
-                    if (content != null && !content.isEmpty()) {
-                        giveOrDrop(player, block, content);
-                    }
-                }
-                container.getInventory().clear();
-            }
-            for (ItemStack drop : drops) {
-                giveOrDrop(player, block, drop);
-            }
-        }
+        pendingTelekinesis.put(player.getUniqueId(), block.getLocation());
 
         chainBreakPlants(block, player, tool);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockDropItem(BlockDropItemEvent event) {
+        if (enchantment == null) return;
+
+        Player player = event.getPlayer();
+        Location loc = pendingTelekinesis.get(player.getUniqueId());
+        if (loc == null || !loc.equals(event.getBlock().getLocation())) return;
+        pendingTelekinesis.remove(player.getUniqueId());
+
+        Block block = event.getBlock();
+        for (Item item : event.getItems()) {
+            giveOrDrop(player, block, item.getItemStack());
+        }
+        event.getItems().clear();
     }
 
     private void chainBreakPlants(Block origin, Player player, ItemStack tool) {
