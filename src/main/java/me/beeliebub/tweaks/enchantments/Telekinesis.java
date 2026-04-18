@@ -7,6 +7,7 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.Container;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -72,6 +73,14 @@ public class Telekinesis implements Listener {
         Collection<ItemStack> drops = block.getDrops(tool, player);
         if (!drops.isEmpty()) {
             event.setDropItems(false);
+            if (block.getState() instanceof Container container) {
+                for (ItemStack content : container.getInventory().getContents()) {
+                    if (content != null && !content.isEmpty()) {
+                        giveOrDrop(player, block, content);
+                    }
+                }
+                container.getInventory().clear();
+            }
             for (ItemStack drop : drops) {
                 giveOrDrop(player, block, drop);
             }
