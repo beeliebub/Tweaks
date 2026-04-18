@@ -17,3 +17,6 @@ Desktop.ini
 
 # Build artifacts
 Tweaks/
+
+*.md
+!README.md
