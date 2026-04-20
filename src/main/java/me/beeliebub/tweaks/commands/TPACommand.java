@@ -8,16 +8,16 @@ import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
-public class TPACommand implements CommandExecutor {
+public class TPACommand implements CommandExecutor, TabCompleter {
 
     private static final int TIMEOUT_SECONDS = 30;
     private final JavaPlugin plugin;
@@ -145,5 +145,20 @@ public class TPACommand implements CommandExecutor {
         }
 
         return true;
+    }
+
+    @Override
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
+                                                @NotNull String label, @NotNull String[] args) {
+        String cmd = label.toLowerCase();
+        if ((cmd.equals("tpa") || cmd.equals("tpahere")) && args.length == 1) {
+            String partial = args[0].toLowerCase();
+            return Bukkit.getOnlinePlayers().stream()
+                    .map(Player::getName)
+                    .filter(n -> n.toLowerCase().startsWith(partial))
+                    .filter(n -> !(sender instanceof Player p) || !n.equals(p.getName()))
+                    .toList();
+        }
+        return Collections.emptyList();
     }
 }

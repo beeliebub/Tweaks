@@ -9,13 +9,14 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
-public class HomeCommand implements CommandExecutor {
+public class HomeCommand implements CommandExecutor, TabCompleter {
 
     private final StorageManager storage;
 
@@ -68,5 +69,30 @@ public class HomeCommand implements CommandExecutor {
         });
 
         return true;
+    }
+
+    @Override
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
+                                                @NotNull String label, @NotNull String[] args) {
+        if (!(sender instanceof Player player)) return Collections.emptyList();
+
+        if (args.length == 1) {
+            List<String> completions = new ArrayList<>(storage.getHomes(player.getUniqueId()));
+            if (player.hasPermission("tweaks.admin.home")) {
+                Bukkit.getOnlinePlayers().forEach(p -> completions.add(p.getName()));
+            }
+            return completions.stream()
+                    .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
+                    .toList();
+        }
+
+        if (args.length == 2 && player.hasPermission("tweaks.admin.home")) {
+            OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
+            return storage.getHomes(target.getUniqueId()).stream()
+                    .filter(s -> s.toLowerCase().startsWith(args[1].toLowerCase()))
+                    .toList();
+        }
+
+        return Collections.emptyList();
     }
 }

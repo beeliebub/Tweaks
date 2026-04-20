@@ -20,7 +20,7 @@ public class Tweaks extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        
+
         saveDefaultConfig();
         maxHomes = getConfig().getInt("max-homes", 3);
         storageManager = new StorageManager(this);
@@ -34,28 +34,48 @@ public class Tweaks extends JavaPlugin {
 
         getCommand("nick").setExecutor(nickCommand);
         getCommand("tpa").setExecutor(tpaCommand);
+        getCommand("tpa").setTabCompleter(tpaCommand);
         getCommand("tpahere").setExecutor(tpaCommand);
+        getCommand("tpahere").setTabCompleter(tpaCommand);
         getCommand("tpaccept").setExecutor(tpaCommand);
+        getCommand("tpaccept").setTabCompleter(tpaCommand);
         getCommand("tpdeny").setExecutor(tpaCommand);
+        getCommand("tpdeny").setTabCompleter(tpaCommand);
         getCommand("back").setExecutor(backCommand);
         getCommand("fly").setExecutor(flyCommand);
 
         // Commands - Homes
-        getCommand("home").setExecutor(new HomeCommand(storageManager));
-        getCommand("sethome").setExecutor(new SetHomeCommand(storageManager, maxHomes));
-        getCommand("delhome").setExecutor(new DelHomeCommand(storageManager));
-        getCommand("homes").setExecutor(new HomesCommand(storageManager));
+        HomeCommand homeCommand = new HomeCommand(storageManager);
+        getCommand("home").setExecutor(homeCommand);
+        getCommand("home").setTabCompleter(homeCommand);
+        SetHomeCommand setHomeCommand = new SetHomeCommand(storageManager, maxHomes);
+        getCommand("sethome").setExecutor(setHomeCommand);
+        getCommand("sethome").setTabCompleter(setHomeCommand);
+        DelHomeCommand delHomeCommand = new DelHomeCommand(storageManager);
+        getCommand("delhome").setExecutor(delHomeCommand);
+        getCommand("delhome").setTabCompleter(delHomeCommand);
+        HomesCommand homesCommand = new HomesCommand(storageManager);
+        getCommand("homes").setExecutor(homesCommand);
+        getCommand("homes").setTabCompleter(homesCommand);
 
         // Commands - Warps
-        getCommand("warp").setExecutor(new WarpCommand(storageManager));
-        getCommand("setwarp").setExecutor(new SetWarpCommand(storageManager));
-        getCommand("delwarp").setExecutor(new DelWarpCommand(storageManager));
+        WarpCommand warpCommand = new WarpCommand(storageManager);
+        getCommand("warp").setExecutor(warpCommand);
+        getCommand("warp").setTabCompleter(warpCommand);
+        SetWarpCommand setWarpCommand = new SetWarpCommand(storageManager);
+        getCommand("setwarp").setExecutor(setWarpCommand);
+        getCommand("setwarp").setTabCompleter(setWarpCommand);
+        DelWarpCommand delWarpCommand = new DelWarpCommand(storageManager);
+        getCommand("delwarp").setExecutor(delWarpCommand);
+        getCommand("delwarp").setTabCompleter(delWarpCommand);
         getCommand("warps").setExecutor(new WarpsCommand(storageManager));
 
         // Commands - Misc
         getCommand("spawn").setExecutor(new SpawnCommand(storageManager));
         getCommand("nv").setExecutor(new NightVisionCommand());
-        getCommand("config").setExecutor(new ConfigCommand(this));
+        ConfigCommand configCommand = new ConfigCommand(this);
+        getCommand("config").setExecutor(configCommand);
+        getCommand("config").setTabCompleter(configCommand);
 
         // Listeners - General
         getServer().getPluginManager().registerEvents(tabManager, this);

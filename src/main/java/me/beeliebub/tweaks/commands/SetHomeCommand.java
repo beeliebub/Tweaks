@@ -9,12 +9,14 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import java.util.UUID;
+import java.util.*;
 
-public class SetHomeCommand implements CommandExecutor {
+public class SetHomeCommand implements CommandExecutor, TabCompleter {
 
     private final StorageManager manager;
     private final int maxHomes;
@@ -56,5 +58,30 @@ public class SetHomeCommand implements CommandExecutor {
         manager.setHome(targetUUID, homeName, Point.fromLocation(player.getLocation()));
         player.sendMessage(Component.text("Home '" + homeName + "' set successfully!").color(NamedTextColor.GREEN));
         return true;
+    }
+
+    @Override
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
+                                                @NotNull String label, @NotNull String[] args) {
+        if (!(sender instanceof Player player)) return Collections.emptyList();
+
+        if (args.length == 1) {
+            List<String> completions = new ArrayList<>(manager.getHomes(player.getUniqueId()));
+            if (player.hasPermission("tweaks.admin.sethome")) {
+                Bukkit.getOnlinePlayers().forEach(p -> completions.add(p.getName()));
+            }
+            return completions.stream()
+                    .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
+                    .toList();
+        }
+
+        if (args.length == 2 && player.hasPermission("tweaks.admin.sethome")) {
+            OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
+            return manager.getHomes(target.getUniqueId()).stream()
+                    .filter(s -> s.toLowerCase().startsWith(args[1].toLowerCase()))
+                    .toList();
+        }
+
+        return Collections.emptyList();
     }
 }

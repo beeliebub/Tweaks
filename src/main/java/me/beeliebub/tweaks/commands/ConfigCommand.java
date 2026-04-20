@@ -6,9 +6,14 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-public class ConfigCommand implements CommandExecutor {
+import java.util.Collections;
+import java.util.List;
+
+public class ConfigCommand implements CommandExecutor, TabCompleter {
 
     private final Tweaks plugin;
 
@@ -50,5 +55,19 @@ public class ConfigCommand implements CommandExecutor {
         }
 
         return true;
+    }
+
+    @Override
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
+                                                @NotNull String label, @NotNull String[] args) {
+        if (!sender.hasPermission("tweaks.admin.config")) return Collections.emptyList();
+
+        if (args.length == 1) {
+            return List.of("max_homes").stream()
+                    .filter(s -> s.startsWith(args[0].toLowerCase()))
+                    .toList();
+        }
+
+        return Collections.emptyList();
     }
 }
