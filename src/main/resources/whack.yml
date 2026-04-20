@@ -1,0 +1,56 @@
+# Whack an Andrew - Configuration
+# ================================
+
+# Duration of a single round in seconds.
+round-duration: 180
+
+# Difficulty scaling (1-10). Higher values make mannequins spawn faster from the start.
+# At 1, mannequins start slow and ramp up. At 10, they start near max speed.
+difficulty: 1
+
+# The mannequin profile name to use for spawned targets.
+profile-name: "andrewkm"
+
+# How long (in ticks) a mannequin stays alive before despawning on its own.
+# 20 ticks = 1 second. Default 60 ticks = 3 seconds.
+mannequin-lifespan: 60
+
+# Base interval (in ticks) between spawn waves at the start of a round.
+# This decreases over time as the round progresses.
+base-spawn-interval: 60
+
+# Minimum interval (in ticks) between spawn waves at peak difficulty.
+min-spawn-interval: 10
+
+# Maximum number of mannequins that can be alive at once.
+max-alive: 10
+
+# Whether to show an action bar with score and time remaining.
+show-actionbar: true
+
+# Whether to announce scores at the end of a round.
+announce-results: true
+
+# Secondary profile - bonus points mannequin.
+secondary-profile:
+  name: "ClarinetPhoenix"
+  points: 3
+  # Percent chance each spawn is a secondary mannequin.
+  chance: 10.0
+
+# Ternary profile - penalty mannequin that removes points when hit.
+ternary-profile:
+  name: "Videowiz92"
+  points: 2
+  # Percent chance each spawn is a ternary mannequin.
+  chance: 10.0
+
+# Rewards for top 3 players. Set with /whack setreward <1|2|3> <reward_name>.
+# Leave empty for no reward.
+rewards:
+  first: ""
+  second: ""
+  third: ""
+
+# Arena data is saved automatically when you set up the arena.
+# Do not edit manually unless you know what you're doing.

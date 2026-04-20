@@ -14,7 +14,12 @@ import me.beeliebub.tweaks.enchantments.Telekinesis;
 import me.beeliebub.tweaks.enchantments.Tunneller;
 import me.beeliebub.tweaks.listeners.*;
 import me.beeliebub.tweaks.managers.*;
+import me.beeliebub.tweaks.minigames.RewardCommand;
+import me.beeliebub.tweaks.minigames.RewardListener;
+import me.beeliebub.tweaks.minigames.RewardManager;
 import me.beeliebub.tweaks.minigames.andrew.MannequinAI;
+import me.beeliebub.tweaks.minigames.andrew.WhackCommand;
+import me.beeliebub.tweaks.minigames.andrew.WhackConfig;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class Tweaks extends JavaPlugin {
@@ -82,6 +87,17 @@ public class Tweaks extends JavaPlugin {
         MannequinAI mannequinAI = new MannequinAI(this);
         getServer().getPluginManager().registerEvents(mannequinAI, this);
         mannequinAI.resumeAll();
+
+        RewardManager rewardManager = new RewardManager(this);
+        RewardCommand rewardCommand = new RewardCommand(rewardManager);
+        getCommand("reward").setExecutor(rewardCommand);
+        getCommand("reward").setTabCompleter(rewardCommand);
+        getServer().getPluginManager().registerEvents(new RewardListener(rewardManager, rewardCommand), this);
+
+        WhackConfig whackConfig = new WhackConfig(this);
+        WhackCommand whackCommand = new WhackCommand(this, whackConfig, rewardManager);
+        getCommand("whack").setExecutor(whackCommand);
+        getCommand("whack").setTabCompleter(whackCommand);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
     }

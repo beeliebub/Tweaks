@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/jayva/.gradle/**)",
+      "Bash(jar tf *)",
+      "WebSearch",
+      "WebFetch(domain:jd.papermc.io)"
+    ]
+  }
+}

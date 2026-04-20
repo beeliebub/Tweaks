@@ -42,3 +42,8 @@ commands:
     description: Return to your previous location
   fly:
     description: Toggle flight mode
+  reward:
+    description: Manage and claim minigame rewards
+  whack:
+    description: Whack an Andrew minigame admin commands
+    permission: tweaks.admin.whack
