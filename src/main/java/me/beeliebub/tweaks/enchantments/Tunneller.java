@@ -94,12 +94,19 @@ public class Tunneller implements Listener {
         }
     }
 
-    // Break a single block, applying smelter/gem drops, routing to inventory or ground, and spawning XP
+    // Break a single block, applying smelter/gem drops and routing to inventory or ground
     private void breakBlock(Block target, ItemStack tool, Player player, boolean useSmelter, boolean useTelekinesis, boolean useGemConnoisseur) {
         Material type = target.getType();
         if (type.isAir() || target.isLiquid()) return;
         if (type.getHardness() < 0) return;
 
+        // No modifiers: breakNaturally handles drops, break effect, and XP in one call
+        if (!useSmelter && !useGemConnoisseur && !useTelekinesis) {
+            target.breakNaturally(tool, true, true);
+            return;
+        }
+
+        // With modifiers: get drops manually so we can apply smelter/gem/telekinesis
         Collection<ItemStack> drops = target.getDrops(tool, player);
         if (useSmelter) drops = Smelter.smeltDrops(drops);
 
@@ -108,12 +115,12 @@ public class Tunneller implements Listener {
             gemDrops = gemConnoisseur.rollDrops(type, tool);
         }
 
-        int exp = target.getExpDrop(tool, player);
-
+        // Clear the block and play the break particle effect
         Location loc = target.getLocation();
-        target.getWorld().playEffect(loc, Effect.STEP_SOUND, type);
         target.setType(Material.AIR);
+        target.getWorld().playEffect(loc, Effect.STEP_SOUND, type);
 
+        // Drop or route items to inventory
         if (useTelekinesis) {
             for (ItemStack drop : drops) {
                 Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
@@ -134,10 +141,6 @@ public class Tunneller implements Listener {
             for (ItemStack drop : gemDrops) {
                 loc.getWorld().dropItemNaturally(loc, drop);
             }
-        }
-
-        if (exp > 0) {
-            target.getWorld().spawn(loc.add(0.5, 0.5, 0.5), org.bukkit.entity.ExperienceOrb.class, orb -> orb.setExperience(exp));
         }
     }
 
