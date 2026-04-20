@@ -15,6 +15,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
+// Deletes a saved home by name. Admins can delete other players' homes.
 public class DelHomeCommand implements CommandExecutor, TabCompleter {
 
     private final StorageManager manager;

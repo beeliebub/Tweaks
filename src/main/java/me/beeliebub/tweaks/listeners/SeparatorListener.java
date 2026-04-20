@@ -20,11 +20,14 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+// Keeps separate inventories and ender chests per world group.
+// When a player changes worlds, their current inventory is saved and the destination world's inventory is loaded.
 public class SeparatorListener implements Listener {
 
     private final JavaPlugin plugin;
     private final StorageManager storage;
 
+    // World keys mapped to inventory profile names
     private static final String ARCHIVE_WORLD_KEY = "jass:archive";
     private static final String LOBBY_WORLD_KEY = "jass:lobby";
     private static final String PI_WORLD_KEY = "jass:pi";
@@ -34,7 +37,9 @@ public class SeparatorListener implements Listener {
     private static final String PROFILE_STANDARD = "standard";
     private static final String PROFILE_PI = "pi";
 
+    // Ender chest data uses this prefix to distinguish from regular inventory data
     private static final String EC_PREFIX = "ec_";
+    // Tracks players who just died so their empty inventory isn't saved over their real one
     private final Set<UUID> recentDeaths = ConcurrentHashMap.newKeySet();
 
     public SeparatorListener(JavaPlugin plugin, StorageManager storage) {
@@ -56,6 +61,7 @@ public class SeparatorListener implements Listener {
                 || storage.getCachedInventory(player, EC_PREFIX + PROFILE_PI) != null;
     }
 
+    // One-time migration: copy existing ender chest contents into the standard profile slot
     private void migrateEnderChest(Player player) {
         UUID uuid = player.getUniqueId();
         if (hasEnderChestData(uuid)) return;
@@ -104,6 +110,7 @@ public class SeparatorListener implements Listener {
         storage.unloadAndSavePlayerInventoriesAsync(uuid);
     }
 
+    // Swap inventory and ender chest contents when switching between world groups
     @EventHandler
     public void onWorldChange(PlayerChangedWorldEvent event) {
         Player player = event.getPlayer();

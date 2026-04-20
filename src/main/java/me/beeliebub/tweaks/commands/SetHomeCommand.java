@@ -16,6 +16,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
+// Saves the player's current location as a named home. Enforces a configurable max home limit.
 public class SetHomeCommand implements CommandExecutor, TabCompleter {
 
     private final StorageManager manager;

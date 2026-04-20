@@ -17,10 +17,13 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
+// Handles /tpa, /tpahere, /tpaccept, and /tpdeny teleport request commands.
+// Requests expire after 30 seconds and only one pending request per target at a time.
 public class TPACommand implements CommandExecutor, TabCompleter {
 
     private static final int TIMEOUT_SECONDS = 30;
     private final JavaPlugin plugin;
+    // Maps target player UUID -> their pending TPA request
     private final Map<UUID, TpaRequest> requests = new HashMap<>();
 
     public TPACommand(JavaPlugin plugin) {

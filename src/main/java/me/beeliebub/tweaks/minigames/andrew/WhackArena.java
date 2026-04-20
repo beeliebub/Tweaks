@@ -8,11 +8,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+// Defines the bounding box for a Whack-an-Andrew arena and tracks spawn block locations within it
 public class WhackArena {
 
     private final World world;
     private final int minX, minY, minZ;
     private final int maxX, maxY, maxZ;
+    // Locations on top of designated spawn blocks where mannequins can appear
     private final List<Location> spawnBlocks = new ArrayList<>();
 
     public WhackArena(Location corner1, Location corner2) {

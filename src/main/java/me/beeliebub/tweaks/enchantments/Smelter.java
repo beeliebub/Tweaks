@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 
+// Auto-smelts raw ore drops (iron, copper, gold) into ingots when mining with this enchantment
 public class Smelter implements Listener {
 
     private final Enchantment enchantment;
@@ -82,6 +83,7 @@ public class Smelter implements Listener {
         }
     }
 
+    // Replace raw ore items with their smelted counterparts
     public static List<ItemStack> smeltDrops(Collection<ItemStack> drops) {
         List<ItemStack> out = new ArrayList<>(drops.size());
         for (ItemStack drop : drops) {

@@ -16,9 +16,12 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
+// Core game logic for Whack-an-Andrew. Spawns mannequins on designated blocks,
+// tracks scores per player, adjusts difficulty over time, and awards rewards to top 3 finishers.
 public class WhackGame {
 
     public enum State { IDLE, RUNNING, PAUSED }
+    // PRIMARY = normal (+1 point), SECONDARY = bonus (+N points), TERNARY = penalty (-N points)
     public enum MannequinType { PRIMARY, SECONDARY, TERNARY }
 
     private final JavaPlugin plugin;
@@ -28,10 +31,10 @@ public class WhackGame {
 
     private State state = State.IDLE;
     private final Map<UUID, Integer> scores = new ConcurrentHashMap<>();
-    private final Set<UUID> aliveMannequins = ConcurrentHashMap.newKeySet();
-    private final Map<UUID, MannequinType> mannequinTypes = new ConcurrentHashMap<>();
-    private final Set<Location> occupiedSpawns = ConcurrentHashMap.newKeySet();
-    private final List<Location> recentSpawns = new ArrayList<>();
+    private final Set<UUID> aliveMannequins = ConcurrentHashMap.newKeySet(); // Mannequins that can still be hit
+    private final Map<UUID, MannequinType> mannequinTypes = new ConcurrentHashMap<>(); // Type of each live mannequin
+    private final Set<Location> occupiedSpawns = ConcurrentHashMap.newKeySet(); // Spawn spots currently in use
+    private final List<Location> recentSpawns = new ArrayList<>(); // Last 5 spawns, used to spread out placement
 
     private BukkitRunnable spawnTask;
     private BukkitRunnable timerTask;
@@ -214,6 +217,7 @@ public class WhackGame {
         timerTask.runTaskTimer(plugin, 20L, 20L);
     }
 
+    // Spawn a mannequin on a random available block, rolling its type (primary/secondary/ternary)
     private void spawnMannequin() {
         List<Location> blocks = arena.getSpawnBlocks();
         if (blocks.isEmpty()) return;
@@ -355,6 +359,7 @@ public class WhackGame {
         if (timerTask != null && !timerTask.isCancelled()) timerTask.cancel();
     }
 
+    // Display final scores sorted by points, and grant configured rewards to top 3 players
     private void announceResults() {
         broadcastToArena(Component.text("=== Whack an Andrew - Results ===")
                 .color(NamedTextColor.GOLD).decorate(TextDecoration.BOLD));

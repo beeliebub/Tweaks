@@ -28,8 +28,11 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
+// Lets players set colored nicknames with & color codes.
+// Admins can remove nicknames from other players, even offline ones (queued for next login).
 public class NickCommand implements CommandExecutor, Listener {
 
+    // Parses & color codes and hex colors into Adventure components
     private static final LegacyComponentSerializer COLOR_SERIALIZER =
             LegacyComponentSerializer.builder()
                     .character('&')
@@ -39,6 +42,7 @@ public class NickCommand implements CommandExecutor, Listener {
     private final JavaPlugin plugin;
     private final NamespacedKey nickKey;
 
+    // Offline players whose nicknames should be cleared on next login
     private final Set<UUID> pendingRemovals = ConcurrentHashMap.newKeySet();
     private final File pendingFile;
 
@@ -156,6 +160,7 @@ public class NickCommand implements CommandExecutor, Listener {
         player.displayName(null);
     }
 
+    // On join: process pending removals or restore saved nickname
     @EventHandler(priority = EventPriority.LOW)
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();

@@ -16,6 +16,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
+// Teleports a player to one of their saved homes. Admins can teleport to other players' homes.
 public class HomeCommand implements CommandExecutor, TabCompleter {
 
     private final StorageManager storage;

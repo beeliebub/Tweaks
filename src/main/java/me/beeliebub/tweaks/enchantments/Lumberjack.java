@@ -28,6 +28,8 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 
+// Chops down entire trees at once by breaking all connected logs of the same type.
+// Respects unbreaking, checks durability before felling, and requires an adjacent leaf block.
 public class Lumberjack implements Listener {
 
     private static final int MAX_LOGS = 256;
@@ -135,6 +137,7 @@ public class Lumberjack implements Listener {
         }
     }
 
+    // Flood-fill search for all logs of the same type connected in a 3x3x3 neighborhood
     private Set<Block> findConnectedLogs(Block start, Material logType) {
         Set<Block> logs = new HashSet<>();
         Deque<Block> queue = new ArrayDeque<>();
@@ -159,6 +162,7 @@ public class Lumberjack implements Listener {
         return logs;
     }
 
+    // Verify this is a real tree (not a log structure) by checking for at least one adjacent leaf
     private boolean hasAdjacentLeaf(Set<Block> logs) {
         for (Block log : logs) {
             for (int dx = -1; dx <= 1; dx++) {

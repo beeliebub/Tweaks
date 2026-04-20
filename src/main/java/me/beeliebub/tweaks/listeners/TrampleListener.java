@@ -8,8 +8,10 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityInteractEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 
+// Prevents farmland from being trampled by players and mobs
 public class TrampleListener implements Listener {
 
+    // Block player trampling
     @EventHandler
     public void onPlayerTrample(PlayerInteractEvent event) {
         if (event.getAction() == Action.PHYSICAL) {

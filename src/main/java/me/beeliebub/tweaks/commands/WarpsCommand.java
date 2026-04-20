@@ -10,6 +10,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Set;
 
+// Lists all available server warps
 public class WarpsCommand implements CommandExecutor {
 
     private final StorageManager manager;

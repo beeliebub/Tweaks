@@ -14,6 +14,8 @@ import org.bukkit.util.Vector;
 
 import java.util.concurrent.ThreadLocalRandom;
 
+// Gives sheep-like wandering AI to mannequins with the "andrewkm" profile.
+// Mannequins idle, look around randomly, then walk to nearby valid ground positions.
 public class MannequinAI implements Listener {
 
     private static final String TARGET_NAME = "andrewkm";
@@ -36,6 +38,7 @@ public class MannequinAI implements Listener {
         startWandering(mannequin);
     }
 
+    // Re-attach wandering AI to all existing andrewkm mannequins (called on plugin enable/reload)
     public void resumeAll() {
         for (var world : plugin.getServer().getWorlds()) {
             for (Mannequin mannequin : world.getEntitiesByClass(Mannequin.class)) {

@@ -28,8 +28,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 
+// Automatically replants crops after harvesting and saplings after tree felling.
+// Crops must be fully grown to break; one seed is consumed from drops for replanting.
 public class Replant implements Listener {
 
+    // Maps crop block type to the seed item needed to replant it
     private static final Map<Material, Material> CROP_SEEDS = Map.of(
             Material.WHEAT, Material.WHEAT_SEEDS,
             Material.CARROTS, Material.CARROT,
@@ -38,6 +41,7 @@ public class Replant implements Listener {
             Material.NETHER_WART, Material.NETHER_WART
     );
 
+    // Maps log type to the sapling that should be planted after felling
     private static final Map<Material, Material> LOG_SAPLINGS = Map.ofEntries(
             Map.entry(Material.OAK_LOG, Material.OAK_SAPLING),
             Map.entry(Material.SPRUCE_LOG, Material.SPRUCE_SAPLING),
@@ -50,6 +54,7 @@ public class Replant implements Listener {
             Map.entry(Material.PALE_OAK_LOG, Material.PALE_OAK_SAPLING)
     );
 
+    // Blocks that saplings can be planted on
     private static final Set<Material> SAPLING_SOIL = EnumSet.of(
             Material.GRASS_BLOCK,
             Material.DIRT,
@@ -113,6 +118,7 @@ public class Replant implements Listener {
         handleCropReplant(event, player, tool, block, blockType);
     }
 
+    // Plant saplings at the base of a felled tree (requires Lumberjack enchant to identify tree logs)
     private void handleTreeReplant(ItemStack tool, Block origin, Material logType) {
         if (lumberjack == null) return;
         Enchantment lumberjackEnchant = lumberjack.getEnchantment();
@@ -142,6 +148,7 @@ public class Replant implements Listener {
         });
     }
 
+    // Harvest a fully grown crop, consume one seed from drops, and replant it at age 0
     private void handleCropReplant(BlockBreakEvent event, Player player, ItemStack tool, Block block, Material cropType) {
         Material seedType = CROP_SEEDS.get(cropType);
         if (seedType == null) return;

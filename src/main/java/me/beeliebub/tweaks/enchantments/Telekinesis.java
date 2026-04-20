@@ -30,6 +30,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 
+// Sends block drops straight to the player's inventory instead of dropping on the ground.
+// Also chain-breaks stackable plants (sugar cane, cactus, bamboo, vines, chorus, etc.)
 public class Telekinesis implements Listener {
 
     private static final BlockFace[] CHORUS_FACES = {
@@ -37,6 +39,7 @@ public class Telekinesis implements Listener {
     };
 
     private final Enchantment enchantment;
+    // Tracks which block break is pending telekinesis pickup (cleared on BlockDropItemEvent)
     private final Map<UUID, Location> pendingTelekinesis = new HashMap<>();
 
     public Telekinesis(Tweaks plugin) {
@@ -65,6 +68,7 @@ public class Telekinesis implements Listener {
         return enchantment != null && !tool.isEmpty() && tool.containsEnchantment(enchantment);
     }
 
+    // Mark the broken block for telekinesis pickup and chain-break any connected plants
     @EventHandler(ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         if (enchantment == null) return;
@@ -80,6 +84,7 @@ public class Telekinesis implements Listener {
         chainBreakPlants(block, player, tool);
     }
 
+    // Intercept dropped items and route them to the player's inventory
     @EventHandler(ignoreCancelled = true)
     public void onBlockDropItem(BlockDropItemEvent event) {
         if (enchantment == null) return;
@@ -96,6 +101,7 @@ public class Telekinesis implements Listener {
         event.getItems().clear();
     }
 
+    // Break all connected segments of stackable plants above/below the origin block
     private void chainBreakPlants(Block origin, Player player, ItemStack tool) {
         List<Block> chain = new ArrayList<>();
         switch (origin.getType()) {

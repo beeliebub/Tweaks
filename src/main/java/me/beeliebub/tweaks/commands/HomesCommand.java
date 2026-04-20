@@ -15,6 +15,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
+// Lists all saved home names for a player. Admins can view other players' homes.
 public class HomesCommand implements CommandExecutor, TabCompleter {
 
     private final StorageManager manager;

@@ -17,6 +17,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
+// Admin command for setting up and controlling Whack-an-Andrew games.
+// Subcommands: arena, corner1, corner2, setblocks, start, pause, stop, setreward, reload
 public class WhackCommand implements CommandExecutor, TabCompleter {
 
     private final JavaPlugin plugin;
@@ -28,7 +30,7 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
     private WhackListener listener;
     private List<Material> spawnBlockMaterials = new ArrayList<>();
 
-    // Arena setup state per player
+    // Tracks which player is mid-arena-setup (waiting for corner2 after setting corner1)
     private final Map<UUID, Location> pendingCorner1 = new HashMap<>();
 
     public WhackCommand(JavaPlugin plugin, WhackConfig config, RewardManager rewardManager) {

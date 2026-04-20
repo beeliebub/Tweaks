@@ -10,6 +10,8 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
+// Handles async YAML persistence for homes, warps, and per-world inventory data.
+// All data is cached in memory with ConcurrentHashMaps and saved to disk asynchronously.
 public class StorageManager {
 
     private final JavaPlugin plugin;
@@ -17,6 +19,7 @@ public class StorageManager {
     private final File warpsFile;
     private final File invDir;
 
+    // In-memory caches: homes per player, global warps, and Base64 inventory strings per player/profile
     private final Map<UUID, Map<String, Point>> homes = new ConcurrentHashMap<>();
     private final Map<String, Point> warps = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, String>> inventoryCache = new ConcurrentHashMap<>();
@@ -186,6 +189,7 @@ public class StorageManager {
         }
     }
 
+    // Load a player's per-world inventory data from disk into cache (called on join)
     public CompletableFuture<Void> loadPlayerInventoriesAsync(UUID player) {
         return CompletableFuture.runAsync(() -> {
             File file = new File(invDir, player.toString() + ".yml");
@@ -201,6 +205,7 @@ public class StorageManager {
         });
     }
 
+    // Save a player's inventory cache to disk and remove from memory (called on quit)
     public void unloadAndSavePlayerInventoriesAsync(UUID player) {
         Map<String, String> data = inventoryCache.remove(player);
         if (data == null || data.isEmpty()) return;

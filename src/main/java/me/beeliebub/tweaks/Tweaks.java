@@ -13,6 +13,7 @@ import me.beeliebub.tweaks.minigames.andrew.WhackCommand;
 import me.beeliebub.tweaks.minigames.andrew.WhackConfig;
 import org.bukkit.plugin.java.JavaPlugin;
 
+// Main plugin class - registers all commands, listeners, enchantments, and minigame systems
 public class Tweaks extends JavaPlugin {
 
     private StorageManager storageManager;
@@ -21,6 +22,7 @@ public class Tweaks extends JavaPlugin {
     @Override
     public void onEnable() {
 
+        // Load config.yml and initialize data storage
         saveDefaultConfig();
         maxHomes = getConfig().getInt("max-homes", 3);
         storageManager = new StorageManager(this);

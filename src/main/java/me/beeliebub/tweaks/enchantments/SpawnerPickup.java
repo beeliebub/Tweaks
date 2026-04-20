@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 
+// Gives a 20% chance to drop a spawner block when mined with this enchantment.
+// The tool breaks after 5 successful spawner pickups, with remaining uses shown in lore.
 public class SpawnerPickup implements Listener {
 
     private static final double DROP_CHANCE = 0.20;

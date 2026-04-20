@@ -8,6 +8,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.ItemStack;
 
+// Saves reward items when an admin closes the reward-editing chest inventory
 public class RewardListener implements Listener {
 
     private final RewardManager rewardManager;

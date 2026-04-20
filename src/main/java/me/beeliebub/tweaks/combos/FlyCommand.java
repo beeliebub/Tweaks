@@ -23,6 +23,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+// Toggles creative flight for players who have earned it via an advancement or are in a fly-enabled world.
+// Flight state persists across logins and is revoked when entering a non-fly world without the advancement.
 public class FlyCommand implements CommandExecutor, Listener {
 
     private final NamespacedKey advancementKey;
@@ -96,6 +98,7 @@ public class FlyCommand implements CommandExecutor, Listener {
         return true;
     }
 
+    // Disable flight when moving to a world where the player doesn't have fly access
     @EventHandler(priority = EventPriority.MONITOR)
     public void onWorldChange(PlayerChangedWorldEvent event) {
 
@@ -110,6 +113,7 @@ public class FlyCommand implements CommandExecutor, Listener {
                 .color(NamedTextColor.RED));
     }
 
+    // Restore flight on login if the player had it enabled and still qualifies
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();

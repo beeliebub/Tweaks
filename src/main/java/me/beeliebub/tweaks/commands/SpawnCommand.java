@@ -12,6 +12,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Optional;
 
+// Teleports a player to the server spawn (stored as a warp named "spawn")
 public class SpawnCommand implements CommandExecutor {
 
     private final StorageManager manager;

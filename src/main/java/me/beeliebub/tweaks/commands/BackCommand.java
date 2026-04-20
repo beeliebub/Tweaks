@@ -18,6 +18,8 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
+// Saves a player's location before teleporting so they can return with /back.
+// Stores the location in the player's PersistentDataContainer so it survives restarts.
 public class BackCommand implements CommandExecutor, Listener {
 
     private final NamespacedKey backKey;
@@ -26,6 +28,7 @@ public class BackCommand implements CommandExecutor, Listener {
         this.backKey = new NamespacedKey(plugin, "back_location");
     }
 
+    // Record the player's location before each teleport (ignoring beds, dismounts, and unknown causes)
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onTeleport(PlayerTeleportEvent event) {
         PlayerTeleportEvent.TeleportCause cause = event.getCause();
@@ -44,6 +47,7 @@ public class BackCommand implements CommandExecutor, Listener {
                 .set(backKey, PersistentDataType.STRING, serialized);
     }
 
+    // Teleport the player back to their last saved location
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String @NotNull [] args) {

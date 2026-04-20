@@ -15,6 +15,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Collections;
 import java.util.List;
 
+// Admin command to create or overwrite a server warp at the player's current location
 public class SetWarpCommand implements CommandExecutor, TabCompleter {
 
     private final StorageManager manager;

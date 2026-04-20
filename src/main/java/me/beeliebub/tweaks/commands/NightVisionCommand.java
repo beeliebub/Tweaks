@@ -10,6 +10,7 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.jetbrains.annotations.NotNull;
 
+// Toggles permanent night vision on/off for a player
 public class NightVisionCommand implements CommandExecutor {
 
     @Override
@@ -20,6 +21,7 @@ public class NightVisionCommand implements CommandExecutor {
             return true;
         }
 
+        // If already active, remove it; otherwise apply infinite duration night vision
         if (player.hasPotionEffect(PotionEffectType.NIGHT_VISION)) {
             player.removePotionEffect(PotionEffectType.NIGHT_VISION);
             player.sendMessage(Component.text("Night vision disabled!", NamedTextColor.GREEN));

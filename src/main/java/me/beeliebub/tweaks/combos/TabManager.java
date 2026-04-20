@@ -15,8 +15,11 @@ import org.bukkit.scoreboard.Team;
 
 import java.util.Map;
 
+// Sorts and labels players in the tab list by their current world.
+// Uses scoreboard teams for ordering and colored prefixes for world identification.
 public class TabManager implements Listener {
 
+    // World namespace keys mapped to profile names
     private static final String ARCHIVE_WORLD_KEY = "jass:archive";
     private static final String LOBBY_WORLD_KEY   = "jass:lobby";
     private static final String PI_WORLD_KEY      = "jass:pi";
@@ -26,6 +29,7 @@ public class TabManager implements Listener {
     private static final String PROFILE_ARCHIVE  = "archive";
     private static final String PROFILE_PI       = "pi";
 
+    // Alphabetical sort keys determine tab list ordering (a = top, d = bottom)
     private static final Map<String, String> SORT_KEYS = Map.of(
             PROFILE_LOBBY,    "a",
             PROFILE_STANDARD, "b",
@@ -33,6 +37,7 @@ public class TabManager implements Listener {
             PROFILE_PI,       "d"
     );
 
+    // Colored prefix tags shown before player names in the tab list
     private static final Map<String, Component> PROFILE_TAGS = Map.of(
             PROFILE_LOBBY,    Component.text("[Lobby] ",    NamedTextColor.AQUA),
             PROFILE_STANDARD, Component.text("[Survival] ", NamedTextColor.GREEN),

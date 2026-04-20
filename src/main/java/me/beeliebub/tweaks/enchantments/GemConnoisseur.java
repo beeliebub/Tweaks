@@ -22,11 +22,14 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 
+// Adds bonus gem/material drops when mining stone, deepslate, or netherrack.
+// Drop rates are configurable per enchantment level and block type in config.yml.
 public class GemConnoisseur implements Listener {
 
     private static final int MAX_LEVEL = 3;
 
     private final Enchantment enchantment;
+    // Nested map: enchant level -> block kind -> (bonus material -> 1-in-N chance)
     private final Map<Integer, Map<String, Map<Material, Integer>>> rates;
     private final Telekinesis telekinesis;
 
@@ -97,6 +100,7 @@ public class GemConnoisseur implements Listener {
         return enchantment != null && !tool.isEmpty() && tool.containsEnchantment(enchantment);
     }
 
+    // Roll for bonus gem drops based on block type, enchant level, and fortune
     public List<ItemStack> rollDrops(Material blockType, ItemStack tool) {
         List<ItemStack> result = new ArrayList<>();
         if (enchantment == null) return result;

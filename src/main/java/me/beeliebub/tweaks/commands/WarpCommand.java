@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
+// Teleports a player to a named server warp
 public class WarpCommand implements CommandExecutor, TabCompleter {
 
     private final StorageManager manager;

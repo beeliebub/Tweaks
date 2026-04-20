@@ -8,6 +8,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 
+// Listens for players hitting mannequins during a Whack-an-Andrew game and routes hits to the game logic
 public class WhackListener implements Listener {
 
     private final WhackGame game;

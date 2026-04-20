@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 
+// Gives a 0.5% chance to drop a spawn egg when killing a mob with this enchantment.
+// The tool breaks after 5 successful egg drops, with remaining uses shown in lore.
 public class EggCollector implements Listener {
 
     private static final double DROP_CHANCE = 0.005;

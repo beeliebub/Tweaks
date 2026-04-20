@@ -12,10 +12,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+// Blocks End portal usage in configured worlds
 public class EndPortalListener implements Listener {
 
     private final Set<String> disabledWorlds;
 
+    // Load the list of worlds where End portals should be disabled from config
     public EndPortalListener(Tweaks plugin) {
         this.disabledWorlds = new HashSet<>();
         List<String> worlds = plugin.getConfig().getStringList("disabled-end-portal-worlds");
@@ -24,6 +26,7 @@ public class EndPortalListener implements Listener {
         }
     }
 
+    // Cancel the portal event if the player is in a disabled world
     @EventHandler
     public void onEnterPortal(PlayerPortalEvent event) {
         if (event.getCause() == PlayerTeleportEvent.TeleportCause.END_PORTAL) {

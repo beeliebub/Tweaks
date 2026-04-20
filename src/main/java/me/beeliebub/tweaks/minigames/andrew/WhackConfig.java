@@ -13,6 +13,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.List;
 
+// Loads and saves Whack-an-Andrew settings from whack.yml, including game parameters,
+// profile names, spawn chances, reward assignments, and arena persistence.
 public class WhackConfig {
 
     private final JavaPlugin plugin;
@@ -112,6 +114,7 @@ public class WhackConfig {
         save();
     }
 
+    // Persist arena corners and spawn block materials to whack.yml so it survives restarts
     public void saveArena(WhackArena arena, List<Material> spawnBlockMaterials) {
         config.set("arena.world", arena.getWorld().getName());
         config.set("arena.corner1.x", arena.getMinX());
@@ -124,6 +127,7 @@ public class WhackConfig {
         save();
     }
 
+    // Rebuild the arena from saved config, re-scanning the world for spawn blocks
     public WhackArena loadArena() {
         if (!config.contains("arena.world")) return null;
 

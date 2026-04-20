@@ -13,6 +13,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Collections;
 import java.util.List;
 
+// Admin command to change plugin config values at runtime (e.g., max homes)
 public class ConfigCommand implements CommandExecutor, TabCompleter {
 
     private final Tweaks plugin;

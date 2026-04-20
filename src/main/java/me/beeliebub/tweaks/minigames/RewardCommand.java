@@ -15,6 +15,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
+// Handles /reward create, /reward edit, and /reward claim commands.
+// Admins create rewards and edit their contents via a chest GUI; players claim pending rewards.
 public class RewardCommand implements CommandExecutor, TabCompleter {
 
     private final RewardManager rewardManager;

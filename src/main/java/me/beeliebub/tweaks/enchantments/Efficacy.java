@@ -25,8 +25,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 
+// Applies shovel/hoe/axe actions to a 3x3 area (path making, tilling, stripping).
+// Each surrounding block affected costs one durability.
 public class Efficacy implements Listener {
 
+    // Blocks that shovels can turn into dirt paths
     private static final Set<Material> SHOVELABLE = EnumSet.of(
             Material.GRASS_BLOCK,
             Material.DIRT,
@@ -36,6 +39,7 @@ public class Efficacy implements Listener {
             Material.ROOTED_DIRT
     );
 
+    // Blocks that hoes can turn into farmland
     private static final Set<Material> TILLABLE = EnumSet.of(
             Material.GRASS_BLOCK,
             Material.DIRT,
@@ -43,6 +47,7 @@ public class Efficacy implements Listener {
             Material.DIRT_PATH
     );
 
+    // Log/wood -> stripped variant mapping for axes
     private static final Map<Material, Material> STRIPPED;
 
     static {
@@ -196,6 +201,7 @@ public class Efficacy implements Listener {
         }
     }
 
+    // Get the two directions perpendicular to the clicked face for the 3x3 grid
     private int[][] perpendicularAxes(BlockFace face) {
         if (face.getModY() != 0) {
             return new int[][]{{1, 0, 0}, {0, 0, 1}};

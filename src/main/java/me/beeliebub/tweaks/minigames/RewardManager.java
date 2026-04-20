@@ -10,10 +10,13 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
+// Manages reward definitions (item sets) and pending rewards for players.
+// Rewards are created by admins and granted to players by minigames; players claim them with /reward claim.
 public class RewardManager {
 
     private final JavaPlugin plugin;
     private final File rewardsFile;
+    // Reward name -> array of items that make up the reward
     private final Map<String, ItemStack[]> rewards = new ConcurrentHashMap<>();
 
     // Pending rewards per player: UUID -> list of reward names to claim

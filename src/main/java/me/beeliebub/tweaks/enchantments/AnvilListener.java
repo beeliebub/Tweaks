@@ -8,6 +8,7 @@ import org.bukkit.event.inventory.PrepareAnvilEvent;
 import org.bukkit.inventory.AnvilInventory;
 import org.bukkit.inventory.ItemStack;
 
+// Prevents tools with SpawnerPickup or EggCollector enchantments from being used in anvils
 public class AnvilListener implements Listener {
 
     private final SpawnerPickup spawnerPickup;

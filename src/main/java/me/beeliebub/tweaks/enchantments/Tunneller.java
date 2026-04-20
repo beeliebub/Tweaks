@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 
+// Breaks a 3x3 area of blocks perpendicular to the face you're mining.
+// Integrates with Smelter, GemConnoisseur, and Telekinesis enchantments, and drops correct XP.
 public class Tunneller implements Listener {
 
     private static final double RAY_DISTANCE = 6.0;
@@ -92,6 +94,7 @@ public class Tunneller implements Listener {
         }
     }
 
+    // Break a single block, applying smelter/gem drops, routing to inventory or ground, and spawning XP
     private void breakBlock(Block target, ItemStack tool, Player player, boolean useSmelter, boolean useTelekinesis, boolean useGemConnoisseur) {
         Material type = target.getType();
         if (type.isAir() || target.isLiquid()) return;
@@ -138,6 +141,7 @@ public class Tunneller implements Listener {
         }
     }
 
+    // Get the two axes perpendicular to the mined face (used to find the 3x3 grid)
     private int[][] axesForFace(BlockFace face) {
         return switch (face) {
             case UP, DOWN -> new int[][]{{1, 0, 0}, {0, 0, 1}};
