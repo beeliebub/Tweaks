@@ -21,6 +21,9 @@ gem-connoisseur: "jass:test4"
 tunneller: "jass:test5"
 spawner-pickup: "jass:test6"
 egg-collector: "jass:test7"
+
+# Drop chance percentage for Egg Collector enchantment (0.0 - 100.0).
+egg-collector-drop-chance: 0.5
 replant: "jass:test8"
 efficacy: "jass:test9"
 

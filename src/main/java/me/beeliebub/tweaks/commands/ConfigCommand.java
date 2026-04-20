@@ -31,7 +31,7 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length < 2) {
-            sender.sendMessage(Component.text("Usage: /" + label + " max_homes <value>").color(NamedTextColor.RED));
+            sender.sendMessage(Component.text("Usage: /" + label + " <key> <value>").color(NamedTextColor.RED));
             return true;
         }
 
@@ -52,6 +52,20 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Component.text("Invalid number format. Please provide a valid integer.").color(NamedTextColor.RED));
                 }
             }
+            case "egg_collector_drop_chance" -> {
+                try {
+                    double chance = Double.parseDouble(args[1]);
+                    if (chance < 0.0 || chance > 100.0) {
+                        sender.sendMessage(Component.text("Drop chance must be between 0.0 and 100.0.").color(NamedTextColor.RED));
+                        return true;
+                    }
+                    plugin.getConfig().set("egg-collector-drop-chance", chance);
+                    plugin.saveConfig();
+                    sender.sendMessage(Component.text("Egg Collector drop chance has been updated live to " + chance + "%!").color(NamedTextColor.GREEN));
+                } catch (NumberFormatException e) {
+                    sender.sendMessage(Component.text("Invalid number format. Please provide a valid decimal number.").color(NamedTextColor.RED));
+                }
+            }
             default -> sender.sendMessage(Component.text("Unknown config key: " + key).color(NamedTextColor.RED));
         }
 
@@ -64,7 +78,7 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
         if (!sender.hasPermission("tweaks.admin.config")) return Collections.emptyList();
 
         if (args.length == 1) {
-            return List.of("max_homes").stream()
+            return List.of("max_homes", "egg_collector_drop_chance").stream()
                     .filter(s -> s.startsWith(args[0].toLowerCase()))
                     .toList();
         }

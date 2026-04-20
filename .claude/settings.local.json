@@ -4,7 +4,8 @@
       "Read(//c/Users/jayva/.gradle/**)",
       "Bash(jar tf *)",
       "WebSearch",
-      "WebFetch(domain:jd.papermc.io)"
+      "WebFetch(domain:jd.papermc.io)",
+      "Bash(xargs grep *)"
     ]
   }
 }

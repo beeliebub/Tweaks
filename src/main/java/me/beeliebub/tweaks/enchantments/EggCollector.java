@@ -30,14 +30,15 @@ import java.util.logging.Level;
 // The tool breaks after 5 successful egg drops, with remaining uses shown in lore.
 public class EggCollector implements Listener {
 
-    private static final double DROP_CHANCE = 0.005;
     private static final int BREAK_AT = 5;
     private static final String LORE_PREFIX = "Egg Collector Uses Remaining: ";
 
+    private final Tweaks plugin;
     private final Enchantment enchantment;
     private final NamespacedKey counterKey;
 
     public EggCollector(Tweaks plugin) {
+        this.plugin = plugin;
         String raw = plugin.getConfig().getString("egg-collector");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.counterKey = new NamespacedKey(plugin, "egg_collector_count");
@@ -74,7 +75,8 @@ public class EggCollector implements Listener {
         ItemStack tool = killer.getInventory().getItemInMainHand();
         if (tool.isEmpty() || !tool.containsEnchantment(enchantment)) return;
 
-        if (ThreadLocalRandom.current().nextDouble() >= DROP_CHANCE) return;
+        double dropChance = plugin.getConfig().getDouble("egg-collector-drop-chance", 0.5) / 100.0;
+        if (ThreadLocalRandom.current().nextDouble() >= dropChance) return;
 
         EntityType type = event.getEntityType();
         Material spawnEgg = Material.matchMaterial(type.getKey().getKey() + "_spawn_egg");
