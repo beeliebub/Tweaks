@@ -14,8 +14,10 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
@@ -91,30 +93,28 @@ public class GemConnoisseur implements Listener {
         return result;
     }
 
-    @EventHandler(ignoreCancelled = true)
-    public void onBlockBreak(BlockBreakEvent event) {
-        if (enchantment == null) return;
+    public boolean hasEnchant(ItemStack tool) {
+        return enchantment != null && !tool.isEmpty() && tool.containsEnchantment(enchantment);
+    }
 
-        Block block = event.getBlock();
-        String blockKind = blockKindOf(block.getType());
-        if (blockKind == null) return;
+    public List<ItemStack> rollDrops(Material blockType, ItemStack tool) {
+        List<ItemStack> result = new ArrayList<>();
+        if (enchantment == null) return result;
 
-        Player player = event.getPlayer();
-        ItemStack tool = player.getInventory().getItemInMainHand();
-        if (tool.isEmpty() || !tool.containsEnchantment(enchantment)) return;
-        if (block.getDrops(tool, player).isEmpty()) return;
+        String blockKind = blockKindOf(blockType);
+        if (blockKind == null) return result;
+        if (!tool.containsEnchantment(enchantment)) return result;
 
         int level = Math.min(tool.getEnchantmentLevel(enchantment), MAX_LEVEL);
-        if (level <= 0) return;
+        if (level <= 0) return result;
 
         Map<String, Map<Material, Integer>> byBlock = rates.get(level);
-        if (byBlock == null) return;
+        if (byBlock == null) return result;
         Map<Material, Integer> materialRates = byBlock.get(blockKind);
-        if (materialRates == null || materialRates.isEmpty()) return;
+        if (materialRates == null || materialRates.isEmpty()) return result;
 
         ThreadLocalRandom random = ThreadLocalRandom.current();
         int fortuneLevel = tool.getEnchantmentLevel(Enchantment.FORTUNE);
-        boolean routeToInventory = telekinesis != null && telekinesis.hasEnchant(tool);
 
         for (Map.Entry<Material, Integer> entry : materialRates.entrySet()) {
             int oneIn = entry.getValue();
@@ -127,7 +127,26 @@ public class GemConnoisseur implements Listener {
                 if (bonus > 0) amount += bonus;
             }
 
-            ItemStack drop = new ItemStack(entry.getKey(), amount);
+            result.add(new ItemStack(entry.getKey(), amount));
+        }
+        return result;
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockBreak(BlockBreakEvent event) {
+        if (enchantment == null) return;
+
+        Block block = event.getBlock();
+        Player player = event.getPlayer();
+        ItemStack tool = player.getInventory().getItemInMainHand();
+        if (tool.isEmpty() || !hasEnchant(tool)) return;
+        if (block.getDrops(tool, player).isEmpty()) return;
+
+        List<ItemStack> gemDrops = rollDrops(block.getType(), tool);
+        if (gemDrops.isEmpty()) return;
+
+        boolean routeToInventory = telekinesis != null && telekinesis.hasEnchant(tool);
+        for (ItemStack drop : gemDrops) {
             if (routeToInventory) {
                 Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
                 for (ItemStack remaining : leftover.values()) {

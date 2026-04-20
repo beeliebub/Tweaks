@@ -18,6 +18,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.RayTraceResult;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 
@@ -28,12 +29,14 @@ public class Tunneller implements Listener {
     private final Enchantment enchantment;
     private final Telekinesis telekinesis;
     private final Smelter smelter;
+    private final GemConnoisseur gemConnoisseur;
 
-    public Tunneller(Tweaks plugin, Telekinesis telekinesis, Smelter smelter) {
+    public Tunneller(Tweaks plugin, Telekinesis telekinesis, Smelter smelter, GemConnoisseur gemConnoisseur) {
         String raw = plugin.getConfig().getString("tunneller");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.telekinesis = telekinesis;
         this.smelter = smelter;
+        this.gemConnoisseur = gemConnoisseur;
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -74,6 +77,7 @@ public class Tunneller implements Listener {
         Block origin = event.getBlock();
         boolean useSmelter = smelter != null && smelter.hasEnchant(tool);
         boolean useTelekinesis = telekinesis != null && telekinesis.hasEnchant(tool);
+        boolean useGemConnoisseur = gemConnoisseur != null && gemConnoisseur.hasEnchant(tool);
 
         for (int u = -1; u <= 1; u++) {
             for (int v = -1; v <= 1; v++) {
@@ -83,18 +87,25 @@ public class Tunneller implements Listener {
                         a1[1] * u + a2[1] * v,
                         a1[2] * u + a2[2] * v
                 );
-                breakBlock(target, tool, player, useSmelter, useTelekinesis);
+                breakBlock(target, tool, player, useSmelter, useTelekinesis, useGemConnoisseur);
             }
         }
     }
 
-    private void breakBlock(Block target, ItemStack tool, Player player, boolean useSmelter, boolean useTelekinesis) {
+    private void breakBlock(Block target, ItemStack tool, Player player, boolean useSmelter, boolean useTelekinesis, boolean useGemConnoisseur) {
         Material type = target.getType();
         if (type.isAir() || target.isLiquid()) return;
         if (type.getHardness() < 0) return;
 
         Collection<ItemStack> drops = target.getDrops(tool, player);
         if (useSmelter) drops = Smelter.smeltDrops(drops);
+
+        List<ItemStack> gemDrops = List.of();
+        if (useGemConnoisseur && !drops.isEmpty()) {
+            gemDrops = gemConnoisseur.rollDrops(type, tool);
+        }
+
+        int exp = target.getExpDrop(tool, player);
 
         Location loc = target.getLocation();
         target.getWorld().playEffect(loc, Effect.STEP_SOUND, type);
@@ -107,10 +118,23 @@ public class Tunneller implements Listener {
                     loc.getWorld().dropItemNaturally(loc, remaining);
                 }
             }
+            for (ItemStack drop : gemDrops) {
+                Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
+                for (ItemStack remaining : leftover.values()) {
+                    loc.getWorld().dropItemNaturally(loc, remaining);
+                }
+            }
         } else {
             for (ItemStack drop : drops) {
                 loc.getWorld().dropItemNaturally(loc, drop);
             }
+            for (ItemStack drop : gemDrops) {
+                loc.getWorld().dropItemNaturally(loc, drop);
+            }
+        }
+
+        if (exp > 0) {
+            target.getWorld().spawn(loc.add(0.5, 0.5, 0.5), org.bukkit.entity.ExperienceOrb.class, orb -> orb.setExperience(exp));
         }
     }
 
