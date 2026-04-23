@@ -39,6 +39,8 @@ public class SeparatorListener implements Listener {
 
     // Ender chest data uses this prefix to distinguish from regular inventory data
     private static final String EC_PREFIX = "ec_";
+    // Experience data uses this prefix to distinguish from regular inventory data
+    private static final String XP_PREFIX = "xp_";
     // Tracks players who just died so their empty inventory isn't saved over their real one
     private final Set<UUID> recentDeaths = ConcurrentHashMap.newKeySet();
 
@@ -61,6 +63,13 @@ public class SeparatorListener implements Listener {
                 || storage.getCachedInventory(player, EC_PREFIX + PROFILE_PI) != null;
     }
 
+    private boolean hasExperienceData(UUID player) {
+        return storage.getCachedInventory(player, XP_PREFIX + PROFILE_STANDARD) != null
+                || storage.getCachedInventory(player, XP_PREFIX + PROFILE_LOBBY) != null
+                || storage.getCachedInventory(player, XP_PREFIX + PROFILE_ARCHIVE) != null
+                || storage.getCachedInventory(player, XP_PREFIX + PROFILE_PI) != null;
+    }
+
     // One-time migration: copy existing ender chest contents into the standard profile slot
     private void migrateEnderChest(Player player) {
         UUID uuid = player.getUniqueId();
@@ -72,6 +81,31 @@ public class SeparatorListener implements Listener {
         String profile = getProfileForWorldKey(player.getWorld().getKey().asString());
         if (!profile.equals(PROFILE_STANDARD)) {
             player.getEnderChest().clear();
+        }
+    }
+
+    // One-time migration: save current XP to the standard profile and zero out all others.
+    // If the player is in a non-standard profile, their XP is saved to standard and then zeroed.
+    private void migrateExperience(Player player) {
+        UUID uuid = player.getUniqueId();
+        if (hasExperienceData(uuid)) return;
+
+        float xp = player.getExp();
+        int level = player.getLevel();
+        String xpData = level + ":" + xp;
+
+        // Always save current XP to the standard profile
+        storage.cacheInventory(uuid, XP_PREFIX + PROFILE_STANDARD, xpData);
+        // Zero out all other profiles
+        storage.cacheInventory(uuid, XP_PREFIX + PROFILE_LOBBY, "0:0.0");
+        storage.cacheInventory(uuid, XP_PREFIX + PROFILE_ARCHIVE, "0:0.0");
+        storage.cacheInventory(uuid, XP_PREFIX + PROFILE_PI, "0:0.0");
+
+        // If player is not in standard profile, zero their current XP
+        String profile = getProfileForWorldKey(player.getWorld().getKey().asString());
+        if (!profile.equals(PROFILE_STANDARD)) {
+            player.setExp(0f);
+            player.setLevel(0);
         }
     }
 
@@ -91,7 +125,9 @@ public class SeparatorListener implements Listener {
         UUID uuid = player.getUniqueId();
 
         storage.loadPlayerInventoriesAsync(uuid).thenRun(() -> Bukkit.getScheduler().runTask(plugin, () -> {
-            if (player.isOnline()) migrateEnderChest(player);
+            if (!player.isOnline()) return;
+            migrateEnderChest(player);
+            migrateExperience(player);
         }));
     }
 
@@ -106,6 +142,7 @@ public class SeparatorListener implements Listener {
 
         storage.cacheInventory(uuid, currentProfile, InventoryUtil.toBase64(player.getInventory().getContents()));
         storage.cacheInventory(uuid, EC_PREFIX + currentProfile, InventoryUtil.toBase64(player.getEnderChest().getContents()));
+        storage.cacheInventory(uuid, XP_PREFIX + currentProfile, player.getLevel() + ":" + player.getExp());
 
         storage.unloadAndSavePlayerInventoriesAsync(uuid);
     }
@@ -138,6 +175,17 @@ public class SeparatorListener implements Listener {
         String ecData = storage.getCachedInventory(uuid, EC_PREFIX + toProfile);
         if (ecData != null && !ecData.isEmpty()) {
             player.getEnderChest().setContents(InventoryUtil.fromBase64(ecData));
+        }
+
+        storage.cacheInventory(uuid, XP_PREFIX + fromProfile, player.getLevel() + ":" + player.getExp());
+        player.setExp(0f);
+        player.setLevel(0);
+
+        String xpData = storage.getCachedInventory(uuid, XP_PREFIX + toProfile);
+        if (xpData != null && !xpData.isEmpty()) {
+            String[] parts = xpData.split(":");
+            player.setLevel(Integer.parseInt(parts[0]));
+            player.setExp(Float.parseFloat(parts[1]));
         }
 
         player.sendMessage(Component.text("Inventory profile switched to: " + toProfile).color(NamedTextColor.YELLOW));

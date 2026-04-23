@@ -14,12 +14,14 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.RayTraceResult;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 
 // Breaks a 3x3 area of blocks perpendicular to the face you're mining.
@@ -81,6 +83,7 @@ public class Tunneller implements Listener {
         boolean useTelekinesis = telekinesis != null && telekinesis.hasEnchant(tool);
         boolean useGemConnoisseur = gemConnoisseur != null && gemConnoisseur.hasEnchant(tool);
 
+        int blocksbroken = 0;
         for (int u = -1; u <= 1; u++) {
             for (int v = -1; v <= 1; v++) {
                 if (u == 0 && v == 0) continue;
@@ -89,21 +92,38 @@ public class Tunneller implements Listener {
                         a1[1] * u + a2[1] * v,
                         a1[2] * u + a2[2] * v
                 );
-                breakBlock(target, tool, player, useSmelter, useTelekinesis, useGemConnoisseur);
+                if (breakBlock(target, tool, player, useSmelter, useTelekinesis, useGemConnoisseur)) {
+                    blocksbroken++;
+                }
+            }
+        }
+
+        if (blocksbroken > 0) {
+            int unbreakingLevel = tool.getEnchantmentLevel(Enchantment.UNBREAKING);
+            ThreadLocalRandom random = ThreadLocalRandom.current();
+            int damageToApply = 0;
+            for (int i = 0; i < blocksbroken; i++) {
+                if (unbreakingLevel <= 0 || random.nextInt(unbreakingLevel + 1) == 0) {
+                    damageToApply++;
+                }
+            }
+            if (damageToApply > 0) {
+                player.damageItemStack(EquipmentSlot.HAND, damageToApply);
             }
         }
     }
 
-    // Break a single block, applying smelter/gem drops and routing to inventory or ground
-    private void breakBlock(Block target, ItemStack tool, Player player, boolean useSmelter, boolean useTelekinesis, boolean useGemConnoisseur) {
+    // Break a single block, applying smelter/gem drops and routing to inventory or ground.
+    // Returns true if a block was actually broken.
+    private boolean breakBlock(Block target, ItemStack tool, Player player, boolean useSmelter, boolean useTelekinesis, boolean useGemConnoisseur) {
         Material type = target.getType();
-        if (type.isAir() || target.isLiquid()) return;
-        if (type.getHardness() < 0) return;
+        if (type.isAir() || target.isLiquid()) return false;
+        if (type.getHardness() < 0) return false;
 
         // No modifiers: breakNaturally handles drops, break effect, and XP in one call
         if (!useSmelter && !useGemConnoisseur && !useTelekinesis) {
             target.breakNaturally(tool, true, true);
-            return;
+            return true;
         }
 
         // With modifiers: get drops manually so we can apply smelter/gem/telekinesis
@@ -142,6 +162,7 @@ public class Tunneller implements Listener {
                 loc.getWorld().dropItemNaturally(loc, drop);
             }
         }
+        return true;
     }
 
     // Get the two axes perpendicular to the mined face (used to find the 3x3 grid)
