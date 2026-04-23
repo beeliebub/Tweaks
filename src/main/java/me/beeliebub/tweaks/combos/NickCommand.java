@@ -131,6 +131,17 @@ public class NickCommand implements CommandExecutor, Listener {
         return true;
     }
 
+    // Strips all & color codes (single-char like &a, and hex like &#rrggbb) to get visible text
+    private static String stripColorCodes(String input) {
+        // Remove hex color codes: &#rrggbb (8 characters each)
+        String stripped = input.replaceAll("&(?i)#[0-9a-f]{6}", "");
+        // Remove standard color/format codes: &x (2 characters each)
+        stripped = stripped.replaceAll("&[0-9a-fA-Fk-oK-OrR]", "");
+        return stripped;
+    }
+
+    private static final int MAX_NICK_LENGTH = 24;
+
     private boolean handleSet(CommandSender sender, String[] args) {
 
         if (!(sender instanceof Player player)) {
@@ -145,6 +156,30 @@ public class NickCommand implements CommandExecutor, Listener {
         }
 
         String rawInput = String.join(" ", args);
+
+        // Disallow spaces
+        if (rawInput.contains(" ")) {
+            player.sendMessage(Component.text("Nicknames cannot contain spaces.")
+                    .color(NamedTextColor.RED));
+            return true;
+        }
+
+        // Disallow magic/obfuscated effect (&k)
+        if (rawInput.matches("(?i).*&k.*")) {
+            player.sendMessage(Component.text("Nicknames cannot use the magic effect (&k).")
+                    .color(NamedTextColor.RED));
+            return true;
+        }
+
+        // Check visible character length (excluding color codes)
+        String visibleText = stripColorCodes(rawInput);
+        if (visibleText.length() > MAX_NICK_LENGTH) {
+            player.sendMessage(Component.text("Nickname too long! Max " + MAX_NICK_LENGTH
+                            + " visible characters (yours: " + visibleText.length() + ").")
+                    .color(NamedTextColor.RED));
+            return true;
+        }
+
         Component nickname = COLOR_SERIALIZER.deserialize(rawInput);
         player.getPersistentDataContainer().set(nickKey, PersistentDataType.STRING, rawInput);
         player.displayName(nickname);
