@@ -46,4 +46,5 @@ commands:
     description: Manage and claim minigame rewards
   whack:
     description: Whack an Andrew minigame admin commands
-    permission: tweaks.admin.whack
+  more:
+    description: Maximize the stack size of the held item
