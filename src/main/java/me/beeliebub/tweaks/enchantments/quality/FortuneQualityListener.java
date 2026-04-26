@@ -39,11 +39,8 @@ public class FortuneQualityListener implements Listener {
         Player player = event.getPlayer();
         ItemStack tool = player.getInventory().getItemInMainHand();
         if (tool.isEmpty()) return;
+        if (registry.getToolQuality(tool, "fortune") == null || vanillaFortune == null) return;
 
-        QualityRegistry.QualityInfo quality = registry.getToolQuality(tool, "fortune");
-        if (quality == null || vanillaFortune == null) return;
-
-        int rerolls = quality.tier().getRerolls();
         Block block = event.getBlock();
 
         // Capture current drops for scoring
@@ -52,28 +49,14 @@ public class FortuneQualityListener implements Listener {
             currentDrops.add(item.getItemStack());
         }
 
-        Collection<ItemStack> bestDrops = currentDrops;
-        int highestScore = scoreDrops(bestDrops);
-
-        // Build a simulation tool with vanilla minecraft:fortune applied.
-        // Vanilla block loot tables only recognize minecraft:fortune in their
-        // apply_bonus functions, not custom quality enchantments like jass:legendary_fortune.
-        ItemStack simTool = tool.clone();
-        simTool.addUnsafeEnchantment(vanillaFortune, quality.level());
-
-        // The block is already broken (now air). Temporarily restore it so
-        // getDrops() can simulate fortune rolls against the original block type.
+        // The block is already broken (now air). Temporarily restore it so the
+        // simulation in applyFortuneRerolls() can call getDrops() against the
+        // original block type.
         BlockData originalData = event.getBlockState().getBlockData();
         block.setBlockData(originalData, false);
+        Collection<ItemStack> bestDrops;
         try {
-            for (int r = 0; r < rerolls; r++) {
-                Collection<ItemStack> simulatedDrops = block.getDrops(simTool, player);
-                int score = scoreDrops(simulatedDrops);
-                if (score > highestScore) {
-                    highestScore = score;
-                    bestDrops = simulatedDrops;
-                }
-            }
+            bestDrops = applyFortuneRerolls(block, tool, player, currentDrops);
         } finally {
             block.setType(Material.AIR, false);
         }
@@ -101,6 +84,36 @@ public class FortuneQualityListener implements Listener {
                 }
             }
         }
+    }
+
+    // Apply quality fortune re-rolls to a block's drops. The block must be in
+    // its original (non-air) state so getDrops() can simulate against it.
+    // Returns baseDrops unchanged if the tool has no quality fortune variant,
+    // otherwise the highest-scored roll across `tier.rerolls` simulations.
+    // Used by Tunneller for surrounding blocks that don't fire BlockDropItemEvent.
+    public Collection<ItemStack> applyFortuneRerolls(Block block, ItemStack tool, Player player, Collection<ItemStack> baseDrops) {
+        QualityRegistry.QualityInfo quality = registry.getToolQuality(tool, "fortune");
+        if (quality == null || vanillaFortune == null) return baseDrops;
+
+        int rerolls = quality.tier().getRerolls();
+        Collection<ItemStack> bestDrops = baseDrops;
+        int highestScore = scoreDrops(bestDrops);
+
+        // Build a simulation tool with vanilla minecraft:fortune applied.
+        // Vanilla block loot tables only recognize minecraft:fortune in their
+        // apply_bonus functions, not custom quality enchantments like jass:legendary_fortune.
+        ItemStack simTool = tool.clone();
+        simTool.addUnsafeEnchantment(vanillaFortune, quality.level());
+
+        for (int r = 0; r < rerolls; r++) {
+            Collection<ItemStack> simulatedDrops = block.getDrops(simTool, player);
+            int score = scoreDrops(simulatedDrops);
+            if (score > highestScore) {
+                highestScore = score;
+                bestDrops = simulatedDrops;
+            }
+        }
+        return bestDrops;
     }
 
     /**

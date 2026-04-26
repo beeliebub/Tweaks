@@ -107,11 +107,13 @@ public class Tweaks extends JavaPlugin {
         SpawnerPickup spawnerPickup = new SpawnerPickup(this);
         EggCollector eggCollector = new EggCollector(this);
 
+        FortuneQualityListener fortuneQuality = new FortuneQualityListener(qualityRegistry);
+
         getServer().getPluginManager().registerEvents(telekinesis, this);
         getServer().getPluginManager().registerEvents(smelter, this);
         getServer().getPluginManager().registerEvents(lumberjack, this);
         getServer().getPluginManager().registerEvents(gemConnoisseur, this);
-        getServer().getPluginManager().registerEvents(new Tunneller(this, telekinesis, smelter, gemConnoisseur, qualityRegistry), this);
+        getServer().getPluginManager().registerEvents(new Tunneller(this, telekinesis, smelter, gemConnoisseur, qualityRegistry, fortuneQuality), this);
         getServer().getPluginManager().registerEvents(spawnerPickup, this);
         getServer().getPluginManager().registerEvents(eggCollector, this);
         getServer().getPluginManager().registerEvents(new AnvilListener(spawnerPickup, eggCollector), this);
@@ -120,7 +122,7 @@ public class Tweaks extends JavaPlugin {
 
         // Quality Enchantment Listeners
         getServer().getPluginManager().registerEvents(new EnchantTableListener(qualityRegistry, bloodMoonManager), this);
-        getServer().getPluginManager().registerEvents(new FortuneQualityListener(qualityRegistry), this);
+        getServer().getPluginManager().registerEvents(fortuneQuality, this);
         getServer().getPluginManager().registerEvents(new LootingQualityListener(qualityRegistry), this);
         getServer().getPluginManager().registerEvents(new LuckOfSeaQualityListener(qualityRegistry, this), this);
 

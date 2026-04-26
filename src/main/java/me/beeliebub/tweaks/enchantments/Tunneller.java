@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.enchantments;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.enchantments.quality.FortuneQualityListener;
 import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
 import me.beeliebub.tweaks.enchantments.quality.QualityTier;
 import org.bukkit.Effect;
@@ -37,15 +38,18 @@ public class Tunneller implements Listener {
     private final Smelter smelter;
     private final GemConnoisseur gemConnoisseur;
     private final QualityRegistry qualityRegistry;
+    private final FortuneQualityListener fortuneQuality;
 
     public Tunneller(Tweaks plugin, Telekinesis telekinesis, Smelter smelter,
-                     GemConnoisseur gemConnoisseur, QualityRegistry qualityRegistry) {
+                     GemConnoisseur gemConnoisseur, QualityRegistry qualityRegistry,
+                     FortuneQualityListener fortuneQuality) {
         String raw = plugin.getConfig().getString("tunneller");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.telekinesis = telekinesis;
         this.smelter = smelter;
         this.gemConnoisseur = gemConnoisseur;
         this.qualityRegistry = qualityRegistry;
+        this.fortuneQuality = fortuneQuality;
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -89,6 +93,11 @@ public class Tunneller implements Listener {
         boolean useSmelter = smelter != null && smelter.hasEnchant(tool);
         boolean useTelekinesis = telekinesis != null && telekinesis.hasEnchant(tool);
         boolean useGemConnoisseur = gemConnoisseur != null && gemConnoisseur.hasEnchant(tool);
+        // Quality fortune re-rolls require the manual break path (breakNaturally
+        // bypasses our re-roll hook). Detect it once per event for the loop.
+        boolean useFortuneReroll = fortuneQuality != null
+                && qualityRegistry != null
+                && qualityRegistry.getToolQuality(tool, "fortune") != null;
 
         int blocksbroken = 0;
         for (int u = -radius; u <= radius; u++) {
@@ -99,7 +108,7 @@ public class Tunneller implements Listener {
                         a1[1] * u + a2[1] * v,
                         a1[2] * u + a2[2] * v
                 );
-                if (breakBlock(target, tool, player, useSmelter, useTelekinesis, useGemConnoisseur)) {
+                if (breakBlock(target, tool, player, useSmelter, useTelekinesis, useGemConnoisseur, useFortuneReroll)) {
                     blocksbroken++;
                 }
             }
@@ -133,19 +142,21 @@ public class Tunneller implements Listener {
 
     // Break a single block, applying smelter/gem drops and routing to inventory or ground.
     // Returns true if a block was actually broken.
-    private boolean breakBlock(Block target, ItemStack tool, Player player, boolean useSmelter, boolean useTelekinesis, boolean useGemConnoisseur) {
+    private boolean breakBlock(Block target, ItemStack tool, Player player, boolean useSmelter, boolean useTelekinesis, boolean useGemConnoisseur, boolean useFortuneReroll) {
         Material type = target.getType();
         if (type.isAir() || target.isLiquid()) return false;
         if (type.getHardness() < 0) return false;
 
-        // No modifiers: breakNaturally handles drops, break effect, and XP in one call
-        if (!useSmelter && !useGemConnoisseur && !useTelekinesis) {
+        // No modifiers and no quality fortune: breakNaturally handles drops, break effect, and XP in one call
+        if (!useSmelter && !useGemConnoisseur && !useTelekinesis && !useFortuneReroll) {
             target.breakNaturally(tool, true, true);
             return true;
         }
 
-        // With modifiers: get drops manually so we can apply smelter/gem/telekinesis
+        // Manual path so we can apply quality fortune re-rolls and/or smelter/gem/telekinesis
         Collection<ItemStack> drops = target.getDrops(tool, player);
+        // Apply fortune re-rolls before smelter so smelter sees the boosted drop count
+        if (useFortuneReroll) drops = fortuneQuality.applyFortuneRerolls(target, tool, player, drops);
         if (useSmelter) drops = Smelter.smeltDrops(drops);
 
         List<ItemStack> gemDrops = List.of();
