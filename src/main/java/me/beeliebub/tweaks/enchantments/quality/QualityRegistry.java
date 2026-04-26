@@ -101,5 +101,19 @@ public class QualityRegistry {
         return info != null ? info.tier() : null;
     }
 
+    // Effective unbreaking level for manual durability calcs (Tunneller, Lumberjack).
+    // Vanilla tool.getEnchantmentLevel(UNBREAKING) misses jass:*_unbreaking variants,
+    // so a tool with only quality unbreaking would otherwise be treated as level 0.
+    // Returns the higher of vanilla level and any quality variant level on the tool.
+    public int getEffectiveUnbreakingLevel(ItemStack tool) {
+        if (tool == null || tool.isEmpty()) return 0;
+        int level = tool.getEnchantmentLevel(Enchantment.UNBREAKING);
+        QualityInfo qualityInfo = getToolQuality(tool, "unbreaking");
+        if (qualityInfo != null && qualityInfo.level() > level) {
+            level = qualityInfo.level();
+        }
+        return level;
+    }
+
     public record QualityInfo(QualityTier tier, int level) {}
 }

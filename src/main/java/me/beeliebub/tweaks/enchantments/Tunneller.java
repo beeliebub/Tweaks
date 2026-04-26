@@ -115,7 +115,9 @@ public class Tunneller implements Listener {
         }
 
         if (blocksbroken > 0) {
-            int unbreakingLevel = tool.getEnchantmentLevel(Enchantment.UNBREAKING);
+            int unbreakingLevel = qualityRegistry != null
+                    ? qualityRegistry.getEffectiveUnbreakingLevel(tool)
+                    : tool.getEnchantmentLevel(Enchantment.UNBREAKING);
             ThreadLocalRandom random = ThreadLocalRandom.current();
             int damageToApply = 0;
             for (int i = 0; i < blocksbroken; i++) {

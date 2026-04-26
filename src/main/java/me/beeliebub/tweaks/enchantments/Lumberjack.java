@@ -3,6 +3,8 @@ package me.beeliebub.tweaks.enchantments;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.enchantments.quality.FortuneQualityListener;
+import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Effect;
@@ -42,11 +44,16 @@ public class Lumberjack implements Listener {
 
     private final Enchantment enchantment;
     private final Telekinesis telekinesis;
+    private final QualityRegistry qualityRegistry;
+    private final FortuneQualityListener fortuneQuality;
 
-    public Lumberjack(Tweaks plugin, Telekinesis telekinesis) {
+    public Lumberjack(Tweaks plugin, Telekinesis telekinesis, QualityRegistry qualityRegistry,
+                      FortuneQualityListener fortuneQuality) {
         String raw = plugin.getConfig().getString("lumberjack");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.telekinesis = telekinesis;
+        this.qualityRegistry = qualityRegistry;
+        this.fortuneQuality = fortuneQuality;
     }
 
     public Enchantment getEnchantment() {
@@ -107,7 +114,9 @@ public class Lumberjack implements Listener {
         }
 
         int additionalBlocks = blocks.size() - 1;
-        int unbreakingLevel = tool.getEnchantmentLevel(Enchantment.UNBREAKING);
+        int unbreakingLevel = qualityRegistry != null
+                ? qualityRegistry.getEffectiveUnbreakingLevel(tool)
+                : tool.getEnchantmentLevel(Enchantment.UNBREAKING);
         ThreadLocalRandom random = ThreadLocalRandom.current();
 
         int damageToApply = 0;
@@ -130,13 +139,16 @@ public class Lumberjack implements Listener {
         }
 
         boolean routeToInventory = telekinesis != null && telekinesis.hasEnchant(tool);
+        // Quality fortune re-rolls on the additional blocks require the manual break path
+        // (breakNaturally bypasses BlockDropItemEvent, so FortuneQualityListener never fires).
+        // Logs/stems aren't fortune-affected, so the per-block check below skips wasted sims.
+        boolean hasFortuneQuality = fortuneQuality != null
+                && qualityRegistry != null
+                && qualityRegistry.getToolQuality(tool, "fortune") != null;
+
         for (Block block : blocks) {
             if (block.equals(origin)) continue;
-            if (routeToInventory) {
-                breakIntoInventory(block, tool, player);
-            } else {
-                block.breakNaturally(tool);
-            }
+            breakBlock(block, tool, player, routeToInventory, hasFortuneQuality);
         }
 
         if (damageToApply > 0) {
@@ -145,16 +157,36 @@ public class Lumberjack implements Listener {
         }
     }
 
-    private void breakIntoInventory(Block block, ItemStack tool, Player player) {
+    // Break a single block. Routes to inventory if telekinesis is active, and applies quality
+    // fortune re-rolls on mushroom caps (the only fortune-affected blocks Lumberjack handles).
+    private void breakBlock(Block block, ItemStack tool, Player player,
+                            boolean routeToInventory, boolean hasFortuneQuality) {
         Material type = block.getType();
+        boolean useFortuneReroll = hasFortuneQuality
+                && (type == Material.RED_MUSHROOM_BLOCK || type == Material.BROWN_MUSHROOM_BLOCK);
+
+        if (!routeToInventory && !useFortuneReroll) {
+            block.breakNaturally(tool);
+            return;
+        }
+
         Collection<ItemStack> drops = block.getDrops(tool, player);
+        if (useFortuneReroll) drops = fortuneQuality.applyFortuneRerolls(block, tool, player, drops);
+
         Location loc = block.getLocation();
         block.getWorld().playEffect(loc, Effect.STEP_SOUND, type);
         block.setType(Material.AIR);
-        for (ItemStack drop : drops) {
-            Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
-            for (ItemStack remaining : leftover.values()) {
-                loc.getWorld().dropItemNaturally(loc, remaining);
+
+        if (routeToInventory) {
+            for (ItemStack drop : drops) {
+                Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
+                for (ItemStack remaining : leftover.values()) {
+                    loc.getWorld().dropItemNaturally(loc, remaining);
+                }
+            }
+        } else {
+            for (ItemStack drop : drops) {
+                loc.getWorld().dropItemNaturally(loc, drop);
             }
         }
     }
