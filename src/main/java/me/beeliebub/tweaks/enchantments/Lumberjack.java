@@ -28,11 +28,17 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 
-// Chops down entire trees at once by breaking all connected logs of the same type.
-// Respects unbreaking, checks durability before felling, and requires an adjacent leaf block.
+// Chops down entire trees (connected logs of the same type) and large mushrooms (connected
+// stem + cap blocks) at once. Respects unbreaking, checks durability before felling,
+// and requires an adjacent leaf (trees) or both stem and cap blocks (mushrooms).
 public class Lumberjack implements Listener {
 
     private static final int MAX_LOGS = 256;
+    private static final Set<Material> MUSHROOM_BLOCKS = Set.of(
+            Material.MUSHROOM_STEM,
+            Material.RED_MUSHROOM_BLOCK,
+            Material.BROWN_MUSHROOM_BLOCK
+    );
 
     private final Enchantment enchantment;
     private final Telekinesis telekinesis;
@@ -48,7 +54,7 @@ public class Lumberjack implements Listener {
     }
 
     public Set<Block> collectConnectedLogs(Block start, Material logType) {
-        return findConnectedLogs(start, logType);
+        return findConnected(start, Set.of(logType));
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -73,24 +79,39 @@ public class Lumberjack implements Listener {
         if (enchantment == null) return;
 
         Block origin = event.getBlock();
-        Material logType = origin.getType();
-        if (!Tag.LOGS.isTagged(logType)) return;
+        Material originType = origin.getType();
+
+        Set<Material> validTypes;
+        boolean isMushroom;
+        if (Tag.LOGS.isTagged(originType)) {
+            validTypes = Set.of(originType);
+            isMushroom = false;
+        } else if (MUSHROOM_BLOCKS.contains(originType)) {
+            validTypes = MUSHROOM_BLOCKS;
+            isMushroom = true;
+        } else {
+            return;
+        }
 
         Player player = event.getPlayer();
         ItemStack tool = player.getInventory().getItemInMainHand();
         if (tool.isEmpty() || !tool.containsEnchantment(enchantment)) return;
 
-        Set<Block> logs = findConnectedLogs(origin, logType);
-        if (logs.size() > MAX_LOGS) return;
-        if (logs.size() <= 1) return;
-        if (!hasAdjacentLeaf(logs)) return;
+        Set<Block> blocks = findConnected(origin, validTypes);
+        if (blocks.size() > MAX_LOGS) return;
+        if (blocks.size() <= 1) return;
+        if (isMushroom) {
+            if (!isGiantMushroom(blocks)) return;
+        } else {
+            if (!hasAdjacentLeaf(blocks)) return;
+        }
 
-        int additionalLogs = logs.size() - 1;
+        int additionalBlocks = blocks.size() - 1;
         int unbreakingLevel = tool.getEnchantmentLevel(Enchantment.UNBREAKING);
         ThreadLocalRandom random = ThreadLocalRandom.current();
 
         int damageToApply = 0;
-        for (int i = 0; i < additionalLogs; i++) {
+        for (int i = 0; i < additionalBlocks; i++) {
             if (unbreakingLevel <= 0 || random.nextInt(unbreakingLevel + 1) == 0) {
                 damageToApply++;
             }
@@ -102,18 +123,19 @@ public class Lumberjack implements Listener {
 
         if (damageToApply > available - 1) {
             event.setCancelled(true);
-            player.sendMessage(Component.text("Your tool isn't durable enough to chop this whole tree!")
+            String what = isMushroom ? "mushroom" : "tree";
+            player.sendMessage(Component.text("Your tool isn't durable enough to chop this whole " + what + "!")
                     .color(NamedTextColor.RED));
             return;
         }
 
         boolean routeToInventory = telekinesis != null && telekinesis.hasEnchant(tool);
-        for (Block log : logs) {
-            if (log.equals(origin)) continue;
+        for (Block block : blocks) {
+            if (block.equals(origin)) continue;
             if (routeToInventory) {
-                breakIntoInventory(log, tool, player);
+                breakIntoInventory(block, tool, player);
             } else {
-                log.breakNaturally(tool);
+                block.breakNaturally(tool);
             }
         }
 
@@ -137,29 +159,29 @@ public class Lumberjack implements Listener {
         }
     }
 
-    // Flood-fill search for all logs of the same type connected in a 3x3x3 neighborhood
-    private Set<Block> findConnectedLogs(Block start, Material logType) {
-        Set<Block> logs = new HashSet<>();
+    // Flood-fill search for all matching blocks connected in a 3x3x3 neighborhood
+    private Set<Block> findConnected(Block start, Set<Material> validTypes) {
+        Set<Block> blocks = new HashSet<>();
         Deque<Block> queue = new ArrayDeque<>();
         queue.add(start);
-        logs.add(start);
+        blocks.add(start);
 
         while (!queue.isEmpty()) {
-            if (logs.size() > MAX_LOGS) return logs;
+            if (blocks.size() > MAX_LOGS) return blocks;
             Block current = queue.poll();
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dy = -1; dy <= 1; dy++) {
                     for (int dz = -1; dz <= 1; dz++) {
                         if (dx == 0 && dy == 0 && dz == 0) continue;
                         Block neighbor = current.getRelative(dx, dy, dz);
-                        if (neighbor.getType() == logType && logs.add(neighbor)) {
+                        if (validTypes.contains(neighbor.getType()) && blocks.add(neighbor)) {
                             queue.add(neighbor);
                         }
                     }
                 }
             }
         }
-        return logs;
+        return blocks;
     }
 
     // Verify this is a real tree (not a log structure) by checking for at least one adjacent leaf
@@ -175,6 +197,23 @@ public class Lumberjack implements Listener {
                     }
                 }
             }
+        }
+        return false;
+    }
+
+    // Verify this is a real giant mushroom (not just a placed cap or stem block) by
+    // requiring the connected set to contain both stem AND cap blocks.
+    private boolean isGiantMushroom(Set<Block> blocks) {
+        boolean hasStem = false;
+        boolean hasCap = false;
+        for (Block block : blocks) {
+            Material type = block.getType();
+            if (type == Material.MUSHROOM_STEM) {
+                hasStem = true;
+            } else if (type == Material.RED_MUSHROOM_BLOCK || type == Material.BROWN_MUSHROOM_BLOCK) {
+                hasCap = true;
+            }
+            if (hasStem && hasCap) return true;
         }
         return false;
     }

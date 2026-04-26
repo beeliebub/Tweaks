@@ -181,12 +181,13 @@ Breaks a **3x3 area** of blocks perpendicular to the face you mine. Mine the sid
 
 ### Lumberjack
 
-Chops down **entire trees** at once. When you break a log, the enchantment finds all connected logs of the same type (up to 256 blocks) and breaks them all in one swing.
+Chops down **entire trees** and **large mushrooms** at once. When you break a log or mushroom block, the enchantment finds all connected blocks (up to 256) and breaks them all in one swing.
 
-- Only activates on actual trees — there must be at least one leaf block adjacent to the connected logs. This prevents it from tearing apart log-built structures.
-- Your tool takes **durability damage for each extra log** broken. Unbreaking reduces this normally.
-- If your tool doesn't have enough durability remaining to chop the entire tree, the break is cancelled and you'll see a red warning message.
-- Works with Telekinesis to send all log drops to your inventory.
+- **Trees**: only activates on actual trees — there must be at least one leaf block adjacent to the connected logs. This prevents it from tearing apart log-built structures.
+- **Large mushrooms**: works on red and brown giant mushrooms. The connected set must include both stem and cap blocks, so isolated placed mushroom blocks are left alone.
+- Your tool takes **durability damage for each extra block** broken. Unbreaking reduces this normally.
+- If your tool doesn't have enough durability remaining to chop the entire tree or mushroom, the break is cancelled and you'll see a red warning message.
+- Works with Telekinesis to send all drops to your inventory.
 
 ### Replant
 
