@@ -1,6 +1,6 @@
 # Tweaks
 
-A Paper plugin that adds custom enchantments, separated world profiles, teleportation utilities, nicknames, flight, and minigames to a multi-world Minecraft server.
+A Paper plugin that adds custom enchantments, an enchantment quality system, separated world profiles, teleportation utilities, nicknames, flight, world events, and minigames to a multi-world Minecraft server.
 
 **Requires Paper 26.1.1 and Java 25.**
 
@@ -26,12 +26,21 @@ A Paper plugin that adds custom enchantments, separated world profiles, teleport
   - [Spawner Pickup](#spawner-pickup)
   - [Egg Collector](#egg-collector)
   - [Enchantment Interactions](#enchantment-interactions)
+- [Enchantment Quality](#enchantment-quality)
+  - [Tiers](#tiers)
+  - [Rolling at the Enchanting Table](#rolling-at-the-enchanting-table)
+  - [Fortune & Looting Re-Rolls](#fortune--looting-re-rolls)
+  - [Luck of the Sea Treasure](#luck-of-the-sea-treasure)
+  - [Tunneller & Efficacy Area Scaling](#tunneller--efficacy-area-scaling)
+  - [Supported Enchantments](#supported-enchantments)
 - [Player Features](#player-features)
   - [Nicknames](#nicknames)
   - [Flight](#flight)
   - [Night Vision](#night-vision)
   - [Tab List](#tab-list)
 - [World Protections](#world-protections)
+- [World Events](#world-events)
+  - [Blood Moon](#blood-moon)
 - [Minigames](#minigames)
   - [Whack an Andrew](#whack-an-andrew)
   - [Rewards](#rewards)
@@ -173,11 +182,12 @@ Deepslate has slightly better rates than stone. Netherrack drops quartz, gold, a
 
 ### Tunneller
 
-Breaks a **3x3 area** of blocks perpendicular to the face you mine. Mine the side of a wall and it carves out a 3x3 tunnel. Mine downward and it clears a 3x3 floor. The center block is the one you break normally; the surrounding 8 blocks are broken by the enchantment.
+Breaks a **3x3 area** of blocks perpendicular to the face you mine. Mine the side of a wall and it carves out a 3x3 tunnel. Mine downward and it clears a 3x3 floor. The center block is the one you break normally; the surrounding blocks are broken by the enchantment.
 
 - Blocks that are air, liquid, or unbreakable (like bedrock) are skipped.
 - Your tool takes **durability damage for each extra block** broken by the enchantment. The Unbreaking enchantment reduces this damage normally.
-- Works with Smelter, Gem Connoisseur, and Telekinesis — all 8 surrounding blocks benefit from whatever combination of enchantments is on your tool.
+- Works with Smelter, Gem Connoisseur, and Telekinesis — all surrounding blocks benefit from whatever combination of enchantments is on your tool.
+- The area scales up to **11x11** with quality variants — see [Tunneller & Efficacy Area Scaling](#tunneller--efficacy-area-scaling).
 
 ### Lumberjack
 
@@ -209,6 +219,8 @@ Extends shovel, hoe, and axe right-click actions to a **3x3 area**:
 
 Each surrounding block affected costs **1 durability**. Only affects blocks of the appropriate type — the shovel won't path stone, the hoe won't till stone, etc. Blocks must also have air above them (for shovels and hoes) to be affected.
 
+The area scales up to **11x11** with quality variants — see [Tunneller & Efficacy Area Scaling](#tunneller--efficacy-area-scaling).
+
 ### Spawner Pickup
 
 Gives a **20% chance** to drop the spawner block when you mine a mob spawner. However, this comes with a cost: the tool tracks how many spawners it has successfully dropped. After **5 successful spawner pickups**, the tool breaks completely (regardless of remaining durability). The number of uses remaining is shown in the item's lore.
@@ -223,15 +235,75 @@ Many enchantments stack together. Here are the notable combinations:
 
 | Combination | Effect |
 |---|---|
-| Tunneller + Telekinesis | All 3x3 drops go straight to your inventory. |
-| Tunneller + Smelter | Raw ores from all 9 blocks are auto-smelted. |
-| Tunneller + Gem Connoisseur | Bonus gem drops roll for all 9 blocks. |
-| Tunneller + Smelter + Gem Connoisseur + Telekinesis | The full package: 3x3 mining with smelting, gem drops, and inventory routing. |
+| Tunneller + Telekinesis | All area drops go straight to your inventory. |
+| Tunneller + Smelter | Raw ores from every block in the area are auto-smelted. |
+| Tunneller + Gem Connoisseur | Bonus gem drops roll for every block in the area. |
+| Tunneller + Smelter + Gem Connoisseur + Telekinesis | The full package: area mining with smelting, gem drops, and inventory routing. |
 | Lumberjack + Telekinesis | All log drops from the tree go to your inventory. |
 | Lumberjack + Replant | Saplings auto-plant at tree bases after felling. |
 | Replant + Telekinesis | Crop drops (minus the replanting seed) go to your inventory. |
 | Smelter + Telekinesis | Smelted ingots go directly to your inventory. |
 | Gem Connoisseur + Telekinesis | Bonus gem drops go to your inventory. |
+
+---
+
+## Enchantment Quality
+
+In addition to the standard (common) form, many enchantments can roll as **quality variants** with stronger effects. Quality variants are provided by the data pack and applied automatically by the plugin at the enchanting table.
+
+### Tiers
+
+There are four quality tiers above common. Their effects depend on which enchantment they're applied to (see the sections below).
+
+| Tier | Roll Weight | Re-Rolls | Tunneller / Efficacy Area |
+|---|---|---|---|
+| **Common** *(vanilla)* | 95% (no quality roll) | 0 | 3x3 |
+| **Uncommon** | 70% of the 5% quality slice | 1 | 5x5 |
+| **Rare** | 20% of the 5% quality slice | 2 | 7x7 |
+| **Epic** | 9% of the 5% quality slice | 3 | 9x9 |
+| **Legendary** | 1% of the 5% quality slice | 5 | 11x11 |
+
+### Rolling at the Enchanting Table
+
+Whenever you enchant an item at an enchanting table, each rolled enchantment that has a quality variant has a **5% chance** to be upgraded to a quality tier. If the upgrade triggers, the tier is rolled with the weights above (so legendary is genuinely rare — 1% of the 5% quality roll, or roughly 1 in 2,000 per applicable enchantment). The visual name and color of the resulting enchantment is determined by the data pack.
+
+This chance is **boosted to 50%** during a [Blood Moon](#blood-moon) event.
+
+### Fortune & Looting Re-Rolls
+
+A quality Fortune or Looting enchantment grants additional **re-rolls** of the drop count for ores or mob loot. Each tier provides more re-rolls, and the highest result wins. Legendary Fortune, for example, rolls the ore drop formula 6 times (1 base + 5 re-rolls) and keeps the best outcome.
+
+> Re-rolls only apply when the underlying drop is allowed to occur — for example, when Smelter cancels the vanilla drop in favor of an ingot, Fortune re-rolls do not apply to that block.
+
+### Luck of the Sea Treasure
+
+A quality Luck of the Sea rod increases the chance that a fishing catch is replaced with a vanilla treasure roll. The chance is split into 12 evenly-spaced steps (4 tiers × 3 enchant levels), scaling from ~8.3% at Uncommon I up to **100% guaranteed treasure** at Legendary III.
+
+### Tunneller & Efficacy Area Scaling
+
+Quality variants of Tunneller and Efficacy enlarge the affected area:
+
+| Tier | Area |
+|---|---|
+| Common | 3x3 |
+| Uncommon | 5x5 |
+| Rare | 7x7 |
+| Epic | 9x9 |
+| Legendary | 11x11 |
+
+Durability cost still scales with each extra block broken, and Unbreaking continues to mitigate that cost normally.
+
+### Supported Enchantments
+
+19 enchantment types have quality variants that the data pack registers and the plugin recognizes:
+
+```
+fortune, looting, luck_of_the_sea, frost_walker, knockback, lunge,
+lure, multishot, piercing, power, punch, quick_charge, sharpness,
+smite, bane_of_arthropods, sweeping_edge, unbreaking, efficacy, tunneller
+```
+
+The plugin implements custom logic for **fortune**, **looting**, **luck_of_the_sea**, **efficacy**, and **tunneller**. The remaining quality variants have their behavior defined entirely by the data pack (typically increased base levels or stronger stat effects).
 
 ---
 
@@ -302,6 +374,26 @@ These protections are always active and require no commands or configuration:
 
 ---
 
+## World Events
+
+### Blood Moon
+
+A rare server-wide event that turns the night crimson and supercharges enchanting.
+
+**How it triggers**: At the start of every full-moon night in the overworld, the plugin rolls a **50% chance** to begin a Blood Moon. When it activates, the entire server sees a dark-red title, a chat broadcast, and an ominous wither sound:
+
+> *The Blood Moon has risen. Quality enchantments favor the bold tonight.*
+
+**What it does**: While a Blood Moon is active, the chance for an enchantment rolled at the enchanting table to become a [quality variant](#enchantment-quality) is boosted from **5% to 50%** per applicable enchantment. Tier weights (uncommon/rare/epic/legendary) still apply on top of that, so legendary remains rare — but the night is the best time to gamble on quality gear.
+
+**How it ends**: The Blood Moon fades automatically at the next dawn (when the overworld day rolls over) or when the night is skipped by sleeping. A bell chime and a chat message announce the end:
+
+> *The Blood Moon fades.*
+
+**Forcing one (admin)**: Admins with `tweaks.admin.bloodmoon` can run `/bloodmoon` to advance the overworld to the start of the next full-moon night and guarantee activation. If a Blood Moon is already active, the command is a no-op.
+
+---
+
 ## Minigames
 
 ### Whack an Andrew
@@ -355,7 +447,9 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/delhome <player> <name>` | `tweaks.admin.delhome` | Delete another player's home. |
 | `/homes <player>` | `tweaks.admin.homes` | List another player's homes. |
 | `/nick off <player>` | `tweaks.admin.nick` | Remove another player's nickname (works on offline players). |
-| `/config <key> <value>` | `tweaks.admin.config` | Update a config value at runtime. |
+| `/tconfig <key> <value>` | `tweaks.admin.config` | Update a config value at runtime. Alias: `/tweaksconfig`. |
+| `/more` | `tweaks.admin.more` | Maximize the stack size of the held item. |
+| `/bloodmoon` | `tweaks.admin.bloodmoon` | Advance the overworld to the next full moon and force-activate the Blood Moon event. |
 | `/reward create <name>` | `tweaks.admin.reward` | Create a new reward template. |
 | `/reward edit <name>` | `tweaks.admin.reward` | Open the reward editor GUI. |
 | `/whack arena` | `tweaks.admin.whack` | Start Whack-an-Andrew arena setup. |
@@ -370,7 +464,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 
 ### Runtime Config Keys
 
-These keys can be changed at runtime with `/config <key> <value>`:
+These keys can be changed at runtime with `/tconfig <key> <value>`:
 
 | Key | Type | Description |
 |---|---|---|
@@ -392,7 +486,9 @@ These keys can be changed at runtime with `/config <key> <value>`:
 | `tweaks.admin.setwarp` | Create server warps. |
 | `tweaks.admin.delwarp` | Delete server warps. |
 | `tweaks.admin.nick` | Remove other players' nicknames. |
-| `tweaks.admin.config` | Use the `/config` command. |
+| `tweaks.admin.config` | Use the `/tconfig` command. |
+| `tweaks.admin.more` | Use the `/more` command to maximize a held stack. |
+| `tweaks.admin.bloodmoon` | Force-activate the Blood Moon event. |
 | `tweaks.admin.reward` | Create and edit minigame rewards. |
 | `tweaks.admin.whack` | Full access to Whack-an-Andrew admin commands. |
 
@@ -400,7 +496,7 @@ These keys can be changed at runtime with `/config <key> <value>`:
 
 ## Configuration
 
-The plugin generates a `config.yml` on first startup. All enchantments require a server-side data pack to register the actual enchantment entries — the config simply maps each enchantment to its namespaced key in the data pack.
+The plugin generates a `config.yml` on first startup. All custom enchantments and their quality variants require a server-side data pack to register the actual enchantment entries — the config simply maps each base enchantment to its namespaced key in the data pack. Quality variants are discovered automatically from the `jass:{tier}_{name}` namespaced-key pattern (e.g. `jass:epic_fortune`).
 
 ```yaml
 # The maximum number of homes a player can set.
@@ -453,14 +549,14 @@ gem-connoisseur-rates:
 
 1. Place the compiled JAR in your server's `plugins/` folder.
 2. Ensure your server is running **Paper 26.1.1** with **Java 25**.
-3. Install the accompanying **data pack** that registers the custom enchantment entries. Without the data pack, all custom enchantments will gracefully disable themselves on startup (you'll see warnings in the console).
+3. Install the accompanying **data pack** that registers the custom enchantment entries (including all quality variants under the `jass:{tier}_{name}` pattern). Without the data pack, custom enchantments and quality features will gracefully disable themselves on startup (you'll see warnings in the console).
 4. Start the server. The plugin will generate its `config.yml` and data directories.
 5. Update the enchantment namespaced keys in `config.yml` to match your data pack's enchantment keys.
 6. Set up a spawn point with `/setwarp spawn` so the `/spawn` command works.
 
 ### Data Pack Requirement
 
-The plugin does **not** register custom enchantments itself. It reads namespaced keys from `config.yml` and looks them up in Paper's enchantment registry. You need a server-side data pack that defines the enchantment entries. If a key is missing, blank, or points to a non-existent enchantment, that specific enchantment feature will disable itself without affecting the rest of the plugin.
+The plugin does **not** register custom enchantments itself. It reads namespaced keys from `config.yml` and looks them up in Paper's enchantment registry. Quality variants are looked up directly under `jass:{tier}_{enchantName}`. If a key is missing, blank, or points to a non-existent enchantment, that specific feature will disable itself without affecting the rest of the plugin.
 
 ### Data Storage
 
