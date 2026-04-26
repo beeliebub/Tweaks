@@ -26,8 +26,10 @@ commands:
     description: Teleport to the world spawn.
   nv:
     description: Toggle night vision.
-  config:
-    description: Update config options.
+  tconfig:
+    description: Update plugin config options.
+    usage: /tconfig <key> <value>
+    aliases: [tweaksconfig]
   nick:
     description: Set or remove your nickname
   tpa:
@@ -48,3 +50,6 @@ commands:
     description: Whack an Andrew minigame admin commands
   more:
     description: Maximize the stack size of the held item
+  bloodmoon:
+    description: Force the next full moon to be a Blood Moon (admin).
+    usage: /bloodmoon

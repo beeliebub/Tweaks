@@ -78,8 +78,8 @@ public class Tweaks extends JavaPlugin {
         getCommand("nv").setExecutor(new NightVisionCommand());
         getCommand("more").setExecutor(new MoreCommand());
         ConfigCommand configCommand = new ConfigCommand(this);
-        getCommand("config").setExecutor(configCommand);
-        getCommand("config").setTabCompleter(configCommand);
+        getCommand("tconfig").setExecutor(configCommand);
+        getCommand("tconfig").setTabCompleter(configCommand);
 
         // Listeners - General
         getServer().getPluginManager().registerEvents(tabManager, this);
@@ -93,6 +93,10 @@ public class Tweaks extends JavaPlugin {
 
         // Quality Enchantment System
         QualityRegistry qualityRegistry = new QualityRegistry(this);
+        BloodMoonManager bloodMoonManager = new BloodMoonManager(this);
+        bloodMoonManager.start();
+        getServer().getPluginManager().registerEvents(bloodMoonManager, this);
+        getCommand("bloodmoon").setExecutor(new BloodMoonCommand(bloodMoonManager));
 
         // Enchantments
         Telekinesis telekinesis = new Telekinesis(this);
@@ -114,7 +118,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new Efficacy(this, qualityRegistry), this);
 
         // Quality Enchantment Listeners
-        getServer().getPluginManager().registerEvents(new EnchantTableListener(qualityRegistry), this);
+        getServer().getPluginManager().registerEvents(new EnchantTableListener(qualityRegistry, bloodMoonManager), this);
         getServer().getPluginManager().registerEvents(new FortuneQualityListener(qualityRegistry), this);
         getServer().getPluginManager().registerEvents(new LootingQualityListener(qualityRegistry), this);
         getServer().getPluginManager().registerEvents(new LuckOfSeaQualityListener(qualityRegistry, this), this);
