@@ -115,11 +115,6 @@ public class NickCommand implements CommandExecutor, Listener {
             return true;
         }
 
-        if (!player.hasPermission("tweaks.nick")) {
-            player.sendMessage(Component.text("No permission.").color(NamedTextColor.RED));
-            return true;
-        }
-
         if (!player.getPersistentDataContainer().has(nickKey)) {
             player.sendMessage(Component.text("You don't have a nickname set.")
                     .color(NamedTextColor.YELLOW));
@@ -147,11 +142,6 @@ public class NickCommand implements CommandExecutor, Listener {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Component.text("Only players can set nicknames.")
                     .color(NamedTextColor.RED));
-            return true;
-        }
-
-        if (!player.hasPermission("tweaks.nick")) {
-            player.sendMessage(Component.text("No permission.").color(NamedTextColor.RED));
             return true;
         }
 

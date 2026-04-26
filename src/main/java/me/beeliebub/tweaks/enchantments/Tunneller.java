@@ -3,6 +3,8 @@ package me.beeliebub.tweaks.enchantments;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
+import me.beeliebub.tweaks.enchantments.quality.QualityTier;
 import org.bukkit.Effect;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -34,13 +36,16 @@ public class Tunneller implements Listener {
     private final Telekinesis telekinesis;
     private final Smelter smelter;
     private final GemConnoisseur gemConnoisseur;
+    private final QualityRegistry qualityRegistry;
 
-    public Tunneller(Tweaks plugin, Telekinesis telekinesis, Smelter smelter, GemConnoisseur gemConnoisseur) {
+    public Tunneller(Tweaks plugin, Telekinesis telekinesis, Smelter smelter,
+                     GemConnoisseur gemConnoisseur, QualityRegistry qualityRegistry) {
         String raw = plugin.getConfig().getString("tunneller");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.telekinesis = telekinesis;
         this.smelter = smelter;
         this.gemConnoisseur = gemConnoisseur;
+        this.qualityRegistry = qualityRegistry;
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -62,11 +67,13 @@ public class Tunneller implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
-        if (enchantment == null) return;
-
         Player player = event.getPlayer();
         ItemStack tool = player.getInventory().getItemInMainHand();
-        if (tool.isEmpty() || !tool.containsEnchantment(enchantment)) return;
+        if (tool.isEmpty()) return;
+
+        // Determine radius: base enchantment = 1 (3x3), quality tiers = 2-5 (5x5 to 11x11)
+        int radius = getRadius(tool);
+        if (radius <= 0) return;
 
         RayTraceResult trace = player.rayTraceBlocks(RAY_DISTANCE);
         if (trace == null) return;
@@ -84,8 +91,8 @@ public class Tunneller implements Listener {
         boolean useGemConnoisseur = gemConnoisseur != null && gemConnoisseur.hasEnchant(tool);
 
         int blocksbroken = 0;
-        for (int u = -1; u <= 1; u++) {
-            for (int v = -1; v <= 1; v++) {
+        for (int u = -radius; u <= radius; u++) {
+            for (int v = -radius; v <= radius; v++) {
                 if (u == 0 && v == 0) continue;
                 Block target = origin.getRelative(
                         a1[0] * u + a2[0] * v,
@@ -111,6 +118,17 @@ public class Tunneller implements Listener {
                 player.damageItemStack(EquipmentSlot.HAND, damageToApply);
             }
         }
+    }
+
+    // Determine the mining radius from the tool's tunneller enchantment.
+    // Returns 1 for common (3x3), 2-5 for quality tiers, or 0 if no tunneller enchant found.
+    private int getRadius(ItemStack tool) {
+        if (enchantment != null && tool.containsEnchantment(enchantment)) return 1;
+        if (qualityRegistry != null) {
+            QualityTier tier = qualityRegistry.getToolQualityTier(tool, "tunneller");
+            if (tier != null) return tier.getAreaRadius();
+        }
+        return 0;
     }
 
     // Break a single block, applying smelter/gem drops and routing to inventory or ground.

@@ -3,6 +3,8 @@ package me.beeliebub.tweaks.enchantments;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
+import me.beeliebub.tweaks.enchantments.quality.QualityTier;
 import org.bukkit.Axis;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -79,10 +81,12 @@ public class Efficacy implements Listener {
     }
 
     private final Enchantment enchantment;
+    private final QualityRegistry qualityRegistry;
 
-    public Efficacy(Tweaks plugin) {
+    public Efficacy(Tweaks plugin, QualityRegistry qualityRegistry) {
         String raw = plugin.getConfig().getString("efficacy");
         this.enchantment = resolveEnchantment(plugin, raw);
+        this.qualityRegistry = qualityRegistry;
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -108,12 +112,12 @@ public class Efficacy implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onPlayerInteract(PlayerInteractEvent event) {
-        if (enchantment == null) return;
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         if (event.getHand() != EquipmentSlot.HAND) return;
 
         ItemStack tool = event.getItem();
-        if (!hasEnchant(tool)) return;
+        int radius = getRadius(tool);
+        if (radius <= 0) return;
 
         Block clicked = event.getClickedBlock();
         if (clicked == null) return;
@@ -122,21 +126,32 @@ public class Efficacy implements Listener {
         Material toolType = tool.getType();
 
         if (isShovel(toolType)) {
-            handleShovel(clicked, player);
+            handleShovel(clicked, player, radius);
         } else if (isHoe(toolType)) {
-            handleHoe(clicked, player);
+            handleHoe(clicked, player, radius);
         } else if (isAxe(toolType)) {
-            handleAxe(clicked, event.getBlockFace(), player);
+            handleAxe(clicked, event.getBlockFace(), player, radius);
         }
     }
 
-    private void handleShovel(Block clicked, Player player) {
+    // Determine the area radius from the tool's efficacy enchantment.
+    // Returns 1 for common (3x3), 2-5 for quality tiers, or 0 if no efficacy enchant found.
+    private int getRadius(ItemStack tool) {
+        if (hasEnchant(tool)) return 1;
+        if (qualityRegistry != null && tool != null && !tool.isEmpty()) {
+            QualityTier tier = qualityRegistry.getToolQualityTier(tool, "efficacy");
+            if (tier != null) return tier.getAreaRadius();
+        }
+        return 0;
+    }
+
+    private void handleShovel(Block clicked, Player player, int radius) {
         if (!SHOVELABLE.contains(clicked.getType())) return;
         if (!clicked.getRelative(BlockFace.UP).getType().isAir()) return;
 
         int count = 0;
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
                 if (dx == 0 && dz == 0) continue;
                 Block target = clicked.getRelative(dx, 0, dz);
                 if (!SHOVELABLE.contains(target.getType())) continue;
@@ -148,13 +163,13 @@ public class Efficacy implements Listener {
         if (count > 0) player.damageItemStack(EquipmentSlot.HAND, count);
     }
 
-    private void handleHoe(Block clicked, Player player) {
+    private void handleHoe(Block clicked, Player player, int radius) {
         if (!TILLABLE.contains(clicked.getType())) return;
         if (!clicked.getRelative(BlockFace.UP).getType().isAir()) return;
 
         int count = 0;
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
                 if (dx == 0 && dz == 0) continue;
                 Block target = clicked.getRelative(dx, 0, dz);
                 if (!TILLABLE.contains(target.getType())) continue;
@@ -166,7 +181,7 @@ public class Efficacy implements Listener {
         if (count > 0) player.damageItemStack(EquipmentSlot.HAND, count);
     }
 
-    private void handleAxe(Block clicked, BlockFace face, Player player) {
+    private void handleAxe(Block clicked, BlockFace face, Player player, int radius) {
         if (!STRIPPED.containsKey(clicked.getType())) return;
 
         int[][] axes = perpendicularAxes(face);
@@ -174,8 +189,8 @@ public class Efficacy implements Listener {
         int[] axisB = axes[1];
 
         int count = 0;
-        for (int a = -1; a <= 1; a++) {
-            for (int b = -1; b <= 1; b++) {
+        for (int a = -radius; a <= radius; a++) {
+            for (int b = -radius; b <= radius; b++) {
                 if (a == 0 && b == 0) continue;
                 Block target = clicked.getRelative(
                         a * axisA[0] + b * axisB[0],

@@ -3,6 +3,7 @@ package me.beeliebub.tweaks;
 import me.beeliebub.tweaks.combos.*;
 import me.beeliebub.tweaks.commands.*;
 import me.beeliebub.tweaks.enchantments.*;
+import me.beeliebub.tweaks.enchantments.quality.*;
 import me.beeliebub.tweaks.listeners.*;
 import me.beeliebub.tweaks.managers.*;
 import me.beeliebub.tweaks.minigames.RewardCommand;
@@ -90,6 +91,9 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new TrampleListener(), this);
         getServer().getPluginManager().registerEvents(new MobGriefListener(), this);
 
+        // Quality Enchantment System
+        QualityRegistry qualityRegistry = new QualityRegistry(this);
+
         // Enchantments
         Telekinesis telekinesis = new Telekinesis(this);
         Smelter smelter = new Smelter(this, telekinesis);
@@ -102,12 +106,18 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(smelter, this);
         getServer().getPluginManager().registerEvents(lumberjack, this);
         getServer().getPluginManager().registerEvents(gemConnoisseur, this);
-        getServer().getPluginManager().registerEvents(new Tunneller(this, telekinesis, smelter, gemConnoisseur), this);
+        getServer().getPluginManager().registerEvents(new Tunneller(this, telekinesis, smelter, gemConnoisseur, qualityRegistry), this);
         getServer().getPluginManager().registerEvents(spawnerPickup, this);
         getServer().getPluginManager().registerEvents(eggCollector, this);
         getServer().getPluginManager().registerEvents(new AnvilListener(spawnerPickup, eggCollector), this);
         getServer().getPluginManager().registerEvents(new Replant(this, telekinesis, lumberjack), this);
-        getServer().getPluginManager().registerEvents(new Efficacy(this), this);
+        getServer().getPluginManager().registerEvents(new Efficacy(this, qualityRegistry), this);
+
+        // Quality Enchantment Listeners
+        getServer().getPluginManager().registerEvents(new EnchantTableListener(qualityRegistry), this);
+        getServer().getPluginManager().registerEvents(new FortuneQualityListener(qualityRegistry), this);
+        getServer().getPluginManager().registerEvents(new LootingQualityListener(qualityRegistry), this);
+        getServer().getPluginManager().registerEvents(new LuckOfSeaQualityListener(qualityRegistry, this), this);
 
         // Minigames - Mannequin AI
         MannequinAI mannequinAI = new MannequinAI(this);
