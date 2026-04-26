@@ -257,15 +257,15 @@ There are four quality tiers above common. Their effects depend on which enchant
 
 | Tier | Roll Weight | Re-Rolls | Tunneller / Efficacy Area |
 |---|---|---|---|
-| **Common** *(vanilla)* | 95% (no quality roll) | 0 | 3x3 |
-| **Uncommon** | 70% of the 5% quality slice | 1 | 5x5 |
-| **Rare** | 20% of the 5% quality slice | 2 | 7x7 |
-| **Epic** | 9% of the 5% quality slice | 3 | 9x9 |
-| **Legendary** | 1% of the 5% quality slice | 5 | 11x11 |
+| **Common** *(vanilla)* | 90% (no quality roll) | 0 | 3x3 |
+| **Uncommon** | 70% of the 10% quality slice | 1 | 5x5 |
+| **Rare** | 20% of the 10% quality slice | 2 | 7x7 |
+| **Epic** | 9% of the 10% quality slice | 3 | 9x9 |
+| **Legendary** | 1% of the 10% quality slice | 5 | 11x11 |
 
 ### Rolling at the Enchanting Table
 
-Whenever you enchant an item at an enchanting table, each rolled enchantment that has a quality variant has a **5% chance** to be upgraded to a quality tier. If the upgrade triggers, the tier is rolled with the weights above (so legendary is genuinely rare — 1% of the 5% quality roll, or roughly 1 in 2,000 per applicable enchantment). The visual name and color of the resulting enchantment is determined by the data pack.
+Whenever you enchant an item at an enchanting table, each rolled enchantment that has a quality variant has a **10% chance** to be upgraded to a quality tier. If the upgrade triggers, the tier is rolled with the weights above (so legendary is genuinely rare — 1% of the 10% quality roll, or roughly 1 in 1,000 per applicable enchantment). The visual name and color of the resulting enchantment is determined by the data pack.
 
 This chance is **boosted to 50%** during a [Blood Moon](#blood-moon) event.
 
@@ -323,7 +323,7 @@ Examples:
 - `/nick &aGreen &bAqua` — multi-colored name.
 - `/nick &#FF5555Custom` — hex color.
 
-Your nickname persists across logins and server restarts. Requires the `tweaks.nick` permission.
+Your nickname persists across logins and server restarts.
 
 ### Flight
 
@@ -384,7 +384,7 @@ A rare server-wide event that turns the night crimson and supercharges enchantin
 
 > *The Blood Moon has risen. Quality enchantments favor the bold tonight.*
 
-**What it does**: While a Blood Moon is active, the chance for an enchantment rolled at the enchanting table to become a [quality variant](#enchantment-quality) is boosted from **5% to 50%** per applicable enchantment. Tier weights (uncommon/rare/epic/legendary) still apply on top of that, so legendary remains rare — but the night is the best time to gamble on quality gear.
+**What it does**: While a Blood Moon is active, the chance for an enchantment rolled at the enchanting table to become a [quality variant](#enchantment-quality) is boosted from **10% to 50%** per applicable enchantment. Tier weights (uncommon/rare/epic/legendary) still apply on top of that, so legendary remains rare — but the night is the best time to gamble on quality gear.
 
 **How it ends**: The Blood Moon fades automatically at the next dawn (when the overworld day rolls over) or when the night is skipped by sleeping. A bell chime and a chat message announce the end:
 
@@ -477,7 +477,6 @@ These keys can be changed at runtime with `/tconfig <key> <value>`:
 
 | Permission | What it grants |
 |---|---|
-| `tweaks.nick` | Use `/nick` to set your own nickname. |
 | `tweaks.bypass.homes` | Bypass the max homes limit. |
 | `tweaks.admin.home` | Teleport to other players' homes. |
 | `tweaks.admin.sethome` | Set homes for other players. |
