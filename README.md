@@ -390,6 +390,8 @@ A rare server-wide event that turns the night crimson and supercharges enchantin
 
 > *The Blood Moon fades.*
 
+**Checking the moon**: Any player can run `/fullmoon` to see a rough estimate of how many real-world minutes remain until the next full-moon night begins.
+
 **Forcing one (admin)**: Admins with `tweaks.admin.bloodmoon` can run `/bloodmoon` to advance the overworld to the start of the next full-moon night and guarantee activation. If a Blood Moon is already active, the command is a no-op.
 
 ---
@@ -434,6 +436,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/nv` | Toggle night vision. |
 | `/nick <nickname>` | Set your display name with color codes. |
 | `/nick off` | Remove your nickname. |
+| `/fullmoon` | Show a rough estimate of how long until the next full moon. |
 | `/reward claim` | Claim pending minigame rewards. |
 
 ### Admin Commands

@@ -53,3 +53,6 @@ commands:
   bloodmoon:
     description: Force the next full moon to be a Blood Moon (admin).
     usage: /bloodmoon
+  fullmoon:
+    description: Show roughly how long until the next full moon.
+    usage: /fullmoon

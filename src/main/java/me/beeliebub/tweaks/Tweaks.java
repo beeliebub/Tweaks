@@ -77,6 +77,7 @@ public class Tweaks extends JavaPlugin {
         getCommand("spawn").setExecutor(new SpawnCommand(storageManager));
         getCommand("nv").setExecutor(new NightVisionCommand());
         getCommand("more").setExecutor(new MoreCommand());
+        getCommand("fullmoon").setExecutor(new FullMoonCommand());
         ConfigCommand configCommand = new ConfigCommand(this);
         getCommand("tconfig").setExecutor(configCommand);
         getCommand("tconfig").setTabCompleter(configCommand);
