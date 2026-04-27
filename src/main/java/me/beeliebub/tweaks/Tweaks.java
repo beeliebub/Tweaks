@@ -104,7 +104,7 @@ public class Tweaks extends JavaPlugin {
         getCommand("bloodmoon").setExecutor(new BloodMoonCommand(bloodMoonManager));
 
         // Enchantments
-        Telekinesis telekinesis = new Telekinesis(this);
+        Telekinesis telekinesis = new Telekinesis(this, itemFilterCommand);
         Smelter smelter = new Smelter(this, telekinesis);
         FortuneQualityListener fortuneQuality = new FortuneQualityListener(qualityRegistry);
         Lumberjack lumberjack = new Lumberjack(this, telekinesis, qualityRegistry, fortuneQuality);

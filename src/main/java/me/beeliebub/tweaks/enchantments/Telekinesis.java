@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.enchantments;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.combos.ItemFilterCommand;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Location;
@@ -39,12 +40,14 @@ public class Telekinesis implements Listener {
     };
 
     private final Enchantment enchantment;
+    private final ItemFilterCommand itemFilter;
     // Tracks which block break is pending telekinesis pickup (cleared on BlockDropItemEvent)
     private final Map<UUID, Location> pendingTelekinesis = new HashMap<>();
 
-    public Telekinesis(Tweaks plugin) {
+    public Telekinesis(Tweaks plugin, ItemFilterCommand itemFilter) {
         String raw = plugin.getConfig().getString("telekinesis");
         this.enchantment = resolveEnchantment(plugin, raw);
+        this.itemFilter = itemFilter;
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -163,7 +166,15 @@ public class Telekinesis implements Listener {
         }
     }
 
-    private void giveOrDrop(Player player, Block block, ItemStack drop) {
+    // Routes a single drop to the player's inventory, honoring the player's /itemfilter.
+    // If the filter rejects the item, it falls to the ground at the block's location instead
+    // (matching the no-telekinesis outcome — the item exists in the world and the filter's
+    // pickup-event handler will keep cancelling auto-pickup).
+    public void giveOrDrop(Player player, Block block, ItemStack drop) {
+        if (itemFilter != null && !itemFilter.allowsPickup(player, drop)) {
+            block.getWorld().dropItemNaturally(block.getLocation(), drop);
+            return;
+        }
         Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
         for (ItemStack remaining : leftover.values()) {
             block.getWorld().dropItemNaturally(block.getLocation(), remaining);

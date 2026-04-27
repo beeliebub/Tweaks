@@ -23,7 +23,6 @@ import org.bukkit.util.RayTraceResult;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 
@@ -171,27 +170,13 @@ public class Tunneller implements Listener {
         target.setType(Material.AIR);
         target.getWorld().playEffect(loc, Effect.STEP_SOUND, type);
 
-        // Drop or route items to inventory
+        // Drop or route items to inventory (telekinesis path consults the player's /itemfilter)
         if (useTelekinesis) {
-            for (ItemStack drop : drops) {
-                Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
-                for (ItemStack remaining : leftover.values()) {
-                    loc.getWorld().dropItemNaturally(loc, remaining);
-                }
-            }
-            for (ItemStack drop : gemDrops) {
-                Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
-                for (ItemStack remaining : leftover.values()) {
-                    loc.getWorld().dropItemNaturally(loc, remaining);
-                }
-            }
+            for (ItemStack drop : drops) telekinesis.giveOrDrop(player, target, drop);
+            for (ItemStack drop : gemDrops) telekinesis.giveOrDrop(player, target, drop);
         } else {
-            for (ItemStack drop : drops) {
-                loc.getWorld().dropItemNaturally(loc, drop);
-            }
-            for (ItemStack drop : gemDrops) {
-                loc.getWorld().dropItemNaturally(loc, drop);
-            }
+            for (ItemStack drop : drops) loc.getWorld().dropItemNaturally(loc, drop);
+            for (ItemStack drop : gemDrops) loc.getWorld().dropItemNaturally(loc, drop);
         }
         return true;
     }

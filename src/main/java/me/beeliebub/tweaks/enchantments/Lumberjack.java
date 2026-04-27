@@ -25,7 +25,6 @@ import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
@@ -178,16 +177,10 @@ public class Lumberjack implements Listener {
         block.setType(Material.AIR);
 
         if (routeToInventory) {
-            for (ItemStack drop : drops) {
-                Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
-                for (ItemStack remaining : leftover.values()) {
-                    loc.getWorld().dropItemNaturally(loc, remaining);
-                }
-            }
+            // Telekinesis path consults the player's /itemfilter before adding to inventory
+            for (ItemStack drop : drops) telekinesis.giveOrDrop(player, block, drop);
         } else {
-            for (ItemStack drop : drops) {
-                loc.getWorld().dropItemNaturally(loc, drop);
-            }
+            for (ItemStack drop : drops) loc.getWorld().dropItemNaturally(loc, drop);
         }
     }
 
