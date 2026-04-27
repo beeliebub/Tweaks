@@ -37,6 +37,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Nicknames](#nicknames)
   - [Flight](#flight)
   - [Night Vision](#night-vision)
+  - [Item Filter](#item-filter)
   - [Tab List](#tab-list)
 - [World Protections](#world-protections)
 - [World Events](#world-events)
@@ -346,6 +347,26 @@ When you enter a world where you don't have flight access, flight is automatical
 
 Applies an infinite-duration night vision effect with no particles.
 
+### Item Filter
+
+Control which items your character actually picks up. Two modes:
+
+- **Whitelist** — only items on your list are picked up.
+- **Blacklist** — every item *except* those on your list is picked up.
+
+The filter is **off by default**. Whether it's enabled, which mode is active, and the contents of each list are all saved on your player profile and persist across logins. The whitelist and blacklist are tracked independently — you can curate one for each mode and swap between them without losing either.
+
+| Command | What it does |
+|---|---|
+| `/itemfilter` | Show your current state (enabled/disabled, mode, item count). |
+| `/itemfilter toggle` | Turn the filter on or off. |
+| `/itemfilter mode` | Swap between whitelist and blacklist mode. |
+| `/itemfilter add <item>` | Add an item to your active list. |
+| `/itemfilter remove <item>` | Remove an item from your active list. |
+| `/itemfilter list` | Show the contents of your active list. |
+
+`/if` is a short alias for `/itemfilter`. Item names use the standard form (e.g. `cobblestone`, `oak_log`, `diamond`); tab completion suggests matches on `add`, and your current list contents on `remove`. No permission required — every player can manage their own filter.
+
 ### Tab List
 
 Players in the tab list are automatically sorted and labeled by their current world profile. Each profile has a colored prefix:
@@ -436,6 +457,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/nv` | Toggle night vision. |
 | `/nick <nickname>` | Set your display name with color codes. |
 | `/nick off` | Remove your nickname. |
+| `/itemfilter [toggle\|mode\|add <item>\|remove <item>\|list]` | Manage your personal pickup filter. Alias: `/if`. |
 | `/fullmoon` | Show a rough estimate of how long until the next full moon. |
 | `/reward claim` | Claim pending minigame rewards. |
 

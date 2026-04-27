@@ -56,3 +56,7 @@ commands:
   fullmoon:
     description: Show roughly how long until the next full moon.
     usage: /fullmoon
+  itemfilter:
+    description: Configure your personal item pickup filter (whitelist or blacklist mode).
+    usage: /itemfilter [toggle | mode | add <item> | remove <item> | list]
+    aliases: [if]

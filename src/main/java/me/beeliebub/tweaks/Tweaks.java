@@ -34,6 +34,7 @@ public class Tweaks extends JavaPlugin {
         TPACommand tpaCommand = new TPACommand(this);
         BackCommand backCommand = new BackCommand(this);
         FlyCommand flyCommand = new FlyCommand(this);
+        ItemFilterCommand itemFilterCommand = new ItemFilterCommand(this);
 
         getCommand("nick").setExecutor(nickCommand);
         getCommand("tpa").setExecutor(tpaCommand);
@@ -46,6 +47,8 @@ public class Tweaks extends JavaPlugin {
         getCommand("tpdeny").setTabCompleter(tpaCommand);
         getCommand("back").setExecutor(backCommand);
         getCommand("fly").setExecutor(flyCommand);
+        getCommand("itemfilter").setExecutor(itemFilterCommand);
+        getCommand("itemfilter").setTabCompleter(itemFilterCommand);
 
         // Commands - Homes
         HomeCommand homeCommand = new HomeCommand(storageManager);
@@ -87,6 +90,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(nickCommand, this);
         getServer().getPluginManager().registerEvents(backCommand, this);
         getServer().getPluginManager().registerEvents(flyCommand, this);
+        getServer().getPluginManager().registerEvents(itemFilterCommand, this);
         getServer().getPluginManager().registerEvents(new EndPortalListener(this), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(this, storageManager), this);
         getServer().getPluginManager().registerEvents(new TrampleListener(), this);
