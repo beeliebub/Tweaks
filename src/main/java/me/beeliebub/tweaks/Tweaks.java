@@ -30,6 +30,9 @@ public class Tweaks extends JavaPlugin {
 
         // Commands - Combos
         TabManager tabManager = new TabManager();
+        AfkCommand afkCommand = new AfkCommand();
+        afkCommand.setTabManager(tabManager);
+        tabManager.setAfkPredicate(afkCommand::isAfk);
         NickCommand nickCommand = new NickCommand(this);
         TPACommand tpaCommand = new TPACommand(this);
         BackCommand backCommand = new BackCommand(this);
@@ -49,6 +52,7 @@ public class Tweaks extends JavaPlugin {
         getCommand("fly").setExecutor(flyCommand);
         getCommand("itemfilter").setExecutor(itemFilterCommand);
         getCommand("itemfilter").setTabCompleter(itemFilterCommand);
+        getCommand("afk").setExecutor(afkCommand);
 
         // Commands - Homes
         HomeCommand homeCommand = new HomeCommand(storageManager);
@@ -91,6 +95,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(backCommand, this);
         getServer().getPluginManager().registerEvents(flyCommand, this);
         getServer().getPluginManager().registerEvents(itemFilterCommand, this);
+        getServer().getPluginManager().registerEvents(afkCommand, this);
         getServer().getPluginManager().registerEvents(new EndPortalListener(this), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(this, storageManager), this);
         getServer().getPluginManager().registerEvents(new TrampleListener(), this);

@@ -14,10 +14,13 @@ import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
 import java.util.Map;
+import java.util.function.Predicate;
 
 // Sorts and labels players in the tab list by their current world.
 // Uses scoreboard teams for ordering and colored prefixes for world identification.
 public class TabManager implements Listener {
+
+    private static final Component AFK_SUFFIX = Component.text(" [AFK]", NamedTextColor.RED);
 
     // World namespace keys mapped to profile names
     private static final String ARCHIVE_WORLD_KEY = "jass:archive";
@@ -46,9 +49,14 @@ public class TabManager implements Listener {
     );
 
     private final Scoreboard scoreboard;
+    private Predicate<Player> afkPredicate = p -> false;
 
     public TabManager() {
         this.scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
+    }
+
+    public void setAfkPredicate(Predicate<Player> afkPredicate) {
+        this.afkPredicate = afkPredicate;
     }
 
     private String getProfileForWorldKey(String worldKey) {
@@ -111,7 +119,11 @@ public class TabManager implements Listener {
         Component tag = PROFILE_TAGS.getOrDefault(profile,
                 Component.text("[???] ", NamedTextColor.GRAY));
 
-        player.playerListName(tag.append(Component.text(player.getName())));
+        Component name = tag.append(Component.text(player.getName()));
+        if (afkPredicate.test(player)) {
+            name = name.append(AFK_SUFFIX);
+        }
+        player.playerListName(name);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

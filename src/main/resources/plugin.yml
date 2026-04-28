@@ -63,3 +63,6 @@ commands:
   toolprotect:
     description: Block use of low-durability epic/legendary diamond/netherite tools (default ON).
     usage: /toolprotect <on|off> | /toolprotect durability <n>
+  afk:
+    description: Toggle AFK status. AFK players don't count toward sleep skipping.
+    usage: /afk
