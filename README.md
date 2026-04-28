@@ -38,6 +38,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Flight](#flight)
   - [Night Vision](#night-vision)
   - [Item Filter](#item-filter)
+  - [Tool Protect](#tool-protect)
   - [Tab List](#tab-list)
 - [World Protections](#world-protections)
 - [World Events](#world-events)
@@ -367,6 +368,31 @@ The filter is **off by default**. Whether it's enabled, which mode is active, an
 
 `/if` is a short alias for `/itemfilter`. Item names use the standard form (e.g. `cobblestone`, `oak_log`, `diamond`); tab completion suggests matches on `add`, and your current list contents on `remove`. No permission required — every player can manage their own filter.
 
+### Tool Protect
+
+A safety net that blocks the use of high-tier tools when they're about to break. **On by default for every player** — no opt-in required.
+
+A tool is "protected" only when **all** of these are true:
+
+- It is a **diamond or netherite** sword, pickaxe, axe, shovel, or hoe.
+- It carries at least one **Epic** or **Legendary** quality enchantment (see [Enchantment Quality](#enchantment-quality)).
+- Its **remaining durability** is below your configured threshold (default: **100**).
+
+While a tool is protected, the plugin cancels any action that would damage it — breaking blocks, attacking entities, and right-click actions like tilling, pathing, or stripping. You'll see a red action-bar warning showing the remaining durability and your current threshold:
+
+> *ToolProtect: 87 durability remaining (threshold 100). Repair or /toolprotect off.*
+
+Tools that don't meet the scope above (wood/stone/iron/gold tiers, or top-tier tools without an Epic/Legendary quality enchant) are never blocked — protection only kicks in for the gear that's actually worth saving.
+
+| Command | What it does |
+|---|---|
+| `/toolprotect` | Show your current state (on/off, threshold). |
+| `/toolprotect on` | Turn protection on. |
+| `/toolprotect off` | Turn protection off. |
+| `/toolprotect durability <n>` | Set your remaining-durability threshold. Values below 1 are rejected — use `/toolprotect off` to disable. |
+
+Both the on/off state and the threshold are saved on your player profile and persist across logins. No permission required.
+
 ### Tab List
 
 Players in the tab list are automatically sorted and labeled by their current world profile. Each profile has a colored prefix:
@@ -458,6 +484,8 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/nick <nickname>` | Set your display name with color codes. |
 | `/nick off` | Remove your nickname. |
 | `/itemfilter [toggle\|mode\|add <item>\|remove <item>\|list]` | Manage your personal pickup filter. Alias: `/if`. |
+| `/toolprotect [on\|off]` | Toggle ToolProtect on/off (default: on). |
+| `/toolprotect durability <n>` | Set your remaining-durability threshold for ToolProtect (default: 100). |
 | `/fullmoon` | Show a rough estimate of how long until the next full moon. |
 | `/reward claim` | Claim pending minigame rewards. |
 

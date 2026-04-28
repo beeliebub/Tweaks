@@ -98,6 +98,13 @@ public class Tweaks extends JavaPlugin {
 
         // Quality Enchantment System
         QualityRegistry qualityRegistry = new QualityRegistry(this);
+
+        // ToolProtect (depends on QualityRegistry to detect epic/legendary quality)
+        ToolProtectCommand toolProtectCommand = new ToolProtectCommand(this, qualityRegistry);
+        getCommand("toolprotect").setExecutor(toolProtectCommand);
+        getCommand("toolprotect").setTabCompleter(toolProtectCommand);
+        getServer().getPluginManager().registerEvents(toolProtectCommand, this);
+
         BloodMoonManager bloodMoonManager = new BloodMoonManager(this);
         bloodMoonManager.start();
         getServer().getPluginManager().registerEvents(bloodMoonManager, this);
