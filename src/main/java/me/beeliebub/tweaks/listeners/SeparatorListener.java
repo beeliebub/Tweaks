@@ -111,6 +111,11 @@ public class SeparatorListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerDeath(PlayerDeathEvent event) {
+        // keepInventory deaths leave the player's items intact; the cache is still authoritative
+        // and the next world-change must save normally. Skipping suppression here is what prevents
+        // a /spawn round-trip from loading an empty profile back into the player's slots.
+        if (event.getKeepInventory()) return;
+
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
         recentDeaths.add(uuid);
@@ -159,34 +164,56 @@ public class SeparatorListener implements Listener {
         if (fromProfile.equals(toProfile)) return;
         boolean justDied = recentDeaths.remove(uuid);
 
+        // Decode all destination data BEFORE mutating the player. A corrupt cache entry must not
+        // leave the player empty after a successful clear() but failed setContents().
+        String invData = storage.getCachedInventory(uuid, toProfile);
+        String ecData = storage.getCachedInventory(uuid, EC_PREFIX + toProfile);
+        String xpData = storage.getCachedInventory(uuid, XP_PREFIX + toProfile);
+
+        ItemStack[] destInv;
+        ItemStack[] destEc;
+        int destLevel = 0;
+        float destExp = 0f;
+
+        try {
+            destInv = (invData == null || invData.isEmpty()) ? null : InventoryUtil.fromBase64(invData);
+            destEc = (ecData == null || ecData.isEmpty()) ? null : InventoryUtil.fromBase64(ecData);
+            if (xpData != null && !xpData.isEmpty()) {
+                String[] parts = xpData.split(":");
+                destLevel = Integer.parseInt(parts[0]);
+                destExp = Float.parseFloat(parts[1]);
+            }
+        } catch (Exception e) {
+            plugin.getLogger().severe("Aborting world-change profile swap for " + player.getName()
+                    + " (" + fromProfile + " -> " + toProfile + "): destination cache decode failed - "
+                    + e.getMessage());
+            player.sendMessage(Component.text("Profile swap aborted: destination data is corrupt. Please report this.")
+                    .color(NamedTextColor.RED));
+            return;
+        }
+
         if (!justDied) {
             storage.cacheInventory(uuid, fromProfile, InventoryUtil.toBase64(player.getInventory().getContents()));
         }
-        player.getInventory().clear();
-
-        String invData = storage.getCachedInventory(uuid, toProfile);
-        if (invData != null && !invData.isEmpty()) {
-            player.getInventory().setContents(InventoryUtil.fromBase64(invData));
-        }
-
         storage.cacheInventory(uuid, EC_PREFIX + fromProfile, InventoryUtil.toBase64(player.getEnderChest().getContents()));
-        player.getEnderChest().clear();
-
-        String ecData = storage.getCachedInventory(uuid, EC_PREFIX + toProfile);
-        if (ecData != null && !ecData.isEmpty()) {
-            player.getEnderChest().setContents(InventoryUtil.fromBase64(ecData));
-        }
-
         storage.cacheInventory(uuid, XP_PREFIX + fromProfile, player.getLevel() + ":" + player.getExp());
-        player.setExp(0f);
-        player.setLevel(0);
 
-        String xpData = storage.getCachedInventory(uuid, XP_PREFIX + toProfile);
-        if (xpData != null && !xpData.isEmpty()) {
-            String[] parts = xpData.split(":");
-            player.setLevel(Integer.parseInt(parts[0]));
-            player.setExp(Float.parseFloat(parts[1]));
+        player.getInventory().clear();
+        if (destInv != null) {
+            player.getInventory().setContents(destInv);
         }
+
+        player.getEnderChest().clear();
+        if (destEc != null) {
+            player.getEnderChest().setContents(destEc);
+        }
+
+        player.setExp(0f);
+        player.setLevel(destLevel);
+        player.setExp(destExp);
+
+        // Write-through to disk so a crash between hops cannot lose the just-saved fromProfile state.
+        storage.savePlayerInventoriesAsync(uuid);
 
         player.sendMessage(Component.text("Inventory profile switched to: " + toProfile).color(NamedTextColor.YELLOW));
     }

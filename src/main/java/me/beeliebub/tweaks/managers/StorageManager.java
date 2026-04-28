@@ -191,17 +191,38 @@ public class StorageManager {
 
     // Load a player's per-world inventory data from disk into cache (called on join)
     public CompletableFuture<Void> loadPlayerInventoriesAsync(UUID player) {
+        // Pre-create the cache entry on the calling thread so any sync cacheInventory(...) writes
+        // that race the async disk read land in the same map. The async path then uses
+        // putIfAbsent, treating live in-memory writes as fresher than disk.
+        Map<String, String> cache = inventoryCache.computeIfAbsent(player, k -> new ConcurrentHashMap<>());
         return CompletableFuture.runAsync(() -> {
             File file = new File(invDir, player.toString() + ".yml");
-            Map<String, String> data = new ConcurrentHashMap<>();
+            if (!file.exists()) return;
 
-            if (file.exists()) {
-                YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
-                for (String profileKey : config.getKeys(false)) {
-                    data.put(profileKey, config.getString(profileKey));
+            YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
+            for (String profileKey : config.getKeys(false)) {
+                String value = config.getString(profileKey);
+                if (value != null) {
+                    cache.putIfAbsent(profileKey, value);
                 }
             }
-            inventoryCache.put(player, data);
+        });
+    }
+
+    // Snapshot a player's inventory cache to disk without removing from memory.
+    // Called after world changes so a crash between hops cannot lose state.
+    public void savePlayerInventoriesAsync(UUID player) {
+        Map<String, String> data = inventoryCache.get(player);
+        if (data == null || data.isEmpty()) return;
+        Map<String, String> snapshot = new HashMap<>(data);
+
+        CompletableFuture.runAsync(() -> {
+            File file = new File(invDir, player.toString() + ".yml");
+            YamlConfiguration config = new YamlConfiguration();
+            snapshot.forEach(config::set);
+            try { config.save(file); } catch (IOException e) {
+                plugin.getLogger().warning("Failed to save inventory data for " + player + ": " + e.getMessage());
+            }
         });
     }
 

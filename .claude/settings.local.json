@@ -9,7 +9,12 @@
       "Bash(bd ready *)",
       "Bash(bd update *)",
       "Bash(bd close *)",
-      "Bash(bd create *)"
+      "Bash(bd create *)",
+      "Bash(bd list *)",
+      "Bash(bd show *)",
+      "Bash(bd memories *)",
+      "Bash(bd remember *)",
+      "Bash(./gradlew compileJava --console=plain)"
     ]
   }
 }
