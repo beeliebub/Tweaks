@@ -39,6 +39,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Night Vision](#night-vision)
   - [Item Filter](#item-filter)
   - [Tool Protect](#tool-protect)
+  - [AFK](#afk)
   - [Tab List](#tab-list)
 - [World Protections](#world-protections)
 - [World Events](#world-events)
@@ -393,6 +394,19 @@ Tools that don't meet the scope above (wood/stone/iron/gold tiers, or top-tier t
 
 Both the on/off state and the threshold are saved on your player profile and persist across logins. No permission required.
 
+### AFK
+
+Mark yourself as away-from-keyboard. While you're AFK:
+
+- A red **[AFK]** suffix is appended to your name in the tab list.
+- You stop counting toward the sleep percentage, so other players can skip the night without waiting on you.
+
+| Command | What it does |
+|---|---|
+| `/afk` | Toggles your AFK status. |
+
+You leave AFK automatically the moment you move at least one block from where you toggled it on (including teleports and world changes). Looking around, opening menus, attacking, and clicking do **not** clear AFK — only actual movement does. AFK status is in-memory only and resets on logout. No permission required.
+
 ### Tab List
 
 Players in the tab list are automatically sorted and labeled by their current world profile. Each profile has a colored prefix:
@@ -404,7 +418,7 @@ Players in the tab list are automatically sorted and labeled by their current wo
 | Archive | **[Archive]** (gold) |
 | Pi | **[Pi]** (light purple) |
 
-Players in the lobby appear at the top of the tab list, followed by survival, archive, and pi. Tags update automatically when you change worlds.
+Players in the lobby appear at the top of the tab list, followed by survival, archive, and pi. Tags update automatically when you change worlds. Players who have toggled `/afk` also display a red **[AFK]** suffix after their name — see [AFK](#afk).
 
 ---
 
@@ -486,6 +500,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/itemfilter [toggle\|mode\|add <item>\|remove <item>\|list]` | Manage your personal pickup filter. Alias: `/if`. |
 | `/toolprotect [on\|off]` | Toggle ToolProtect on/off (default: on). |
 | `/toolprotect durability <n>` | Set your remaining-durability threshold for ToolProtect (default: 100). |
+| `/afk` | Toggle AFK status. AFK players don't count toward sleep skipping and show a red [AFK] tag in the tab list. |
 | `/fullmoon` | Show a rough estimate of how long until the next full moon. |
 | `/reward claim` | Claim pending minigame rewards. |
 
