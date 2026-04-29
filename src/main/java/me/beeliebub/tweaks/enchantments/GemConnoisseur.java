@@ -152,10 +152,7 @@ public class GemConnoisseur implements Listener {
         boolean routeToInventory = telekinesis != null && telekinesis.hasEnchant(tool);
         for (ItemStack drop : gemDrops) {
             if (routeToInventory) {
-                Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
-                for (ItemStack remaining : leftover.values()) {
-                    block.getWorld().dropItemNaturally(block.getLocation(), remaining);
-                }
+                telekinesis.giveOrDrop(player, block, drop);
             } else {
                 block.getWorld().dropItemNaturally(block.getLocation(), drop);
             }

@@ -30,7 +30,7 @@ public class Tweaks extends JavaPlugin {
 
         // Commands - Combos
         TabManager tabManager = new TabManager();
-        AfkCommand afkCommand = new AfkCommand();
+        AfkCommand afkCommand = new AfkCommand(this);
         afkCommand.setTabManager(tabManager);
         tabManager.setAfkPredicate(afkCommand::isAfk);
         NickCommand nickCommand = new NickCommand(this);
@@ -99,6 +99,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(flyCommand, this);
         getServer().getPluginManager().registerEvents(itemFilterCommand, this);
         getServer().getPluginManager().registerEvents(afkCommand, this);
+        afkCommand.start();
         getServer().getPluginManager().registerEvents(invSeeCommand, this);
         getServer().getPluginManager().registerEvents(new EndPortalListener(this), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(this, storageManager), this);

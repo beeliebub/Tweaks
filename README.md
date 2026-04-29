@@ -405,7 +405,9 @@ Mark yourself as away-from-keyboard. While you're AFK:
 |---|---|
 | `/afk` | Toggles your AFK status. |
 
-You leave AFK automatically the moment you move at least one block from where you toggled it on (including teleports and world changes). Looking around, opening menus, attacking, and clicking do **not** clear AFK — only actual movement does. AFK status is in-memory only and resets on logout. No permission required.
+You leave AFK automatically the moment you move at least one block from where you toggled it on (including teleports and world changes). Looking around, opening menus, attacking, and clicking do **not** clear AFK — only actual movement does.
+
+You also enter AFK automatically after **10 minutes** of not moving. Only positional movement (walking, jumping, teleporting) resets the idle timer; rotating the camera, attacking, opening menus, chatting, and clicking do **not** count as activity — matching the rule that clicks don't exit AFK either. AFK status is in-memory only and resets on logout. No permission required.
 
 ### Tab List
 
@@ -500,7 +502,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/itemfilter [toggle\|mode\|add <item>\|remove <item>\|list]` | Manage your personal pickup filter. Alias: `/if`. |
 | `/toolprotect [on\|off]` | Toggle ToolProtect on/off (default: on). |
 | `/toolprotect durability <n>` | Set your remaining-durability threshold for ToolProtect (default: 100). |
-| `/afk` | Toggle AFK status. AFK players don't count toward sleep skipping and show a red [AFK] tag in the tab list. |
+| `/afk` | Toggle AFK status. Auto-applies after 10 minutes without moving. AFK players don't count toward sleep skipping and show a red [AFK] tag in the tab list. |
 | `/fullmoon` | Show a rough estimate of how long until the next full moon. |
 | `/reward claim` | Claim pending minigame rewards. |
 
