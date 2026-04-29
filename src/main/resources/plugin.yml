@@ -66,3 +66,6 @@ commands:
   afk:
     description: Toggle AFK status. AFK players don't count toward sleep skipping.
     usage: /afk
+  invsee:
+    description: View and modify another online player's inventory (admin).
+    usage: /invsee <player>

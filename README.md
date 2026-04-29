@@ -517,6 +517,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/nick off <player>` | `tweaks.admin.nick` | Remove another player's nickname (works on offline players). |
 | `/tconfig <key> <value>` | `tweaks.admin.config` | Update a config value at runtime. Alias: `/tweaksconfig`. |
 | `/more` | `tweaks.admin.more` | Maximize the stack size of the held item. |
+| `/invsee <player>` | `tweaks.admin.invsee` | View and modify an online player's inventory (hotbar, main, armor, offhand). |
 | `/bloodmoon` | `tweaks.admin.bloodmoon` | Advance the overworld to the next full moon and force-activate the Blood Moon event. |
 | `/reward create <name>` | `tweaks.admin.reward` | Create a new reward template. |
 | `/reward edit <name>` | `tweaks.admin.reward` | Open the reward editor GUI. |
@@ -555,6 +556,7 @@ These keys can be changed at runtime with `/tconfig <key> <value>`:
 | `tweaks.admin.nick` | Remove other players' nicknames. |
 | `tweaks.admin.config` | Use the `/tconfig` command. |
 | `tweaks.admin.more` | Use the `/more` command to maximize a held stack. |
+| `tweaks.admin.invsee` | View and modify another player's inventory via `/invsee`. |
 | `tweaks.admin.bloodmoon` | Force-activate the Blood Moon event. |
 | `tweaks.admin.reward` | Create and edit minigame rewards. |
 | `tweaks.admin.whack` | Full access to Whack-an-Andrew admin commands. |
