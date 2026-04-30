@@ -13,6 +13,7 @@ import me.beeliebub.tweaks.minigames.RewardManager;
 import me.beeliebub.tweaks.minigames.andrew.MannequinAI;
 import me.beeliebub.tweaks.minigames.andrew.WhackCommand;
 import me.beeliebub.tweaks.minigames.andrew.WhackConfig;
+import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
 import org.bukkit.plugin.java.JavaPlugin;
 
 // Main plugin class - registers all commands, listeners, enchantments, and minigame systems
@@ -102,7 +103,8 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(afkCommand, this);
         afkCommand.start();
         getServer().getPluginManager().registerEvents(invSeeCommand, this);
-        getServer().getPluginManager().registerEvents(new EndPortalListener(this), this);
+        getServer().getPluginManager().registerEvents(new PortalListener(this), this);
+        getServer().getPluginManager().registerEvents(new ResourceWorldJoinListener(this, storageManager), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(this, storageManager), this);
         getServer().getPluginManager().registerEvents(new TrampleListener(), this);
         getServer().getPluginManager().registerEvents(new MobGriefListener(), this);
@@ -163,6 +165,10 @@ public class Tweaks extends JavaPlugin {
         getCommand("reward").setExecutor(rewardCommand);
         getCommand("reward").setTabCompleter(rewardCommand);
         getServer().getPluginManager().registerEvents(new RewardListener(rewardManager, rewardCommand), this);
+
+        // Minigames - Resource Hunt
+        ResourceHunt resourceHunt = new ResourceHunt(this, rewardManager);
+        getServer().getPluginManager().registerEvents(resourceHunt, this);
 
         // Minigames - Whack an Andrew
         WhackConfig whackConfig = new WhackConfig(this);

@@ -1,0 +1,17 @@
+# Resource Hunt targets — each entry is "material: amount".
+# On every server start the plugin picks one entry at random as the active hunt.
+# The first player to obtain that material in that quantity through block drops in
+# the jass:resource world wins the "resource" reward (claimable with /reward claim).
+# Other worlds do not contribute progress.
+#
+# Material names follow Bukkit Material constants (case-insensitive). Amount must be > 0.
+# Unknown materials and non-positive amounts are skipped with a warning at load.
+
+iron_ore: 7
+raw_copper: 32
+raw_gold: 12
+diamond: 4
+emerald: 3
+coal: 32
+amethyst_shard: 24
+ancient_debris: 2

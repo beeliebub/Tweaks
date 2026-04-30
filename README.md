@@ -48,6 +48,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Blood Moon](#blood-moon)
 - [Minigames](#minigames)
   - [Whack an Andrew](#whack-an-andrew)
+  - [Resource Hunt](#resource-hunt)
   - [Rewards](#rewards)
 - [Commands Reference](#commands-reference)
 - [Permissions Reference](#permissions-reference)
@@ -480,6 +481,32 @@ A rare server-wide event that turns the night crimson and supercharges enchantin
 A "Whack-a-Mole" style minigame where armor stands pop up on designated blocks in an arena. Players compete to hit as many as possible, and the top 3 scorers receive rewards.
 
 This is entirely admin-managed — see the [admin commands](#admin-commands) section for setup instructions.
+
+### Resource Hunt
+
+A server-wide race that runs in the **`jass:resource`** world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` (e.g. `iron_ore: 7`) as the active target. The first player to obtain the chosen item in the chosen amount through block drops in the resource world wins — and only blocks broken in `jass:resource` count toward progress, so any drops you collect in the overworld, lobby, or other dimensions are ignored.
+
+The winner gets the **`resource`** reward queued, claimable like any other reward via `/reward claim`. Once someone wins, the hunt closes for the rest of the session — the next target is chosen on the next server restart. A short message reminds each player of the active target when they log in; if the hunt has already been won, the join message instead reports who completed it and what they gathered.
+
+**Configuration** (`plugins/Tweaks/resource_hunt.yml`): a flat list of `material: amount` entries. Material names are Bukkit `Material` constants (lowercase). Unknown materials and non-positive amounts are skipped with a warning at load.
+
+```yaml
+iron_ore: 7
+raw_copper: 32
+diamond: 4
+ancient_debris: 2
+```
+
+**Admin setup**: the `resource` reward shell is auto-created on first plugin load; populate it with `/reward edit resource` to choose what the winner actually receives.
+
+**World restrictions**: `jass:resource` is single-purpose for gathering, so a few player-features are disabled inside it:
+
+| Restriction | What it does |
+|---|---|
+| End portals | Cancelled when entered from `jass:resource` (configurable via `disabled-end-portal-worlds`). |
+| Nether portals | Cancelled when entered from `jass:resource`. |
+| `/sethome` | Refused in `jass:resource` with an error message. |
+| Login eject | Players who log in while their saved location is inside `jass:resource` are immediately sent to the `newspawn` warp. (Requires `/setwarp newspawn` to be configured.) |
 
 ### Rewards
 

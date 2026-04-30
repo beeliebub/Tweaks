@@ -16,8 +16,11 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-// Saves the player's current location as a named home. Enforces a configurable max home limit.
+// Saves the player's current location as a named home. Enforces a configurable max home limit
+// and refuses to record homes inside the resource world.
 public class SetHomeCommand implements CommandExecutor, TabCompleter {
+
+    private static final String DISABLED_WORLD_KEY = "jass:resource";
 
     private final StorageManager manager;
     private final int maxHomes;
@@ -32,6 +35,11 @@ public class SetHomeCommand implements CommandExecutor, TabCompleter {
 
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Component.text("Only players can set homes.").color(NamedTextColor.RED));
+            return true;
+        }
+
+        if (DISABLED_WORLD_KEY.equals(player.getWorld().getKey().asString().toLowerCase())) {
+            player.sendMessage(Component.text("You cannot set a home in this world.").color(NamedTextColor.RED));
             return true;
         }
 

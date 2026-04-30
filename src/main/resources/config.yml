@@ -7,6 +7,7 @@ egg-collector-drop-chance: 0.5
 # Worlds where the end portal is disabled.
 disabled-end-portal-worlds:
   - "jass:archive"
+  - "jass:resource"
 
 # Worlds where fly is enabled by default.
 fly-worlds:
