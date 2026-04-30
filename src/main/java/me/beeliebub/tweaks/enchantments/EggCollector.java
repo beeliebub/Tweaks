@@ -32,6 +32,7 @@ public class EggCollector implements Listener {
 
     private static final int BREAK_AT = 5;
     private static final String LORE_PREFIX = "Egg Collector Uses Remaining: ";
+    private static final String DISABLED_MOBS_KEY = "egg-collector-disabled-mobs";
 
     private final Tweaks plugin;
     private final Enchantment enchantment;
@@ -75,11 +76,14 @@ public class EggCollector implements Listener {
         ItemStack tool = killer.getInventory().getItemInMainHand();
         if (tool.isEmpty() || !tool.containsEnchantment(enchantment)) return;
 
+        EntityType type = event.getEntityType();
+        String mobKey = type.getKey().getKey();
+        if (isMobDisabled(mobKey)) return;
+
         double dropChance = plugin.getConfig().getDouble("egg-collector-drop-chance", 0.5) / 100.0;
         if (ThreadLocalRandom.current().nextDouble() >= dropChance) return;
 
-        EntityType type = event.getEntityType();
-        Material spawnEgg = Material.matchMaterial(type.getKey().getKey() + "_spawn_egg");
+        Material spawnEgg = Material.matchMaterial(mobKey + "_spawn_egg");
         if (spawnEgg == null) return;
 
         event.getDrops().add(new ItemStack(spawnEgg));
@@ -97,6 +101,13 @@ public class EggCollector implements Listener {
             updateUsesLore(meta, BREAK_AT - count);
             tool.setItemMeta(meta);
         }
+    }
+
+    private boolean isMobDisabled(String mobKey) {
+        for (String entry : plugin.getConfig().getStringList(DISABLED_MOBS_KEY)) {
+            if (entry.equalsIgnoreCase(mobKey)) return true;
+        }
+        return false;
     }
 
     private void updateUsesLore(ItemMeta meta, int remaining) {

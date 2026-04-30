@@ -28,7 +28,11 @@ commands:
     description: Toggle night vision.
   tconfig:
     description: Update plugin config options.
-    usage: /tconfig <key> <value>
+    usage: |
+      /tconfig max_homes <int>
+      /tconfig egg_collector_drop_chance <0.0-100.0>
+      /tconfig eggdrop <disable|enable> <mob>
+      /tconfig spawneregg <disable|enable> <mob>
     aliases: [tweaksconfig]
   nick:
     description: Set or remove your nickname

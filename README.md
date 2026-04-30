@@ -44,6 +44,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
 - [Cosmetics](#cosmetics)
   - [Redstone Trail](#redstone-trail)
 - [World Protections](#world-protections)
+  - [Spawn Egg Restrictions](#spawn-egg-restrictions)
 - [World Events](#world-events)
   - [Blood Moon](#blood-moon)
 - [Minigames](#minigames)
@@ -236,6 +237,8 @@ Gives a **20% chance** to drop the spawner block when you mine a mob spawner. Ho
 ### Egg Collector
 
 Gives a configurable chance (default: **0.5%**) to drop a **spawn egg** when you kill a mob. Like Spawner Pickup, the tool tracks successful egg drops and **breaks after 5**. Remaining uses are shown in the item's lore.
+
+Admins can blacklist specific mobs from ever rolling an egg via `/tconfig eggdrop disable <mob>`. Disabled mobs never drop an egg and never consume one of the tool's 5 uses. Use `/tconfig eggdrop enable <mob>` to lift the block. See [Spawn Egg Restrictions](#spawn-egg-restrictions) for the matching spawner-side block.
 
 ### Enchantment Interactions
 
@@ -452,6 +455,19 @@ These protections are always active and require no commands or configuration:
 | **Enderman Grief Protection** | Endermen cannot pick up or place blocks. |
 | **End Portal Control** | End portals are disabled in configured worlds (archive by default). Players who try receive a red message. |
 
+### Spawn Egg Restrictions
+
+Admins can disable Egg Collector drops or spawn-egg-on-spawner conversion on a per-mob basis. Both lists start empty (every mob allowed) and are managed entirely through commands — no manual config edits required.
+
+| Command | What it does |
+|---|---|
+| `/tconfig eggdrop disable <mob>` | Stops Egg Collector from ever rolling that mob's spawn egg. |
+| `/tconfig eggdrop enable <mob>` | Re-allows Egg Collector to roll that mob's spawn egg. |
+| `/tconfig spawneregg disable <mob>` | Blocks players from using that mob's spawn egg on a spawner block to set the spawner's spawned type. |
+| `/tconfig spawneregg enable <mob>` | Re-allows that spawn egg to be used on spawners. |
+
+`<mob>` is the vanilla entity key (e.g. `zombie`, `blaze`, `wither_skeleton`). Tab completion lists every mob with a spawn egg, and the `enable` form prefers currently-disabled mobs so admins can audit and revert their own changes quickly.
+
 ---
 
 ## World Events
@@ -560,7 +576,9 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/delhome <player> <name>` | `tweaks.admin.delhome` | Delete another player's home. |
 | `/homes <player>` | `tweaks.admin.homes` | List another player's homes. |
 | `/nick off <player>` | `tweaks.admin.nick` | Remove another player's nickname (works on offline players). |
-| `/tconfig <key> <value>` | `tweaks.admin.config` | Update a config value at runtime. Alias: `/tweaksconfig`. |
+| `/tconfig <key> <value>` | `tweaks.admin.config` | Update a numeric/string config value at runtime. Alias: `/tweaksconfig`. |
+| `/tconfig eggdrop <disable\|enable> <mob>` | `tweaks.admin.config` | Disable or re-enable Egg Collector drops for a specific mob. Auto-creates the config list. |
+| `/tconfig spawneregg <disable\|enable> <mob>` | `tweaks.admin.config` | Disable or re-enable using a specific mob's spawn egg on a spawner block. Auto-creates the config list. |
 | `/more` | `tweaks.admin.more` | Maximize the stack size of the held item. |
 | `/invsee <player>` | `tweaks.admin.invsee` | View and modify an online player's inventory (hotbar, main, armor, offhand). |
 | `/bloodmoon` | `tweaks.admin.bloodmoon` | Advance the overworld to the next full moon and force-activate the Blood Moon event. |
@@ -584,6 +602,13 @@ These keys can be changed at runtime with `/tconfig <key> <value>`:
 |---|---|---|
 | `max_homes` | Integer | Maximum number of homes per player. |
 | `egg_collector_drop_chance` | Decimal (0.0 - 100.0) | Egg Collector drop chance percentage. |
+
+In addition to the simple key/value form, `/tconfig` exposes two list-mutation subcommands that manage per-mob blacklists. Both lists are auto-created on first use:
+
+| Subcommand | Effect |
+|---|---|
+| `/tconfig eggdrop <disable\|enable> <mob>` | Adds/removes `<mob>` from `egg-collector-disabled-mobs`. Disabled mobs never drop an Egg Collector egg and never consume one of the tool's 5 uses. |
+| `/tconfig spawneregg <disable\|enable> <mob>` | Adds/removes `<mob>` from `spawner-egg-disabled-mobs`. Disabled mobs' spawn eggs cannot be right-clicked on a spawner block to set its spawned type. |
 
 ---
 
@@ -618,6 +643,14 @@ max-homes: 15
 
 # Drop chance percentage for Egg Collector enchantment (0.0 - 100.0).
 egg-collector-drop-chance: 0.5
+
+# Mobs that will NEVER drop a spawn egg from Egg Collector. Manage at runtime via
+# /tconfig eggdrop <disable|enable> <mob>; this section is auto-created on first use.
+egg-collector-disabled-mobs: []
+
+# Mobs whose spawn eggs cannot be right-clicked on a spawner to set the spawned type.
+# Manage at runtime via /tconfig spawneregg <disable|enable> <mob>.
+spawner-egg-disabled-mobs: []
 
 # Worlds where the end portal is disabled.
 disabled-end-portal-worlds:
