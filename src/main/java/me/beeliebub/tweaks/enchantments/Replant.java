@@ -7,30 +7,39 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Tag;
-import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Ageable;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
 
 // Automatically replants crops after harvesting and saplings after tree felling.
-// Crops must be fully grown to break; one seed is consumed from drops for replanting.
+// Crop replanting flows through BlockDropItemEvent so other plugins (e.g. Husbandry)
+// can mutate the dropped items first; the seed used for replanting carries those mutations.
 public class Replant implements Listener {
+
+    /** Hook invoked after a crop is replanted; receives the seed used (with PDC) and the new block. */
+    @FunctionalInterface
+    public interface ReplantHook {
+        void onReplant(ItemStack seed, Block block);
+    }
 
     // Maps crop block type to the seed item needed to replant it
     private static final Map<Material, Material> CROP_SEEDS = Map.of(
@@ -73,12 +82,26 @@ public class Replant implements Listener {
     private final Telekinesis telekinesis;
     private final Lumberjack lumberjack;
 
+    // Tracks crops that should be replanted on the next BlockDropItemEvent for that block.
+    private final Map<Location, PendingReplant> pendingReplants = new HashMap<>();
+
+    private final List<ReplantHook> replantHooks = new CopyOnWriteArrayList<>();
+
+    public Enchantment getEnchantment() {
+        return enchantment;
+    }
+
     public Replant(Tweaks plugin, Telekinesis telekinesis, Lumberjack lumberjack) {
         this.plugin = plugin;
         String raw = plugin.getConfig().getString("replant");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.telekinesis = telekinesis;
         this.lumberjack = lumberjack;
+    }
+
+    /** Register a callback invoked after each successful crop replant. */
+    public void addReplantHook(ReplantHook hook) {
+        if (hook != null) replantHooks.add(hook);
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -115,7 +138,71 @@ public class Replant implements Listener {
             return;
         }
 
-        handleCropReplant(event, player, tool, block, blockType);
+        Material seedType = CROP_SEEDS.get(blockType);
+        if (seedType == null) return;
+
+        BlockData data = block.getBlockData();
+        if (!(data instanceof Ageable ageable)) return;
+
+        // Immature crops: cancel the break so players can't waste growth time.
+        if (ageable.getAge() < ageable.getMaximumAge()) {
+            event.setCancelled(true);
+            return;
+        }
+
+        // Mark this break for replanting; we'll consume the seed in BlockDropItemEvent
+        // after other plugins (Husbandry) have mutated the drops.
+        pendingReplants.put(block.getLocation(), new PendingReplant(blockType, seedType));
+    }
+
+    // Consume one (now-traited) seed from the dropped items and schedule the replant.
+    // Runs at HIGH so trait-mutating listeners (e.g. Husbandry at LOW/NORMAL) finish first,
+    // and Telekinesis (HIGHEST) picks up the remaining drops afterwards.
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
+    public void onBlockDropItem(BlockDropItemEvent event) {
+        if (enchantment == null) return;
+
+        Block block = event.getBlock();
+        PendingReplant pending = pendingReplants.remove(block.getLocation());
+        if (pending == null) return;
+
+        // Find a seed in the (possibly mutated) drops to use for replanting.
+        ItemStack seedToPlant = null;
+        for (Item item : event.getItems()) {
+            ItemStack stack = item.getItemStack();
+            if (stack.getType() == pending.seedType && stack.getAmount() > 0) {
+                ItemStack reduced = stack.clone();
+                reduced.setAmount(reduced.getAmount() - 1);
+                seedToPlant = stack.clone();
+                seedToPlant.setAmount(1);
+
+                if (reduced.getAmount() <= 0) {
+                    item.remove();
+                } else {
+                    item.setItemStack(reduced);
+                }
+                break;
+            }
+        }
+        if (seedToPlant == null) return;
+
+        final ItemStack seedFinal = seedToPlant;
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            if (!block.getType().isAir()) return;
+            block.setType(pending.cropType);
+            BlockData newData = block.getBlockData();
+            if (newData instanceof Ageable fresh) {
+                fresh.setAge(0);
+                block.setBlockData(fresh);
+            }
+            for (ReplantHook hook : replantHooks) {
+                try {
+                    hook.onReplant(seedFinal, block);
+                } catch (Throwable t) {
+                    plugin.getLogger().log(Level.WARNING, "Replant hook failed", t);
+                }
+            }
+        });
     }
 
     // Plant saplings at the base of a felled tree (requires Lumberjack enchant to identify tree logs)
@@ -148,57 +235,5 @@ public class Replant implements Listener {
         });
     }
 
-    // Harvest a fully grown crop, consume one seed from drops, and replant it at age 0
-    private void handleCropReplant(BlockBreakEvent event, Player player, ItemStack tool, Block block, Material cropType) {
-        Material seedType = CROP_SEEDS.get(cropType);
-        if (seedType == null) return;
-
-        BlockData data = block.getBlockData();
-        if (!(data instanceof Ageable ageable)) return;
-
-        if (ageable.getAge() < ageable.getMaximumAge()) {
-            event.setCancelled(true);
-            return;
-        }
-
-        Collection<ItemStack> drops = block.getDrops(tool, player);
-        List<ItemStack> remaining = new ArrayList<>(drops.size());
-        boolean consumed = false;
-        for (ItemStack drop : drops) {
-            if (!consumed && drop.getType() == seedType && drop.getAmount() > 0) {
-                ItemStack clone = drop.clone();
-                clone.setAmount(clone.getAmount() - 1);
-                consumed = true;
-                if (clone.getAmount() > 0) remaining.add(clone);
-            } else {
-                remaining.add(drop);
-            }
-        }
-        if (!consumed) return;
-
-        event.setDropItems(false);
-
-        boolean useTelekinesis = telekinesis != null && telekinesis.hasEnchant(tool);
-        Location loc = block.getLocation();
-        World world = block.getWorld();
-        for (ItemStack drop : remaining) {
-            if (useTelekinesis) {
-                Map<Integer, ItemStack> leftover = player.getInventory().addItem(drop);
-                for (ItemStack overflow : leftover.values()) {
-                    world.dropItemNaturally(loc, overflow);
-                }
-            } else {
-                world.dropItemNaturally(loc, drop);
-            }
-        }
-
-        plugin.getServer().getScheduler().runTask(plugin, () -> {
-            block.setType(cropType);
-            BlockData newData = block.getBlockData();
-            if (newData instanceof Ageable fresh) {
-                fresh.setAge(0);
-                block.setBlockData(fresh);
-            }
-        });
-    }
+    private record PendingReplant(Material cropType, Material seedType) {}
 }

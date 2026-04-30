@@ -21,6 +21,16 @@ public class Tweaks extends JavaPlugin {
 
     private StorageManager storageManager;
     private int maxHomes;
+    private Telekinesis telekinesis;
+    private Replant replant;
+
+    public Telekinesis getTelekinesis() {
+        return telekinesis;
+    }
+
+    public Replant getReplant() {
+        return replant;
+    }
 
     @Override
     public void onEnable() {
@@ -124,7 +134,7 @@ public class Tweaks extends JavaPlugin {
         getCommand("bloodmoon").setExecutor(new BloodMoonCommand(bloodMoonManager));
 
         // Enchantments
-        Telekinesis telekinesis = new Telekinesis(this, itemFilterCommand);
+        telekinesis = new Telekinesis(this, itemFilterCommand);
         Smelter smelter = new Smelter(this, telekinesis);
         FortuneQualityListener fortuneQuality = new FortuneQualityListener(qualityRegistry);
         Lumberjack lumberjack = new Lumberjack(this, telekinesis, qualityRegistry, fortuneQuality);
@@ -140,14 +150,14 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(spawnerPickup, this);
         getServer().getPluginManager().registerEvents(eggCollector, this);
         getServer().getPluginManager().registerEvents(new AnvilListener(spawnerPickup, eggCollector), this);
-        getServer().getPluginManager().registerEvents(new Replant(this, telekinesis, lumberjack), this);
+        replant = new Replant(this, telekinesis, lumberjack);
+        getServer().getPluginManager().registerEvents(replant, this);
         getServer().getPluginManager().registerEvents(new Efficacy(this, qualityRegistry), this);
 
         // Quality Enchantment Listeners
         getServer().getPluginManager().registerEvents(new EnchantTableListener(qualityRegistry, bloodMoonManager), this);
         getServer().getPluginManager().registerEvents(fortuneQuality, this);
         getServer().getPluginManager().registerEvents(new LootingQualityListener(qualityRegistry), this);
-        getServer().getPluginManager().registerEvents(new LuckOfSeaQualityListener(qualityRegistry, this), this);
 
         // Cosmetics
         RedstoneTrail redstoneTrail = new RedstoneTrail(this);

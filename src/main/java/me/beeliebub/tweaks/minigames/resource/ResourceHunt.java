@@ -158,6 +158,7 @@ public class ResourceHunt implements Listener {
                     .append(Component.text("first to gather ", NamedTextColor.YELLOW))
                     .append(Component.text(targetAmount + "× " + readableName(targetMaterial), NamedTextColor.WHITE))
                     .append(Component.text(" in the resource world wins!", NamedTextColor.YELLOW))
+                    .append(Component.text(" Use /resource to go there now!", NamedTextColor.GREEN))
                     .build();
         } else {
             String name = winnerName != null ? winnerName : "another player";

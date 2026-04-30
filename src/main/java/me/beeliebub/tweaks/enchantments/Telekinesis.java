@@ -13,6 +13,7 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockDropItemEvent;
@@ -67,6 +68,10 @@ public class Telekinesis implements Listener {
         return resolved;
     }
 
+    public Enchantment getEnchantment() {
+        return enchantment;
+    }
+
     public boolean hasEnchant(ItemStack tool) {
         return enchantment != null && !tool.isEmpty() && tool.containsEnchantment(enchantment);
     }
@@ -87,8 +92,10 @@ public class Telekinesis implements Listener {
         chainBreakPlants(block, player, tool);
     }
 
-    // Intercept dropped items and route them to the player's inventory
-    @EventHandler(ignoreCancelled = true)
+    // Intercept dropped items and route them to the player's inventory.
+    // Runs at HIGHEST so other plugins (Husbandry trait mutations, Replant seed consumption)
+    // can finish modifying the dropped items before pickup.
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
     public void onBlockDropItem(BlockDropItemEvent event) {
         if (enchantment == null) return;
 

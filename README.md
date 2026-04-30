@@ -2,7 +2,7 @@
 
 A Paper plugin that adds custom enchantments, an enchantment quality system, separated world profiles, teleportation utilities, nicknames, flight, world events, cosmetics, and minigames to a multi-world Minecraft server.
 
-**Requires Paper 26.1.1 and Java 25.**
+**Requires Paper 26.1.2 and Java 25.**
 
 ---
 
@@ -210,6 +210,8 @@ Chops down **entire trees** and **large mushrooms** at once. When you break a lo
 Automatically replants crops and saplings after harvesting.
 
 **Crops**: When you break a fully-grown crop (wheat, carrots, potatoes, beetroots, nether wart), the enchantment consumes one seed from the drops and replants the crop at age 0. If the crop is **not fully grown**, the break is cancelled entirely — this prevents accidental harvesting of immature crops.
+
+Replant runs through the standard `BlockDropItemEvent` flow so other plugins (e.g. Husbandry's crop traits) can mutate the dropped items first — the seed used for replanting carries any traits applied by those plugins. Plugins can register a `Replant.ReplantHook` (via `Tweaks#getReplant()`) to be notified of replants and persist their own data onto the new block.
 
 **Trees**: When combined with Lumberjack, saplings are automatically planted at the base of felled trees wherever a log was sitting on valid soil (grass, dirt, podzol, moss, mud, etc.).
 
