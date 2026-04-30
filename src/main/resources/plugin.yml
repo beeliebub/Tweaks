@@ -69,3 +69,5 @@ commands:
   invsee:
     description: View and modify another online player's inventory (admin).
     usage: /invsee <player>
+  resource:
+    description: Safely teleport to the resource world

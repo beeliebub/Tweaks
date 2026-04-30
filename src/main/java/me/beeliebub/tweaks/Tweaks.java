@@ -154,6 +154,8 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(redstoneTrail, this);
         redstoneTrail.start();
 
+        getCommand("resource").setExecutor(new ResourceCommand());
+
         // Minigames - Mannequin AI
         MannequinAI mannequinAI = new MannequinAI(this);
         getServer().getPluginManager().registerEvents(mannequinAI, this);
