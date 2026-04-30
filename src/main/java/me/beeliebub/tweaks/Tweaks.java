@@ -2,6 +2,7 @@ package me.beeliebub.tweaks;
 
 import me.beeliebub.tweaks.combos.*;
 import me.beeliebub.tweaks.commands.*;
+import me.beeliebub.tweaks.cosmetics.*;
 import me.beeliebub.tweaks.enchantments.*;
 import me.beeliebub.tweaks.enchantments.quality.*;
 import me.beeliebub.tweaks.listeners.*;
@@ -145,6 +146,11 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(fortuneQuality, this);
         getServer().getPluginManager().registerEvents(new LootingQualityListener(qualityRegistry), this);
         getServer().getPluginManager().registerEvents(new LuckOfSeaQualityListener(qualityRegistry, this), this);
+
+        // Cosmetics
+        RedstoneTrail redstoneTrail = new RedstoneTrail(this);
+        getServer().getPluginManager().registerEvents(redstoneTrail, this);
+        redstoneTrail.start();
 
         // Minigames - Mannequin AI
         MannequinAI mannequinAI = new MannequinAI(this);

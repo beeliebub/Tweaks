@@ -1,6 +1,6 @@
 # Tweaks
 
-A Paper plugin that adds custom enchantments, an enchantment quality system, separated world profiles, teleportation utilities, nicknames, flight, world events, and minigames to a multi-world Minecraft server.
+A Paper plugin that adds custom enchantments, an enchantment quality system, separated world profiles, teleportation utilities, nicknames, flight, world events, cosmetics, and minigames to a multi-world Minecraft server.
 
 **Requires Paper 26.1.1 and Java 25.**
 
@@ -41,6 +41,8 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Tool Protect](#tool-protect)
   - [AFK](#afk)
   - [Tab List](#tab-list)
+- [Cosmetics](#cosmetics)
+  - [Redstone Trail](#redstone-trail)
 - [World Protections](#world-protections)
 - [World Events](#world-events)
   - [Blood Moon](#blood-moon)
@@ -421,6 +423,18 @@ Players in the tab list are automatically sorted and labeled by their current wo
 | Pi | **[Pi]** (light purple) |
 
 Players in the lobby appear at the top of the tab list, followed by survival, archive, and pi. Tags update automatically when you change worlds. Players who have toggled `/afk` also display a red **[AFK]** suffix after their name — see [AFK](#afk).
+
+---
+
+## Cosmetics
+
+Purely visual effects unlocked by ordinary in-game items — no commands, no permissions, no toggles.
+
+### Redstone Trail
+
+Apply the **silence** armor trim to a pair of boots using **redstone** as the trim material, then equip them. While you walk, run, or sprint, your footsteps leave a brief trail of red redstone-dust particles behind you. The effect activates the moment you put the boots on and stops the moment you take them off — there is no command to enable or disable it.
+
+Only horizontal movement triggers the trail; standing still, falling straight down, or rotating the camera produces no particles. The trail samples a few times per second, so it stays light on the network even at sprint speed and across a busy server.
 
 ---
 
