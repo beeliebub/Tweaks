@@ -6,6 +6,7 @@ import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.enchantments.quality.FortuneQualityListener;
 import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
 import me.beeliebub.tweaks.enchantments.quality.QualityTier;
+import me.beeliebub.tweaks.enchantments.quality.SilkTouchQualityListener;
 import org.bukkit.Effect;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -38,10 +39,11 @@ public class Tunneller implements Listener {
     private final GemConnoisseur gemConnoisseur;
     private final QualityRegistry qualityRegistry;
     private final FortuneQualityListener fortuneQuality;
+    private final SilkTouchQualityListener silkTouchQuality;
 
     public Tunneller(Tweaks plugin, Telekinesis telekinesis, Smelter smelter,
                      GemConnoisseur gemConnoisseur, QualityRegistry qualityRegistry,
-                     FortuneQualityListener fortuneQuality) {
+                     FortuneQualityListener fortuneQuality, SilkTouchQualityListener silkTouchQuality) {
         String raw = plugin.getConfig().getString("tunneller");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.telekinesis = telekinesis;
@@ -49,6 +51,7 @@ public class Tunneller implements Listener {
         this.gemConnoisseur = gemConnoisseur;
         this.qualityRegistry = qualityRegistry;
         this.fortuneQuality = fortuneQuality;
+        this.silkTouchQuality = silkTouchQuality;
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -97,6 +100,9 @@ public class Tunneller implements Listener {
         boolean useFortuneReroll = fortuneQuality != null
                 && qualityRegistry != null
                 && qualityRegistry.getToolQuality(tool, "fortune") != null;
+        boolean useSilkQuality = silkTouchQuality != null
+                && qualityRegistry != null
+                && qualityRegistry.getToolQuality(tool, "silk_touch") != null;
 
         int blocksbroken = 0;
         for (int u = -radius; u <= radius; u++) {
@@ -107,7 +113,7 @@ public class Tunneller implements Listener {
                         a1[1] * u + a2[1] * v,
                         a1[2] * u + a2[2] * v
                 );
-                if (breakBlock(target, tool, player, useSmelter, useTelekinesis, useGemConnoisseur, useFortuneReroll)) {
+                if (breakBlock(target, tool, player, useSmelter, useTelekinesis, useGemConnoisseur, useFortuneReroll, useSilkQuality)) {
                     blocksbroken++;
                 }
             }
@@ -143,19 +149,30 @@ public class Tunneller implements Listener {
 
     // Break a single block, applying smelter/gem drops and routing to inventory or ground.
     // Returns true if a block was actually broken.
-    private boolean breakBlock(Block target, ItemStack tool, Player player, boolean useSmelter, boolean useTelekinesis, boolean useGemConnoisseur, boolean useFortuneReroll) {
+    private boolean breakBlock(Block target, ItemStack tool, Player player, boolean useSmelter, boolean useTelekinesis, boolean useGemConnoisseur, boolean useFortuneReroll, boolean useSilkQuality) {
         Material type = target.getType();
         if (type.isAir() || target.isLiquid()) return false;
-        if (type.getHardness() < 0) return false;
 
-        // No modifiers and no quality fortune: breakNaturally handles drops, break effect, and XP in one call
-        if (!useSmelter && !useGemConnoisseur && !useTelekinesis && !useFortuneReroll) {
+        if (type.getHardness() < 0) {
+            // Reinforced Deepslate can only be broken by Epic+ Silk Touch
+            if (type == Material.REINFORCED_DEEPSLATE && useSilkQuality) {
+                QualityTier tier = qualityRegistry.getToolQualityTier(tool, "silk_touch");
+                if (tier == null || tier.ordinal() < QualityTier.EPIC.ordinal()) return false;
+            } else {
+                return false;
+            }
+        }
+
+        // No modifiers and no quality fortune/silk: breakNaturally handles drops, break effect, and XP in one call
+        if (!useSmelter && !useGemConnoisseur && !useTelekinesis && !useFortuneReroll && !useSilkQuality) {
             target.breakNaturally(tool, true, true);
             return true;
         }
 
-        // Manual path so we can apply quality fortune re-rolls and/or smelter/gem/telekinesis
+        // Manual path so we can apply quality fortune/silk re-rolls and/or smelter/gem/telekinesis
         Collection<ItemStack> drops = target.getDrops(tool, player);
+        // Apply Silk Touch quality drops
+        if (useSilkQuality) drops = silkTouchQuality.applySilkQuality(target, tool, drops);
         // Apply fortune re-rolls before smelter so smelter sees the boosted drop count
         if (useFortuneReroll) drops = fortuneQuality.applyFortuneRerolls(target, tool, player, drops);
         if (useSmelter) drops = Smelter.smeltDrops(drops);

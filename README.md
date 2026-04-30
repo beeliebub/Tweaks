@@ -306,15 +306,30 @@ Durability cost still scales with each extra block broken, and Unbreaking contin
 
 ### Supported Enchantments
 
-19 enchantment types have quality variants that the data pack registers and the plugin recognizes:
+20 enchantment types have quality variants that the data pack registers and the plugin recognizes:
 
 ```
 fortune, looting, luck_of_the_sea, frost_walker, knockback, lunge,
 lure, multishot, piercing, power, punch, quick_charge, sharpness,
-smite, bane_of_arthropods, sweeping_edge, unbreaking, efficacy, tunneller
+smite, bane_of_arthropods, sweeping_edge, unbreaking, efficacy, tunneller,
+silk_touch
 ```
 
-The plugin implements custom logic for **fortune**, **looting**, **luck_of_the_sea**, **efficacy**, and **tunneller**. The remaining quality variants have their behavior defined entirely by the data pack (typically increased base levels or stronger stat effects).
+The plugin implements custom logic for **fortune**, **looting**, **luck_of_the_sea**, **efficacy**, **tunneller**, and **silk_touch**. The remaining quality variants have their behavior defined entirely by the data pack (typically increased base levels or stronger stat effects).
+
+#### Silk Touch Quality
+
+Quality variants of Silk Touch allow players to pick up blocks that are normally impossible to obtain:
+
+| Tier | New Pickups |
+|---|---|
+| **Uncommon** | Dirt Path |
+| **Rare** | Farmland |
+| **Epic** | Reinforced Deepslate |
+| **Legendary** | Budding Amethyst |
+
+- **Reinforced Deepslate**: Picking this up requires at least an **Epic** Silk Touch tool. This also works with **Tunneller** — an Epic+ Silk Touch Tunneller tool can carve out 3x3 areas of Reinforced Deepslate (which is normally unbreakable).
+- Tiers are cumulative: a Legendary tool can pick up everything from the lower tiers.
 
 ---
 
@@ -482,7 +497,7 @@ A rare server-wide event that turns the night crimson and supercharges enchantin
 
 **What it does**: While a Blood Moon is active, the chance for an enchantment rolled at the enchanting table to become a [quality variant](#enchantment-quality) is boosted from **10% to 50%** per applicable enchantment. Tier weights (uncommon/rare/epic/legendary) still apply on top of that, so legendary remains rare — but the night is the best time to gamble on quality gear.
 
-**How it ends**: The Blood Moon fades automatically at the next dawn (when the overworld day rolls over) or when the night is skipped by sleeping. A bell chime and a chat message announce the end:
+**How it ends**: The Blood Moon fades automatically at the next dawn (when the overworld day rolls over). **Sleeping is blocked** while a Blood Moon is active; the moon's energy prevents players from skipping the night. A bell chime and a chat message announce the end:
 
 > *The Blood Moon fades.*
 

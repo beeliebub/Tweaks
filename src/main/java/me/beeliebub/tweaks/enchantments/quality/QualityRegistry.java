@@ -23,7 +23,8 @@ public class QualityRegistry {
             "fortune", "looting", "luck_of_the_sea", "frost_walker", "knockback",
             "lunge", "lure", "multishot", "piercing", "power", "punch",
             "quick_charge", "sharpness", "smite", "bane_of_arthropods",
-            "sweeping_edge", "unbreaking", "efficacy", "tunneller", "efficiency"
+            "sweeping_edge", "unbreaking", "efficacy", "tunneller", "efficiency",
+            "silk_touch"
     };
 
     private static final Set<String> SUPPORTED_NAMES = Set.of(ENCHANT_NAMES);

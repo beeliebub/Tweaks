@@ -12,6 +12,7 @@ import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.event.world.TimeSkipEvent;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -155,6 +156,14 @@ public class BloodMoonManager implements Listener {
         if (!active) return;
         if (event.getSkipReason() != TimeSkipEvent.SkipReason.NIGHT_SKIP) return;
         deactivate();
+    }
+
+    @EventHandler
+    public void onBedEnter(PlayerBedEnterEvent event) {
+        if (!active) return;
+        event.setCancelled(true);
+        event.getPlayer().sendMessage(Component.text("The Blood Moon's energy prevents you from sleeping.")
+                .color(NamedTextColor.RED));
     }
 
     private World pickReferenceWorld() {

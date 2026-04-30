@@ -138,6 +138,7 @@ public class Tweaks extends JavaPlugin {
         telekinesis = new Telekinesis(this, itemFilterCommand);
         Smelter smelter = new Smelter(this, telekinesis);
         FortuneQualityListener fortuneQuality = new FortuneQualityListener(qualityRegistry);
+        SilkTouchQualityListener silkTouchQuality = new SilkTouchQualityListener(qualityRegistry);
         Lumberjack lumberjack = new Lumberjack(this, telekinesis, qualityRegistry, fortuneQuality);
         GemConnoisseur gemConnoisseur = new GemConnoisseur(this, telekinesis);
         SpawnerPickup spawnerPickup = new SpawnerPickup(this);
@@ -147,7 +148,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(smelter, this);
         getServer().getPluginManager().registerEvents(lumberjack, this);
         getServer().getPluginManager().registerEvents(gemConnoisseur, this);
-        getServer().getPluginManager().registerEvents(new Tunneller(this, telekinesis, smelter, gemConnoisseur, qualityRegistry, fortuneQuality), this);
+        getServer().getPluginManager().registerEvents(new Tunneller(this, telekinesis, smelter, gemConnoisseur, qualityRegistry, fortuneQuality, silkTouchQuality), this);
         getServer().getPluginManager().registerEvents(spawnerPickup, this);
         getServer().getPluginManager().registerEvents(eggCollector, this);
         getServer().getPluginManager().registerEvents(new AnvilListener(spawnerPickup, eggCollector), this);
@@ -158,6 +159,7 @@ public class Tweaks extends JavaPlugin {
         // Quality Enchantment Listeners
         getServer().getPluginManager().registerEvents(new EnchantTableListener(qualityRegistry, bloodMoonManager), this);
         getServer().getPluginManager().registerEvents(fortuneQuality, this);
+        getServer().getPluginManager().registerEvents(silkTouchQuality, this);
         getServer().getPluginManager().registerEvents(new LootingQualityListener(qualityRegistry), this);
 
         // Cosmetics
