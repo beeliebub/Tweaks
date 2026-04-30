@@ -163,9 +163,9 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new LootingQualityListener(qualityRegistry), this);
 
         // Cosmetics
-        RedstoneTrail redstoneTrail = new RedstoneTrail(this);
-        getServer().getPluginManager().registerEvents(redstoneTrail, this);
-        redstoneTrail.start();
+        BootTrail bootTrail = new BootTrail(this);
+        getServer().getPluginManager().registerEvents(bootTrail, this);
+        bootTrail.start();
 
         getCommand("resource").setExecutor(new ResourceCommand());
 

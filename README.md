@@ -42,7 +42,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [AFK](#afk)
   - [Tab List](#tab-list)
 - [Cosmetics](#cosmetics)
-  - [Redstone Trail](#redstone-trail)
+  - [Boot Trails](#boot-trails)
 - [World Protections](#world-protections)
   - [Spawn Egg Restrictions](#spawn-egg-restrictions)
 - [World Events](#world-events)
@@ -451,11 +451,27 @@ Players in the lobby appear at the top of the tab list, followed by survival, ar
 
 Purely visual effects unlocked by ordinary in-game items — no commands, no permissions, no toggles.
 
-### Redstone Trail
+### Boot Trails
 
-Apply the **silence** armor trim to a pair of boots using **redstone** as the trim material, then equip them. While you walk, run, or sprint, your footsteps leave a brief trail of red redstone-dust particles behind you. The effect activates the moment you put the boots on and stops the moment you take them off — there is no command to enable or disable it.
+Apply an **armor trim** to a pair of boots using specific materials to unlock a particle trail that follows your footsteps while you walk, run, or sprint. The effect activates automatically when the boots are equipped and stops when they are removed.
 
-Only horizontal movement triggers the trail; standing still, falling straight down, or rotating the camera produces no particles. The trail samples a few times per second, so it stays light on the network even at sprint speed and across a busy server.
+Only horizontal movement triggers the trail; standing still, falling, or rotating the camera produces no particles. The trail samples a few times per second to remain lightweight on the network.
+
+| Trim Material | Particle Effect |
+|---|---|
+| **Redstone** | Redstone dust (`dust`) |
+| **Amethyst** | Portal swirls (`portal`) |
+| **Copper** | Waxing effect (`wax_on`) |
+| **Diamond** | Glow squid ink (`glow_squid_ink`) |
+| **Emerald** | Happy villager sparkles (`happy_villager`) |
+| **Gold** | Golden hearts (`goldheart_0` / `heart`) |
+| **Iron** | Lava drips (`lava`) |
+| **Lapis** | Enchantment table runes (`enchant`) |
+| **Netherite** | Combination of smoke, lava, and multi-colored dust |
+| **Quartz** | Soul fire flames (`soul_fire_flame`) |
+| **Resin** | Honey block slide effect (`landing_honey`) |
+
+Any armor trim pattern can be used to activate these effects, as long as the material matches one of the above.
 
 ---
 
