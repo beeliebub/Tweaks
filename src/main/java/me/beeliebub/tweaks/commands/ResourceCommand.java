@@ -1,9 +1,11 @@
 package me.beeliebub.tweaks.commands;
 
+import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.command.Command;
@@ -12,7 +14,16 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 public class ResourceCommand implements CommandExecutor {
+
+    private final ResourceHuntItems resourceHuntItems;
+
+    public ResourceCommand(ResourceHuntItems resourceHuntItems) {
+        this.resourceHuntItems = resourceHuntItems;
+    }
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
@@ -23,6 +34,18 @@ public class ResourceCommand implements CommandExecutor {
         }
 
         Player player = (Player) sender;
+
+        // Check for disallowed items
+        List<Material> disallowed = resourceHuntItems.getDisallowedItems(player);
+        if (!disallowed.isEmpty()) {
+            String itemNames = disallowed.stream()
+                    .map(m -> m.name().toLowerCase().replace('_', ' '))
+                    .distinct()
+                    .collect(Collectors.joining(", "));
+            player.sendMessage(Component.text("You cannot enter the resource world with these items: ", NamedTextColor.RED)
+                    .append(Component.text(itemNames, NamedTextColor.YELLOW)));
+            return true;
+        }
 
         // 2. Locate the specific world
         // Bukkit.getWorld(String) matches by world *name* (folder name); we need the namespaced key.

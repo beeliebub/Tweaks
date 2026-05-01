@@ -40,6 +40,9 @@ public class Tweaks extends JavaPlugin {
         maxHomes = getConfig().getInt("max-homes", 3);
         storageManager = new StorageManager(this);
 
+        // Resource Hunt Items Manager
+        ResourceHuntItems resourceHuntItems = new ResourceHuntItems(this);
+
         // Commands - Combos
         TabManager tabManager = new TabManager();
         AfkCommand afkCommand = new AfkCommand(this);
@@ -47,7 +50,7 @@ public class Tweaks extends JavaPlugin {
         tabManager.setAfkPredicate(afkCommand::isAfk);
         NickCommand nickCommand = new NickCommand(this);
         TPACommand tpaCommand = new TPACommand(this);
-        BackCommand backCommand = new BackCommand(this);
+        BackCommand backCommand = new BackCommand(this, resourceHuntItems);
         FlyCommand flyCommand = new FlyCommand(this);
         ItemFilterCommand itemFilterCommand = new ItemFilterCommand(this);
         InvSeeCommand invSeeCommand = new InvSeeCommand(this);
@@ -100,7 +103,7 @@ public class Tweaks extends JavaPlugin {
         getCommand("nv").setExecutor(new NightVisionCommand());
         getCommand("more").setExecutor(new MoreCommand());
         getCommand("fullmoon").setExecutor(new FullMoonCommand());
-        ConfigCommand configCommand = new ConfigCommand(this);
+        ConfigCommand configCommand = new ConfigCommand(this, resourceHuntItems);
         getCommand("tconfig").setExecutor(configCommand);
         getCommand("tconfig").setTabCompleter(configCommand);
 
@@ -114,7 +117,7 @@ public class Tweaks extends JavaPlugin {
         afkCommand.start();
         getServer().getPluginManager().registerEvents(invSeeCommand, this);
         getServer().getPluginManager().registerEvents(new PortalListener(this), this);
-        getServer().getPluginManager().registerEvents(new ResourceWorldJoinListener(this, storageManager), this);
+        getServer().getPluginManager().registerEvents(new ResourceWorldListener(this, storageManager), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(this, storageManager), this);
         getServer().getPluginManager().registerEvents(new TrampleListener(), this);
         getServer().getPluginManager().registerEvents(new MobGriefListener(), this);
@@ -173,7 +176,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(bootTrail, this);
         bootTrail.start();
 
-        getCommand("resource").setExecutor(new ResourceCommand());
+        getCommand("resource").setExecutor(new ResourceCommand(resourceHuntItems));
 
         // Minigames - Mannequin AI
         MannequinAI mannequinAI = new MannequinAI(this);

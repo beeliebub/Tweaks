@@ -1,5 +1,7 @@
 package me.beeliebub.tweaks.commands;
 
+import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
+import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -18,14 +20,19 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 // Saves a player's location before teleporting so they can return with /back.
 // Stores the location in the player's PersistentDataContainer so it survives restarts.
 public class BackCommand implements CommandExecutor, Listener {
 
     private final NamespacedKey backKey;
+    private final ResourceHuntItems resourceHuntItems;
 
-    public BackCommand(JavaPlugin plugin) {
+    public BackCommand(JavaPlugin plugin, ResourceHuntItems resourceHuntItems) {
         this.backKey = new NamespacedKey(plugin, "back_location");
+        this.resourceHuntItems = resourceHuntItems;
     }
 
     // Record the player's location before each teleport (ignoring beds, dismounts, and unknown causes)
@@ -86,6 +93,20 @@ public class BackCommand implements CommandExecutor, Listener {
                     Double.parseDouble(parts[3]),
                     Float.parseFloat(parts[4]),
                     Float.parseFloat(parts[5]));
+
+            // Prevent returning to resource world with disallowed items
+            if (ResourceHunt.TARGET_WORLD_KEY.equals(world.getKey().asString())) {
+                List<Material> disallowed = resourceHuntItems.getDisallowedItems(player);
+                if (!disallowed.isEmpty()) {
+                    String itemNames = disallowed.stream()
+                            .map(m -> m.name().toLowerCase().replace('_', ' '))
+                            .distinct()
+                            .collect(Collectors.joining(", "));
+                    player.sendMessage(Component.text("You cannot return to the resource world with these items: ", NamedTextColor.RED)
+                            .append(Component.text(itemNames, NamedTextColor.YELLOW)));
+                    return true;
+                }
+            }
 
             player.teleportAsync(loc).thenAccept(success -> {
                 if (success) {

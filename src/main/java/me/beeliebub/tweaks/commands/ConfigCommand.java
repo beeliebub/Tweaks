@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.commands;
 
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -26,14 +27,17 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
     private static final String SPAWN_EGG_SUFFIX = "_spawn_egg";
 
     private static final List<String> TOP_LEVEL_KEYS = List.of(
-            "max_homes", "egg_collector_drop_chance", "eggdrop", "spawneregg"
+            "max_homes", "egg_collector_drop_chance", "eggdrop", "spawneregg", "resourceitems"
     );
     private static final List<String> TOGGLE_ACTIONS = List.of("disable", "enable");
+    private static final List<String> LIST_ACTIONS = List.of("add", "remove");
 
     private final Tweaks plugin;
+    private final ResourceHuntItems resourceHuntItems;
 
-    public ConfigCommand(Tweaks plugin) {
+    public ConfigCommand(Tweaks plugin, ResourceHuntItems resourceHuntItems) {
         this.plugin = plugin;
+        this.resourceHuntItems = resourceHuntItems;
     }
 
     @Override
@@ -58,6 +62,7 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
                     "eggdrop", EGG_DROP_DISABLED_KEY, "Egg Collector drops");
             case "spawneregg" -> handleMobToggle(sender, label, args,
                     "spawneregg", SPAWNER_EGG_DISABLED_KEY, "Spawn-egg use on spawners");
+            case "resourceitems" -> handleResourceItems(sender, label, args);
             default -> sender.sendMessage(Component.text("Unknown config key: " + key).color(NamedTextColor.RED));
         }
 
@@ -70,6 +75,7 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text("  /" + label + " egg_collector_drop_chance <0.0-100.0>").color(NamedTextColor.RED));
         sender.sendMessage(Component.text("  /" + label + " eggdrop <disable|enable> <mob>").color(NamedTextColor.RED));
         sender.sendMessage(Component.text("  /" + label + " spawneregg <disable|enable> <mob>").color(NamedTextColor.RED));
+        sender.sendMessage(Component.text("  /" + label + " resourceitems <add|remove> <item>").color(NamedTextColor.RED));
     }
 
     private void handleMaxHomes(CommandSender sender, String label, String[] args) {
@@ -157,6 +163,31 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    private void handleResourceItems(CommandSender sender, String label, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(Component.text("Usage: /" + label + " resourceitems <add|remove> <item>")
+                    .color(NamedTextColor.RED));
+            return;
+        }
+
+        String action = args[1].toLowerCase(Locale.ROOT);
+        Material mat = Material.matchMaterial(args[2]);
+        if (mat == null) {
+            sender.sendMessage(Component.text("Unknown material: " + args[2]).color(NamedTextColor.RED));
+            return;
+        }
+
+        if (action.equals("add")) {
+            resourceHuntItems.addAllowedItem(mat);
+            sender.sendMessage(Component.text("Added '" + mat.name().toLowerCase() + "' to resource world allowed items.", NamedTextColor.GREEN));
+        } else if (action.equals("remove")) {
+            resourceHuntItems.removeAllowedItem(mat);
+            sender.sendMessage(Component.text("Removed '" + mat.name().toLowerCase() + "' from resource world allowed items.", NamedTextColor.GREEN));
+        } else {
+            sender.sendMessage(Component.text("Action must be 'add' or 'remove'.", NamedTextColor.RED));
+        }
+    }
+
     private static String normalizeMob(String raw) {
         String mob = raw.toLowerCase(Locale.ROOT);
         if (mob.startsWith("minecraft:")) mob = mob.substring("minecraft:".length());
@@ -191,6 +222,11 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
             return TOGGLE_ACTIONS.stream().filter(s -> s.startsWith(prefix)).toList();
         }
 
+        if (args.length == 2 && key.equals("resourceitems")) {
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            return LIST_ACTIONS.stream().filter(s -> s.startsWith(prefix)).toList();
+        }
+
         if (args.length == 3 && (key.equals("eggdrop") || key.equals("spawneregg"))) {
             String prefix = normalizeMob(args[2]);
             Stream<String> source = spawnEggMobs().stream();
@@ -203,6 +239,16 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
                 }
             }
             return source.filter(s -> s.startsWith(prefix)).toList();
+        }
+
+        if (args.length == 3 && key.equals("resourceitems")) {
+            String prefix = args[2].toLowerCase(Locale.ROOT);
+            return Arrays.stream(Material.values())
+                    .map(m -> m.name().toLowerCase(Locale.ROOT))
+                    .filter(s -> s.startsWith(prefix))
+                    .sorted()
+                    .limit(100)
+                    .toList();
         }
 
         return Collections.emptyList();

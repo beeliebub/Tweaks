@@ -535,11 +535,11 @@ This is entirely admin-managed — see the [admin commands](#admin-commands) sec
 
 ### Resource Hunt
 
-A server-wide race that runs in the **`jass:resource`** world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` (e.g. `iron_ore: 7`) as the active target. The first player to obtain the chosen item in the chosen amount through block drops in the resource world wins — and only blocks broken in `jass:resource` count toward progress, so any drops you collect in the overworld, lobby, or other dimensions are ignored.
-
-Only items **original to** the resource world count: any block a player hand-places in `jass:resource` is invisibly tagged, and breaking that block (or picking up its drops) won't advance progress — you'll get an action-bar warning if you try, so you don't think the hunt is broken. This stops the obvious cheese of stockpiling iron blocks elsewhere and re-mining them on event day. The same exclusion applies to **mobs**: drops from naturally-spawned mobs killed by a player **do** count, but drops from mobs you spawned yourself (spawn eggs, breeding, snow/iron golems built on-site, mob spawners, fish buckets) **don't** count, with the same warning. Villager trades likewise don't count (no block break, no mob kill). Blocks broken with the **Tunneller** enchantment **do** count, including the surrounding tunneled blocks — not just the one your cursor is on.
+A server-wide race that runs in the **`jass:resource`** world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` (e.g. `iron_ore: 7`) as the active target. The first player to obtain the chosen item in the chosen amount through block drops, mob kills, or fishing in the resource world wins — and only items obtained in `jass:resource` count toward progress, so any drops you collect in the overworld, lobby, or other dimensions are ignored.
 
 The winner gets the **`resource`** reward queued, claimable like any other reward via `/reward claim`. Once someone wins, the hunt closes for the rest of the session — the next target is chosen on the next server restart. A short message reminds each player of the active target when they log in; if the hunt has already been won, the join message instead reports who completed it and what they gathered.
+
+**Protection**: To keep the race fair, players are restricted from bringing disallowed items into the resource world. Using `/resource` or `/back` to travel to `jass:resource` will fail if you have restricted items in your inventory, and the plugin will tell you which items are blocking your travel. Only basic tools, armor, and food are generally allowed.
 
 **Configuration** (`plugins/Tweaks/resource_hunt.yml`): a flat list of `material: amount` entries. Material names are Bukkit `Material` constants (lowercase). Unknown materials and non-positive amounts are skipped with a warning at load.
 
@@ -549,6 +549,8 @@ raw_copper: 32
 diamond: 4
 ancient_debris: 2
 ```
+
+**Allowed Items** (`plugins/Tweaks/resource_hunt_items.yml`): a list of materials allowed to be carried into the resource world. Manage at runtime via `/tconfig resourceitems <add|remove> <item>`.
 
 **Admin setup**: the `resource` reward shell is auto-created on first plugin load; populate it with `/reward edit resource` to choose what the winner actually receives.
 
@@ -560,6 +562,8 @@ ancient_debris: 2
 | Nether portals | Cancelled when entered from `jass:resource`. |
 | `/sethome` | Refused in `jass:resource` with an error message. |
 | Login eject | Players who log in while their saved location is inside `jass:resource` are immediately sent to the `newspawn` warp. (Requires `/setwarp newspawn` to be configured.) |
+| Item Whitelist | Restricts items that can be brought into the world via `/resource` or `/back`. |
+| Ender Chests | Cannot be opened or used while in `jass:resource`. |
 
 ### Rewards
 
