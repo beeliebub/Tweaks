@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.minigames.resource;
 
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.minigames.RewardManager;
+import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -17,8 +18,10 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
@@ -34,29 +37,31 @@ import java.util.concurrent.ThreadLocalRandom;
 //
 // On every server start, one entry is picked at random from resource_hunt.yml as the active
 // target (Material + required amount). The first player to obtain the target via block drops,
-// mob kills, or fishing in the jass:resource world is granted the "resource" reward via 
-// RewardManager and the hunt closes for the rest of the session. Drops in any other world 
+// mob kills, or fishing in the jass:resource world is granted the "resource" reward via
+// RewardManager and the hunt closes for the rest of the session. Drops in any other world
 // are ignored entirely.
 //
-// To prevent cheesing, players are restricted from bringing disallowed items into the 
+// To prevent cheesing, players are restricted from bringing disallowed items into the
 // resource world (enforced by /resource and /back).
 //
 // Listening at EventPriority.LOW for BlockDropItemEvent guarantees we tally the dropped items
 // before Telekinesis (default NORMAL priority) clears the event's item list to route them to
-// the player's inventory â€” so telekinesis users and non-telekinesis users are counted exactly
-// once each, with no double-counting via the ground-pickup path.
+// the player's inventory
 public class ResourceHunt implements Listener {
 
     public static final String TARGET_WORLD_KEY = "jass:resource";
-    public static final String REWARD_NAME = "resource";
+    private static final String REWARD_NAME = "resource";
 
     private final Tweaks plugin;
     private final RewardManager rewardManager;
+
     private final Material targetMaterial;
     private final int targetAmount;
     private final Map<UUID, Integer> progress = new ConcurrentHashMap<>();
-    private volatile UUID winner;
-    private volatile String winnerName;
+    private final Map<UUID, BossBar> playerBars = new ConcurrentHashMap<>();
+
+    private UUID winner = null;
+    private String winnerName = null;
 
     public ResourceHunt(Tweaks plugin, RewardManager rewardManager) {
         this.plugin = plugin;
@@ -79,7 +84,7 @@ public class ResourceHunt implements Listener {
         if (!rewardManager.rewardExists(REWARD_NAME)) {
             rewardManager.createReward(REWARD_NAME);
             plugin.getLogger().info("Created empty '" + REWARD_NAME
-                    + "' reward shell â€” populate with /reward edit " + REWARD_NAME);
+                    + "' reward shell for Resource Hunt.");
         }
     }
 
@@ -88,16 +93,17 @@ public class ResourceHunt implements Listener {
         if (!file.exists()) {
             plugin.saveResource("resource_hunt.yml", false);
         }
-        YamlConfiguration cfg = YamlConfiguration.loadConfiguration(file);
 
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
         List<Map.Entry<Material, Integer>> entries = new ArrayList<>();
-        for (String key : cfg.getKeys(false)) {
+
+        for (String key : config.getKeys(false)) {
             Material mat = Material.matchMaterial(key);
             if (mat == null) {
                 plugin.getLogger().warning("resource_hunt.yml: unknown material '" + key + "', skipped.");
                 continue;
             }
-            int amount = cfg.getInt(key, 0);
+            int amount = config.getInt(key);
             if (amount <= 0) {
                 plugin.getLogger().warning("resource_hunt.yml: '" + key + "' has non-positive amount, skipped.");
                 continue;
@@ -193,6 +199,7 @@ public class ResourceHunt implements Listener {
 
     private void recordProgress(Player player, int gained) {
         int newTotal = progress.merge(player.getUniqueId(), gained, Integer::sum);
+        updateBossBar(player, newTotal);
         if (newTotal >= targetAmount) {
             declareWinner(player);
         }
@@ -205,11 +212,20 @@ public class ResourceHunt implements Listener {
 
         rewardManager.grantReward(player.getUniqueId(), REWARD_NAME);
 
+        // Hide all boss bars
+        for (Map.Entry<UUID, BossBar> entry : playerBars.entrySet()) {
+            Player p = Bukkit.getPlayer(entry.getKey());
+            if (p != null) {
+                p.hideBossBar(entry.getValue());
+            }
+        }
+        playerBars.clear();
+
         Component announcement = Component.text()
                 .append(Component.text("[Resource Hunt] ", NamedTextColor.GOLD, TextDecoration.BOLD))
                 .append(Component.text(player.getName(), NamedTextColor.AQUA))
                 .append(Component.text(" was first to gather ", NamedTextColor.YELLOW))
-                .append(Component.text(targetAmount + "Ã— " + readableName(targetMaterial), NamedTextColor.WHITE))
+                .append(Component.text(targetAmount + "x " + readableName(targetMaterial), NamedTextColor.WHITE))
                 .append(Component.text("! Use ", NamedTextColor.YELLOW))
                 .append(Component.text("/reward claim", NamedTextColor.GOLD))
                 .append(Component.text(" to collect.", NamedTextColor.YELLOW))
@@ -220,13 +236,18 @@ public class ResourceHunt implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
         if (targetMaterial == null) return;
+        Player player = event.getPlayer();
+
+        if (TARGET_WORLD_KEY.equals(player.getWorld().getKey().asString())) {
+            showBossBar(player);
+        }
 
         Component msg;
         if (winner == null) {
             msg = Component.text()
                     .append(Component.text("Resource Hunt: ", NamedTextColor.GOLD, TextDecoration.BOLD))
                     .append(Component.text("first to gather ", NamedTextColor.YELLOW))
-                    .append(Component.text(targetAmount + "Ã— " + readableName(targetMaterial), NamedTextColor.WHITE))
+                    .append(Component.text(targetAmount + "x " + readableName(targetMaterial), NamedTextColor.WHITE))
                     .append(Component.text(" in the resource world wins!", NamedTextColor.YELLOW))
                     .append(Component.text(" Use /resource to go there now!", NamedTextColor.GREEN))
                     .build();
@@ -236,12 +257,61 @@ public class ResourceHunt implements Listener {
                     .append(Component.text("Resource Hunt: ", NamedTextColor.GOLD, TextDecoration.BOLD))
                     .append(Component.text("already completed by ", NamedTextColor.YELLOW))
                     .append(Component.text(name, NamedTextColor.AQUA))
-                    .append(Component.text(" â€” they gathered ", NamedTextColor.YELLOW))
-                    .append(Component.text(targetAmount + "Ã— " + readableName(targetMaterial), NamedTextColor.WHITE))
-                    .append(Component.text(".", NamedTextColor.YELLOW))
+                    .append(Component.text("!", NamedTextColor.YELLOW))
                     .build();
         }
-        event.getPlayer().sendMessage(msg);
+        player.sendMessage(msg);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onQuit(PlayerQuitEvent event) {
+        playerBars.remove(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onWorldChange(PlayerChangedWorldEvent event) {
+        Player player = event.getPlayer();
+        if (TARGET_WORLD_KEY.equals(player.getWorld().getKey().asString())) {
+            showBossBar(player);
+        } else {
+            hideBossBar(player);
+        }
+    }
+
+    private void showBossBar(Player player) {
+        if (!isActive()) return;
+        
+        BossBar bar = playerBars.computeIfAbsent(player.getUniqueId(), uuid -> {
+            BossBar b = BossBar.bossBar(
+                    Component.text("Resource Hunt: Collect " + targetAmount + "x " + readableName(targetMaterial), NamedTextColor.GREEN, TextDecoration.BOLD),
+                    0.0f,
+                    BossBar.Color.GREEN,
+                    BossBar.Overlay.PROGRESS);
+            updateBossBar(player, progress.getOrDefault(uuid, 0), b);
+            return b;
+        });
+        
+        player.showBossBar(bar);
+    }
+
+    private void hideBossBar(Player player) {
+        BossBar bar = playerBars.remove(player.getUniqueId());
+        if (bar != null) {
+            player.hideBossBar(bar);
+        }
+    }
+
+    private void updateBossBar(Player player, int current) {
+        BossBar bar = playerBars.get(player.getUniqueId());
+        if (bar != null) {
+            updateBossBar(player, current, bar);
+        }
+    }
+
+    private void updateBossBar(Player player, int current, BossBar bar) {
+        float prog = Math.max(0.0f, Math.min(1.0f, (float) current / targetAmount));
+        bar.progress(prog);
+        bar.name(Component.text("Resource Hunt: " + current + "/" + targetAmount + " " + readableName(targetMaterial), NamedTextColor.GREEN, TextDecoration.BOLD));
     }
 
     private static String readableName(Material material) {

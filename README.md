@@ -511,7 +511,7 @@ Admins can disable Egg Collector drops or spawn-egg-on-spawner conversion on a p
 
 A rare server-wide event that turns the night crimson and supercharges enchanting.
 
-**How it triggers**: At the start of every full-moon night in the overworld, the plugin rolls a **50% chance** to begin a Blood Moon. When it activates, the entire server sees a dark-red title, a chat broadcast, and an ominous wither sound:
+**How it triggers**: At the start of every full-moon night in the overworld, the plugin rolls a **50% chance** to begin a Blood Moon. When it activates, the entire server sees a dark-red title, a chat broadcast, and an ominous wither sound. A **red boss bar** also appears at the top of the screen, counting down until the event ends at dawn.
 
 > *The Blood Moon has risen. Quality enchantments favor the bold tonight.*
 
@@ -538,6 +538,8 @@ This is entirely admin-managed — see the [admin commands](#admin-commands) sec
 ### Resource Hunt
 
 A server-wide race that runs in the **`jass:resource`** world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` (e.g. `iron_ore: 7`) as the active target. The first player to obtain the chosen item in the chosen amount through block drops, mob kills, or fishing in the resource world wins — and only items obtained in `jass:resource` count toward progress, so any drops you collect in the overworld, lobby, or other dimensions are ignored.
+
+While inside the `jass:resource` world, a **green boss bar** at the top of the screen shows your personal progress toward the goal. Once someone wins, the boss bar disappears for everyone.
 
 The winner gets the **`resource`** reward queued, claimable like any other reward via `/reward claim`. Once someone wins, the hunt closes for the rest of the session — the next target is chosen on the next server restart. A short message reminds each player of the active target when they log in; if the hunt has already been won, the join message instead reports who completed it and what they gathered.
 

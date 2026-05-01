@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.managers;
 
 import me.beeliebub.tweaks.Tweaks;
+import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -13,6 +14,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerBedEnterEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.TimeSkipEvent;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -26,6 +29,7 @@ public class BloodMoonManager implements Listener {
 
     private static final long FULL_MOON_PHASE = 0L;
     private static final long NIGHT_START_TICK = 13000L;
+    private static final long NIGHT_DURATION_TICKS = 11000L; // 24000 - 13000
     private static final long DAY_LENGTH_TICKS = 24000L;
     private static final long POLL_INTERVAL_TICKS = 20L;
     private static final double ACTIVATION_CHANCE = 0.50;
@@ -36,6 +40,7 @@ public class BloodMoonManager implements Listener {
     private long activationDay = -1L;
     private long lastRolledDay = -1L;
     private BukkitTask pollTask;
+    private BossBar bossBar;
 
     public BloodMoonManager(Tweaks plugin) {
         this.plugin = plugin;
@@ -89,7 +94,9 @@ public class BloodMoonManager implements Listener {
             pollTask.cancel();
             pollTask = null;
         }
-        active = false;
+        if (active) {
+            deactivate();
+        }
     }
 
     private void tick() {
@@ -100,8 +107,12 @@ public class BloodMoonManager implements Listener {
         long dayTime = world.getTime();
         long moonPhase = currentDay % 8L;
 
-        if (active && currentDay > activationDay) {
-            deactivate();
+        if (active) {
+            if (currentDay > activationDay || dayTime < NIGHT_START_TICK) {
+                deactivate();
+            } else {
+                updateBossBar(dayTime);
+            }
         }
 
         if (!active && moonPhase == FULL_MOON_PHASE && dayTime >= NIGHT_START_TICK
@@ -117,13 +128,41 @@ public class BloodMoonManager implements Listener {
         active = true;
         activationDay = day;
         plugin.getLogger().info("Blood Moon has risen.");
+        
+        bossBar = BossBar.bossBar(
+                Component.text("Blood Moon", NamedTextColor.RED, TextDecoration.BOLD),
+                1.0f,
+                BossBar.Color.RED,
+                BossBar.Overlay.PROGRESS);
+        
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            player.showBossBar(bossBar);
+        }
+        
         announceStart();
     }
 
     private void deactivate() {
         active = false;
         plugin.getLogger().info("Blood Moon has ended.");
+        
+        if (bossBar != null) {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                player.hideBossBar(bossBar);
+            }
+            bossBar = null;
+        }
+        
         announceEnd();
+    }
+
+    private void updateBossBar(long dayTime) {
+        if (bossBar == null) return;
+        
+        // dayTime goes from 13000 to 23999 (approx)
+        long ticksLeft = DAY_LENGTH_TICKS - dayTime;
+        float progress = Math.max(0.0f, Math.min(1.0f, (float) ticksLeft / NIGHT_DURATION_TICKS));
+        bossBar.progress(progress);
     }
 
     private void announceStart() {
@@ -164,6 +203,20 @@ public class BloodMoonManager implements Listener {
         event.setCancelled(true);
         event.getPlayer().sendMessage(Component.text("The Blood Moon's energy prevents you from sleeping.")
                 .color(NamedTextColor.RED));
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        if (active && bossBar != null) {
+            event.getPlayer().showBossBar(bossBar);
+        }
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        if (active && bossBar != null) {
+            event.getPlayer().hideBossBar(bossBar);
+        }
     }
 
     private World pickReferenceWorld() {
