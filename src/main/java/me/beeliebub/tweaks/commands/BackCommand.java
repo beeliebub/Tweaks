@@ -15,6 +15,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
@@ -43,15 +44,29 @@ public class BackCommand implements CommandExecutor, Listener {
         if (cause == PlayerTeleportEvent.TeleportCause.UNKNOWN) return;
         if (cause == PlayerTeleportEvent.TeleportCause.DISMOUNT) return;
         if (cause == PlayerTeleportEvent.TeleportCause.EXIT_BED) return;
-        Location from = event.getFrom();
-        String serialized = from.getWorld().getName()
-                + "," + from.getX()
-                + "," + from.getY()
-                + "," + from.getZ()
-                + "," + from.getYaw()
-                + "," + from.getPitch();
+        saveLocation(event.getPlayer(), event.getFrom());
+    }
 
-        event.getPlayer().getPersistentDataContainer()
+    // Capture the death location so /back reliably brings players back to their items.
+    // Vanilla respawn does not fire PlayerTeleportEvent, so we record explicitly here. If the
+    // player teleports somewhere after respawning, the teleport listener will overwrite this
+    // with the post-respawn location — matching the "unless they teleport somewhere else
+    // first after dying" rule.
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onDeath(PlayerDeathEvent event) {
+        Player player = event.getEntity();
+        saveLocation(player, player.getLocation());
+    }
+
+    private void saveLocation(Player player, Location loc) {
+        if (loc.getWorld() == null) return;
+        String serialized = loc.getWorld().getName()
+                + "," + loc.getX()
+                + "," + loc.getY()
+                + "," + loc.getZ()
+                + "," + loc.getYaw()
+                + "," + loc.getPitch();
+        player.getPersistentDataContainer()
                 .set(backKey, PersistentDataType.STRING, serialized);
     }
 
@@ -95,8 +110,13 @@ public class BackCommand implements CommandExecutor, Listener {
                     Float.parseFloat(parts[4]),
                     Float.parseFloat(parts[5]));
 
-            // Prevent returning to resource world with disallowed items
-            if (ResourceHunt.TARGET_WORLD_KEY.equals(world.getKey().asString())) {
+            // Only scan inventory when the player is actually entering the resource world from
+            // outside. Travel that stays within jass:resource (e.g. /back to a death location
+            // inside the world) skips the check — the player already had those items legally.
+            boolean enteringResourceFromOutside =
+                    ResourceHunt.TARGET_WORLD_KEY.equals(world.getKey().asString())
+                    && !ResourceHunt.TARGET_WORLD_KEY.equals(player.getWorld().getKey().asString());
+            if (enteringResourceFromOutside) {
                 List<Material> disallowed = resourceHuntItems.getDisallowedItems(player);
                 if (!disallowed.isEmpty()) {
                     String itemNames = disallowed.stream()

@@ -182,7 +182,7 @@ public class Tunneller implements Listener {
         // Manual path so we can apply quality fortune/silk re-rolls and/or smelter/gem/telekinesis
         Collection<ItemStack> drops = target.getDrops(tool, player);
         // Apply Silk Touch quality drops
-        if (useSilkQuality) drops = silkTouchQuality.applySilkQuality(target, tool, drops);
+        if (useSilkQuality) drops = silkTouchQuality.applySilkQuality(target, tool, player, drops);
         // Apply fortune re-rolls before smelter so smelter sees the boosted drop count
         if (useFortuneReroll) drops = fortuneQuality.applyFortuneRerolls(target, tool, player, drops);
         if (useSmelter) drops = Smelter.smeltDrops(drops);
