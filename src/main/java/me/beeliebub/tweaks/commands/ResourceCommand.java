@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.commands;
 
+import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -35,16 +36,22 @@ public class ResourceCommand implements CommandExecutor {
 
         Player player = (Player) sender;
 
-        // Check for disallowed items
-        List<Material> disallowed = resourceHuntItems.getDisallowedItems(player);
-        if (!disallowed.isEmpty()) {
-            String itemNames = disallowed.stream()
-                    .map(m -> m.name().toLowerCase().replace('_', ' '))
-                    .distinct()
-                    .collect(Collectors.joining(", "));
-            player.sendMessage(Component.text("You cannot enter the resource world with these items: ", NamedTextColor.RED)
-                    .append(Component.text(itemNames, NamedTextColor.YELLOW)));
-            return true;
+        // Only scan inventory when entering from outside. A player already in jass:resource
+        // legally has whatever they're carrying, and re-checking would block a /resource that
+        // is just a "return to spawn within the world" convenience.
+        boolean alreadyInResource =
+                ResourceHunt.TARGET_WORLD_KEY.equals(player.getWorld().getKey().asString());
+        if (!alreadyInResource) {
+            List<Material> disallowed = resourceHuntItems.getDisallowedItems(player);
+            if (!disallowed.isEmpty()) {
+                String itemNames = disallowed.stream()
+                        .map(m -> m.name().toLowerCase().replace('_', ' '))
+                        .distinct()
+                        .collect(Collectors.joining(", "));
+                player.sendMessage(Component.text("You cannot enter the resource world with these items: ", NamedTextColor.RED)
+                        .append(Component.text(itemNames, NamedTextColor.YELLOW)));
+                return true;
+            }
         }
 
         // 2. Locate the specific world
