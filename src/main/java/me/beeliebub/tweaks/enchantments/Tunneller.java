@@ -7,6 +7,7 @@ import me.beeliebub.tweaks.enchantments.quality.FortuneQualityListener;
 import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
 import me.beeliebub.tweaks.enchantments.quality.QualityTier;
 import me.beeliebub.tweaks.enchantments.quality.SilkTouchQualityListener;
+import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
 import org.bukkit.Effect;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -40,10 +41,12 @@ public class Tunneller implements Listener {
     private final QualityRegistry qualityRegistry;
     private final FortuneQualityListener fortuneQuality;
     private final SilkTouchQualityListener silkTouchQuality;
+    private final ResourceHunt resourceHunt;
 
     public Tunneller(Tweaks plugin, Telekinesis telekinesis, Smelter smelter,
                      GemConnoisseur gemConnoisseur, QualityRegistry qualityRegistry,
-                     FortuneQualityListener fortuneQuality, SilkTouchQualityListener silkTouchQuality) {
+                     FortuneQualityListener fortuneQuality, SilkTouchQualityListener silkTouchQuality,
+                     ResourceHunt resourceHunt) {
         String raw = plugin.getConfig().getString("tunneller");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.telekinesis = telekinesis;
@@ -52,6 +55,7 @@ public class Tunneller implements Listener {
         this.qualityRegistry = qualityRegistry;
         this.fortuneQuality = fortuneQuality;
         this.silkTouchQuality = silkTouchQuality;
+        this.resourceHunt = resourceHunt;
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -163,8 +167,14 @@ public class Tunneller implements Listener {
             }
         }
 
-        // No modifiers and no quality fortune/silk: breakNaturally handles drops, break effect, and XP in one call
+        // No modifiers and no quality fortune/silk: breakNaturally handles drops, break effect, and XP in one call.
+        // Peek at the drops first so the active Resource Hunt can credit them — the surrounding tunnelled
+        // blocks bypass BlockDropItemEvent and would otherwise be silently uncounted.
         if (!useSmelter && !useGemConnoisseur && !useTelekinesis && !useFortuneReroll && !useSilkQuality) {
+            Collection<ItemStack> peek = (resourceHunt != null && resourceHunt.isActive())
+                    ? target.getDrops(tool, player)
+                    : null;
+            if (peek != null) resourceHunt.recordExternalDrops(player, target, peek);
             target.breakNaturally(tool, true, true);
             return true;
         }
@@ -180,6 +190,14 @@ public class Tunneller implements Listener {
         List<ItemStack> gemDrops = List.of();
         if (useGemConnoisseur && !drops.isEmpty()) {
             gemDrops = gemConnoisseur.rollDrops(type, tool);
+        }
+
+        // Credit drops toward Resource Hunt before the block becomes air — recordExternalDrops
+        // reads the placed-by-player PDC marker off this block, and we want to check it while
+        // the block still exists.
+        if (resourceHunt != null) {
+            resourceHunt.recordExternalDrops(player, target, drops);
+            if (!gemDrops.isEmpty()) resourceHunt.recordExternalDrops(player, target, gemDrops);
         }
 
         // Clear the block and play the break particle effect

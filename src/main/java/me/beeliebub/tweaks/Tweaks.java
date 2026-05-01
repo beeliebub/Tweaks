@@ -134,6 +134,12 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(bloodMoonManager, this);
         getCommand("bloodmoon").setExecutor(new BloodMoonCommand(bloodMoonManager));
 
+        // Reward + Resource Hunt are constructed early so Tunneller can credit its surrounding
+        // (BlockDropItemEvent-bypassing) breaks via ResourceHunt#recordExternalDrops. Listener
+        // registration for both still happens further down with the rest of the minigame block.
+        RewardManager rewardManager = new RewardManager(this);
+        ResourceHunt resourceHunt = new ResourceHunt(this, rewardManager);
+
         // Enchantments
         telekinesis = new Telekinesis(this, itemFilterCommand);
         Smelter smelter = new Smelter(this, telekinesis);
@@ -148,7 +154,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(smelter, this);
         getServer().getPluginManager().registerEvents(lumberjack, this);
         getServer().getPluginManager().registerEvents(gemConnoisseur, this);
-        getServer().getPluginManager().registerEvents(new Tunneller(this, telekinesis, smelter, gemConnoisseur, qualityRegistry, fortuneQuality, silkTouchQuality), this);
+        getServer().getPluginManager().registerEvents(new Tunneller(this, telekinesis, smelter, gemConnoisseur, qualityRegistry, fortuneQuality, silkTouchQuality, resourceHunt), this);
         getServer().getPluginManager().registerEvents(spawnerPickup, this);
         getServer().getPluginManager().registerEvents(eggCollector, this);
         getServer().getPluginManager().registerEvents(new AnvilListener(spawnerPickup, eggCollector), this);
@@ -174,15 +180,13 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(mannequinAI, this);
         mannequinAI.resumeAll();
 
-        // Minigames - Rewards
-        RewardManager rewardManager = new RewardManager(this);
+        // Minigames - Rewards (manager already constructed above so Tunneller could see ResourceHunt)
         RewardCommand rewardCommand = new RewardCommand(rewardManager);
         getCommand("reward").setExecutor(rewardCommand);
         getCommand("reward").setTabCompleter(rewardCommand);
         getServer().getPluginManager().registerEvents(new RewardListener(rewardManager, rewardCommand), this);
 
         // Minigames - Resource Hunt
-        ResourceHunt resourceHunt = new ResourceHunt(this, rewardManager);
         getServer().getPluginManager().registerEvents(resourceHunt, this);
 
         // Minigames - Whack an Andrew
