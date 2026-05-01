@@ -537,11 +537,11 @@ This is entirely admin-managed — see the [admin commands](#admin-commands) sec
 
 ### Resource Hunt
 
-A server-wide race that runs in the **`jass:resource`** world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` (e.g. `iron_ore: 7`) as the active target. The first player to obtain the chosen item in the chosen amount through block drops, mob kills, or fishing in the resource world wins — and only items obtained in `jass:resource` count toward progress, so any drops you collect in the overworld, lobby, or other dimensions are ignored.
+A server-wide race that runs in the **`jass:resource`** world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` (e.g. `iron_ore: 7`) as the active target. Each player who obtains the chosen item in the chosen amount through block drops, mob kills, or fishing in the resource world completes the hunt — and only items obtained in `jass:resource` count toward progress, so any drops you collect in the overworld, lobby, or other dimensions are ignored.
 
-While inside the `jass:resource` world, a **green boss bar** at the top of the screen shows your personal progress toward the goal. Once someone wins, the boss bar disappears for everyone.
+While inside the `jass:resource` world, a **green boss bar** at the top of the screen shows your personal progress toward the goal. Your boss bar disappears once you personally finish; the hunt stays open for everyone else.
 
-The winner gets the **`resource`** reward queued, claimable like any other reward via `/reward claim`. Once someone wins, the hunt closes for the rest of the session — the next target is chosen on the next server restart. A short message reminds each player of the active target when they log in; if the hunt has already been won, the join message instead reports who completed it and what they gathered.
+The **first player** to complete the hunt earns the **`resource`** reward **three times**. Every player who completes it after that earns it once. Rewards are queued and claimable like any other reward via `/reward claim`. The hunt remains open for the rest of the session so anyone can still complete it for a single reward; the next target is chosen on the next server restart. A short message reminds each player of the active target when they log in; once the first winner has been declared, the join message instead names them and points out that the hunt is still open for a single-reward completion.
 
 **Protection**: To keep the race fair, players are restricted from bringing disallowed items into the resource world. Using `/resource` or `/back` to travel to `jass:resource` will fail if you have restricted items in your inventory, and the plugin will tell you which items are blocking your travel. Only basic tools, armor, and food are generally allowed.
 

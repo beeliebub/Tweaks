@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -36,10 +37,12 @@ import java.util.concurrent.ThreadLocalRandom;
 // Resource Hunt minigame.
 //
 // On every server start, one entry is picked at random from resource_hunt.yml as the active
-// target (Material + required amount). The first player to obtain the target via block drops,
+// target (Material + required amount). Each player who reaches the threshold via block drops,
 // mob kills, or fishing in the jass:resource world is granted the "resource" reward via
-// RewardManager and the hunt closes for the rest of the session. Drops in any other world
-// are ignored entirely.
+// RewardManager. The first player to complete is granted the reward 3 times; everyone else
+// who completes afterward gets it once. The hunt remains open for the rest of the session so
+// that anyone can still complete it; only the completing player's boss bar is removed when
+// they finish. Drops in any other world are ignored entirely.
 //
 // To prevent cheesing, players are restricted from bringing disallowed items into the
 // resource world (enforced by /resource and /back).
@@ -51,6 +54,7 @@ public class ResourceHunt implements Listener {
 
     public static final String TARGET_WORLD_KEY = "jass:resource";
     private static final String REWARD_NAME = "resource";
+    private static final int FIRST_WINNER_REWARD_COUNT = 3;
 
     private final Tweaks plugin;
     private final RewardManager rewardManager;
@@ -59,9 +63,10 @@ public class ResourceHunt implements Listener {
     private final int targetAmount;
     private final Map<UUID, Integer> progress = new ConcurrentHashMap<>();
     private final Map<UUID, BossBar> playerBars = new ConcurrentHashMap<>();
+    private final Set<UUID> completed = ConcurrentHashMap.newKeySet();
 
-    private UUID winner = null;
-    private String winnerName = null;
+    private UUID firstWinner = null;
+    private String firstWinnerName = null;
 
     public ResourceHunt(Tweaks plugin, RewardManager rewardManager) {
         this.plugin = plugin;
@@ -119,12 +124,13 @@ public class ResourceHunt implements Listener {
     }
 
     public boolean isActive() {
-        return targetMaterial != null && winner == null;
+        return targetMaterial != null;
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onBlockDropItem(BlockDropItemEvent event) {
         if (!isActive()) return;
+        if (completed.contains(event.getPlayer().getUniqueId())) return;
         Block block = event.getBlock();
         if (!TARGET_WORLD_KEY.equals(block.getWorld().getKey().asString())) return;
 
@@ -148,6 +154,7 @@ public class ResourceHunt implements Listener {
      */
     public void recordExternalDrops(Player player, Block block, Collection<ItemStack> drops) {
         if (!isActive()) return;
+        if (completed.contains(player.getUniqueId())) return;
         if (!TARGET_WORLD_KEY.equals(block.getWorld().getKey().asString())) return;
 
         int gained = 0;
@@ -172,6 +179,7 @@ public class ResourceHunt implements Listener {
 
         Player killer = entity.getKiller();
         if (killer == null) return;
+        if (completed.contains(killer.getUniqueId())) return;
 
         int gained = 0;
         for (ItemStack stack : event.getDrops()) {
@@ -187,6 +195,7 @@ public class ResourceHunt implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlayerFish(PlayerFishEvent event) {
         if (!isActive()) return;
+        if (completed.contains(event.getPlayer().getUniqueId())) return;
         if (!TARGET_WORLD_KEY.equals(event.getPlayer().getWorld().getKey().asString())) return;
         if (event.getState() != PlayerFishEvent.State.CAUGHT_FISH) return;
         if (!(event.getCaught() instanceof Item caughtItem)) return;
@@ -201,36 +210,62 @@ public class ResourceHunt implements Listener {
         int newTotal = progress.merge(player.getUniqueId(), gained, Integer::sum);
         updateBossBar(player, newTotal);
         if (newTotal >= targetAmount) {
-            declareWinner(player);
+            declareCompletion(player);
         }
     }
 
-    private synchronized void declareWinner(Player player) {
-        if (winner != null) return;
-        winner = player.getUniqueId();
-        winnerName = player.getName();
+    private synchronized void declareCompletion(Player player) {
+        if (!completed.add(player.getUniqueId())) return;
 
-        rewardManager.grantReward(player.getUniqueId(), REWARD_NAME);
-
-        // Hide all boss bars
-        for (Map.Entry<UUID, BossBar> entry : playerBars.entrySet()) {
-            Player p = Bukkit.getPlayer(entry.getKey());
-            if (p != null) {
-                p.hideBossBar(entry.getValue());
-            }
+        boolean isFirst = (firstWinner == null);
+        int rewardCount;
+        if (isFirst) {
+            firstWinner = player.getUniqueId();
+            firstWinnerName = player.getName();
+            rewardCount = FIRST_WINNER_REWARD_COUNT;
+        } else {
+            rewardCount = 1;
         }
-        playerBars.clear();
 
-        Component announcement = Component.text()
-                .append(Component.text("[Resource Hunt] ", NamedTextColor.GOLD, TextDecoration.BOLD))
-                .append(Component.text(player.getName(), NamedTextColor.AQUA))
-                .append(Component.text(" was first to gather ", NamedTextColor.YELLOW))
-                .append(Component.text(targetAmount + "x " + readableName(targetMaterial), NamedTextColor.WHITE))
-                .append(Component.text("! Use ", NamedTextColor.YELLOW))
-                .append(Component.text("/reward claim", NamedTextColor.GOLD))
-                .append(Component.text(" to collect.", NamedTextColor.YELLOW))
-                .build();
+        for (int i = 0; i < rewardCount; i++) {
+            rewardManager.grantReward(player.getUniqueId(), REWARD_NAME);
+        }
+
+        // Only hide this player's boss bar; the hunt stays open for everyone else.
+        BossBar bar = playerBars.remove(player.getUniqueId());
+        if (bar != null) {
+            player.hideBossBar(bar);
+        }
+
+        Component announcement;
+        if (isFirst) {
+            announcement = Component.text()
+                    .append(Component.text("[Resource Hunt] ", NamedTextColor.GOLD, TextDecoration.BOLD))
+                    .append(Component.text(player.getName(), NamedTextColor.AQUA))
+                    .append(Component.text(" was first to gather ", NamedTextColor.YELLOW))
+                    .append(Component.text(targetAmount + "x " + readableName(targetMaterial), NamedTextColor.WHITE))
+                    .append(Component.text(" and earned a ", NamedTextColor.YELLOW))
+                    .append(Component.text("triple reward", NamedTextColor.GOLD, TextDecoration.BOLD))
+                    .append(Component.text("! Others can still complete the hunt for a single reward.", NamedTextColor.YELLOW))
+                    .build();
+        } else {
+            announcement = Component.text()
+                    .append(Component.text("[Resource Hunt] ", NamedTextColor.GOLD, TextDecoration.BOLD))
+                    .append(Component.text(player.getName(), NamedTextColor.AQUA))
+                    .append(Component.text(" also completed the hunt!", NamedTextColor.YELLOW))
+                    .build();
+        }
         Bukkit.broadcast(announcement);
+
+        Component personal = Component.text()
+                .append(Component.text("Use ", NamedTextColor.YELLOW))
+                .append(Component.text("/reward claim", NamedTextColor.GOLD))
+                .append(Component.text(rewardCount > 1
+                                ? " to collect your " + rewardCount + " rewards."
+                                : " to collect your reward.",
+                        NamedTextColor.YELLOW))
+                .build();
+        player.sendMessage(personal);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -242,22 +277,27 @@ public class ResourceHunt implements Listener {
             showBossBar(player);
         }
 
+        boolean playerDone = completed.contains(player.getUniqueId());
         Component msg;
-        if (winner == null) {
+        if (firstWinner == null) {
             msg = Component.text()
                     .append(Component.text("Resource Hunt: ", NamedTextColor.GOLD, TextDecoration.BOLD))
                     .append(Component.text("first to gather ", NamedTextColor.YELLOW))
                     .append(Component.text(targetAmount + "x " + readableName(targetMaterial), NamedTextColor.WHITE))
-                    .append(Component.text(" in the resource world wins!", NamedTextColor.YELLOW))
+                    .append(Component.text(" in the resource world wins a triple reward!", NamedTextColor.YELLOW))
                     .append(Component.text(" Use /resource to go there now!", NamedTextColor.GREEN))
                     .build();
-        } else {
-            String name = winnerName != null ? winnerName : "another player";
+        } else if (playerDone) {
             msg = Component.text()
                     .append(Component.text("Resource Hunt: ", NamedTextColor.GOLD, TextDecoration.BOLD))
-                    .append(Component.text("already completed by ", NamedTextColor.YELLOW))
+                    .append(Component.text("you've already completed this session's hunt.", NamedTextColor.YELLOW))
+                    .build();
+        } else {
+            String name = firstWinnerName != null ? firstWinnerName : "another player";
+            msg = Component.text()
+                    .append(Component.text("Resource Hunt: ", NamedTextColor.GOLD, TextDecoration.BOLD))
                     .append(Component.text(name, NamedTextColor.AQUA))
-                    .append(Component.text("!", NamedTextColor.YELLOW))
+                    .append(Component.text(" finished first — complete the hunt yourself for a single reward!", NamedTextColor.YELLOW))
                     .build();
         }
         player.sendMessage(msg);
@@ -280,7 +320,8 @@ public class ResourceHunt implements Listener {
 
     private void showBossBar(Player player) {
         if (!isActive()) return;
-        
+        if (completed.contains(player.getUniqueId())) return;
+
         BossBar bar = playerBars.computeIfAbsent(player.getUniqueId(), uuid -> {
             BossBar b = BossBar.bossBar(
                     Component.text("Resource Hunt: Collect " + targetAmount + "x " + readableName(targetMaterial), NamedTextColor.GREEN, TextDecoration.BOLD),
@@ -290,7 +331,7 @@ public class ResourceHunt implements Listener {
             updateBossBar(player, progress.getOrDefault(uuid, 0), b);
             return b;
         });
-        
+
         player.showBossBar(bar);
     }
 
