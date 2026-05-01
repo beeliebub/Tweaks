@@ -187,6 +187,8 @@ At level 3, mining stone can drop:
 
 Deepslate has slightly better rates than stone. Netherrack drops quartz, gold, and at level 3, ancient debris. The Fortune enchantment on the same tool can increase the quantity of bonus drops.
 
+Items obtained through Gem Connoisseur count toward the **[Resource Hunt](#resource-hunt)** event when they match the active target.
+
 ### Tunneller
 
 Breaks a **3x3 area** of blocks perpendicular to the face you mine. Mine the side of a wall and it carves out a 3x3 tunnel. Mine downward and it clears a 3x3 floor. The center block is the one you break normally; the surrounding blocks are broken by the enchantment.

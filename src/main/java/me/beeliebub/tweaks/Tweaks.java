@@ -14,6 +14,7 @@ import me.beeliebub.tweaks.minigames.andrew.MannequinAI;
 import me.beeliebub.tweaks.minigames.andrew.WhackCommand;
 import me.beeliebub.tweaks.minigames.andrew.WhackConfig;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
+import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import org.bukkit.plugin.java.JavaPlugin;
 
 // Main plugin class - registers all commands, listeners, enchantments, and minigame systems
@@ -149,7 +150,7 @@ public class Tweaks extends JavaPlugin {
         FortuneQualityListener fortuneQuality = new FortuneQualityListener(qualityRegistry);
         SilkTouchQualityListener silkTouchQuality = new SilkTouchQualityListener(qualityRegistry);
         Lumberjack lumberjack = new Lumberjack(this, telekinesis, qualityRegistry, fortuneQuality);
-        GemConnoisseur gemConnoisseur = new GemConnoisseur(this, telekinesis);
+        GemConnoisseur gemConnoisseur = new GemConnoisseur(this, telekinesis, resourceHunt);
         SpawnerPickup spawnerPickup = new SpawnerPickup(this);
         EggCollector eggCollector = new EggCollector(this, qualityRegistry);
 

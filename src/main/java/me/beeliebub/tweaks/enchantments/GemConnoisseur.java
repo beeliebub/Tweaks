@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.enchantments;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
@@ -32,12 +33,14 @@ public class GemConnoisseur implements Listener {
     // Nested map: enchant level -> block kind -> (bonus material -> 1-in-N chance)
     private final Map<Integer, Map<String, Map<Material, Integer>>> rates;
     private final Telekinesis telekinesis;
+    private final ResourceHunt resourceHunt;
 
-    public GemConnoisseur(Tweaks plugin, Telekinesis telekinesis) {
+    public GemConnoisseur(Tweaks plugin, Telekinesis telekinesis, ResourceHunt resourceHunt) {
         String raw = plugin.getConfig().getString("gem-connoisseur");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.rates = loadRates(plugin);
         this.telekinesis = telekinesis;
+        this.resourceHunt = resourceHunt;
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -148,6 +151,10 @@ public class GemConnoisseur implements Listener {
 
         List<ItemStack> gemDrops = rollDrops(block.getType(), tool);
         if (gemDrops.isEmpty()) return;
+
+        if (resourceHunt != null) {
+            resourceHunt.recordExternalDrops(player, block, gemDrops);
+        }
 
         boolean routeToInventory = telekinesis != null && telekinesis.hasEnchant(tool);
         for (ItemStack drop : gemDrops) {
