@@ -40,12 +40,19 @@ public class TabManager implements Listener {
             PROFILE_PI,       "d"
     );
 
-    // Colored prefix tags shown before player names in the tab list
-    private static final Map<String, Component> PROFILE_TAGS = Map.of(
-            PROFILE_LOBBY,    Component.text("[Lobby] ",    NamedTextColor.AQUA),
-            PROFILE_STANDARD, Component.text("[Survival] ", NamedTextColor.GREEN),
-            PROFILE_ARCHIVE,  Component.text("[Archive] ",  NamedTextColor.GOLD),
-            PROFILE_PI,       Component.text("[Pi] ",       NamedTextColor.LIGHT_PURPLE)
+    // Tab list prefixes are driven by the player's current world key — independent of the
+    // separator profile. Worlds without an entry fall back to FALLBACK_TAG ([Survival]/green),
+    // matching how the standard profile has always rendered.
+    private static final Component FALLBACK_TAG =
+            Component.text("[Survival] ", NamedTextColor.GREEN);
+    private static final Map<String, Component> WORLD_TAGS = Map.of(
+            LOBBY_WORLD_KEY,        Component.text("[Lobby] ",    NamedTextColor.AQUA),
+            ARCHIVE_WORLD_KEY,      Component.text("[Archive] ",  NamedTextColor.GOLD),
+            PI_WORLD_KEY,           Component.text("[Pi] ",       NamedTextColor.LIGHT_PURPLE),
+            "minecraft:overworld",  Component.text("[Survival] ", NamedTextColor.GREEN),
+            "minecraft:the_nether", Component.text("[Nether] ",   NamedTextColor.LIGHT_PURPLE),
+            "minecraft:the_end",    Component.text("[End] ",      NamedTextColor.DARK_PURPLE),
+            "jass:resource",        Component.text("[Resource] ", NamedTextColor.AQUA)
     );
 
     private final Scoreboard scoreboard;
@@ -115,9 +122,8 @@ public class TabManager implements Listener {
     }
 
     public void refreshTabName(Player player) {
-        String profile = getProfile(player);
-        Component tag = PROFILE_TAGS.getOrDefault(profile,
-                Component.text("[???] ", NamedTextColor.GRAY));
+        String worldKey = player.getWorld().getKey().asString();
+        Component tag = WORLD_TAGS.getOrDefault(worldKey, FALLBACK_TAG);
 
         Component name = tag.append(Component.text(player.getName()));
         if (afkPredicate.test(player)) {

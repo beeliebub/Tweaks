@@ -438,16 +438,19 @@ You also enter AFK automatically after **10 minutes** of not moving. Only positi
 
 ### Tab List
 
-Players in the tab list are automatically sorted and labeled by their current world profile. Each profile has a colored prefix:
+Players in the tab list are automatically sorted by their current world profile and labeled with a colored prefix based on the **specific world** they are in:
 
-| Profile | Tag |
+| World | Tag |
 |---|---|
-| Lobby | **[Lobby]** (aqua) |
-| Standard | **[Survival]** (green) |
-| Archive | **[Archive]** (gold) |
-| Pi | **[Pi]** (light purple) |
+| `jass:lobby` | **[Lobby]** (aqua) |
+| `minecraft:overworld` | **[Survival]** (green) |
+| `minecraft:the_nether` | **[Nether]** (light purple) |
+| `minecraft:the_end` | **[End]** (dark purple) |
+| `jass:resource` | **[Resource]** (aqua) |
+| `jass:archive` | **[Archive]** (gold) |
+| `jass:pi` | **[Pi]** (light purple) |
 
-Players in the lobby appear at the top of the tab list, followed by survival, archive, and pi. Tags update automatically when you change worlds. Players who have toggled `/afk` also display a red **[AFK]** suffix after their name — see [AFK](#afk).
+Any other world falls back to the **[Survival]** tag. Players in the lobby appear at the top of the tab list, followed by the standard worlds (overworld, nether, end, resource), then archive, then pi. Tags update automatically when you change worlds. Players who have toggled `/afk` also display a red **[AFK]** suffix after their name — see [AFK](#afk).
 
 ---
 
