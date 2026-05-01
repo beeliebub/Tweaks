@@ -64,7 +64,7 @@ public class BootTrail implements Listener {
 
         // Diamond -> Glow Squid Ink
         addEffect(materialRegistry, "diamond", (player, loc) -> {
-            player.getWorld().spawnParticle(Particle.GLOW_SQUID_INK, loc, 4, 0.18, 0.05, 0.18, 0.05);
+            player.getWorld().spawnParticle(Particle.GLOW, loc, 4, 0.18, 0.05, 0.18, 0.05);
         });
 
         // Emerald -> Happy Villager
@@ -72,10 +72,9 @@ public class BootTrail implements Listener {
             player.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, loc, 3, 0.2, 0.1, 0.2, 0.0);
         });
 
-        // Gold -> Goldheart_0 (fallback to Heart if unavailable)
-        Particle goldParticle = resolveParticle("GOLDHEART_0", Particle.HEART);
+        // Gold -> Totem Of Undying
         addEffect(materialRegistry, "gold", (player, loc) -> {
-            player.getWorld().spawnParticle(goldParticle, loc, 2, 0.18, 0.1, 0.18, 0.0);
+            player.getWorld().spawnParticle(Particle.TOTEM_OF_UNDYING, loc, 2, 0.18, 0.1, 0.18, 0.0);
         });
 
         // Iron -> Lava
