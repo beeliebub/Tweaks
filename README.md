@@ -492,6 +492,7 @@ These protections are always active and require no commands or configuration:
 | **Creeper Block Protection** | Creeper explosions still deal damage but no longer destroy blocks. |
 | **Enderman Grief Protection** | Endermen cannot pick up or place blocks. |
 | **End Portal Control** | End portals are disabled in configured worlds (archive by default). Players who try receive a red message. |
+| **Lore-Tagged Emerald Trade Block** | Emeralds carrying any lore cannot be placed into a regular Villager's trade cost slots. Wandering Traders are exempt and still accept lore-tagged emeralds, so they remain a valid sink. Triggered placements are cancelled with a chat warning and a villager "no" sound. |
 
 ### Spawn Egg Restrictions
 

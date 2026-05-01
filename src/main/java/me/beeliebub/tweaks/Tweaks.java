@@ -123,6 +123,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new TrampleListener(), this);
         getServer().getPluginManager().registerEvents(new MobGriefListener(), this);
         getServer().getPluginManager().registerEvents(new SpawnerEggListener(this), this);
+        getServer().getPluginManager().registerEvents(new VillagerTradeListener(), this);
 
         // Quality Enchantment System
         QualityRegistry qualityRegistry = new QualityRegistry(this);
