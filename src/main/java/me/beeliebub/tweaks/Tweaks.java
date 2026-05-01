@@ -142,7 +142,7 @@ public class Tweaks extends JavaPlugin {
         Lumberjack lumberjack = new Lumberjack(this, telekinesis, qualityRegistry, fortuneQuality);
         GemConnoisseur gemConnoisseur = new GemConnoisseur(this, telekinesis);
         SpawnerPickup spawnerPickup = new SpawnerPickup(this);
-        EggCollector eggCollector = new EggCollector(this);
+        EggCollector eggCollector = new EggCollector(this, qualityRegistry);
 
         getServer().getPluginManager().registerEvents(telekinesis, this);
         getServer().getPluginManager().registerEvents(smelter, this);

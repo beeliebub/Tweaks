@@ -3,6 +3,8 @@ package me.beeliebub.tweaks.enchantments;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
+import me.beeliebub.tweaks.enchantments.quality.QualityTier;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -35,11 +37,13 @@ public class EggCollector implements Listener {
     private static final String DISABLED_MOBS_KEY = "egg-collector-disabled-mobs";
 
     private final Tweaks plugin;
+    private final QualityRegistry qualityRegistry;
     private final Enchantment enchantment;
     private final NamespacedKey counterKey;
 
-    public EggCollector(Tweaks plugin) {
+    public EggCollector(Tweaks plugin, QualityRegistry qualityRegistry) {
         this.plugin = plugin;
+        this.qualityRegistry = qualityRegistry;
         String raw = plugin.getConfig().getString("egg-collector");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.counterKey = new NamespacedKey(plugin, "egg_collector_count");
@@ -81,7 +85,28 @@ public class EggCollector implements Listener {
         if (isMobDisabled(mobKey)) return;
 
         double dropChance = plugin.getConfig().getDouble("egg-collector-drop-chance", 0.5) / 100.0;
-        if (ThreadLocalRandom.current().nextDouble() >= dropChance) return;
+        
+        boolean success = false;
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        
+        // Initial roll
+        if (random.nextDouble() < dropChance) {
+            success = true;
+        } else {
+            // Check for quality Looting re-rolls
+            QualityRegistry.QualityInfo lootingQuality = qualityRegistry.getToolQuality(tool, "looting");
+            if (lootingQuality != null) {
+                int rerolls = lootingQuality.tier().getRerolls();
+                for (int i = 0; i < rerolls; i++) {
+                    if (random.nextDouble() < dropChance) {
+                        success = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!success) return;
 
         Material spawnEgg = Material.matchMaterial(mobKey + "_spawn_egg");
         if (spawnEgg == null) return;

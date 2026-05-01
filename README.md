@@ -238,6 +238,8 @@ Gives a **20% chance** to drop the spawner block when you mine a mob spawner. Ho
 
 Gives a configurable chance (default: **0.5%**) to drop a **spawn egg** when you kill a mob. Like Spawner Pickup, the tool tracks successful egg drops and **breaks after 5**. Remaining uses are shown in the item's lore.
 
+If your tool also carries a **quality Looting** enchantment, the egg drop chance benefits from the same **re-roll capabilities** as standard mob loot. A Legendary Looting tool, for example, will re-roll the egg drop chance 5 additional times if the initial roll fails.
+
 Admins can blacklist specific mobs from ever rolling an egg via `/tconfig eggdrop disable <mob>`. Disabled mobs never drop an egg and never consume one of the tool's 5 uses. Use `/tconfig eggdrop enable <mob>` to lift the block. See [Spawn Egg Restrictions](#spawn-egg-restrictions) for the matching spawner-side block.
 
 ### Enchantment Interactions
