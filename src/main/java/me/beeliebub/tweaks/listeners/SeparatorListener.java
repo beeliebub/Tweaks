@@ -13,6 +13,7 @@ import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -122,6 +123,15 @@ public class SeparatorListener implements Listener {
 
         String currentProfile = getProfileForWorldKey(player.getWorld().getKey().asString());
         storage.cacheInventory(uuid, currentProfile, InventoryUtil.toBase64(new ItemStack[player.getInventory().getSize()]));
+    }
+
+    // Clear the death suppression once the player has respawned. Any inventory the player rebuilds
+    // post-respawn (e.g. picking up drops after /back) must be saved normally on the next world
+    // change — leaving the flag set causes onWorldChange to skip the save and the cache (still
+    // holding the empty post-death snapshot) silently wipes the inventory on return.
+    @EventHandler
+    public void onPlayerRespawn(PlayerRespawnEvent event) {
+        recentDeaths.remove(event.getPlayer().getUniqueId());
     }
 
     @EventHandler
