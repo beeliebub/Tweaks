@@ -41,6 +41,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Tool Protect](#tool-protect)
   - [AFK](#afk)
   - [Tab List](#tab-list)
+  - [XP Storage Bottles](#xp-storage-bottles)
 - [Cosmetics](#cosmetics)
   - [Boot Trails](#boot-trails)
 - [World Protections](#world-protections)
@@ -451,6 +452,26 @@ Players in the tab list are automatically sorted by their current world profile 
 | `jass:pi` | **[Pi]** (light purple) |
 
 Any other world falls back to the **[Survival]** tag. Players in the lobby appear at the top of the tab list, followed by the standard worlds (overworld, nether, end, resource), then archive, then pi. Tags update automatically when you change worlds. Players who have toggled `/afk` also display a red **[AFK]** suffix after their name — see [AFK](#afk).
+
+### XP Storage Bottles
+
+Store your experience levels for later use or trade by brewing **XP Storage Bottles** (Bottles of Enchanting) in a brewing stand.
+
+**Brewing Recipes**:
+
+| Ingredient | Bottle Type | Result | Stored XP |
+|---|---|---|---|
+| Emerald | Glass Bottle | XP Bottle | 1,395 orbs |
+| Emerald Block | Glass Bottle | XP Bottle | 12,555 orbs |
+
+**How it works**:
+
+- **Payment**: Brewing consumes your own experience. The player who places the emerald or emerald block into the brewing stand is the one charged for the brew.
+- **Verification**: If you don't have enough experience to cover the cost, the brewing process is cancelled and the ingredients are returned to you (dropped on top of the stand).
+- **Stacking**: Unlike regular potions, these custom XP bottles can be stacked up to **64**.
+- **Usage**: Simply drink the bottle to receive the stored experience. The vanilla drinking animation and sound apply, and you'll receive a glass bottle back.
+
+This system ensures that experience can be safely stored and transferred without loss, using a clean, vanilla-friendly brewing mechanic.
 
 ---
 

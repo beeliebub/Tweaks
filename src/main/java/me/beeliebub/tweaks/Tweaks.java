@@ -15,6 +15,7 @@ import me.beeliebub.tweaks.minigames.andrew.WhackCommand;
 import me.beeliebub.tweaks.minigames.andrew.WhackConfig;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
+import me.beeliebub.tweaks.xpbottle.XpBottleListener;
 import org.bukkit.plugin.java.JavaPlugin;
 
 // Main plugin class - registers all commands, listeners, enchantments, and minigame systems
@@ -177,6 +178,9 @@ public class Tweaks extends JavaPlugin {
         BootTrail bootTrail = new BootTrail(this);
         getServer().getPluginManager().registerEvents(bootTrail, this);
         bootTrail.start();
+
+        // XP storage bottles (custom brewing-stand recipe + drinkable bottles)
+        getServer().getPluginManager().registerEvents(new XpBottleListener(this), this);
 
         getCommand("resource").setExecutor(new ResourceCommand(resourceHuntItems));
 
