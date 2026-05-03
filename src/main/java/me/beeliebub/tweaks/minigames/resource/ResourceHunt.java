@@ -8,7 +8,10 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.Ageable;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.LivingEntity;
@@ -17,6 +20,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockDropItemEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.inventory.FurnaceExtractEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
@@ -24,6 +28,9 @@ import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -67,12 +74,18 @@ public class ResourceHunt implements Listener {
     private final Map<UUID, BossBar> playerBars = new ConcurrentHashMap<>();
     private final Set<UUID> completed = ConcurrentHashMap.newKeySet();
 
+    // Marks an ItemStack that has already contributed to someone's progress. Counted items are
+    // skipped on every counting path, which kills the chest-cheese where players stash counted
+    // ores in a chest and rebreak the chest to redrop the same items.
+    private final NamespacedKey countedKey;
+
     private UUID firstWinner = null;
     private String firstWinnerName = null;
 
     public ResourceHunt(Tweaks plugin, RewardManager rewardManager) {
         this.plugin = plugin;
         this.rewardManager = rewardManager;
+        this.countedKey = new NamespacedKey(plugin, "resource_hunt_counted");
 
         Map.Entry<Material, Integer> picked = pickRandomTarget();
         if (picked == null) {
@@ -131,17 +144,30 @@ public class ResourceHunt implements Listener {
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onBlockDropItem(BlockDropItemEvent event) {
-        if (!isActive()) return;
-        if (completed.contains(event.getPlayer().getUniqueId())) return;
         Block block = event.getBlock();
         if (!TARGET_WORLD_KEY.equals(block.getWorld().getKey().asString())) return;
+
+        // Propagate taint from a player-placed block onto its drops, then clear the marker. This
+        // closes the place-then-rebreak loop: drops from a tainted block come out pre-tagged and
+        // therefore won't be counted by the loop below or by anything downstream.
+        boolean wasTainted = consumeBlockTaint(block);
+        if (wasTainted) {
+            for (Item item : event.getItems()) {
+                ItemStack stack = item.getItemStack();
+                if (markCounted(stack)) item.setItemStack(stack);
+            }
+        }
+
+        if (!isActive()) return;
+        if (completed.contains(event.getPlayer().getUniqueId())) return;
 
         int gained = 0;
         for (Item item : event.getItems()) {
             ItemStack stack = item.getItemStack();
-            if (stack.getType() == targetMaterial) {
-                gained += stack.getAmount();
-            }
+            if (stack.getType() != targetMaterial) continue;
+            if (isCounted(stack)) continue;
+            gained += stack.getAmount();
+            if (markCounted(stack)) item.setItemStack(stack);
         }
 
         if (gained <= 0) return;
@@ -155,15 +181,24 @@ public class ResourceHunt implements Listener {
      * drops the player will actually receive (i.e. after smelter/fortune/silk processing).
      */
     public void recordExternalDrops(Player player, Block block, Collection<ItemStack> drops) {
+        if (!TARGET_WORLD_KEY.equals(block.getWorld().getKey().asString())) return;
+
+        // Same taint-propagation flow as onBlockDropItem, run unconditionally so that even a
+        // tunnelled block placed by a player doesn't laundering counted items back into fresh
+        // drops. Done before the active/completed guards so the marker is always cleared.
+        if (consumeBlockTaint(block)) {
+            for (ItemStack stack : drops) markCounted(stack);
+        }
+
         if (!isActive()) return;
         if (completed.contains(player.getUniqueId())) return;
-        if (!TARGET_WORLD_KEY.equals(block.getWorld().getKey().asString())) return;
 
         int gained = 0;
         for (ItemStack stack : drops) {
-            if (stack != null && stack.getType() == targetMaterial) {
-                gained += stack.getAmount();
-            }
+            if (stack == null || stack.getType() != targetMaterial) continue;
+            if (isCounted(stack)) continue;
+            gained += stack.getAmount();
+            markCounted(stack);
         }
 
         if (gained <= 0) return;
@@ -185,9 +220,10 @@ public class ResourceHunt implements Listener {
 
         int gained = 0;
         for (ItemStack stack : event.getDrops()) {
-            if (stack != null && stack.getType() == targetMaterial) {
-                gained += stack.getAmount();
-            }
+            if (stack == null || stack.getType() != targetMaterial) continue;
+            if (isCounted(stack)) continue;
+            gained += stack.getAmount();
+            markCounted(stack);
         }
 
         if (gained <= 0) return;
@@ -203,23 +239,108 @@ public class ResourceHunt implements Listener {
     public void onFurnaceExtract(FurnaceExtractEvent event) {
         if (!isActive()) return;
         Player player = event.getPlayer();
-        if (completed.contains(player.getUniqueId())) return;
         if (!TARGET_WORLD_KEY.equals(event.getBlock().getWorld().getKey().asString())) return;
         if (event.getItemType() != targetMaterial) return;
-        recordProgress(player, event.getItemAmount());
+
+        int amount = event.getItemAmount();
+
+        // The extracted items aren't in the player inventory yet during the event. Schedule a tag
+        // pass next tick so the chest-cheese can't reuse smelted ingots. We tag regardless of
+        // completion state — completed players' items still need to be inert for everyone else.
+        Bukkit.getScheduler().runTask(plugin,
+                () -> tagInventoryStacks(player, targetMaterial, amount));
+
+        if (completed.contains(player.getUniqueId())) return;
+        recordProgress(player, amount);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlayerFish(PlayerFishEvent event) {
         if (!isActive()) return;
-        if (completed.contains(event.getPlayer().getUniqueId())) return;
         if (!TARGET_WORLD_KEY.equals(event.getPlayer().getWorld().getKey().asString())) return;
         if (event.getState() != PlayerFishEvent.State.CAUGHT_FISH) return;
         if (!(event.getCaught() instanceof Item caughtItem)) return;
 
         ItemStack stack = caughtItem.getItemStack();
-        if (stack.getType() == targetMaterial) {
-            recordProgress(event.getPlayer(), stack.getAmount());
+        if (stack.getType() != targetMaterial) return;
+        if (isCounted(stack)) return;
+
+        if (markCounted(stack)) caughtItem.setItemStack(stack);
+
+        if (completed.contains(event.getPlayer().getUniqueId())) return;
+        recordProgress(event.getPlayer(), stack.getAmount());
+    }
+
+    // When a counted item is placed as a block in the resource world, mark its position on the
+    // chunk PDC so that whatever drops out of that block later inherits the counted tag and can't
+    // re-credit progress. Skipped for Ageable / amethyst-bud-style blocks because their drops
+    // genuinely come from growth, not from the originally-placed material.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockPlace(BlockPlaceEvent event) {
+        Block block = event.getBlockPlaced();
+        if (!TARGET_WORLD_KEY.equals(block.getWorld().getKey().asString())) return;
+        if (!isCounted(event.getItemInHand())) return;
+        if (isGrowthExempt(block)) return;
+        block.getChunk().getPersistentDataContainer().set(
+                blockTaintKey(block), PersistentDataType.BYTE, (byte) 1);
+    }
+
+    private boolean isGrowthExempt(Block block) {
+        BlockData data = block.getBlockData();
+        if (data instanceof Ageable) return true;
+        return switch (block.getType()) {
+            case SMALL_AMETHYST_BUD, MEDIUM_AMETHYST_BUD, LARGE_AMETHYST_BUD, AMETHYST_CLUSTER -> true;
+            default -> false;
+        };
+    }
+
+    // Returns true if the block had a taint marker (and clears it as a side effect).
+    private boolean consumeBlockTaint(Block block) {
+        PersistentDataContainer chunkPdc = block.getChunk().getPersistentDataContainer();
+        NamespacedKey key = blockTaintKey(block);
+        if (!chunkPdc.has(key, PersistentDataType.BYTE)) return false;
+        chunkPdc.remove(key);
+        return true;
+    }
+
+    // Per-block PDC key on the chunk container. NamespacedKey only allows [a-z0-9/._-], so y is
+    // serialized with an 'n'/'p' prefix to encode the sign without breaking validation.
+    private NamespacedKey blockTaintKey(Block block) {
+        int lx = block.getX() & 0xF;
+        int lz = block.getZ() & 0xF;
+        int y = block.getY();
+        String yEnc = (y < 0) ? "n" + (-y) : "p" + y;
+        return new NamespacedKey(plugin, "rh_taint_" + lx + "_" + yEnc + "_" + lz);
+    }
+
+    private boolean isCounted(ItemStack stack) {
+        if (stack == null || stack.getType().isAir()) return false;
+        ItemMeta meta = stack.getItemMeta();
+        return meta != null && meta.getPersistentDataContainer().has(countedKey, PersistentDataType.BYTE);
+    }
+
+    // Returns true if meta was modified (caller may need to push the stack back onto an Item entity).
+    private boolean markCounted(ItemStack stack) {
+        if (stack == null || stack.getType().isAir()) return false;
+        ItemMeta meta = stack.getItemMeta();
+        if (meta == null) return false;
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        if (pdc.has(countedKey, PersistentDataType.BYTE)) return false;
+        pdc.set(countedKey, PersistentDataType.BYTE, (byte) 1);
+        stack.setItemMeta(meta);
+        return true;
+    }
+
+    // Tags up to `amount` units of `material` in the player's inventory. Used after furnace
+    // extraction, where the extracted ItemStack isn't directly accessible during the event.
+    private void tagInventoryStacks(Player player, Material material, int amount) {
+        int remaining = amount;
+        for (ItemStack stack : player.getInventory().getContents()) {
+            if (remaining <= 0) break;
+            if (stack == null || stack.getType() != material) continue;
+            if (isCounted(stack)) continue;
+            markCounted(stack);
+            remaining -= stack.getAmount();
         }
     }
 

@@ -570,6 +570,8 @@ The **first player** to complete the hunt earns the **`resource`** reward **thre
 
 **Protection**: To keep the race fair, players are restricted from bringing disallowed items into the resource world. Using `/resource` or `/back` to travel **into** `jass:resource` from another world will fail if you have restricted items in your inventory, and the plugin will tell you which items are blocking your travel. The check is skipped when you are already inside `jass:resource` — you can `/back` to a death spot in the resource world (to recover items) or `/resource` to its spawn without re-scanning your inventory. Only basic tools, armor, and food are generally allowed when entering from outside.
 
+**Anti-recount**: Once an item has been counted toward someone's progress, it carries an invisible PDC tag and won't be counted again — so stashing ores in a chest and breaking the chest, or placing a counted ore as a block and re-breaking it, no longer regenerates progress. Crops, sugar cane, bamboo, amethyst buds, and other growth-stage blocks are exempt from the placed-block taint, so legitimate harvest cycles still credit normally.
+
 **Configuration** (`plugins/Tweaks/resource_hunt.yml`): a flat list of `material: amount` entries. Material names are Bukkit `Material` constants (lowercase). Unknown materials and non-positive amounts are skipped with a warning at load.
 
 ```yaml

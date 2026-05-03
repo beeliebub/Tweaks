@@ -193,8 +193,8 @@ public class Tunneller implements Listener {
         }
 
         // Credit drops toward Resource Hunt before the block becomes air — recordExternalDrops
-        // reads the placed-by-player PDC marker off this block, and we want to check it while
-        // the block still exists.
+        // reads the placed-by-player taint marker off the chunk by block position, and we want
+        // to consume it while the block still resolves to its real coordinates.
         if (resourceHunt != null) {
             resourceHunt.recordExternalDrops(player, target, drops);
             if (!gemDrops.isEmpty()) resourceHunt.recordExternalDrops(player, target, gemDrops);
