@@ -28,17 +28,22 @@ import org.bukkit.inventory.RecipeChoice;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.List;
 import java.util.UUID;
 import java.util.logging.Level;
 
 // XP-storage bottle pipeline:
 //   - Registers two PotionMix brewing recipes (emerald and emerald block + glass bottle).
 //   - Tracks the player who placed the ingredient on the BrewingStand's tile-state PDC.
-//   - At BrewEvent: charges the tracked player as much as they can afford, replaces unaffordable
-//     bottles with plain glass, and on a full shortfall (or no tracked brewer at all — e.g.
-//     hopper-fed) cancels the brew and drops the ingredient back at the stand so the player
-//     keeps their emerald.
+//   - At BrewEvent: ALWAYS cancels the event and reapplies inventory mutations from a one-tick
+//     scheduled task — Paper 26.1.1's BrewEvent.getResults() set() does not reliably propagate
+//     to the applied bottle slots, and the result item produced by PotionMix loses its orbs PDC
+//     somewhere in the brewing pipeline. Cancelling lets us bypass both pitfalls and gives full
+//     control over the bottle slots and the ingredient slot (consumption + partial-brew refund).
+//   - The deferred task: charges the tracked player, writes our XP-bottle template directly into
+//     each affordable slot, refunds unaffordable brewed slots as glass bottles, and decides what
+//     to do with the ingredient slot. On a full brew, decrement by 1 (vanilla parity); on a
+//     partial brew, drop the entire remaining ingredient stack on top of the stand and clear the
+//     slot so the leftover glass bottles can't auto-cycle into another 400-tick brew.
 //   - On PlayerItemConsumeEvent: awards the bottle's stored orb count via ExperienceManager.
 //     Vanilla potion drinking handles the animation, stack decrement, and glass-bottle remainder.
 //
@@ -151,13 +156,30 @@ public class XpBottleListener implements Listener {
         Block block = event.getBlock();
         if (!(block.getState() instanceof BrewingStand stand)) return;
 
-        List<ItemStack> results = event.getResults();
+        // Identify our recipe by ingredient + glass-bottle inputs. Emerald / emerald_block +
+        // glass bottle is exclusive to our PotionMix (no vanilla recipe matches), so the
+        // ingredient type is a sound discriminator. We deliberately do NOT inspect the result
+        // item's PDC — Paper 26.1.1's brewing pipeline does not reliably surface the orbs PDC
+        // back into BrewEvent.getResults().
+        BrewerInventory contents = event.getContents();
+        ItemStack ingredient = contents.getIngredient();
+        if (ingredient == null || ingredient.isEmpty()) return;
+        int costPerBottle;
+        if (ingredient.getType() == Material.EMERALD) {
+            costPerBottle = ORBS_PER_EMERALD;
+        } else if (ingredient.getType() == Material.EMERALD_BLOCK) {
+            costPerBottle = ORBS_PER_EMERALD_BLOCK;
+        } else {
+            return;
+        }
+
+        boolean[] brewedSlots = new boolean[3];
         int totalBottles = 0;
-        int costPerBottle = 0;
-        for (ItemStack result : results) {
-            if (xpBottle.isXpBottle(result)) {
+        for (int i = 0; i < 3; i++) {
+            ItemStack input = contents.getItem(i);
+            if (input != null && input.getType() == Material.GLASS_BOTTLE) {
+                brewedSlots[i] = true;
                 totalBottles++;
-                if (costPerBottle == 0) costPerBottle = xpBottle.getStoredOrbs(result);
             }
         }
         if (totalBottles == 0) return;
@@ -171,30 +193,31 @@ public class XpBottleListener implements Listener {
         stand.update();
 
         int affordable;
-        if (brewer == null || costPerBottle <= 0) {
+        if (brewer == null) {
             affordable = 0;
         } else {
             int currentXp = new ExperienceManager(brewer).getCurrentExp();
             affordable = Math.min(totalBottles, currentXp / costPerBottle);
         }
 
+        // Always cancel — we apply our own bottle-slot writes and ingredient consumption from a
+        // one-tick scheduled task. Mutating event.getResults() does not reliably propagate to
+        // the inventory on Paper 26.1.1, and cancelling also lets us cleanly drop the leftover
+        // ingredient stack on partial brews so the brewing stand can't auto-cycle into another
+        // 400-tick attempt with the unaffordable glass bottles still in slots.
+        event.setCancelled(true);
+
+        Location standCenter = block.getLocation().toCenterLocation().add(0, 0.5, 0);
+        World world = block.getWorld();
+
         if (affordable == 0) {
-            // No one can pay → cancel and return the ingredient. Cancelling preserves the
-            // ingredient and bottles, but the brewing stand will immediately re-attempt on the
-            // next tick because the recipe still matches. Clearing the ingredient slot — and
-            // dropping its contents on top of the stand so the player can pick it back up —
-            // breaks the loop without confiscating items.
-            event.setCancelled(true);
-            ItemStack ingredient = event.getContents().getIngredient();
-            ItemStack ingredientClone = (ingredient != null && !ingredient.isEmpty()) ? ingredient.clone() : null;
-            Location standCenter = block.getLocation().toCenterLocation().add(0, 0.5, 0);
-            World world = block.getWorld();
+            ItemStack ingredientClone = ingredient.clone();
             Bukkit.getScheduler().runTask(plugin, () -> {
                 BlockState st = block.getState();
                 if (st instanceof BrewingStand bs) {
                     bs.getInventory().setIngredient(null);
                 }
-                if (ingredientClone != null && world != null) {
+                if (world != null) {
                     world.dropItemNaturally(standCenter, ingredientClone);
                 }
             });
@@ -205,22 +228,67 @@ public class XpBottleListener implements Listener {
             return;
         }
 
-        new ExperienceManager(brewer).changeExp(-(affordable * costPerBottle));
-        if (affordable < totalBottles) {
-            brewer.sendMessage(Component.text("Not enough XP for all bottles — brewed "
-                    + affordable + " of " + totalBottles + ".", NamedTextColor.YELLOW));
-        }
+        // Capture state for the deferred task. XP charging is deferred too so a stand that's
+        // broken or replaced between the event and the task doesn't bill the player.
+        final Player finalBrewer = brewer;
+        final int finalAffordable = affordable;
+        final int finalTotalBottles = totalBottles;
+        final int finalCost = costPerBottle;
+        final boolean[] finalBrewedSlots = brewedSlots;
+        final Material expectedIngredientType = ingredient.getType();
 
-        int kept = 0;
-        for (int i = 0; i < results.size(); i++) {
-            ItemStack r = results.get(i);
-            if (!xpBottle.isXpBottle(r)) continue;
-            if (kept < affordable) {
-                kept++;
-            } else {
-                results.set(i, new ItemStack(Material.GLASS_BOTTLE));
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            BlockState st = block.getState();
+            if (!(st instanceof BrewingStand bs)) return;
+            BrewerInventory inv = bs.getInventory();
+
+            new ExperienceManager(finalBrewer).changeExp(-(finalAffordable * finalCost));
+            if (finalAffordable < finalTotalBottles) {
+                finalBrewer.sendMessage(Component.text("Not enough XP for all bottles — brewed "
+                        + finalAffordable + " of " + finalTotalBottles + ".", NamedTextColor.YELLOW));
             }
-        }
+
+            // Write XP bottles to affordable brewed slots, refund the rest as glass bottles.
+            int kept = 0;
+            for (int i = 0; i < 3; i++) {
+                if (!finalBrewedSlots[i]) continue;
+                if (kept < finalAffordable) {
+                    inv.setItem(i, stackableTemplate(finalCost));
+                    kept++;
+                } else {
+                    inv.setItem(i, new ItemStack(Material.GLASS_BOTTLE));
+                }
+            }
+
+            // Ingredient handling. Cancelling left the original stack untouched, so we replicate
+            // vanilla's "consume one per cycle" by decrementing here on a full brew. On a partial
+            // brew, drop the entire remaining stack on top of the stand and clear the slot — that
+            // breaks the auto-cycle that would otherwise attempt to brew the leftover glass-bottle
+            // refunds with the still-present ingredient on the next tick.
+            ItemStack currentIng = inv.getIngredient();
+            if (currentIng == null || currentIng.isEmpty() || currentIng.getType() != expectedIngredientType) {
+                // Player swapped the ingredient between event and task — leave whatever is there.
+                return;
+            }
+            if (finalAffordable >= finalTotalBottles) {
+                int newAmount = currentIng.getAmount() - 1;
+                if (newAmount <= 0) {
+                    inv.setIngredient(null);
+                } else {
+                    ItemStack newIng = currentIng.clone();
+                    newIng.setAmount(newAmount);
+                    inv.setIngredient(newIng);
+                }
+            } else {
+                int leftover = currentIng.getAmount() - 1;
+                inv.setIngredient(null);
+                if (leftover > 0 && world != null) {
+                    ItemStack drop = currentIng.clone();
+                    drop.setAmount(leftover);
+                    world.dropItemNaturally(standCenter, drop);
+                }
+            }
+        });
     }
 
     @EventHandler(ignoreCancelled = true)
