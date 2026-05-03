@@ -51,7 +51,7 @@ public class Tweaks extends JavaPlugin {
         afkCommand.setTabManager(tabManager);
         tabManager.setAfkPredicate(afkCommand::isAfk);
         NickCommand nickCommand = new NickCommand(this);
-        TPACommand tpaCommand = new TPACommand(this);
+        TPACommand tpaCommand = new TPACommand(this, resourceHuntItems);
         BackCommand backCommand = new BackCommand(this, resourceHuntItems);
         FlyCommand flyCommand = new FlyCommand(this);
         ItemFilterCommand itemFilterCommand = new ItemFilterCommand(this);
@@ -182,7 +182,7 @@ public class Tweaks extends JavaPlugin {
         // XP storage bottles (custom brewing-stand recipe + drinkable bottles)
         getServer().getPluginManager().registerEvents(new XpBottleListener(this), this);
 
-        getCommand("resource").setExecutor(new ResourceCommand(resourceHuntItems));
+        getCommand("resource").setExecutor(new ResourceCommand(resourceHunt, resourceHuntItems));
 
         // Minigames - Mannequin AI
         MannequinAI mannequinAI = new MannequinAI(this);

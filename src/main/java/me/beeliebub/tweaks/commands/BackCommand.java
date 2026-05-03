@@ -110,13 +110,15 @@ public class BackCommand implements CommandExecutor, Listener {
                     Float.parseFloat(parts[4]),
                     Float.parseFloat(parts[5]));
 
-            // Only scan inventory when the player is actually entering the resource world from
-            // outside. Travel that stays within jass:resource (e.g. /back to a death location
-            // inside the world) skips the check — the player already had those items legally.
+            // Only scan inventory when the player is actually entering a resource world from
+            // outside THAT world. Travel that stays within the same resource world (e.g. /back
+            // to a death location inside the world) skips the check — the player already had
+            // those items legally.
             boolean enteringResourceFromOutside =
-                    ResourceHunt.TARGET_WORLD_KEY.equals(world.getKey().asString())
-                    && !ResourceHunt.TARGET_WORLD_KEY.equals(player.getWorld().getKey().asString());
+                    ResourceHunt.isResourceWorld(world.getKey().asString())
+                    && !world.getKey().asString().equals(player.getWorld().getKey().asString());
             if (enteringResourceFromOutside) {
+
                 List<Material> disallowed = resourceHuntItems.getDisallowedItems(player);
                 if (!disallowed.isEmpty()) {
                     String itemNames = disallowed.stream()

@@ -26,7 +26,9 @@ import org.bukkit.event.inventory.FurnaceExtractEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
@@ -46,12 +48,12 @@ import java.util.concurrent.ThreadLocalRandom;
 //
 // On every server start, one entry is picked at random from resource_hunt.yml as the active
 // target (Material + required amount). Each player who reaches the threshold via block drops,
-// mob kills, fishing, or smelting (furnace, blast furnace, smoker) in the jass:resource world
-// is granted the "resource" reward via RewardManager. The first player to complete is granted
-// the reward 3 times; everyone else who completes afterward gets it once. The hunt remains open
-// for the rest of the session so that anyone can still complete it; only the completing
-// player's boss bar is removed when they finish. Drops/extracts in any other world are ignored
-// entirely.
+// mob kills, fishing, or smelting (furnace, blast furnace, smoker) in the jass:resource or
+// jass:resource_nether world is granted the "resource" reward via RewardManager. The first
+// player to complete is granted the reward 3 times; everyone else who completes afterward gets
+// it once. The hunt remains open for the rest of the session so that anyone can still complete
+// it; only the completing player's boss bar is removed when they finish. Drops/extracts in any
+// other world are ignored entirely.
 //
 // To prevent cheesing, players are restricted from bringing disallowed items into the
 // resource world (enforced by /resource and /back).
@@ -62,6 +64,7 @@ import java.util.concurrent.ThreadLocalRandom;
 public class ResourceHunt implements Listener {
 
     public static final String TARGET_WORLD_KEY = "jass:resource";
+    public static final String TARGET_WORLD_NETHER_KEY = "jass:resource_nether";
     private static final String REWARD_NAME = "resource";
     private static final int FIRST_WINNER_REWARD_COUNT = 3;
 
@@ -70,6 +73,8 @@ public class ResourceHunt implements Listener {
 
     private final Material targetMaterial;
     private final int targetAmount;
+    private final String activeWorldKey;
+
     private final Map<UUID, Integer> progress = new ConcurrentHashMap<>();
     private final Map<UUID, BossBar> playerBars = new ConcurrentHashMap<>();
     private final Set<UUID> completed = ConcurrentHashMap.newKeySet();
@@ -87,15 +92,17 @@ public class ResourceHunt implements Listener {
         this.rewardManager = rewardManager;
         this.countedKey = new NamespacedKey(plugin, "resource_hunt_counted");
 
-        Map.Entry<Material, Integer> picked = pickRandomTarget();
+        Target picked = pickRandomTarget();
         if (picked == null) {
             this.targetMaterial = null;
             this.targetAmount = 0;
+            this.activeWorldKey = TARGET_WORLD_KEY;
         } else {
-            this.targetMaterial = picked.getKey();
-            this.targetAmount = picked.getValue();
+            this.targetMaterial = picked.material;
+            this.targetAmount = picked.amount;
+            this.activeWorldKey = picked.worldKey;
             plugin.getLogger().info("Resource Hunt target this session: "
-                    + targetAmount + "x " + targetMaterial.getKey());
+                    + targetAmount + "x " + targetMaterial.getKey() + " in " + activeWorldKey);
         }
 
         // Pre-create the reward shell so admins can populate it via /reward edit resource even
@@ -108,28 +115,29 @@ public class ResourceHunt implements Listener {
         }
     }
 
-    private Map.Entry<Material, Integer> pickRandomTarget() {
+    private static class Target {
+        Material material;
+        int amount;
+        String worldKey;
+
+        Target(Material material, int amount, String worldKey) {
+            this.material = material;
+            this.amount = amount;
+            this.worldKey = worldKey;
+        }
+    }
+
+    private Target pickRandomTarget() {
         File file = new File(plugin.getDataFolder(), "resource_hunt.yml");
         if (!file.exists()) {
             plugin.saveResource("resource_hunt.yml", false);
         }
 
         YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
-        List<Map.Entry<Material, Integer>> entries = new ArrayList<>();
+        List<Target> entries = new ArrayList<>();
 
-        for (String key : config.getKeys(false)) {
-            Material mat = Material.matchMaterial(key);
-            if (mat == null) {
-                plugin.getLogger().warning("resource_hunt.yml: unknown material '" + key + "', skipped.");
-                continue;
-            }
-            int amount = config.getInt(key);
-            if (amount <= 0) {
-                plugin.getLogger().warning("resource_hunt.yml: '" + key + "' has non-positive amount, skipped.");
-                continue;
-            }
-            entries.add(Map.entry(mat, amount));
-        }
+        loadTargets(config, "overworld", TARGET_WORLD_KEY, entries);
+        loadTargets(config, "nether", TARGET_WORLD_NETHER_KEY, entries);
 
         if (entries.isEmpty()) {
             plugin.getLogger().warning("Resource Hunt has no valid targets in resource_hunt.yml; minigame disabled this session.");
@@ -138,14 +146,40 @@ public class ResourceHunt implements Listener {
         return entries.get(ThreadLocalRandom.current().nextInt(entries.size()));
     }
 
+    private void loadTargets(YamlConfiguration config, String section, String worldKey, List<Target> entries) {
+        if (!config.isConfigurationSection(section)) return;
+        Map<String, Object> values = config.getConfigurationSection(section).getValues(false);
+        for (Map.Entry<String, Object> entry : values.entrySet()) {
+            Material mat = Material.matchMaterial(entry.getKey());
+            if (mat == null) {
+                plugin.getLogger().warning("resource_hunt.yml (" + section + "): unknown material '" + entry.getKey() + "', skipped.");
+                continue;
+            }
+            if (!(entry.getValue() instanceof Number num)) {
+                plugin.getLogger().warning("resource_hunt.yml (" + section + "): '" + entry.getKey() + "' has invalid amount, skipped.");
+                continue;
+            }
+            int amount = num.intValue();
+            if (amount <= 0) {
+                plugin.getLogger().warning("resource_hunt.yml (" + section + "): '" + entry.getKey() + "' has non-positive amount, skipped.");
+                continue;
+            }
+            entries.add(new Target(mat, amount, worldKey));
+        }
+    }
+
     public boolean isActive() {
         return targetMaterial != null;
+    }
+
+    public String getActiveWorldKey() {
+        return activeWorldKey;
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onBlockDropItem(BlockDropItemEvent event) {
         Block block = event.getBlock();
-        if (!TARGET_WORLD_KEY.equals(block.getWorld().getKey().asString())) return;
+        if (!activeWorldKey.equals(block.getWorld().getKey().asString())) return;
 
         // Propagate taint from a player-placed block onto its drops, then clear the marker. This
         // closes the place-then-rebreak loop: drops from a tainted block come out pre-tagged and
@@ -181,7 +215,7 @@ public class ResourceHunt implements Listener {
      * drops the player will actually receive (i.e. after smelter/fortune/silk processing).
      */
     public void recordExternalDrops(Player player, Block block, Collection<ItemStack> drops) {
-        if (!TARGET_WORLD_KEY.equals(block.getWorld().getKey().asString())) return;
+        if (!activeWorldKey.equals(block.getWorld().getKey().asString())) return;
 
         // Same taint-propagation flow as onBlockDropItem, run unconditionally so that even a
         // tunnelled block placed by a player doesn't laundering counted items back into fresh
@@ -212,7 +246,7 @@ public class ResourceHunt implements Listener {
         if (!isActive()) return;
         LivingEntity entity = event.getEntity();
         if (entity instanceof Player) return;
-        if (!TARGET_WORLD_KEY.equals(entity.getWorld().getKey().asString())) return;
+        if (!activeWorldKey.equals(entity.getWorld().getKey().asString())) return;
 
         Player killer = entity.getKiller();
         if (killer == null) return;
@@ -239,7 +273,7 @@ public class ResourceHunt implements Listener {
     public void onFurnaceExtract(FurnaceExtractEvent event) {
         if (!isActive()) return;
         Player player = event.getPlayer();
-        if (!TARGET_WORLD_KEY.equals(event.getBlock().getWorld().getKey().asString())) return;
+        if (!activeWorldKey.equals(event.getBlock().getWorld().getKey().asString())) return;
         if (event.getItemType() != targetMaterial) return;
 
         int amount = event.getItemAmount();
@@ -257,7 +291,7 @@ public class ResourceHunt implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlayerFish(PlayerFishEvent event) {
         if (!isActive()) return;
-        if (!TARGET_WORLD_KEY.equals(event.getPlayer().getWorld().getKey().asString())) return;
+        if (!activeWorldKey.equals(event.getPlayer().getWorld().getKey().asString())) return;
         if (event.getState() != PlayerFishEvent.State.CAUGHT_FISH) return;
         if (!(event.getCaught() instanceof Item caughtItem)) return;
 
@@ -278,7 +312,7 @@ public class ResourceHunt implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
         Block block = event.getBlockPlaced();
-        if (!TARGET_WORLD_KEY.equals(block.getWorld().getKey().asString())) return;
+        if (!activeWorldKey.equals(block.getWorld().getKey().asString())) return;
         if (!isCounted(event.getItemInHand())) return;
         if (isGrowthExempt(block)) return;
         block.getChunk().getPersistentDataContainer().set(
@@ -411,7 +445,7 @@ public class ResourceHunt implements Listener {
         if (targetMaterial == null) return;
         Player player = event.getPlayer();
 
-        if (TARGET_WORLD_KEY.equals(player.getWorld().getKey().asString())) {
+        if (activeWorldKey.equals(player.getWorld().getKey().asString())) {
             showBossBar(player);
         }
 
@@ -449,11 +483,15 @@ public class ResourceHunt implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onWorldChange(PlayerChangedWorldEvent event) {
         Player player = event.getPlayer();
-        if (TARGET_WORLD_KEY.equals(player.getWorld().getKey().asString())) {
+        if (activeWorldKey.equals(player.getWorld().getKey().asString())) {
             showBossBar(player);
         } else {
             hideBossBar(player);
         }
+    }
+
+    public static boolean isResourceWorld(String worldKey) {
+        return TARGET_WORLD_KEY.equals(worldKey) || TARGET_WORLD_NETHER_KEY.equals(worldKey);
     }
 
     private void showBossBar(Player player) {

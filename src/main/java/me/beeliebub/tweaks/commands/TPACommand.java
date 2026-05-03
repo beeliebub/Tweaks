@@ -1,5 +1,7 @@
 package me.beeliebub.tweaks.commands;
 
+import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
+import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -16,6 +18,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 // Handles /tpa, /tpahere, /tpaccept, and /tpdeny teleport request commands.
 // Requests expire after 30 seconds and only one pending request per target at a time.
@@ -23,11 +26,13 @@ public class TPACommand implements CommandExecutor, TabCompleter {
 
     private static final int TIMEOUT_SECONDS = 30;
     private final JavaPlugin plugin;
+    private final ResourceHuntItems resourceHuntItems;
     // Maps target player UUID -> their pending TPA request
     private final Map<UUID, TpaRequest> requests = new HashMap<>();
 
-    public TPACommand(JavaPlugin plugin) {
+    public TPACommand(JavaPlugin plugin, ResourceHuntItems resourceHuntItems) {
         this.plugin = plugin;
+        this.resourceHuntItems = resourceHuntItems;
     }
 
     private record TpaRequest(UUID requester, UUID target, boolean here, BukkitTask expiryTask) {
@@ -118,6 +123,25 @@ public class TPACommand implements CommandExecutor, TabCompleter {
 
         Player teleporting = request.here() ? player : requester;
         Player destination = request.here() ? requester : player;
+
+        // Item safety check: block travel into resource worlds with disallowed items
+        boolean enteringResourceFromOutside =
+                ResourceHunt.isResourceWorld(destination.getWorld().getKey().asString())
+                && !destination.getWorld().getKey().asString().equals(teleporting.getWorld().getKey().asString());
+
+        if (enteringResourceFromOutside) {
+            List<org.bukkit.Material> disallowed = resourceHuntItems.getDisallowedItems(teleporting);
+            if (!disallowed.isEmpty()) {
+                String itemNames = disallowed.stream()
+                        .map(m -> m.name().toLowerCase().replace('_', ' '))
+                        .distinct()
+                        .collect(Collectors.joining(", "));
+                teleporting.sendMessage(Component.text("You cannot teleport into the resource world with these items: ", NamedTextColor.RED)
+                        .append(Component.text(itemNames, NamedTextColor.YELLOW)));
+                destination.sendMessage(Component.text(teleporting.getName() + " has disallowed items and cannot teleport to you.", NamedTextColor.RED));
+                return true;
+            }
+        }
 
         teleporting.teleportAsync(destination.getLocation()).thenAccept(success -> {
             if (success) {

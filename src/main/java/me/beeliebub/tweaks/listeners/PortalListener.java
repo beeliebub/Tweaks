@@ -18,7 +18,8 @@ import java.util.Set;
 //     world is a single-purpose gathering dimension and should never bridge to the Nether.
 public class PortalListener implements Listener {
 
-    private static final String NETHER_DISABLED_WORLD_KEY = "jass:resource";
+    private static final String RESOURCE_WORLD_KEY = "jass:resource";
+    private static final String RESOURCE_NETHER_WORLD_KEY = "jass:resource_nether";
 
     private final Set<String> disabledEndWorlds;
 
@@ -37,9 +38,11 @@ public class PortalListener implements Listener {
         if (cause == PlayerTeleportEvent.TeleportCause.END_PORTAL && disabledEndWorlds.contains(worldKey)) {
             event.setCancelled(true);
             event.getPlayer().sendMessage(Component.text("The End is disabled in this world!", NamedTextColor.RED));
-        } else if (cause == PlayerTeleportEvent.TeleportCause.NETHER_PORTAL && NETHER_DISABLED_WORLD_KEY.equals(worldKey)) {
-            event.setCancelled(true);
-            event.getPlayer().sendMessage(Component.text("The Nether is disabled in this world!", NamedTextColor.RED));
+        } else if (cause == PlayerTeleportEvent.TeleportCause.NETHER_PORTAL) {
+            if (RESOURCE_WORLD_KEY.equals(worldKey) || RESOURCE_NETHER_WORLD_KEY.equals(worldKey)) {
+                event.setCancelled(true);
+                event.getPlayer().sendMessage(Component.text("Nether portals do not work in this world.", NamedTextColor.RED));
+            }
         }
     }
 }

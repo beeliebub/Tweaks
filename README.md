@@ -127,13 +127,17 @@ Request to teleport to another player, or request them to come to you.
 
 When you receive a TPA request, you'll see clickable **[Accept]** and **[Deny]** buttons in chat. Requests expire after **30 seconds** if not answered. Only one incoming request can be pending at a time per player — a new request replaces the old one.
 
+**Protection**: Just like `/resource`, if a TPA teleport would take a player from an outside world into a resource world (`jass:resource` or `jass:resource_nether`), the player's inventory is scanned for disallowed items. If any are found, the teleport is blocked.
+
 ### Back
 
 | Command | What it does |
 |---|---|
 | `/back` | Teleports you to your location before your last teleport, or to where you died. |
 
-This works after any teleport (TPA, home, warp, spawn, etc.) and after death — when you die, the death location is captured automatically so you can `/back` to recover your items. If you teleport somewhere after respawning, your back location updates to that pre-teleport spot, as usual. Your back location is saved across logins and server restarts.
+This works after any teleport (TPA, home, warp, spawn, etc.) and after death — when you die, the death location is captured automatically so you can `/back` to recover your items. If you teleport somewhere after respawning, your back location updates to that pre-teleport spot, as usual. Your back location is saved across logins and server restarts. Traveling **into** a resource world via `/back` is also subject to inventory item restrictions.
+
+---
 
 ### Spawn
 
@@ -562,23 +566,28 @@ This is entirely admin-managed — see the [admin commands](#admin-commands) sec
 
 ### Resource Hunt
 
-A server-wide race that runs in the **`jass:resource`** world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` (e.g. `iron_ore: 7`) as the active target. Each player who obtains the chosen item in the chosen amount through block drops, mob kills, fishing, or smelting (furnace, blast furnace, smoker) in the resource world completes the hunt — and only items obtained in `jass:resource` count toward progress, so any drops you collect in the overworld, lobby, or other dimensions are ignored.
+A server-wide race that runs in the **`jass:resource`** (Overworld) or **`jass:resource_nether`** (Nether) world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` as the active target. Each player who obtains the chosen item in the chosen amount through block drops, mob kills, fishing, or smelting (furnace, blast furnace, smoker) in the active resource world completes the hunt — only items obtained in the correct resource world count toward progress.
 
-While inside the `jass:resource` world, a **green boss bar** at the top of the screen shows your personal progress toward the goal. Your boss bar disappears once you personally finish; the hunt stays open for everyone else.
+While inside the active resource world, a **green boss bar** at the top of the screen shows your personal progress toward the goal. Your boss bar disappears once you personally finish; the hunt stays open for everyone else.
 
-The **first player** to complete the hunt earns the **`resource`** reward **three times**. Every player who completes it after that earns it once. Rewards are queued and claimable like any other reward via `/reward claim`. The hunt remains open for the rest of the session so anyone can still complete it for a single reward; the next target is chosen on the next server restart. A short message reminds each player of the active target when they log in; once the first winner has been declared, the join message instead names them and points out that the hunt is still open for a single-reward completion.
+The **first player** to complete the hunt earns the **`resource`** reward **three times**. Every player who completes it after that earns it once. Rewards are queued and claimable like any other reward via `/reward claim`. The next target is chosen on the next server restart. A message reminds each player of the active target when they log in or enter the resource world.
 
-**Protection**: To keep the race fair, players are restricted from bringing disallowed items into the resource world. Using `/resource` or `/back` to travel **into** `jass:resource` from another world will fail if you have restricted items in your inventory, and the plugin will tell you which items are blocking your travel. The check is skipped when you are already inside `jass:resource` — you can `/back` to a death spot in the resource world (to recover items) or `/resource` to its spawn without re-scanning your inventory. Only basic tools, armor, and food are generally allowed when entering from outside.
+**Protection**: To keep the race fair, players are restricted from bringing disallowed items into the resource world. Using `/resource`, `/back`, or `/tpa` to travel **into** a resource world from another world will fail if you have restricted items in your inventory. The check is skipped when you are already inside the same world — you can `/back` to a death spot or `/resource` to its spawn without re-scanning your inventory. Only basic tools, armor, and food are generally allowed when entering from outside.
 
-**Anti-recount**: Once an item has been counted toward someone's progress, it carries an invisible PDC tag and won't be counted again — so stashing ores in a chest and breaking the chest, or placing a counted ore as a block and re-breaking it, no longer regenerates progress. Crops, sugar cane, bamboo, amethyst buds, and other growth-stage blocks are exempt from the placed-block taint, so legitimate harvest cycles still credit normally.
+**Nether Safety**: If no safe 2-block air gap can be found when teleporting to the Nether resource world, the plugin will automatically generate a **5x5 bedrock platform** to ensure you don't spawn in lava or solid blocks.
 
-**Configuration** (`plugins/Tweaks/resource_hunt.yml`): a flat list of `material: amount` entries. Material names are Bukkit `Material` constants (lowercase). Unknown materials and non-positive amounts are skipped with a warning at load.
+**Anti-recount**: Once an item has been counted toward someone's progress, it carries an invisible PDC tag and won't be counted again. Crops, sugar cane, bamboo, and amethyst buds are exempt from the placed-block taint.
+
+**Configuration** (`plugins/Tweaks/resource_hunt.yml`): separate lists for overworld and nether targets.
 
 ```yaml
-iron_ore: 7
-raw_copper: 32
-diamond: 4
-ancient_debris: 2
+overworld:
+  iron_ore: 7
+  raw_copper: 32
+  diamond: 4
+nether:
+  ancient_debris: 2
+  ghast_tear: 5
 ```
 
 **Allowed Items** (`plugins/Tweaks/resource_hunt_items.yml`): a list of materials allowed to be carried into the resource world. Manage at runtime via `/tconfig resourceitems <add|remove> <item>`.
