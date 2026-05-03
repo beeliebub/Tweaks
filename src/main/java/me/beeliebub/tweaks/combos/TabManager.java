@@ -52,7 +52,8 @@ public class TabManager implements Listener {
             "minecraft:overworld",  Component.text("[Survival] ", NamedTextColor.GREEN),
             "minecraft:the_nether", Component.text("[Nether] ",   NamedTextColor.LIGHT_PURPLE),
             "minecraft:the_end",    Component.text("[End] ",      NamedTextColor.DARK_PURPLE),
-            "jass:resource",        Component.text("[Resource] ", NamedTextColor.AQUA)
+            "jass:resource",        Component.text("[Resource] ", NamedTextColor.AQUA),
+            "jass:resource_nether", Component.text("[Resource] ", NamedTextColor.AQUA)
     );
 
     private final Scoreboard scoreboard;

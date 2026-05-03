@@ -179,7 +179,8 @@ public class ResourceHunt implements Listener {
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onBlockDropItem(BlockDropItemEvent event) {
         Block block = event.getBlock();
-        if (!activeWorldKey.equals(block.getWorld().getKey().asString())) return;
+        String worldKey = block.getWorld().getKey().asString();
+        if (!isResourceWorld(worldKey)) return;
 
         // Propagate taint from a player-placed block onto its drops, then clear the marker. This
         // closes the place-then-rebreak loop: drops from a tainted block come out pre-tagged and
@@ -193,14 +194,14 @@ public class ResourceHunt implements Listener {
         }
 
         if (!isActive()) return;
-        if (completed.contains(event.getPlayer().getUniqueId())) return;
+        boolean canCount = worldKey.equals(activeWorldKey) && !completed.contains(event.getPlayer().getUniqueId());
 
         int gained = 0;
         for (Item item : event.getItems()) {
             ItemStack stack = item.getItemStack();
             if (stack.getType() != targetMaterial) continue;
             if (isCounted(stack)) continue;
-            gained += stack.getAmount();
+            if (canCount) gained += stack.getAmount();
             if (markCounted(stack)) item.setItemStack(stack);
         }
 
@@ -215,7 +216,8 @@ public class ResourceHunt implements Listener {
      * drops the player will actually receive (i.e. after smelter/fortune/silk processing).
      */
     public void recordExternalDrops(Player player, Block block, Collection<ItemStack> drops) {
-        if (!activeWorldKey.equals(block.getWorld().getKey().asString())) return;
+        String worldKey = block.getWorld().getKey().asString();
+        if (!isResourceWorld(worldKey)) return;
 
         // Same taint-propagation flow as onBlockDropItem, run unconditionally so that even a
         // tunnelled block placed by a player doesn't laundering counted items back into fresh
@@ -225,13 +227,13 @@ public class ResourceHunt implements Listener {
         }
 
         if (!isActive()) return;
-        if (completed.contains(player.getUniqueId())) return;
+        boolean canCount = worldKey.equals(activeWorldKey) && !completed.contains(player.getUniqueId());
 
         int gained = 0;
         for (ItemStack stack : drops) {
             if (stack == null || stack.getType() != targetMaterial) continue;
             if (isCounted(stack)) continue;
-            gained += stack.getAmount();
+            if (canCount) gained += stack.getAmount();
             markCounted(stack);
         }
 
@@ -246,17 +248,18 @@ public class ResourceHunt implements Listener {
         if (!isActive()) return;
         LivingEntity entity = event.getEntity();
         if (entity instanceof Player) return;
-        if (!activeWorldKey.equals(entity.getWorld().getKey().asString())) return;
+        String worldKey = entity.getWorld().getKey().asString();
+        if (!isResourceWorld(worldKey)) return;
 
         Player killer = entity.getKiller();
         if (killer == null) return;
-        if (completed.contains(killer.getUniqueId())) return;
+        boolean canCount = worldKey.equals(activeWorldKey) && !completed.contains(killer.getUniqueId());
 
         int gained = 0;
         for (ItemStack stack : event.getDrops()) {
             if (stack == null || stack.getType() != targetMaterial) continue;
             if (isCounted(stack)) continue;
-            gained += stack.getAmount();
+            if (canCount) gained += stack.getAmount();
             markCounted(stack);
         }
 
@@ -273,7 +276,8 @@ public class ResourceHunt implements Listener {
     public void onFurnaceExtract(FurnaceExtractEvent event) {
         if (!isActive()) return;
         Player player = event.getPlayer();
-        if (!activeWorldKey.equals(event.getBlock().getWorld().getKey().asString())) return;
+        String worldKey = event.getBlock().getWorld().getKey().asString();
+        if (!isResourceWorld(worldKey)) return;
         if (event.getItemType() != targetMaterial) return;
 
         int amount = event.getItemAmount();
@@ -284,14 +288,15 @@ public class ResourceHunt implements Listener {
         Bukkit.getScheduler().runTask(plugin,
                 () -> tagInventoryStacks(player, targetMaterial, amount));
 
-        if (completed.contains(player.getUniqueId())) return;
+        if (!worldKey.equals(activeWorldKey) || completed.contains(player.getUniqueId())) return;
         recordProgress(player, amount);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlayerFish(PlayerFishEvent event) {
         if (!isActive()) return;
-        if (!activeWorldKey.equals(event.getPlayer().getWorld().getKey().asString())) return;
+        String worldKey = event.getPlayer().getWorld().getKey().asString();
+        if (!isResourceWorld(worldKey)) return;
         if (event.getState() != PlayerFishEvent.State.CAUGHT_FISH) return;
         if (!(event.getCaught() instanceof Item caughtItem)) return;
 
@@ -301,7 +306,7 @@ public class ResourceHunt implements Listener {
 
         if (markCounted(stack)) caughtItem.setItemStack(stack);
 
-        if (completed.contains(event.getPlayer().getUniqueId())) return;
+        if (!worldKey.equals(activeWorldKey) || completed.contains(event.getPlayer().getUniqueId())) return;
         recordProgress(event.getPlayer(), stack.getAmount());
     }
 
@@ -312,7 +317,7 @@ public class ResourceHunt implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
         Block block = event.getBlockPlaced();
-        if (!activeWorldKey.equals(block.getWorld().getKey().asString())) return;
+        if (!isResourceWorld(block.getWorld().getKey().asString())) return;
         if (!isCounted(event.getItemInHand())) return;
         if (isGrowthExempt(block)) return;
         block.getChunk().getPersistentDataContainer().set(
@@ -444,12 +449,20 @@ public class ResourceHunt implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         if (targetMaterial == null) return;
         Player player = event.getPlayer();
+        String worldKey = player.getWorld().getKey().asString();
 
-        if (activeWorldKey.equals(player.getWorld().getKey().asString())) {
+        if (activeWorldKey.equals(worldKey)) {
             showBossBar(player);
         }
 
+        // Safety: if joining in a non-resource world, ensure no tags remain (e.g. if they logged
+        // out in resource but were moved while offline).
+        if (!isResourceWorld(worldKey)) {
+            stripCountedTags(player);
+        }
+
         boolean playerDone = completed.contains(player.getUniqueId());
+
         Component msg;
         if (firstWinner == null) {
             msg = Component.text()
@@ -483,10 +496,43 @@ public class ResourceHunt implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onWorldChange(PlayerChangedWorldEvent event) {
         Player player = event.getPlayer();
-        if (activeWorldKey.equals(player.getWorld().getKey().asString())) {
+        String fromWorldKey = event.getFrom().getKey().asString();
+        String toWorldKey = player.getWorld().getKey().asString();
+
+        // 1. Boss bar management for the active world
+        if (activeWorldKey.equals(toWorldKey)) {
             showBossBar(player);
         } else {
             hideBossBar(player);
+        }
+
+        // 2. PDC removal when leaving ANY resource world. We strip tags from both inventory and
+        // ender chest so that items brought out of the resource world (whether in pockets or
+        // in a chest) can stack with survival items.
+        if (isResourceWorld(fromWorldKey) && !isResourceWorld(toWorldKey)) {
+            stripCountedTags(player);
+        }
+    }
+
+    private void stripCountedTags(Player player) {
+        // Scan main inventory
+        for (ItemStack stack : player.getInventory().getContents()) {
+            removeCountedTag(stack);
+        }
+        // Scan ender chest
+        for (ItemStack stack : player.getEnderChest().getContents()) {
+            removeCountedTag(stack);
+        }
+    }
+
+    private void removeCountedTag(ItemStack stack) {
+        if (stack == null || stack.getType().isAir()) return;
+        ItemMeta meta = stack.getItemMeta();
+        if (meta == null) return;
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        if (pdc.has(countedKey, PersistentDataType.BYTE)) {
+            pdc.remove(countedKey);
+            stack.setItemMeta(meta);
         }
     }
 
