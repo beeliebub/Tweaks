@@ -40,6 +40,11 @@ public class Lumberjack implements Listener {
             Material.RED_MUSHROOM_BLOCK,
             Material.BROWN_MUSHROOM_BLOCK
     );
+    private static final Set<Material> NETHER_LEAVES = Set.of(
+            Material.NETHER_WART_BLOCK,
+            Material.WARPED_WART_BLOCK,
+            Material.SHROOMLIGHT
+    );
 
     private final Enchantment enchantment;
     private final Telekinesis telekinesis;
@@ -216,7 +221,8 @@ public class Lumberjack implements Listener {
                 for (int dy = -1; dy <= 1; dy++) {
                     for (int dz = -1; dz <= 1; dz++) {
                         if (dx == 0 && dy == 0 && dz == 0) continue;
-                        if (Tag.LEAVES.isTagged(log.getRelative(dx, dy, dz).getType())) {
+                        Material type = log.getRelative(dx, dy, dz).getType();
+                        if (Tag.LEAVES.isTagged(type) || NETHER_LEAVES.contains(type)) {
                             return true;
                         }
                     }
