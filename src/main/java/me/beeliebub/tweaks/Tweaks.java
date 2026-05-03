@@ -168,6 +168,9 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(replant, this);
         getServer().getPluginManager().registerEvents(new Efficacy(this, qualityRegistry), this);
 
+        // Disenchanting Bundle
+        getServer().getPluginManager().registerEvents(new DisenchantingBundle(this, qualityRegistry), this);
+
         // Quality Enchantment Listeners
         getServer().getPluginManager().registerEvents(new EnchantTableListener(qualityRegistry, bloodMoonManager), this);
         getServer().getPluginManager().registerEvents(fortuneQuality, this);

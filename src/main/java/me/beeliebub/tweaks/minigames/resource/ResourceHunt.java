@@ -7,6 +7,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
@@ -538,6 +539,22 @@ public class ResourceHunt implements Listener {
 
     public static boolean isResourceWorld(String worldKey) {
         return TARGET_WORLD_KEY.equals(worldKey) || TARGET_WORLD_NETHER_KEY.equals(worldKey);
+    }
+
+    /**
+     * Generates a 5x5 bedrock platform at Y=64 in the specified world and returns the center spawn location.
+     */
+    public static Location createBedrockPlatform(org.bukkit.World world, int cx, int cz) {
+        int y = 64; // Middle-ish of the Nether
+
+        for (int x = cx - 2; x <= cx + 2; x++) {
+            for (int z = cz - 2; z <= cz + 2; z++) {
+                world.getBlockAt(x, y, z).setType(Material.BEDROCK);
+                world.getBlockAt(x, y + 1, z).setType(Material.AIR);
+                world.getBlockAt(x, y + 2, z).setType(Material.AIR);
+            }
+        }
+        return new Location(world, cx + 0.5, y + 1, cz + 0.5);
     }
 
     private void showBossBar(Player player) {

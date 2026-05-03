@@ -42,6 +42,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [AFK](#afk)
   - [Tab List](#tab-list)
   - [XP Storage Bottles](#xp-storage-bottles)
+  - [Disenchanting Bundle](#disenchanting-bundle)
 - [Cosmetics](#cosmetics)
   - [Boot Trails](#boot-trails)
 - [World Protections](#world-protections)
@@ -479,6 +480,27 @@ This system ensures that experience can be safely stored and transferred without
 
 ---
 
+### Disenchanting Bundle
+
+Any **bundle with lore** (any custom lore will work) can be used to safely (or mostly safely) extract enchantments from items. **The bundle is consumed and destroyed upon use.**
+
+**How it works**:
+
+1.  **Trigger**: Right-click an enchanted item with a Disenchanting Bundle (or right-click the bundle with the enchanted item on your cursor).
+2.  **Extraction**: The bundle will immediately strip **all** enchantments from the item.
+3.  **Conversion**: For each enchantment removed, the bundle attempts to convert it into an individual **Enchanted Book**.
+4.  **Priority**: Enchantments are processed in order of their [quality tier](#tiers) (Legendary > Epic > Rare > Uncommon > Vanilla).
+
+**Success Probabilities**:
+
+- **First Enchantment**: The highest-tier enchantment is **guaranteed** (100% chance) to be given back as a book. If there are multiple enchantments at the highest tier, one is picked at random to be the guaranteed extraction.
+- **Subsequent Enchantments**: After each **successful** book extraction, the chance for the next enchantment to become a book decreases (100% -> 80% -> 60% -> 40% -> 20% -> 0%).
+- **Failure**: If an extraction roll fails, the enchantment is still removed from the item, but no book is given (it is lost to the void). After a failure, the success chance for the next enchantment **remains at its current level**.
+
+This mechanic provides a strategic way to recover powerful enchantments from tools at the cost of the bundle itself and the risk of losing some enchantments on heavily enchanted items.
+
+---
+
 ## Cosmetics
 
 Purely visual effects unlocked by ordinary in-game items — no commands, no permissions, no toggles.
@@ -574,7 +596,7 @@ The **first player** to complete the hunt earns the **`resource`** reward **thre
 
 **Protection**: To keep the race fair, players are restricted from bringing disallowed items into the resource world. Using `/resource`, `/back`, or `/tpa` to travel **into** a resource world from another world will fail if you have restricted items in your inventory. The check is skipped when you are already inside the same world — you can `/back` to a death spot or `/resource` to its spawn without re-scanning your inventory. Only basic tools, armor, and food are generally allowed when entering from outside.
 
-**Nether Safety**: If no safe 2-block air gap can be found when teleporting to the Nether resource world, the plugin will automatically generate a **5x5 bedrock platform** to ensure you don't spawn in lava or solid blocks.
+**Nether Safety**: If no safe 2-block air gap can be found when teleporting to the Nether resource world, or if a teleport would land a player on the Nether roof (above Y=127), the plugin will automatically generate a **5x5 bedrock platform** at Y=64 to ensure you don't spawn in lava, solid blocks, or on top of the world.
 
 **Anti-recount**: Once an item has been counted toward someone's progress, it carries an invisible PDC tag and won't be counted again. Crops, sugar cane, bamboo, and amethyst buds are exempt from the placed-block taint.
 

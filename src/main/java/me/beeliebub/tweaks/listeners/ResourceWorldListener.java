@@ -68,7 +68,7 @@ public class ResourceWorldListener implements Listener {
     }
 
     /**
-     * Prevents teleporting to the Nether roof in the resource world.
+     * Prevents teleporting to the Nether roof in the resource world by redirecting to a safe bedrock platform.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onTeleport(org.bukkit.event.player.PlayerTeleportEvent event) {
@@ -76,8 +76,11 @@ public class ResourceWorldListener implements Listener {
         if (!RESOURCE_NETHER_WORLD_KEY.equals(to.getWorld().getKey().asString())) return;
 
         if (to.getY() >= 127) {
-            event.setCancelled(true);
-            event.getPlayer().sendMessage(Component.text("The Nether roof is off-limits in the resource world!", NamedTextColor.RED));
+            Location safe = ResourceHunt.createBedrockPlatform(to.getWorld(), to.getBlockX(), to.getBlockZ());
+            safe.setYaw(to.getYaw());
+            safe.setPitch(to.getPitch());
+            event.setTo(safe);
+            event.getPlayer().sendMessage(Component.text("The Nether roof is off-limits; redirecting you to a safe platform.", NamedTextColor.GOLD));
         }
     }
 

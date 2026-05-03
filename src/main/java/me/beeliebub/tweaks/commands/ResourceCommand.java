@@ -79,7 +79,9 @@ public class ResourceCommand implements CommandExecutor {
             if (found != null) {
                 safeLocation = found;
             } else {
-                safeLocation = createBedrockPlatform(defaultSpawn);
+                safeLocation = ResourceHunt.createBedrockPlatform(resourceWorld, defaultSpawn.getBlockX(), defaultSpawn.getBlockZ());
+                safeLocation.setYaw(defaultSpawn.getYaw());
+                safeLocation.setPitch(defaultSpawn.getPitch());
                 player.sendMessage(Component.text("No safe spot found; generated a temporary platform.", NamedTextColor.GOLD));
             }
         } else {
@@ -130,21 +132,5 @@ public class ResourceCommand implements CommandExecutor {
         return world.getBlockAt(x, y, z).getType().isAir() &&
                world.getBlockAt(x, y + 1, z).getType().isAir() &&
                world.getBlockAt(x, y - 1, z).getType().isSolid();
-    }
-
-    private Location createBedrockPlatform(Location center) {
-        World world = center.getWorld();
-        int cx = center.getBlockX();
-        int cz = center.getBlockZ();
-        int y = 64; // Middle-ish of the Nether
-
-        for (int x = cx - 2; x <= cx + 2; x++) {
-            for (int z = cz - 2; z <= cz + 2; z++) {
-                world.getBlockAt(x, y, z).setType(Material.BEDROCK);
-                world.getBlockAt(x, y + 1, z).setType(Material.AIR);
-                world.getBlockAt(x, y + 2, z).setType(Material.AIR);
-            }
-        }
-        return new Location(world, cx + 0.5, y + 1, cz + 0.5, center.getYaw(), center.getPitch());
     }
 }
