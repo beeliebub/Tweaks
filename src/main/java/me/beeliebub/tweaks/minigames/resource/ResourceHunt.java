@@ -18,6 +18,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.inventory.FurnaceExtractEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -38,11 +39,12 @@ import java.util.concurrent.ThreadLocalRandom;
 //
 // On every server start, one entry is picked at random from resource_hunt.yml as the active
 // target (Material + required amount). Each player who reaches the threshold via block drops,
-// mob kills, or fishing in the jass:resource world is granted the "resource" reward via
-// RewardManager. The first player to complete is granted the reward 3 times; everyone else
-// who completes afterward gets it once. The hunt remains open for the rest of the session so
-// that anyone can still complete it; only the completing player's boss bar is removed when
-// they finish. Drops in any other world are ignored entirely.
+// mob kills, fishing, or smelting (furnace, blast furnace, smoker) in the jass:resource world
+// is granted the "resource" reward via RewardManager. The first player to complete is granted
+// the reward 3 times; everyone else who completes afterward gets it once. The hunt remains open
+// for the rest of the session so that anyone can still complete it; only the completing
+// player's boss bar is removed when they finish. Drops/extracts in any other world are ignored
+// entirely.
 //
 // To prevent cheesing, players are restricted from bringing disallowed items into the
 // resource world (enforced by /resource and /back).
@@ -190,6 +192,21 @@ public class ResourceHunt implements Listener {
 
         if (gained <= 0) return;
         recordProgress(killer, gained);
+    }
+
+    // Counts items pulled from a furnace, blast furnace, or smoker — FurnaceExtractEvent fires
+    // for all three Furnace block-entity subtypes when the player removes the cooked item from
+    // the result slot. The event reports the *resolved* item type and amount the player took, so
+    // this naturally credits e.g. iron ingot from raw iron without us having to introspect the
+    // recipe or input stack.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onFurnaceExtract(FurnaceExtractEvent event) {
+        if (!isActive()) return;
+        Player player = event.getPlayer();
+        if (completed.contains(player.getUniqueId())) return;
+        if (!TARGET_WORLD_KEY.equals(event.getBlock().getWorld().getKey().asString())) return;
+        if (event.getItemType() != targetMaterial) return;
+        recordProgress(player, event.getItemAmount());
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.enchantments;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
@@ -25,11 +26,13 @@ public class Smelter implements Listener {
 
     private final Enchantment enchantment;
     private final Telekinesis telekinesis;
+    private final ResourceHunt resourceHunt;
 
-    public Smelter(Tweaks plugin, Telekinesis telekinesis) {
+    public Smelter(Tweaks plugin, Telekinesis telekinesis, ResourceHunt resourceHunt) {
         String raw = plugin.getConfig().getString("smelter");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.telekinesis = telekinesis;
+        this.resourceHunt = resourceHunt;
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -69,6 +72,14 @@ public class Smelter implements Listener {
         List<ItemStack> smelted = smeltDrops(drops);
 
         event.setDropItems(false);
+
+        // Credit smelted drops toward the active Resource Hunt. setDropItems(false) above
+        // suppresses BlockDropItemEvent, which would otherwise be the path that ResourceHunt
+        // observes; we have to call the external-drops hook directly so smelted ingots count
+        // toward the goal in jass:resource.
+        if (resourceHunt != null) {
+            resourceHunt.recordExternalDrops(player, block, smelted);
+        }
 
         boolean routeToInventory = telekinesis != null && telekinesis.hasEnchant(tool);
         for (ItemStack drop : smelted) {

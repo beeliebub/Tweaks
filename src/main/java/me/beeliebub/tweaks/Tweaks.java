@@ -148,7 +148,7 @@ public class Tweaks extends JavaPlugin {
 
         // Enchantments
         telekinesis = new Telekinesis(this, itemFilterCommand);
-        Smelter smelter = new Smelter(this, telekinesis);
+        Smelter smelter = new Smelter(this, telekinesis, resourceHunt);
         FortuneQualityListener fortuneQuality = new FortuneQualityListener(qualityRegistry);
         SilkTouchQualityListener silkTouchQuality = new SilkTouchQualityListener(qualityRegistry);
         Lumberjack lumberjack = new Lumberjack(this, telekinesis, qualityRegistry, fortuneQuality);

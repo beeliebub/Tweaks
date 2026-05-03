@@ -455,20 +455,20 @@ Any other world falls back to the **[Survival]** tag. Players in the lobby appea
 
 ### XP Storage Bottles
 
-Store your experience levels for later use or trade by brewing **XP Storage Bottles** (Bottles of Enchanting) in a brewing stand.
+Store your experience levels for later use or trade by brewing **Experience Potions** in a brewing stand.
 
 **Brewing Recipes**:
 
 | Ingredient | Bottle Type | Result | Stored XP |
 |---|---|---|---|
-| Emerald | Glass Bottle | XP Bottle | 1,395 orbs |
-| Emerald Block | Glass Bottle | XP Bottle | 12,555 orbs |
+| Emerald | Glass Bottle | Experience Potion | 1,395 orbs |
+| Emerald Block | Glass Bottle | Experience Potion | 12,555 orbs |
 
 **How it works**:
 
 - **Payment**: Brewing consumes your own experience. The player who places the emerald or emerald block into the brewing stand is the one charged for the brew.
 - **Verification**: If you don't have enough experience to cover the cost, the brewing process is cancelled and the ingredients are returned to you (dropped on top of the stand).
-- **Stacking**: Unlike regular potions, these custom XP bottles can be stacked up to **64**.
+- **Stacking**: Unlike regular potions, these custom Experience Potions can be stacked up to **64**.
 - **Usage**: Simply drink the bottle to receive the stored experience. The vanilla drinking animation and sound apply, and you'll receive a glass bottle back.
 
 This system ensures that experience can be safely stored and transferred without loss, using a clean, vanilla-friendly brewing mechanic.
@@ -562,7 +562,7 @@ This is entirely admin-managed — see the [admin commands](#admin-commands) sec
 
 ### Resource Hunt
 
-A server-wide race that runs in the **`jass:resource`** world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` (e.g. `iron_ore: 7`) as the active target. Each player who obtains the chosen item in the chosen amount through block drops, mob kills, or fishing in the resource world completes the hunt — and only items obtained in `jass:resource` count toward progress, so any drops you collect in the overworld, lobby, or other dimensions are ignored.
+A server-wide race that runs in the **`jass:resource`** world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` (e.g. `iron_ore: 7`) as the active target. Each player who obtains the chosen item in the chosen amount through block drops, mob kills, fishing, or smelting (furnace, blast furnace, smoker) in the resource world completes the hunt — and only items obtained in `jass:resource` count toward progress, so any drops you collect in the overworld, lobby, or other dimensions are ignored.
 
 While inside the `jass:resource` world, a **green boss bar** at the top of the screen shows your personal progress toward the goal. Your boss bar disappears once you personally finish; the hunt stays open for everyone else.
 

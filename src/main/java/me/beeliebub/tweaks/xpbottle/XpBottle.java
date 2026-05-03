@@ -16,7 +16,7 @@ import java.text.NumberFormat;
 import java.util.List;
 import java.util.Locale;
 
-// Custom-item factory + identifier for the XP-storage Bottle of Enchanting.
+// Custom-item factory + identifier for the XP-storage Experience Potion.
 //
 // We render this as Material.POTION with PotionType.AWKWARD (no effects) so that vanilla's
 // drinking animation, stack decrement, and glass-bottle remainder all "just work". Material
@@ -46,8 +46,8 @@ public final class XpBottle {
         meta.setBasePotionType(PotionType.AWKWARD);
         meta.setColor(BOTTLE_COLOR);
 
-        meta.itemName(Component.text("Bottle of Enchanting")
-                .color(NamedTextColor.LIGHT_PURPLE)
+        meta.itemName(Component.text("Experience Potion")
+                .color(NamedTextColor.GREEN)
                 .decoration(TextDecoration.ITALIC, false));
 
         String formatted = NumberFormat.getNumberInstance(Locale.US).format(orbs);
