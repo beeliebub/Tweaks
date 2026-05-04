@@ -33,6 +33,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Luck of the Sea Treasure](#luck-of-the-sea-treasure)
   - [Tunneller & Efficacy Area Scaling](#tunneller--efficacy-area-scaling)
   - [Supported Enchantments](#supported-enchantments)
+  - [Silk Touch Quality](#silk-touch-quality)
 - [Player Features](#player-features)
   - [Nicknames](#nicknames)
   - [Flight](#flight)
@@ -208,7 +209,7 @@ Breaks a **3x3 area** of blocks perpendicular to the face you mine. Mine the sid
 
 Chops down **entire trees** and **large mushrooms** at once. When you break a log or mushroom block, the enchantment finds all connected blocks (up to 256) and breaks them all in one swing.
 
-- **Trees**: only activates on actual trees — there must be at least one leaf block adjacent to the connected logs. This prevents it from tearing apart log-built structures.
+- **Trees**: only activates on actual trees — there must be at least one leaf block adjacent to the connected logs. This prevents it from tearing apart log-built structures. Supports Nether trees (Wart blocks/Shroomlight as leaves).
 - **Large mushrooms**: works on red and brown giant mushrooms. The connected set must include both stem and cap blocks, so isolated placed mushroom blocks are left alone.
 - Your tool takes **durability damage for each extra block** broken. Unbreaking reduces this normally.
 - If your tool doesn't have enough durability remaining to chop the entire tree or mushroom, the break is cancelled and you'll see a red warning message.
@@ -387,7 +388,7 @@ Applies an infinite-duration night vision effect with no particles.
 Control which items your character actually picks up. Two modes:
 
 - **Whitelist** — only items on your list are picked up.
-- **Blacklist** — every item *except* those on your list is picked up.
+- **Blacklist** — every item *except* those on your list are picked up.
 
 The filter is **off by default**. Whether it's enabled, which mode is active, and the contents of each list are all saved on your player profile and persist across logins. The whitelist and blacklist are tracked independently — you can curate one for each mode and swap between them without losing either.
 
@@ -453,6 +454,7 @@ Players in the tab list are automatically sorted by their current world profile 
 | `minecraft:the_nether` | **[Nether]** (light purple) |
 | `minecraft:the_end` | **[End]** (dark purple) |
 | `jass:resource` | **[Resource]** (aqua) |
+| `jass:resource_nether` | **[Resource]** (aqua) |
 | `jass:archive` | **[Archive]** (gold) |
 | `jass:pi` | **[Pi]** (light purple) |
 
@@ -538,8 +540,8 @@ These protections are always active and require no commands or configuration:
 | **Farmland Anti-Trample** | Players and mobs cannot trample farmland by walking or jumping on it. |
 | **Creeper Block Protection** | Creeper explosions still deal damage but no longer destroy blocks. |
 | **Enderman Grief Protection** | Endermen cannot pick up or place blocks. |
-| **End Portal Control** | End portals are disabled in configured worlds (archive by default). Players who try receive a red message. |
-| **Lore-Tagged Emerald Trade Block** | Emeralds carrying any lore cannot be placed into a regular Villager's trade cost slots. Wandering Traders are exempt and still accept lore-tagged emeralds, so they remain a valid sink. Triggered placements are cancelled with a chat warning and a villager "no" sound. |
+| **End Portal Control** | End portals are disabled in configured worlds (`jass:archive` by default). Players who try receive a red message. |
+| **Lore-Tagged Emerald Trade Block** | Emeralds carrying any lore cannot be placed into a regular Villager's trade cost slots. Wandering Traders are exempt and still accept lore-tagged emeralds. |
 
 ### Spawn Egg Restrictions
 
@@ -549,10 +551,10 @@ Admins can disable Egg Collector drops or spawn-egg-on-spawner conversion on a p
 |---|---|
 | `/tconfig eggdrop disable <mob>` | Stops Egg Collector from ever rolling that mob's spawn egg. |
 | `/tconfig eggdrop enable <mob>` | Re-allows Egg Collector to roll that mob's spawn egg. |
-| `/tconfig spawneregg disable <mob>` | Blocks players from using that mob's spawn egg on a spawner block to set the spawner's spawned type. |
+| `/tconfig spawneregg disable <mob>` | Blocks players from using that mob's spawn egg on a spawner block. |
 | `/tconfig spawneregg enable <mob>` | Re-allows that spawn egg to be used on spawners. |
 
-`<mob>` is the vanilla entity key (e.g. `zombie`, `blaze`, `wither_skeleton`). Tab completion lists every mob with a spawn egg, and the `enable` form prefers currently-disabled mobs so admins can audit and revert their own changes quickly.
+`<mob>` is the vanilla entity key (e.g. `zombie`, `blaze`, `wither_skeleton`). Tab completion lists every mob with a spawn egg, and the `enable` form prefers currently-disabled mobs.
 
 ---
 
@@ -564,17 +566,13 @@ A rare server-wide event that turns the night crimson and supercharges enchantin
 
 **How it triggers**: At the start of every full-moon night in the overworld, the plugin rolls a **50% chance** to begin a Blood Moon. When it activates, the entire server sees a dark-red title, a chat broadcast, and an ominous wither sound. A **red boss bar** also appears at the top of the screen, counting down until the event ends at dawn.
 
-> *The Blood Moon has risen. Quality enchantments favor the bold tonight.*
+**What it does**: While a Blood Moon is active, the chance for an enchantment rolled at the enchanting table to become a [quality variant](#enchantment-quality) is boosted from **10% to 50%** per applicable enchantment. Tier weights (uncommon/rare/epic/legendary) still apply on top of that.
 
-**What it does**: While a Blood Moon is active, the chance for an enchantment rolled at the enchanting table to become a [quality variant](#enchantment-quality) is boosted from **10% to 50%** per applicable enchantment. Tier weights (uncommon/rare/epic/legendary) still apply on top of that, so legendary remains rare — but the night is the best time to gamble on quality gear.
-
-**How it ends**: The Blood Moon fades automatically at the next dawn (when the overworld day rolls over). **Sleeping is blocked** while a Blood Moon is active; the moon's energy prevents players from skipping the night. A bell chime and a chat message announce the end:
-
-> *The Blood Moon fades.*
+**How it ends**: The Blood Moon fades automatically at the next dawn. **Sleeping is blocked** while a Blood Moon is active.
 
 **Checking the moon**: Any player can run `/fullmoon` to see a rough estimate of how many real-world minutes remain until the next full-moon night begins.
 
-**Forcing one (admin)**: Admins with `tweaks.admin.bloodmoon` can run `/bloodmoon` to advance the overworld to the start of the next full-moon night and guarantee activation. If a Blood Moon is already active, the command is a no-op.
+**Forcing one (admin)**: Admins with `tweaks.admin.bloodmoon` can run `/bloodmoon` to advance the overworld to the start of the next full-moon night and guarantee activation.
 
 ---
 
@@ -588,17 +586,17 @@ This is entirely admin-managed — see the [admin commands](#admin-commands) sec
 
 ### Resource Hunt
 
-A server-wide race that runs in the **`jass:resource`** (Overworld) or **`jass:resource_nether`** (Nether) world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` as the active target. Each player who obtains the chosen item in the chosen amount through block drops, mob kills, fishing, or smelting (furnace, blast furnace, smoker) in the active resource world completes the hunt — only items obtained in the correct resource world count toward progress.
+A server-wide race that runs in the **`jass:resource`** (Overworld) or **`jass:resource_nether`** (Nether) world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` as the active target. Each player who obtains the chosen item in the chosen amount through block drops, mob kills, fishing, or smelting in the active resource world completes the hunt.
 
-While inside the active resource world, a **green boss bar** at the top of the screen shows your personal progress toward the goal. Your boss bar disappears once you personally finish; the hunt stays open for everyone else.
+While inside the active resource world, a **green boss bar** at the top of the screen shows your personal progress toward the goal. Your boss bar disappears once you personally finish.
 
-The **first player** to complete the hunt earns the **`resource`** reward **three times**. Every player who completes it after that earns it once. Rewards are queued and claimable like any other reward via `/reward claim`. The next target is chosen on the next server restart. A message reminds each player of the active target when they log in or enter the resource world.
+The **first player** to complete the hunt earns the **`resource`** reward **three times**. Every player who completes it after that earns it once. Rewards are queued and claimable via `/reward claim`.
 
-**Protection**: To keep the race fair, players are restricted from bringing disallowed items into the resource world. Using `/resource`, `/back`, or `/tpa` to travel **into** a resource world from another world will fail if you have restricted items in your inventory. The check is skipped when you are already inside the same world — you can `/back` to a death spot or `/resource` to its spawn without re-scanning your inventory. Only basic tools, armor, and food are generally allowed when entering from outside.
+**Protection**: To keep the race fair, players are restricted from bringing disallowed items into the resource world. Using `/resource`, `/back`, or `/tpa` to travel **into** a resource world from another world will fail if you have restricted items in your inventory.
 
-**Nether Safety**: If no safe 2-block air gap can be found when teleporting to the Nether resource world, or if a teleport would land a player on the Nether roof (above Y=127), the plugin will automatically generate a **5x5 bedrock platform** at Y=64 to ensure you don't spawn in lava, solid blocks, or on top of the world.
+**Nether Safety**: If no safe 2-block air gap can be found when teleporting to the Nether resource world, or if a teleport would land a player on the Nether roof (above Y=127), the plugin will automatically generate a **5x5 bedrock platform** at Y=64.
 
-**Anti-recount**: Once an item has been counted toward someone's progress, it carries an invisible PDC tag and won't be counted again. Crops, sugar cane, bamboo, and amethyst buds are exempt from the placed-block taint.
+**Anti-recount**: Once an item has been counted toward someone's progress, it carries an invisible PDC tag and won't be counted again. Crops, sugar cane, bamboo, and amethyst buds are exempt.
 
 **Configuration** (`plugins/Tweaks/resource_hunt.yml`): separate lists for overworld and nether targets.
 
@@ -614,18 +612,18 @@ nether:
 
 **Allowed Items** (`plugins/Tweaks/resource_hunt_items.yml`): a list of materials allowed to be carried into the resource world. Manage at runtime via `/tconfig resourceitems <add|remove> <item>`.
 
-**Admin setup**: the `resource` reward shell is auto-created on first plugin load; populate it with `/reward edit resource` to choose what the winner actually receives.
+**Admin setup**: the `resource` reward shell is auto-created on first plugin load; populate it with `/reward edit resource`.
 
-**World restrictions**: `jass:resource` is single-purpose for gathering, so a few player-features are disabled inside it:
+**World restrictions**: `jass:resource` and `jass:resource_nether` are single-purpose for gathering:
 
 | Restriction | What it does |
 |---|---|
-| End portals | Cancelled when entered from `jass:resource` (configurable via `disabled-end-portal-worlds`). |
-| Nether portals | Cancelled when entered from `jass:resource`. |
-| `/sethome` | Refused in `jass:resource` with an error message. |
-| Login eject | Players who log in while their saved location is inside `jass:resource` are immediately sent to the `newspawn` warp. (Requires `/setwarp newspawn` to be configured.) |
-| Item Whitelist | Restricts items that can be brought into the world via `/resource` or `/back`. |
-| Ender Chests | Cannot be opened or used while in `jass:resource`. |
+| End portals | Blocked in resource worlds. |
+| Nether portals | Blocked in resource worlds. |
+| `/sethome` | Refused in resource worlds. |
+| Login eject | Players logging in inside a resource world are sent to `/warp newspawn`. |
+| Item Whitelist | Restricts items that can be brought in via `/resource`, `/back`, or `/tpa`. |
+| Ender Chests | Cannot be opened or used while in a resource world. |
 
 ### Rewards
 
@@ -659,11 +657,11 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/nv` | Toggle night vision. |
 | `/nick <nickname>` | Set your display name with color codes. |
 | `/nick off` | Remove your nickname. |
-| `/itemfilter [toggle\|mode\|add <item>\|remove <item>\|list]` | Manage your personal pickup filter. Alias: `/if`. |
-| `/toolprotect [on\|off]` | Toggle ToolProtect on/off (default: on). |
-| `/toolprotect durability <n>` | Set your remaining-durability threshold for ToolProtect (default: 100). |
-| `/afk` | Toggle AFK status. Auto-applies after 10 minutes without moving. AFK players don't count toward sleep skipping and show a red [AFK] tag in the tab list. |
-| `/fullmoon` | Show a rough estimate of how long until the next full moon. |
+| `/itemfilter [toggle\|mode\|add <item>\|remove <item>\|list]` | Manage pickup filter. Alias: `/if`. |
+| `/toolprotect [on\|off]` | Toggle ToolProtect on/off. |
+| `/toolprotect durability <n>` | Set remaining-durability threshold for ToolProtect. |
+| `/afk` | Toggle AFK status. |
+| `/fullmoon` | Show estimate for next full moon. |
 | `/reward claim` | Claim pending minigame rewards. |
 
 ### Admin Commands
@@ -676,40 +674,23 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/sethome <player> <name>` | `tweaks.admin.sethome` | Set a home for another player. |
 | `/delhome <player> <name>` | `tweaks.admin.delhome` | Delete another player's home. |
 | `/homes <player>` | `tweaks.admin.homes` | List another player's homes. |
-| `/nick off <player>` | `tweaks.admin.nick` | Remove another player's nickname (works on offline players). |
-| `/tconfig <key> <value>` | `tweaks.admin.config` | Update a numeric/string config value at runtime. Alias: `/tweaksconfig`. |
-| `/tconfig eggdrop <disable\|enable> <mob>` | `tweaks.admin.config` | Disable or re-enable Egg Collector drops for a specific mob. Auto-creates the config list. |
-| `/tconfig spawneregg <disable\|enable> <mob>` | `tweaks.admin.config` | Disable or re-enable using a specific mob's spawn egg on a spawner block. Auto-creates the config list. |
+| `/nick off <player>` | `tweaks.admin.nick` | Remove another player's nickname. |
+| `/tconfig <key> <value>` | `tweaks.admin.config` | Update a config value at runtime. Alias: `/tweaksconfig`. |
+| `/tconfig eggdrop <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable Egg Collector drops for a mob. |
+| `/tconfig spawneregg <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable spawn egg usage on spawners. |
+| `/tconfig resourceitems <add\|remove> <item>` | `tweaks.admin.config` | Manage resource world item whitelist. |
 | `/more` | `tweaks.admin.more` | Maximize the stack size of the held item. |
-| `/invsee <player>` | `tweaks.admin.invsee` | View and modify an online player's inventory (hotbar, main, armor, offhand). |
-| `/bloodmoon` | `tweaks.admin.bloodmoon` | Advance the overworld to the next full moon and force-activate the Blood Moon event. |
+| `/invsee <player>` | `tweaks.admin.invsee` | View and modify an online player's inventory. |
+| `/bloodmoon` | `tweaks.admin.bloodmoon` | Force-activate the Blood Moon event. |
 | `/reward create <name>` | `tweaks.admin.reward` | Create a new reward template. |
 | `/reward edit <name>` | `tweaks.admin.reward` | Open the reward editor GUI. |
 | `/whack arena` | `tweaks.admin.whack` | Start Whack-an-Andrew arena setup. |
-| `/whack corner1` | `tweaks.admin.whack` | Set arena corner 1 (look at target block). |
-| `/whack corner2` | `tweaks.admin.whack` | Set arena corner 2 (look at target block). |
+| `/whack corner1` | `tweaks.admin.whack` | Set arena corner 1. |
+| `/whack corner2` | `tweaks.admin.whack` | Set arena corner 2. |
 | `/whack setblocks <material...>` | `tweaks.admin.whack` | Scan arena for spawn point blocks. |
 | `/whack start` | `tweaks.admin.whack` | Start a Whack-an-Andrew game. |
-| `/whack pause` | `tweaks.admin.whack` | Pause the current game. |
 | `/whack stop` | `tweaks.admin.whack` | Stop the current game. |
 | `/whack setreward <1\|2\|3> <name>` | `tweaks.admin.whack` | Set the reward for 1st/2nd/3rd place. |
-| `/whack reload` | `tweaks.admin.whack` | Reload the whack.yml config. |
-
-### Runtime Config Keys
-
-These keys can be changed at runtime with `/tconfig <key> <value>`:
-
-| Key | Type | Description |
-|---|---|---|
-| `max_homes` | Integer | Maximum number of homes per player. |
-| `egg_collector_drop_chance` | Decimal (0.0 - 100.0) | Egg Collector drop chance percentage. |
-
-In addition to the simple key/value form, `/tconfig` exposes two list-mutation subcommands that manage per-mob blacklists. Both lists are auto-created on first use:
-
-| Subcommand | Effect |
-|---|---|
-| `/tconfig eggdrop <disable\|enable> <mob>` | Adds/removes `<mob>` from `egg-collector-disabled-mobs`. Disabled mobs never drop an Egg Collector egg and never consume one of the tool's 5 uses. |
-| `/tconfig spawneregg <disable\|enable> <mob>` | Adds/removes `<mob>` from `spawner-egg-disabled-mobs`. Disabled mobs' spawn eggs cannot be right-clicked on a spawner block to set its spawned type. |
 
 ---
 
@@ -726,31 +707,29 @@ In addition to the simple key/value form, `/tconfig` exposes two list-mutation s
 | `tweaks.admin.delwarp` | Delete server warps. |
 | `tweaks.admin.nick` | Remove other players' nicknames. |
 | `tweaks.admin.config` | Use the `/tconfig` command. |
-| `tweaks.admin.more` | Use the `/more` command to maximize a held stack. |
-| `tweaks.admin.invsee` | View and modify another player's inventory via `/invsee`. |
-| `tweaks.admin.bloodmoon` | Force-activate the Blood Moon event. |
-| `tweaks.admin.reward` | Create and edit minigame rewards. |
-| `tweaks.admin.whack` | Full access to Whack-an-Andrew admin commands. |
+| `tweaks.admin.more` | Use the `/more` command. |
+| `tweaks.admin.invsee` | Use the `/invsee` command. |
+| `tweaks.admin.bloodmoon` | Force-activate Blood Moons. |
+| `tweaks.admin.reward` | Create and edit rewards. |
+| `tweaks.admin.whack` | Full access to Whack-an-Andrew commands. |
 
 ---
 
 ## Configuration
 
-The plugin generates a `config.yml` on first startup. All custom enchantments and their quality variants require a server-side data pack to register the actual enchantment entries — the config simply maps each base enchantment to its namespaced key in the data pack. Quality variants are discovered automatically from the `jass:{tier}_{name}` namespaced-key pattern (e.g. `jass:epic_fortune`).
+The plugin generates a `config.yml` on first startup. Custom enchantments require a server-side data pack to register the entries.
 
 ```yaml
-# The maximum number of homes a player can set.
+# Maximum number of homes per player.
 max-homes: 15
 
-# Drop chance percentage for Egg Collector enchantment (0.0 - 100.0).
+# Drop chance percentage for Egg Collector (0.0 - 100.0).
 egg-collector-drop-chance: 0.5
 
-# Mobs that will NEVER drop a spawn egg from Egg Collector. Manage at runtime via
-# /tconfig eggdrop <disable|enable> <mob>; this section is auto-created on first use.
+# Mobs that will NEVER drop a spawn egg.
 egg-collector-disabled-mobs: []
 
-# Mobs whose spawn eggs cannot be right-clicked on a spawner to set the spawned type.
-# Manage at runtime via /tconfig spawneregg <disable|enable> <mob>.
+# Mobs whose spawn eggs cannot be used on spawners.
 spawner-egg-disabled-mobs: []
 
 # Worlds where the end portal is disabled.
@@ -762,9 +741,6 @@ fly-worlds:
   - "jass:archive"
   - "jass:lobby"
 
-# Flight permission advancement (namespaced key).
-fly-advancement: "jass:test"
-
 # Namespaced keys of custom enchantments (must match the data pack).
 telekinesis: "jass:test1"
 smelter: "jass:test2"
@@ -775,18 +751,6 @@ spawner-pickup: "jass:test6"
 egg-collector: "jass:test7"
 replant: "jass:test8"
 efficacy: "jass:test9"
-
-# Drop rates for Gem Connoisseur (1-in-N chance per block mined, by enchant level and block type).
-gem-connoisseur-rates:
-  1:
-    stone:
-      emerald: 1250
-      diamond: 1094
-      # ... etc
-  2:
-    # Better rates at level 2 ...
-  3:
-    # Best rates at level 3 ...
 ```
 
 ---
@@ -795,32 +759,28 @@ gem-connoisseur-rates:
 
 ### Installation
 
-1. Place the compiled JAR in your server's `plugins/` folder.
-2. Ensure your server is running **Paper 26.1.1** with **Java 25**.
-3. Install the accompanying **data pack** that registers the custom enchantment entries (including all quality variants under the `jass:{tier}_{name}` pattern). Without the data pack, custom enchantments and quality features will gracefully disable themselves on startup (you'll see warnings in the console).
-4. Start the server. The plugin will generate its `config.yml` and data directories.
-5. Update the enchantment namespaced keys in `config.yml` to match your data pack's enchantment keys.
-6. Set up a spawn point with `/setwarp spawn` so the `/spawn` command works.
+1. Place the JAR in `plugins/`.
+2. Ensure you are running **Paper 26.1.2** with **Java 25**.
+3. Install the required **data pack** for custom enchantments.
+4. Start the server, then update namespaced keys in `config.yml`.
+5. Run `/setwarp spawn` to enable `/spawn`.
+6. Run `/setwarp newspawn` to enable resource world login ejection.
 
 ### Data Pack Requirement
 
-The plugin does **not** register custom enchantments itself. It reads namespaced keys from `config.yml` and looks them up in Paper's enchantment registry. Quality variants are looked up directly under `jass:{tier}_{enchantName}`. If a key is missing, blank, or points to a non-existent enchantment, that specific feature will disable itself without affecting the rest of the plugin.
+The plugin reads namespaced keys from `config.yml` and looks them up in Paper's enchantment registry. Quality variants are looked up directly under `jass:{tier}_{enchantName}`.
 
 ### Data Storage
 
-All data is stored in flat YAML files under the plugin's data folder:
+All data is stored in YAML files under `plugins/Tweaks/`:
 
-| Path | Contents |
-|---|---|
-| `plugins/Tweaks/config.yml` | Plugin configuration. |
-| `plugins/Tweaks/homes/<UUID>.yml` | Per-player home locations. |
-| `plugins/Tweaks/warps.yml` | Server warp locations. |
-| `plugins/Tweaks/inventories/<UUID>.yml` | Per-player separated inventories, ender chests, and experience per profile. |
-| `plugins/Tweaks/nick-removals.yml` | Pending offline nickname removals. |
-| `plugins/Tweaks/whack.yml` | Whack-an-Andrew arena configuration. |
-| `plugins/Tweaks/rewards/` | Reward template data. |
-
-All file I/O is performed asynchronously to prevent lag. Home and warp data is loaded into memory on startup. Inventory data is loaded per-player on join and unloaded on quit.
+- `config.yml`: Plugin settings.
+- `homes/<UUID>.yml`: Per-player home locations.
+- `warps.yml`: Server warp locations.
+- `inventories/<UUID>.yml`: Separated inventories, ender chests, and XP.
+- `nick-removals.yml`: Pending nickname removals.
+- `whack.yml`: Whack-an-Andrew configuration.
+- `rewards/`: Reward templates.
 
 ### Building from Source
 
@@ -828,10 +788,8 @@ All file I/O is performed asynchronously to prevent lag. Home and warp data is l
 ./gradlew build
 ```
 
-The compiled JAR is output to `build/libs/`. To run a development server with the plugin:
+Compiled JAR is in `build/libs/`. Run a dev server with:
 
 ```bash
 ./gradlew runServer
 ```
-
-This starts a Paper 26.1.1 server with 2 GB of heap and the plugin automatically loaded.
