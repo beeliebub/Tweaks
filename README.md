@@ -42,6 +42,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Tool Protect](#tool-protect)
   - [AFK](#afk)
   - [Tab List](#tab-list)
+  - [Help Menu](#help-menu)
   - [XP Storage Bottles](#xp-storage-bottles)
   - [Disenchanting Bundle](#disenchanting-bundle)
 - [Cosmetics](#cosmetics)
@@ -460,6 +461,14 @@ Players in the tab list are automatically sorted by their current world profile 
 
 Any other world falls back to the **[Survival]** tag. Players in the lobby appear at the top of the tab list, followed by the standard worlds (overworld, nether, end, resource), then archive, then pi. Tags update automatically when you change worlds. Players who have toggled `/afk` also display a red **[AFK]** suffix after their name — see [AFK](#afk).
 
+### Help Menu
+
+A comprehensive, interactive help system is available to guide you through the server's features.
+
+- **GUI Access**: Type `/help` to open a categorized menu where you can explore different aspects of gameplay.
+- **Direct Access**: Use `/help <section>` (e.g., `/help teleportation` or `/help tunneller`) to jump directly to a specific category or article.
+- **Login Tips**: Each time you log in, you'll receive a random gameplay tip to help you discover new features.
+
 ### XP Storage Bottles
 
 Store your experience levels for later use or trade by brewing **Experience Potions** in a brewing stand.
@@ -662,6 +671,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/toolprotect durability <n>` | Set remaining-durability threshold for ToolProtect. |
 | `/afk` | Toggle AFK status. |
 | `/fullmoon` | Show estimate for next full moon. |
+| `/help [section]` | Show comprehensive GUI help menu. |
 | `/reward claim` | Claim pending minigame rewards. |
 
 ### Admin Commands

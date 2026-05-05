@@ -56,6 +56,9 @@ public class Tweaks extends JavaPlugin {
         FlyCommand flyCommand = new FlyCommand(this);
         ItemFilterCommand itemFilterCommand = new ItemFilterCommand(this);
         InvSeeCommand invSeeCommand = new InvSeeCommand(this);
+        HelpManager helpManager = new HelpManager(getLogger());
+        HelpCommand helpCommand = new HelpCommand(helpManager);
+        HelpListener helpListener = new HelpListener(helpCommand, helpManager);
 
         getCommand("nick").setExecutor(nickCommand);
         getCommand("tpa").setExecutor(tpaCommand);
@@ -73,6 +76,8 @@ public class Tweaks extends JavaPlugin {
         getCommand("afk").setExecutor(afkCommand);
         getCommand("invsee").setExecutor(invSeeCommand);
         getCommand("invsee").setTabCompleter(invSeeCommand);
+        getCommand("help").setExecutor(helpCommand);
+        getCommand("help").setTabCompleter(helpCommand);
 
         // Commands - Homes
         HomeCommand homeCommand = new HomeCommand(storageManager);
@@ -118,6 +123,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(afkCommand, this);
         afkCommand.start();
         getServer().getPluginManager().registerEvents(invSeeCommand, this);
+        getServer().getPluginManager().registerEvents(helpListener, this);
         getServer().getPluginManager().registerEvents(new PortalListener(this), this);
         getServer().getPluginManager().registerEvents(new ResourceWorldListener(this, storageManager), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(this, storageManager), this);

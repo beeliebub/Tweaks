@@ -75,3 +75,6 @@ commands:
     usage: /invsee <player>
   resource:
     description: Safely teleport to the resource world
+  help:
+    description: Comprehensive GUI help menu.
+    usage: /help [section]
