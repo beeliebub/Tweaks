@@ -389,7 +389,6 @@ public class HelpManager {
                 white("- Lobby: The lobby world."),
                 white("- Standard: Survival, Nether, and End."),
                 white("- Archive: The archive world."),
-                white("- Pi: The pi world."),
                 Component.empty(),
                 yellow("Switching worlds automatically swaps items and XP!")
         ), Material.PAINTING, List.of("spawn", "tablist")));
