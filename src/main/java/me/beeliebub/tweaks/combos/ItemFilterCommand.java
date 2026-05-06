@@ -62,10 +62,10 @@ public class ItemFilterCommand implements CommandExecutor, TabCompleter, Listene
             case "mode"   -> handleMode(player);
             case "add"    -> handleAdd(player, args);
             case "remove" -> handleRemove(player, args);
-            case "list"   -> { showList(player); yield true; }
+            case "list"   -> handleList(player, args);
             default -> {
                 player.sendMessage(Component.text(
-                        "Usage: /if [toggle | mode | add <item> | remove <item> | list]",
+                        "Usage: /if [toggle | mode | add <item> | remove <item> | list [clear]]",
                         NamedTextColor.YELLOW));
                 yield true;
             }
@@ -154,6 +154,17 @@ public class ItemFilterCommand implements CommandExecutor, TabCompleter, Listene
         return true;
     }
 
+    private boolean handleList(Player player, String[] args) {
+        if (args.length > 1 && args[1].equalsIgnoreCase("clear")) {
+            String mode = getMode(player);
+            setList(player, mode, List.of());
+            player.sendMessage(Component.text("Your " + mode + " has been cleared.", NamedTextColor.GREEN));
+            return true;
+        }
+        showList(player);
+        return true;
+    }
+
     private void showList(Player player) {
         String mode = getMode(player);
         List<String> list = getList(player, mode);
@@ -197,6 +208,10 @@ public class ItemFilterCommand implements CommandExecutor, TabCompleter, Listene
         if (args.length != 2) return List.of();
 
         String partial = args[1].toLowerCase(Locale.ROOT);
+
+        if (args[0].equalsIgnoreCase("list")) {
+            return prefixFilter(List.of("clear"), partial);
+        }
 
         if (args[0].equalsIgnoreCase("remove") && sender instanceof Player p) {
             // Suggest only what's actually in the player's current list

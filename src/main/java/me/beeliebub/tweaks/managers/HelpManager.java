@@ -356,6 +356,7 @@ public class HelpManager {
                 cmd("/if add <item>", "Add an item to the current list."),
                 cmd("/if remove <item>", "Remove an item from the list."),
                 cmd("/if list", "View your active filter list."),
+                cmd("/if list clear", "Clear your currently active list."),
                 Component.empty(),
                 aqua("Filter state is saved on your profile!")
         ), Material.REPEATER, List.of("telekinesis", "profiles")));

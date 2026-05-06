@@ -206,6 +206,7 @@ Breaks a **3x3 area** of blocks perpendicular to the face you mine. Mine the sid
 - Blocks that are air, liquid, or unbreakable (like bedrock) are skipped.
 - Your tool takes **durability damage for each extra block** broken by the enchantment. The Unbreaking enchantment reduces this damage normally.
 - Works with Smelter, Gem Connoisseur, and Telekinesis — all surrounding blocks benefit from whatever combination of enchantments is on your tool.
+- **Containers are safe**: if the tunnelled area collaterally breaks a chest, barrel, hopper, furnace, brewing stand, or other container, its contents are preserved. With Telekinesis they go straight into your inventory (overflow at the chest's location); without Telekinesis they drop on the ground in place. Shulker boxes are unaffected by this — their contents are already preserved inside the dropped shulker item itself.
 - The area scales up to **11x11** with quality variants — see [Tunneller & Efficacy Area Scaling](#tunneller--efficacy-area-scaling).
 
 ### Lumberjack
@@ -403,8 +404,9 @@ The filter is **off by default**. Whether it's enabled, which mode is active, an
 | `/itemfilter add <item>` | Add an item to your active list. |
 | `/itemfilter remove <item>` | Remove an item from your active list. |
 | `/itemfilter list` | Show the contents of your active list. |
+| `/itemfilter list clear` | Clear your currently active list. |
 
-`/if` is a short alias for `/itemfilter`. Item names use the standard form (e.g. `cobblestone`, `oak_log`, `diamond`); tab completion suggests matches on `add`, and your current list contents on `remove`. No permission required — every player can manage their own filter.
+`/if` is a short alias for `/itemfilter`. Item names use the standard form (e.g. `cobblestone`, `oak_log`, `diamond`); tab completion suggests matches on `add`, your current list contents on `remove`, and `clear` on `list`. No permission required — every player can manage their own filter.
 
 ### Tool Protect
 
@@ -691,7 +693,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/nv` | Toggle night vision. |
 | `/nick <nickname>` | Set your display name with color codes. |
 | `/nick off` | Remove your nickname. |
-| `/itemfilter [toggle\|mode\|add <item>\|remove <item>\|list]` | Manage pickup filter. Alias: `/if`. |
+| `/itemfilter [toggle\|mode\|add <item>\|remove <item>\|list [clear]]` | Manage pickup filter. Alias: `/if`. |
 | `/toolprotect [on\|off]` | Toggle ToolProtect on/off. |
 | `/toolprotect durability <n>` | Set remaining-durability threshold for ToolProtect. |
 | `/afk` | Toggle AFK status. |

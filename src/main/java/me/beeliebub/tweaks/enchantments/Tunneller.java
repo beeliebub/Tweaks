@@ -14,16 +14,22 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.BlockState;
+import org.bukkit.block.Container;
+import org.bukkit.block.ShulkerBox;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.RayTraceResult;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
@@ -167,10 +173,19 @@ public class Tunneller implements Listener {
             }
         }
 
-        // No modifiers and no quality fortune/silk: breakNaturally handles drops, break effect, and XP in one call.
-        // Peek at the drops first so the active Resource Hunt can credit them — the surrounding tunnelled
-        // blocks bypass BlockDropItemEvent and would otherwise be silently uncounted.
-        if (!useSmelter && !useGemConnoisseur && !useTelekinesis && !useFortuneReroll && !useSilkQuality) {
+        // Container blocks (chests, barrels, hoppers, furnaces, brewing stands, etc.) need
+        // their inventory captured BEFORE the block is destroyed — both setType(AIR) and
+        // breakNaturally can leave the contents in limbo when the area-mining tool routes
+        // drops through telekinesis/smelter/etc. Capture+clear up front so the spill path
+        // is identical regardless of which branch we take below.
+        List<ItemStack> containerContents = drainContainer(target);
+        boolean isContainer = !containerContents.isEmpty() || isContainerBlock(target);
+
+        // No modifiers and no quality fortune/silk and no container to spill: breakNaturally
+        // handles drops, break effect, and XP in one call. Peek at the drops first so the
+        // active Resource Hunt can credit them — the surrounding tunnelled blocks bypass
+        // BlockDropItemEvent and would otherwise be silently uncounted.
+        if (!useSmelter && !useGemConnoisseur && !useTelekinesis && !useFortuneReroll && !useSilkQuality && !isContainer) {
             Collection<ItemStack> peek = (resourceHunt != null && resourceHunt.isActive())
                     ? target.getDrops(tool, player)
                     : null;
@@ -205,15 +220,44 @@ public class Tunneller implements Listener {
         target.setType(Material.AIR);
         target.getWorld().playEffect(loc, Effect.STEP_SOUND, type);
 
-        // Drop or route items to inventory (telekinesis path consults the player's /itemfilter)
+        // Drop or route items to inventory (telekinesis path consults the player's /itemfilter).
+        // Container contents follow the same routing as the block's own drops so a Telekinesis
+        // tunneller pulls chest contents into the player's inventory (with overflow at the
+        // chest's location), and a non-Telekinesis tunneller drops them on the ground in place.
         if (useTelekinesis) {
             for (ItemStack drop : drops) telekinesis.giveOrDrop(player, target, drop);
             for (ItemStack drop : gemDrops) telekinesis.giveOrDrop(player, target, drop);
+            for (ItemStack item : containerContents) telekinesis.giveOrDrop(player, target, item);
         } else {
             for (ItemStack drop : drops) loc.getWorld().dropItemNaturally(loc, drop);
             for (ItemStack drop : gemDrops) loc.getWorld().dropItemNaturally(loc, drop);
+            for (ItemStack item : containerContents) loc.getWorld().dropItemNaturally(loc, item);
         }
         return true;
+    }
+
+    // Snapshot a container's inventory and clear the live one so the BlockEntity's later
+    // teardown can't double-drop. Excludes ShulkerBox because vanilla preserves a shulker's
+    // contents inside the dropped item's NBT — spilling them separately would duplicate.
+    private static List<ItemStack> drainContainer(Block target) {
+        BlockState state = target.getState();
+        if (!(state instanceof Container container) || state instanceof ShulkerBox) {
+            return Collections.emptyList();
+        }
+        Inventory inv = container.getInventory();
+        ItemStack[] raw = inv.getContents();
+        List<ItemStack> captured = new ArrayList<>(raw.length);
+        for (ItemStack item : raw) {
+            if (item == null || item.getType().isAir() || item.getAmount() <= 0) continue;
+            captured.add(item);
+        }
+        if (!captured.isEmpty()) inv.clear();
+        return captured;
+    }
+
+    private static boolean isContainerBlock(Block target) {
+        BlockState state = target.getState();
+        return state instanceof Container && !(state instanceof ShulkerBox);
     }
 
     // Get the two axes perpendicular to the mined face (used to find the 3x3 grid)
