@@ -27,7 +27,8 @@ public final class Permissions {
     public static final String ADMIN_WHACK = "tweaks.admin.whack";
     public static final String ADMIN_INVSEE = "tweaks.admin.invsee";
     public static final String ADMIN_BLOODMOON = "tweaks.admin.bloodmoon";
-    
+    public static final String ADMIN_LOGS = "tweaks.admin.logs";
+
     public static final String ADMIN_PERMISSIONS = "tweaks.admin.permissions";
 
     /**

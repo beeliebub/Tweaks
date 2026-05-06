@@ -413,6 +413,26 @@ public class HelpManager {
                 aqua("- Exempts you from sleep requirements!")
         ), Material.TOTEM_OF_UNDYING, List.of("tablist", "profiles")));
 
+        articles.add(new HelpArticle("blocklog", "Block Log (Admin)", List.of(
+                gray("Audit who added/removed items from chests, trapped chests, and barrels."),
+                Component.empty(),
+                cmd("/logs", "Toggle inspector mode."),
+                gray("Then punch a chest to view its log in chat."),
+                Component.empty(),
+                aqua("Display:"),
+                white("- Each entry shows time, player, amount, and item."),
+                white("- Hover an item name for its full tooltip."),
+                white("- Hover a player name for their UUID."),
+                white("- 10 entries per page; click [Prev]/[Next] to navigate."),
+                Component.empty(),
+                aqua("Storage:"),
+                white("- Logs live in the chunk PDC (no extra files)."),
+                white("- Entries older than 30 days are pruned on chunk load."),
+                white("- Capped at 500 entries per chest (oldest dropped)."),
+                Component.empty(),
+                red("Requires permission: tweaks.admin.logs")
+        ), Material.WRITABLE_BOOK, List.of("toolprotect")));
+
         return new HelpCategory("features", "Player Features", articles, Material.WRITABLE_BOOK);
     }
 

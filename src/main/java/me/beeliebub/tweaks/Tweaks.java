@@ -1,5 +1,9 @@
 package me.beeliebub.tweaks;
 
+import me.beeliebub.tweaks.blocklog.BlockLogChunkListener;
+import me.beeliebub.tweaks.blocklog.BlockLogListener;
+import me.beeliebub.tweaks.blocklog.ChestLogManager;
+import me.beeliebub.tweaks.blocklog.LogsCommand;
 import me.beeliebub.tweaks.combos.*;
 import me.beeliebub.tweaks.commands.*;
 import me.beeliebub.tweaks.cosmetics.*;
@@ -224,6 +228,14 @@ public class Tweaks extends JavaPlugin {
         WhackCommand whackCommand = new WhackCommand(this, whackConfig, rewardManager);
         getCommand("whack").setExecutor(whackCommand);
         getCommand("whack").setTabCompleter(whackCommand);
+
+        // BlockLog - per-chunk PDC chest interaction logging
+        ChestLogManager chestLogManager = new ChestLogManager(this);
+        LogsCommand logsCommand = new LogsCommand(chestLogManager);
+        getCommand("logs").setExecutor(logsCommand);
+        getServer().getPluginManager().registerEvents(logsCommand, this);
+        getServer().getPluginManager().registerEvents(new BlockLogListener(chestLogManager), this);
+        getServer().getPluginManager().registerEvents(new BlockLogChunkListener(chestLogManager), this);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
         }

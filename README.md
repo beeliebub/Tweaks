@@ -49,6 +49,8 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Boot Trails](#boot-trails)
 - [World Protections](#world-protections)
   - [Spawn Egg Restrictions](#spawn-egg-restrictions)
+- [Admin Tools](#admin-tools)
+  - [Block Log](#block-log)
 - [World Events](#world-events)
   - [Blood Moon](#blood-moon)
 - [Minigames](#minigames)
@@ -567,6 +569,29 @@ Admins can disable Egg Collector drops or spawn-egg-on-spawner conversion on a p
 
 ---
 
+## Admin Tools
+
+### Block Log
+
+A lightweight chest-audit system: every time a player adds or removes items from a **chest**, **trapped chest**, or **barrel**, the change is recorded against that container. Admins can review the history at any time.
+
+| Command | Permission | What it does |
+|---|---|---|
+| `/logs` | `tweaks.admin.logs` | Toggle inspector mode. With inspector mode on, **left-click (punch)** any chest, trapped chest, or barrel to view its log in chat. |
+
+**What you'll see**: each log entry shows the timestamp (server time), the player's name, an `+amount` (added) or `-amount` (removed) tag, and the item involved. Hover any item name for the full vanilla tooltip (enchants, lore, durability, custom data). Hover a player name to see their UUID. Logs are paginated 10 entries at a time with clickable `[<- Prev]` / `[Next ->]` buttons.
+
+**Storage**: logs are stored entirely in the chunk's persistent data container (PDC) — no extra files, no databases. Each chest's history is one compact byte array under that chunk's data, capped at **500 entries** per chest (the oldest are dropped first when the cap is hit).
+
+**Retention**: when a chunk is loaded, any log entry older than **30 days** is pruned automatically. Empty chests (no entries left after pruning) drop their PDC key entirely so the chunk's data stays small.
+
+**Coverage limits**:
+- Hoppers, droppers, and other automation are **not** logged — only direct player interaction counts.
+- Ender chests and shulker boxes are **not** tracked (per-player or portable; no useful audit value).
+- Logs persist as long as the chunk does — destroying a chest does not erase its prior history.
+
+---
+
 ## World Events
 
 ### Blood Moon
@@ -701,6 +726,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/whack start` | `tweaks.admin.whack` | Start a Whack-an-Andrew game. |
 | `/whack stop` | `tweaks.admin.whack` | Stop the current game. |
 | `/whack setreward <1\|2\|3> <name>` | `tweaks.admin.whack` | Set the reward for 1st/2nd/3rd place. |
+| `/logs` | `tweaks.admin.logs` | Toggle chest-log inspector mode. Punch a chest to view its log. |
 
 ---
 
@@ -722,6 +748,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `tweaks.admin.bloodmoon` | Force-activate Blood Moons. |
 | `tweaks.admin.reward` | Create and edit rewards. |
 | `tweaks.admin.whack` | Full access to Whack-an-Andrew commands. |
+| `tweaks.admin.logs` | Use `/logs` and inspect chest logs by punching containers. |
 
 ---
 
