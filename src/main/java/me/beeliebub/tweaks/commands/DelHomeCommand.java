@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.commands;
 
+import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.managers.StorageManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -37,7 +38,7 @@ public class DelHomeCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 1) {
             homeName = args[0];
-        } else if (args.length == 2 && player.hasPermission("tweaks.admin.delhome")) {
+        } else if (args.length == 2 && player.hasPermission(Permissions.ADMIN_DELHOME)) {
             OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
             targetUUID = target.getUniqueId();
             homeName = args[1];
@@ -63,7 +64,7 @@ public class DelHomeCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 1) {
             List<String> completions = new ArrayList<>(manager.getHomes(player.getUniqueId()));
-            if (player.hasPermission("tweaks.admin.delhome")) {
+            if (player.hasPermission(Permissions.ADMIN_DELHOME)) {
                 Bukkit.getOnlinePlayers().forEach(p -> completions.add(p.getName()));
             }
             return completions.stream()
@@ -71,7 +72,7 @@ public class DelHomeCommand implements CommandExecutor, TabCompleter {
                     .toList();
         }
 
-        if (args.length == 2 && player.hasPermission("tweaks.admin.delhome")) {
+        if (args.length == 2 && player.hasPermission(Permissions.ADMIN_DELHOME)) {
             OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
             return manager.getHomes(target.getUniqueId()).stream()
                     .filter(s -> s.toLowerCase().startsWith(args[1].toLowerCase()))

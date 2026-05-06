@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.combos;
 
+import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -73,7 +74,7 @@ public class NickCommand implements CommandExecutor, Listener {
     private boolean handleOff(CommandSender sender, String[] args) {
 
         if (args.length == 2) {
-            if (!sender.hasPermission("tweaks.admin.nick")) {
+            if (!sender.hasPermission(Permissions.ADMIN_NICK)) {
                 sender.sendMessage(Component.text("No permission.").color(NamedTextColor.RED));
                 return true;
             }

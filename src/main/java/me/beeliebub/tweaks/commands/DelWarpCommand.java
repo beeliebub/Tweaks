@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.commands;
 
+import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.managers.StorageManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -25,7 +26,7 @@ public class DelWarpCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
 
-        if (!sender.hasPermission("tweaks.admin.delwarp")) {
+        if (!sender.hasPermission(Permissions.ADMIN_DELWARP)) {
             sender.sendMessage(Component.text("No permission.").color(NamedTextColor.RED));
             return true;
         }

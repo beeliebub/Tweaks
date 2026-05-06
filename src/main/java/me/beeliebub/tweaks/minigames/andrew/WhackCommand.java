@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.minigames.andrew;
 
+import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.minigames.RewardManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -53,7 +54,7 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        if (!player.hasPermission("tweaks.admin.whack")) {
+        if (!player.hasPermission(Permissions.ADMIN_WHACK)) {
             player.sendMessage(Component.text("You do not have permission to use this command.").color(NamedTextColor.RED));
             return true;
         }
@@ -282,7 +283,7 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("tweaks.admin.whack")) return Collections.emptyList();
+        if (!sender.hasPermission(Permissions.ADMIN_WHACK)) return Collections.emptyList();
 
         if (args.length == 1) {
             List<String> subs = List.of("arena", "corner1", "corner2", "setblocks", "start", "pause", "stop", "setreward", "reload");

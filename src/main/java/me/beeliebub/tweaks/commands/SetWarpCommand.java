@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.commands;
 
+import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.Point;
 import me.beeliebub.tweaks.managers.StorageManager;
 import net.kyori.adventure.text.Component;
@@ -32,7 +33,7 @@ public class SetWarpCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        if (!player.hasPermission("tweaks.admin.setwarp")) {
+        if (!player.hasPermission(Permissions.ADMIN_SETWARP)) {
             sender.sendMessage(Component.text("No permission.").color(NamedTextColor.RED));
             return true;
         }

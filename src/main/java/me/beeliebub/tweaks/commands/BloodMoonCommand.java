@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.commands;
 
+import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.managers.BloodMoonManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -12,8 +13,6 @@ import org.jetbrains.annotations.NotNull;
 // and force-activate the Blood Moon event.
 public class BloodMoonCommand implements CommandExecutor {
 
-    private static final String PERMISSION = "tweaks.admin.bloodmoon";
-
     private final BloodMoonManager manager;
 
     public BloodMoonCommand(BloodMoonManager manager) {
@@ -23,7 +22,7 @@ public class BloodMoonCommand implements CommandExecutor {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission(PERMISSION)) {
+        if (!sender.hasPermission(Permissions.ADMIN_BLOODMOON)) {
             sender.sendMessage(Component.text("You do not have permission to use this command.")
                     .color(NamedTextColor.RED));
             return true;

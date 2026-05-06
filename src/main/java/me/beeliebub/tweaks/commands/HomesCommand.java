@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.commands;
 
+import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.managers.StorageManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -35,7 +36,7 @@ public class HomesCommand implements CommandExecutor, TabCompleter {
         UUID targetUUID;
         String targetName;
 
-        if (args.length == 1 && sender.hasPermission("tweaks.admin.homes")) {
+        if (args.length == 1 && sender.hasPermission(Permissions.ADMIN_HOMES)) {
             OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
             targetUUID = target.getUniqueId();
             targetName = target.getName() != null ? target.getName() : args[0];
@@ -59,7 +60,7 @@ public class HomesCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
-        if (args.length == 1 && sender.hasPermission("tweaks.admin.homes")) {
+        if (args.length == 1 && sender.hasPermission(Permissions.ADMIN_HOMES)) {
             String partial = args[0].toLowerCase();
             return Bukkit.getOnlinePlayers().stream()
                     .map(Player::getName)

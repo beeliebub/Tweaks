@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.commands;
 
+import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.managers.StorageManager;
 import me.beeliebub.tweaks.Point;
 import net.kyori.adventure.text.Component;
@@ -48,7 +49,7 @@ public class SetHomeCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 1) {
             homeName = args[0];
-        } else if (args.length == 2 && player.hasPermission("tweaks.admin.sethome")) {
+        } else if (args.length == 2 && player.hasPermission(Permissions.ADMIN_SETHOME)) {
             OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
             targetUUID = target.getUniqueId();
             homeName = args[1];
@@ -57,7 +58,7 @@ public class SetHomeCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        if (targetUUID.equals(player.getUniqueId()) && !player.hasPermission("tweaks.bypass.homes")) {
+        if (targetUUID.equals(player.getUniqueId()) && !player.hasPermission(Permissions.BYPASS_HOMES)) {
             if (manager.getHomeCount(targetUUID) >= maxHomes && manager.getHome(targetUUID, homeName).isEmpty()) {
                 player.sendMessage(Component.text("You have reached the maximum of " + maxHomes + " homes!").color(NamedTextColor.RED));
                 return true;
@@ -76,7 +77,7 @@ public class SetHomeCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 1) {
             List<String> completions = new ArrayList<>(manager.getHomes(player.getUniqueId()));
-            if (player.hasPermission("tweaks.admin.sethome")) {
+            if (player.hasPermission(Permissions.ADMIN_SETHOME)) {
                 Bukkit.getOnlinePlayers().forEach(p -> completions.add(p.getName()));
             }
             return completions.stream()
@@ -84,7 +85,7 @@ public class SetHomeCommand implements CommandExecutor, TabCompleter {
                     .toList();
         }
 
-        if (args.length == 2 && player.hasPermission("tweaks.admin.sethome")) {
+        if (args.length == 2 && player.hasPermission(Permissions.ADMIN_SETHOME)) {
             OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
             return manager.getHomes(target.getUniqueId()).stream()
                     .filter(s -> s.toLowerCase().startsWith(args[1].toLowerCase()))

@@ -1,5 +1,7 @@
 package me.beeliebub.tweaks.enchantments.quality;
 
+import me.beeliebub.tweaks.enchantments.Telekinesis;
+import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.enchantments.Enchantment;
@@ -27,17 +29,26 @@ import java.util.List;
  * - Rare+:     Farmland
  * - Epic+:     Reinforced Deepslate
  * - Legendary: Budding Amethyst
+ * <p>
+ * Runs at LOWEST priority so Smelter (LOW) sees event.isDropItems() == false and steps aside —
+ * silk takes precedence over smelter when both apply to the same block.
  */
 public class SilkTouchQualityListener implements Listener {
 
     private final QualityRegistry registry;
+    private final Telekinesis telekinesis;
+    private final ResourceHunt resourceHunt;
 
-    public SilkTouchQualityListener(QualityRegistry registry) {
+    public SilkTouchQualityListener(QualityRegistry registry, Telekinesis telekinesis, ResourceHunt resourceHunt) {
         this.registry = registry;
+        this.telekinesis = telekinesis;
+        this.resourceHunt = resourceHunt;
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
+        if (!event.isDropItems()) return;
+
         Player player = event.getPlayer();
         ItemStack tool = player.getInventory().getItemInMainHand();
         if (tool.isEmpty()) return;
@@ -47,25 +58,41 @@ public class SilkTouchQualityListener implements Listener {
 
         Block block = event.getBlock();
 
+        Collection<ItemStack> finalDrops;
         Material bonus = getQualitySilkTouchDrop(block, tool);
         if (bonus != null) {
-            event.setDropItems(false);
-            block.getWorld().dropItemNaturally(block.getLocation(), new ItemStack(bonus));
+            finalDrops = List.of(new ItemStack(bonus));
+        } else if (tool.containsEnchantment(Enchantment.SILK_TOUCH)) {
+            // Vanilla silk_touch already produces correct silk drops; let BlockDropItemEvent
+            // run untouched so ResourceHunt and Telekinesis pick them up there.
             return;
+        } else {
+            Collection<ItemStack> silkDrops = computeSilkDrops(block, tool, player);
+            // Only override when the synthetic silk tool would actually produce different drops
+            // than the player's real tool — otherwise leave vanilla drops untouched (this avoids
+            // re-routing items for non-silk-affected blocks like dirt or wood).
+            if (silkDrops == null) return;
+            finalDrops = silkDrops;
         }
 
-        // If vanilla silk_touch is also on the tool, vanilla already handles silk drops
-        // correctly; don't double-process.
-        if (tool.containsEnchantment(Enchantment.SILK_TOUCH)) return;
-
-        Collection<ItemStack> silkDrops = computeSilkDrops(block, tool, player);
-        // Only override when the synthetic silk tool would actually produce different drops
-        // than the player's real tool — otherwise leave vanilla drops untouched (this avoids
-        // re-routing items for non-silk-affected blocks like dirt or wood).
-        if (silkDrops == null) return;
         event.setDropItems(false);
-        for (ItemStack drop : silkDrops) {
-            block.getWorld().dropItemNaturally(block.getLocation(), drop);
+
+        // Credit drops toward Resource Hunt before the block becomes air — recordExternalDrops
+        // reads the placed-by-player taint marker off the chunk by block position, and we want
+        // to consume it while the block still resolves to its real coordinates.
+        if (resourceHunt != null) {
+            resourceHunt.recordExternalDrops(player, block, finalDrops);
+        }
+
+        boolean useTelekinesis = telekinesis != null && telekinesis.hasEnchant(tool);
+        if (useTelekinesis) {
+            for (ItemStack drop : finalDrops) {
+                telekinesis.giveOrDrop(player, block, drop);
+            }
+        } else {
+            for (ItemStack drop : finalDrops) {
+                block.getWorld().dropItemNaturally(block.getLocation(), drop);
+            }
         }
     }
 

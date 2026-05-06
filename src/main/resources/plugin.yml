@@ -78,3 +78,7 @@ commands:
   help:
     description: Comprehensive GUI help menu.
     usage: /help [section]
+  tprm:
+    description: Custom permission system management.
+    usage: /tprm <group|user|gui>
+    aliases: [tweaksperms, perms]

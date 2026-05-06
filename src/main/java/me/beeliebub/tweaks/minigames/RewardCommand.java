@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.minigames;
 
+import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -56,7 +57,7 @@ public class RewardCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleCreate(Player player, String[] args) {
-        if (!player.hasPermission("tweaks.admin.reward")) {
+        if (!player.hasPermission(Permissions.ADMIN_REWARD)) {
             player.sendMessage(Component.text("You do not have permission.").color(NamedTextColor.RED));
             return;
         }
@@ -79,7 +80,7 @@ public class RewardCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleEdit(Player player, String[] args) {
-        if (!player.hasPermission("tweaks.admin.reward")) {
+        if (!player.hasPermission(Permissions.ADMIN_REWARD)) {
             player.sendMessage(Component.text("You do not have permission.").color(NamedTextColor.RED));
             return;
         }
@@ -142,7 +143,7 @@ public class RewardCommand implements CommandExecutor, TabCompleter {
 
     private void sendUsage(Player player, String label) {
         player.sendMessage(Component.text("=== Rewards ===").color(NamedTextColor.GOLD));
-        if (player.hasPermission("tweaks.admin.reward")) {
+        if (player.hasPermission(Permissions.ADMIN_REWARD)) {
             player.sendMessage(Component.text("/" + label + " create <name>").color(NamedTextColor.YELLOW)
                     .append(Component.text(" - Create a new reward").color(NamedTextColor.GRAY)));
             player.sendMessage(Component.text("/" + label + " edit <name>").color(NamedTextColor.YELLOW)
@@ -158,7 +159,7 @@ public class RewardCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) {
             List<String> subs = new ArrayList<>();
             subs.add("claim");
-            if (sender.hasPermission("tweaks.admin.reward")) {
+            if (sender.hasPermission(Permissions.ADMIN_REWARD)) {
                 subs.add("create");
                 subs.add("edit");
             }
@@ -167,7 +168,7 @@ public class RewardCommand implements CommandExecutor, TabCompleter {
                     .toList();
         }
 
-        if (args.length == 2 && sender.hasPermission("tweaks.admin.reward")) {
+        if (args.length == 2 && sender.hasPermission(Permissions.ADMIN_REWARD)) {
             String sub = args[0].toLowerCase();
             if (sub.equals("edit")) {
                 String partial = args[1].toLowerCase();

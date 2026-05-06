@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.commands;
 
+import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
@@ -19,7 +20,7 @@ public class MoreCommand implements CommandExecutor {
             return true;
         }
 
-        if (!player.hasPermission("tweaks.admin.more")) {
+        if (!player.hasPermission(Permissions.ADMIN_MORE)) {
             player.sendMessage(Component.text("You don't have permission to use this command!", NamedTextColor.RED));
             return true;
         }

@@ -7,6 +7,9 @@ import me.beeliebub.tweaks.enchantments.*;
 import me.beeliebub.tweaks.enchantments.quality.*;
 import me.beeliebub.tweaks.listeners.*;
 import me.beeliebub.tweaks.managers.*;
+import me.beeliebub.tweaks.permissions.PermissionCommand;
+import me.beeliebub.tweaks.permissions.PermissionListener;
+import me.beeliebub.tweaks.permissions.PermissionManager;
 import me.beeliebub.tweaks.minigames.RewardCommand;
 import me.beeliebub.tweaks.minigames.RewardListener;
 import me.beeliebub.tweaks.minigames.RewardManager;
@@ -22,6 +25,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public class Tweaks extends JavaPlugin {
 
     private StorageManager storageManager;
+    private PermissionManager permissionManager;
     private int maxHomes;
     private Telekinesis telekinesis;
     private Replant replant;
@@ -41,6 +45,7 @@ public class Tweaks extends JavaPlugin {
         saveDefaultConfig();
         maxHomes = getConfig().getInt("max-homes", 3);
         storageManager = new StorageManager(this);
+        permissionManager = new PermissionManager(this);
 
         // Resource Hunt Items Manager
         ResourceHuntItems resourceHuntItems = new ResourceHuntItems(this);
@@ -114,6 +119,11 @@ public class Tweaks extends JavaPlugin {
         getCommand("tconfig").setExecutor(configCommand);
         getCommand("tconfig").setTabCompleter(configCommand);
 
+        // Commands - Permissions
+        PermissionCommand permissionCommand = new PermissionCommand(permissionManager);
+        getCommand("tprm").setExecutor(permissionCommand);
+        getCommand("tprm").setTabCompleter(permissionCommand);
+
         // Listeners - General
         getServer().getPluginManager().registerEvents(tabManager, this);
         getServer().getPluginManager().registerEvents(nickCommand, this);
@@ -124,6 +134,8 @@ public class Tweaks extends JavaPlugin {
         afkCommand.start();
         getServer().getPluginManager().registerEvents(invSeeCommand, this);
         getServer().getPluginManager().registerEvents(helpListener, this);
+        getServer().getPluginManager().registerEvents(permissionManager, this);
+        getServer().getPluginManager().registerEvents(new PermissionListener(permissionManager), this);
         getServer().getPluginManager().registerEvents(new PortalListener(this), this);
         getServer().getPluginManager().registerEvents(new ResourceWorldListener(this, storageManager), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(this, storageManager), this);
@@ -156,7 +168,7 @@ public class Tweaks extends JavaPlugin {
         telekinesis = new Telekinesis(this, itemFilterCommand);
         Smelter smelter = new Smelter(this, telekinesis, resourceHunt);
         FortuneQualityListener fortuneQuality = new FortuneQualityListener(qualityRegistry);
-        SilkTouchQualityListener silkTouchQuality = new SilkTouchQualityListener(qualityRegistry);
+        SilkTouchQualityListener silkTouchQuality = new SilkTouchQualityListener(qualityRegistry, telekinesis, resourceHunt);
         Lumberjack lumberjack = new Lumberjack(this, telekinesis, qualityRegistry, fortuneQuality);
         GemConnoisseur gemConnoisseur = new GemConnoisseur(this, telekinesis, resourceHunt);
         SpawnerPickup spawnerPickup = new SpawnerPickup(this);
@@ -214,6 +226,13 @@ public class Tweaks extends JavaPlugin {
         getCommand("whack").setTabCompleter(whackCommand);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
-    }
+        }
 
-}
+        @Override
+        public void onDisable() {
+        if (permissionManager != null) {
+            permissionManager.shutdown();
+        }
+        }
+
+        }

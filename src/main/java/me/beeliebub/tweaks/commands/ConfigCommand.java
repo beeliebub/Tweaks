@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.commands;
 
+import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import net.kyori.adventure.text.Component;
@@ -43,7 +44,7 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
 
-        if (!sender.hasPermission("tweaks.admin.config")) {
+        if (!sender.hasPermission(Permissions.ADMIN_CONFIG)) {
             sender.sendMessage(Component.text("You do not have permission to use this command.").color(NamedTextColor.RED));
             return true;
         }
@@ -208,7 +209,7 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
-        if (!sender.hasPermission("tweaks.admin.config")) return Collections.emptyList();
+        if (!sender.hasPermission(Permissions.ADMIN_CONFIG)) return Collections.emptyList();
 
         if (args.length == 1) {
             String prefix = args[0].toLowerCase(Locale.ROOT);

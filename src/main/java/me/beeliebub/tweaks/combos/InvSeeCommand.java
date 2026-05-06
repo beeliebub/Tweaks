@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.combos;
 
+import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -39,7 +40,6 @@ import java.util.stream.Collectors;
 // dies, or quits so SeparatorListener's profile swap can't race the mirror.
 public class InvSeeCommand implements CommandExecutor, TabCompleter, Listener {
 
-    private static final String PERMISSION = "tweaks.admin.invsee";
     private static final int GUI_SIZE = 45;
 
     // GUI slot -> PlayerInventory slot. -1 means decorative filler (clicks cancelled).
@@ -77,7 +77,7 @@ public class InvSeeCommand implements CommandExecutor, TabCompleter, Listener {
             sender.sendMessage(Component.text("Only players can use /invsee.", NamedTextColor.RED));
             return true;
         }
-        if (!viewer.hasPermission(PERMISSION)) {
+        if (!viewer.hasPermission(Permissions.ADMIN_INVSEE)) {
             viewer.sendMessage(Component.text("You don't have permission to use this command.", NamedTextColor.RED));
             return true;
         }
@@ -103,7 +103,7 @@ public class InvSeeCommand implements CommandExecutor, TabCompleter, Listener {
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                       @NotNull String alias, @NotNull String @NotNull [] args) {
-        if (!sender.hasPermission(PERMISSION)) return List.of();
+        if (!sender.hasPermission(Permissions.ADMIN_INVSEE)) return List.of();
         if (args.length != 1) return List.of();
         String prefix = args[0].toLowerCase();
         return Bukkit.getOnlinePlayers().stream()
