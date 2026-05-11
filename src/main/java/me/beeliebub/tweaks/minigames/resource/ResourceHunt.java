@@ -27,9 +27,7 @@ import org.bukkit.event.inventory.FurnaceExtractEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
@@ -40,7 +38,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -48,45 +45,47 @@ import java.util.concurrent.ThreadLocalRandom;
 // Resource Hunt minigame.
 //
 // On every server start, one entry is picked at random from resource_hunt.yml as the active
-// target (Material + required amount). Each player who reaches the threshold via block drops,
-// mob kills, fishing, or smelting (furnace, blast furnace, smoker) in the jass:resource or
-// jass:resource_nether world is granted the "resource" reward via RewardManager. The first
-// player to complete is granted the reward 3 times; everyone else who completes afterward gets
-// it once. The hunt remains open for the rest of the session so that anyone can still complete
-// it; only the completing player's boss bar is removed when they finish. Drops/extracts in any
-// other world are ignored entirely.
+// target (Material + base amount + tier multiplier). Each player builds toward three
+// cumulative tier thresholds individually:
+//   Tier 1 = base
+//   Tier 2 = round(base * multiplier)
+//   Tier 3 = round(base * multiplier^2)
+// Crossing each threshold grants the "resource" reward exactly once via RewardManager; a
+// single update may cross multiple tiers if the gain is large. Drops/extracts in any world
+// other than the active resource world are ignored entirely for progress purposes.
 //
 // To prevent cheesing, players are restricted from bringing disallowed items into the
 // resource world (enforced by /resource and /back).
 //
 // Listening at EventPriority.LOW for BlockDropItemEvent guarantees we tally the dropped items
 // before Telekinesis (default NORMAL priority) clears the event's item list to route them to
-// the player's inventory
+// the player's inventory.
 public class ResourceHunt implements Listener {
 
     public static final String TARGET_WORLD_KEY = "jass:resource";
     public static final String TARGET_WORLD_NETHER_KEY = "jass:resource_nether";
     private static final String REWARD_NAME = "resource";
-    private static final int FIRST_WINNER_REWARD_COUNT = 3;
+    private static final int NUM_TIERS = 3;
+    private static final double DEFAULT_MULTIPLIER = 2.0;
 
     private final Tweaks plugin;
     private final RewardManager rewardManager;
 
     private final Material targetMaterial;
     private final int targetAmount;
+    private final double targetMultiplier;
+    private final int[] tierThresholds; // length = NUM_TIERS
     private final String activeWorldKey;
 
     private final Map<UUID, Integer> progress = new ConcurrentHashMap<>();
     private final Map<UUID, BossBar> playerBars = new ConcurrentHashMap<>();
-    private final Set<UUID> completed = ConcurrentHashMap.newKeySet();
+    // Highest tier index already granted for each player (0 = none, NUM_TIERS = all done).
+    private final Map<UUID, Integer> tiersCompleted = new ConcurrentHashMap<>();
 
     // Marks an ItemStack that has already contributed to someone's progress. Counted items are
     // skipped on every counting path, which kills the chest-cheese where players stash counted
     // ores in a chest and rebreak the chest to redrop the same items.
     private final NamespacedKey countedKey;
-
-    private UUID firstWinner = null;
-    private String firstWinnerName = null;
 
     public ResourceHunt(Tweaks plugin, RewardManager rewardManager) {
         this.plugin = plugin;
@@ -97,18 +96,24 @@ public class ResourceHunt implements Listener {
         if (picked == null) {
             this.targetMaterial = null;
             this.targetAmount = 0;
+            this.targetMultiplier = DEFAULT_MULTIPLIER;
+            this.tierThresholds = new int[NUM_TIERS];
             this.activeWorldKey = TARGET_WORLD_KEY;
         } else {
             this.targetMaterial = picked.material;
             this.targetAmount = picked.amount;
+            this.targetMultiplier = picked.multiplier;
+            this.tierThresholds = computeTierThresholds(targetAmount, targetMultiplier);
             this.activeWorldKey = picked.worldKey;
             plugin.getLogger().info("Resource Hunt target this session: "
-                    + targetAmount + "x " + targetMaterial.getKey() + " in " + activeWorldKey);
+                    + targetMaterial.getKey() + " in " + activeWorldKey
+                    + " (tiers " + tierThresholds[0] + "/" + tierThresholds[1] + "/" + tierThresholds[2]
+                    + ", multiplier x" + targetMultiplier + ")");
         }
 
         // Pre-create the reward shell so admins can populate it via /reward edit resource even
-        // before someone wins. Items added after a winner is declared are still picked up at
-        // /reward claim time because RewardManager resolves items lazily.
+        // before someone wins. Items added later are still picked up at /reward claim time
+        // because RewardManager resolves items lazily.
         if (!rewardManager.rewardExists(REWARD_NAME)) {
             rewardManager.createReward(REWARD_NAME);
             plugin.getLogger().info("Created empty '" + REWARD_NAME
@@ -116,14 +121,29 @@ public class ResourceHunt implements Listener {
         }
     }
 
-    private static class Target {
-        Material material;
-        int amount;
-        String worldKey;
+    private static int[] computeTierThresholds(int base, double multiplier) {
+        int[] thresholds = new int[NUM_TIERS];
+        double scaled = base;
+        for (int i = 0; i < NUM_TIERS; i++) {
+            int t = (int) Math.round(scaled);
+            // Guarantee strict monotonic growth so a multiplier of 1.0 still presents three tiers.
+            if (i > 0 && t <= thresholds[i - 1]) t = thresholds[i - 1] + 1;
+            thresholds[i] = t;
+            scaled *= multiplier;
+        }
+        return thresholds;
+    }
 
-        Target(Material material, int amount, String worldKey) {
+    private static class Target {
+        final Material material;
+        final int amount;
+        final double multiplier;
+        final String worldKey;
+
+        Target(Material material, int amount, double multiplier, String worldKey) {
             this.material = material;
             this.amount = amount;
+            this.multiplier = multiplier;
             this.worldKey = worldKey;
         }
     }
@@ -147,6 +167,8 @@ public class ResourceHunt implements Listener {
         return entries.get(ThreadLocalRandom.current().nextInt(entries.size()));
     }
 
+    // Accepts each entry as either a bare integer (legacy: amount only, multiplier defaults to
+    // DEFAULT_MULTIPLIER) or as the string "<amount>:<multiplier>" (tiered form).
     private void loadTargets(YamlConfiguration config, String section, String worldKey, List<Target> entries) {
         if (!config.isConfigurationSection(section)) return;
         Map<String, Object> values = config.getConfigurationSection(section).getValues(false);
@@ -156,16 +178,37 @@ public class ResourceHunt implements Listener {
                 plugin.getLogger().warning("resource_hunt.yml (" + section + "): unknown material '" + entry.getKey() + "', skipped.");
                 continue;
             }
-            if (!(entry.getValue() instanceof Number num)) {
+
+            int amount;
+            double multiplier;
+            Object raw = entry.getValue();
+            if (raw instanceof Number num) {
+                amount = num.intValue();
+                multiplier = DEFAULT_MULTIPLIER;
+            } else if (raw instanceof String str) {
+                String[] parts = str.split(":", 2);
+                try {
+                    amount = Integer.parseInt(parts[0].trim());
+                    multiplier = parts.length >= 2 ? Double.parseDouble(parts[1].trim()) : DEFAULT_MULTIPLIER;
+                } catch (NumberFormatException e) {
+                    plugin.getLogger().warning("resource_hunt.yml (" + section + "): '" + entry.getKey() + "' has invalid value '" + str + "', skipped.");
+                    continue;
+                }
+            } else {
                 plugin.getLogger().warning("resource_hunt.yml (" + section + "): '" + entry.getKey() + "' has invalid amount, skipped.");
                 continue;
             }
-            int amount = num.intValue();
+
             if (amount <= 0) {
                 plugin.getLogger().warning("resource_hunt.yml (" + section + "): '" + entry.getKey() + "' has non-positive amount, skipped.");
                 continue;
             }
-            entries.add(new Target(mat, amount, worldKey));
+            if (multiplier < 1.0) {
+                plugin.getLogger().warning("resource_hunt.yml (" + section + "): '" + entry.getKey() + "' has multiplier < 1.0; clamping to 1.0.");
+                multiplier = 1.0;
+            }
+
+            entries.add(new Target(mat, amount, multiplier, worldKey));
         }
     }
 
@@ -175,6 +218,10 @@ public class ResourceHunt implements Listener {
 
     public String getActiveWorldKey() {
         return activeWorldKey;
+    }
+
+    private boolean isFullyComplete(UUID uuid) {
+        return tiersCompleted.getOrDefault(uuid, 0) >= NUM_TIERS;
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
@@ -195,7 +242,7 @@ public class ResourceHunt implements Listener {
         }
 
         if (!isActive()) return;
-        boolean canCount = worldKey.equals(activeWorldKey) && !completed.contains(event.getPlayer().getUniqueId());
+        boolean canCount = worldKey.equals(activeWorldKey) && !isFullyComplete(event.getPlayer().getUniqueId());
 
         int gained = 0;
         for (Item item : event.getItems()) {
@@ -228,7 +275,7 @@ public class ResourceHunt implements Listener {
         }
 
         if (!isActive()) return;
-        boolean canCount = worldKey.equals(activeWorldKey) && !completed.contains(player.getUniqueId());
+        boolean canCount = worldKey.equals(activeWorldKey) && !isFullyComplete(player.getUniqueId());
 
         int gained = 0;
         for (ItemStack stack : drops) {
@@ -254,7 +301,7 @@ public class ResourceHunt implements Listener {
 
         Player killer = entity.getKiller();
         if (killer == null) return;
-        boolean canCount = worldKey.equals(activeWorldKey) && !completed.contains(killer.getUniqueId());
+        boolean canCount = worldKey.equals(activeWorldKey) && !isFullyComplete(killer.getUniqueId());
 
         int gained = 0;
         for (ItemStack stack : event.getDrops()) {
@@ -289,7 +336,7 @@ public class ResourceHunt implements Listener {
         Bukkit.getScheduler().runTask(plugin,
                 () -> tagInventoryStacks(player, targetMaterial, amount));
 
-        if (!worldKey.equals(activeWorldKey) || completed.contains(player.getUniqueId())) return;
+        if (!worldKey.equals(activeWorldKey) || isFullyComplete(player.getUniqueId())) return;
         recordProgress(player, amount);
     }
 
@@ -307,7 +354,7 @@ public class ResourceHunt implements Listener {
 
         if (markCounted(stack)) caughtItem.setItemStack(stack);
 
-        if (!worldKey.equals(activeWorldKey) || completed.contains(event.getPlayer().getUniqueId())) return;
+        if (!worldKey.equals(activeWorldKey) || isFullyComplete(event.getPlayer().getUniqueId())) return;
         recordProgress(event.getPlayer(), stack.getAmount());
     }
 
@@ -385,63 +432,57 @@ public class ResourceHunt implements Listener {
     }
 
     private void recordProgress(Player player, int gained) {
+        if (isFullyComplete(player.getUniqueId())) return;
         int newTotal = progress.merge(player.getUniqueId(), gained, Integer::sum);
+        grantPendingTiers(player, newTotal);
         updateBossBar(player, newTotal);
-        if (newTotal >= targetAmount) {
-            declareCompletion(player);
+    }
+
+    // Grants every tier whose cumulative threshold the player has now crossed. A single
+    // progress update can grant multiple tiers if the gain was large enough.
+    private synchronized void grantPendingTiers(Player player, int newTotal) {
+        UUID uuid = player.getUniqueId();
+        while (true) {
+            int tier = tiersCompleted.getOrDefault(uuid, 0);
+            if (tier >= NUM_TIERS) return;
+            if (newTotal < tierThresholds[tier]) return;
+            tiersCompleted.put(uuid, tier + 1);
+            rewardManager.grantReward(uuid, REWARD_NAME);
+            announceTierCompletion(player, tier + 1);
         }
     }
 
-    private synchronized void declareCompletion(Player player) {
-        if (!completed.add(player.getUniqueId())) return;
-
-        boolean isFirst = (firstWinner == null);
-        int rewardCount;
-        if (isFirst) {
-            firstWinner = player.getUniqueId();
-            firstWinnerName = player.getName();
-            rewardCount = FIRST_WINNER_REWARD_COUNT;
-        } else {
-            rewardCount = 1;
-        }
-
-        for (int i = 0; i < rewardCount; i++) {
-            rewardManager.grantReward(player.getUniqueId(), REWARD_NAME);
-        }
-
-        // Only hide this player's boss bar; the hunt stays open for everyone else.
-        BossBar bar = playerBars.remove(player.getUniqueId());
-        if (bar != null) {
-            player.hideBossBar(bar);
-        }
+    private void announceTierCompletion(Player player, int tier) {
+        boolean isFinal = (tier >= NUM_TIERS);
 
         Component announcement;
-        if (isFirst) {
+        if (isFinal) {
             announcement = Component.text()
                     .append(Component.text("[Resource Hunt] ", NamedTextColor.GOLD, TextDecoration.BOLD))
                     .append(Component.text(player.getName(), NamedTextColor.AQUA))
-                    .append(Component.text(" was first to gather ", NamedTextColor.YELLOW))
-                    .append(Component.text(targetAmount + "x " + readableName(targetMaterial), NamedTextColor.WHITE))
-                    .append(Component.text(" and earned a ", NamedTextColor.YELLOW))
-                    .append(Component.text("triple reward", NamedTextColor.GOLD, TextDecoration.BOLD))
-                    .append(Component.text("! Others can still complete the hunt for a single reward.", NamedTextColor.YELLOW))
+                    .append(Component.text(" cleared all ", NamedTextColor.YELLOW))
+                    .append(Component.text(NUM_TIERS + " tiers", NamedTextColor.GOLD, TextDecoration.BOLD))
+                    .append(Component.text(" of the resource hunt!", NamedTextColor.YELLOW))
                     .build();
         } else {
+            int nextThreshold = tierThresholds[tier];
             announcement = Component.text()
                     .append(Component.text("[Resource Hunt] ", NamedTextColor.GOLD, TextDecoration.BOLD))
                     .append(Component.text(player.getName(), NamedTextColor.AQUA))
-                    .append(Component.text(" also completed the hunt!", NamedTextColor.YELLOW))
+                    .append(Component.text(" reached Tier " + tier + " (", NamedTextColor.YELLOW))
+                    .append(Component.text(tierThresholds[tier - 1] + "x " + readableName(targetMaterial), NamedTextColor.WHITE))
+                    .append(Component.text("). Next tier: ", NamedTextColor.YELLOW))
+                    .append(Component.text(nextThreshold + "x", NamedTextColor.GOLD))
+                    .append(Component.text(".", NamedTextColor.YELLOW))
                     .build();
         }
         Bukkit.broadcast(announcement);
 
         Component personal = Component.text()
+                .append(Component.text(isFinal ? "All tiers complete! " : "Tier " + tier + " complete. ", NamedTextColor.GOLD))
                 .append(Component.text("Use ", NamedTextColor.YELLOW))
                 .append(Component.text("/reward claim", NamedTextColor.GOLD))
-                .append(Component.text(rewardCount > 1
-                                ? " to collect your " + rewardCount + " rewards."
-                                : " to collect your reward.",
-                        NamedTextColor.YELLOW))
+                .append(Component.text(" to collect.", NamedTextColor.YELLOW))
                 .build();
         player.sendMessage(personal);
     }
@@ -462,28 +503,21 @@ public class ResourceHunt implements Listener {
             stripCountedTags(player);
         }
 
-        boolean playerDone = completed.contains(player.getUniqueId());
-
         Component msg;
-        if (firstWinner == null) {
+        if (isFullyComplete(player.getUniqueId())) {
             msg = Component.text()
                     .append(Component.text("Resource Hunt: ", NamedTextColor.GOLD, TextDecoration.BOLD))
-                    .append(Component.text("first to gather ", NamedTextColor.YELLOW))
-                    .append(Component.text(targetAmount + "x " + readableName(targetMaterial), NamedTextColor.WHITE))
-                    .append(Component.text(" in the resource world wins a triple reward!", NamedTextColor.YELLOW))
-                    .append(Component.text(" Use /resource to go there now!", NamedTextColor.GREEN))
-                    .build();
-        } else if (playerDone) {
-            msg = Component.text()
-                    .append(Component.text("Resource Hunt: ", NamedTextColor.GOLD, TextDecoration.BOLD))
-                    .append(Component.text("you've already completed this session's hunt.", NamedTextColor.YELLOW))
+                    .append(Component.text("you've already completed all tiers this session.", NamedTextColor.YELLOW))
                     .build();
         } else {
-            String name = firstWinnerName != null ? firstWinnerName : "another player";
             msg = Component.text()
                     .append(Component.text("Resource Hunt: ", NamedTextColor.GOLD, TextDecoration.BOLD))
-                    .append(Component.text(name, NamedTextColor.AQUA))
-                    .append(Component.text(" finished first — complete the hunt yourself for a single reward!", NamedTextColor.YELLOW))
+                    .append(Component.text("gather ", NamedTextColor.YELLOW))
+                    .append(Component.text(readableName(targetMaterial), NamedTextColor.WHITE))
+                    .append(Component.text(" in the resource world to clear tiers ", NamedTextColor.YELLOW))
+                    .append(Component.text(tierThresholds[0] + "/" + tierThresholds[1] + "/" + tierThresholds[2], NamedTextColor.GOLD))
+                    .append(Component.text(". Each tier grants a reward.", NamedTextColor.YELLOW))
+                    .append(Component.text(" Use /resource to go there now!", NamedTextColor.GREEN))
                     .build();
         }
         player.sendMessage(msg);
@@ -559,11 +593,11 @@ public class ResourceHunt implements Listener {
 
     private void showBossBar(Player player) {
         if (!isActive()) return;
-        if (completed.contains(player.getUniqueId())) return;
+        if (isFullyComplete(player.getUniqueId())) return;
 
         BossBar bar = playerBars.computeIfAbsent(player.getUniqueId(), uuid -> {
             BossBar b = BossBar.bossBar(
-                    Component.text("Resource Hunt: Collect " + targetAmount + "x " + readableName(targetMaterial), NamedTextColor.GREEN, TextDecoration.BOLD),
+                    Component.text("Resource Hunt", NamedTextColor.GREEN, TextDecoration.BOLD),
                     0.0f,
                     BossBar.Color.GREEN,
                     BossBar.Overlay.PROGRESS);
@@ -588,10 +622,22 @@ public class ResourceHunt implements Listener {
         }
     }
 
+    // Renders the bar against the next unmet tier's threshold. Once all tiers are cleared the
+    // bar is hidden and removed so the player's HUD is clean.
     private void updateBossBar(Player player, int current, BossBar bar) {
-        float prog = Math.max(0.0f, Math.min(1.0f, (float) current / targetAmount));
+        UUID uuid = player.getUniqueId();
+        int tierIdx = tiersCompleted.getOrDefault(uuid, 0);
+        if (tierIdx >= NUM_TIERS) {
+            player.hideBossBar(bar);
+            playerBars.remove(uuid);
+            return;
+        }
+        int threshold = tierThresholds[tierIdx];
+        float prog = Math.max(0.0f, Math.min(1.0f, (float) current / threshold));
         bar.progress(prog);
-        bar.name(Component.text("Resource Hunt: " + current + "/" + targetAmount + " " + readableName(targetMaterial), NamedTextColor.GREEN, TextDecoration.BOLD));
+        bar.name(Component.text(
+                "Resource Hunt Tier " + (tierIdx + 1) + ": " + current + "/" + threshold + " " + readableName(targetMaterial),
+                NamedTextColor.GREEN, TextDecoration.BOLD));
     }
 
     private static String readableName(Material material) {

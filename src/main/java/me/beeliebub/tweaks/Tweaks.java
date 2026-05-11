@@ -131,6 +131,9 @@ public class Tweaks extends JavaPlugin {
         ConfigCommand configCommand = new ConfigCommand(this, resourceHuntItems);
         getCommand("tconfig").setExecutor(configCommand);
         getCommand("tconfig").setTabCompleter(configCommand);
+        GameModeCommand gameModeCommand = new GameModeCommand();
+        getCommand("survival").setExecutor(gameModeCommand);
+        getCommand("creative").setExecutor(gameModeCommand);
 
         // Commands - Permissions
         PermissionCommand permissionCommand = new PermissionCommand(permissionManager);

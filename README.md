@@ -53,6 +53,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Block Log](#block-log)
   - [Item Editing](#item-editing)
   - [Chest GUI Copy](#chest-gui-copy)
+  - [Gamemode Shortcuts](#gamemode-shortcuts)
 - [World Events](#world-events)
   - [Blood Moon](#blood-moon)
 - [Minigames](#minigames)
@@ -653,6 +654,17 @@ The file also records the world key and block coordinates so the snapshot can be
 
 The `name` argument is restricted to letters, numbers, dots, dashes, and underscores so it cannot escape the `guicopies/` directory. Existing files are silently overwritten — the chat confirmation indicates whether the save was a fresh write or an overwrite.
 
+### Gamemode Shortcuts
+
+Convenience commands for switching your own gamemode, both gated by the same admin permission.
+
+| Command | Permission | What it does |
+|---|---|---|
+| `/survival` | `tweaks.admin.gamemode` | Switch the executing player to Survival. |
+| `/creative` | `tweaks.admin.gamemode` | Switch the executing player to Creative. |
+
+Both commands are player-only and only affect the executing player; if you're already in the target gamemode, the command no-ops with a yellow note. Use vanilla `/gamemode` to target other players.
+
 ---
 
 ## World Events
@@ -683,27 +695,35 @@ This is entirely admin-managed — see the [admin commands](#admin-commands) sec
 
 ### Resource Hunt
 
-A server-wide race that runs in the **`jass:resource`** (Overworld) or **`jass:resource_nether`** (Nether) world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` as the active target. Each player who obtains the chosen item in the chosen amount through block drops, mob kills, fishing, or smelting in the active resource world completes the hunt.
+An individual tiered gathering minigame that runs in the **`jass:resource`** (Overworld) or **`jass:resource_nether`** (Nether) world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` as the active target. Progress accumulates from block drops, mob kills, fishing, and smelting in the active resource world.
 
-While inside the active resource world, a **green boss bar** at the top of the screen shows your personal progress toward the goal. Your boss bar disappears once you personally finish.
+Each entry defines a **base amount** and a **multiplier** that produce three cumulative tier thresholds:
 
-The **first player** to complete the hunt earns the **`resource`** reward **three times**. Every player who completes it after that earns it once. Rewards are queued and claimable via `/reward claim`.
+| Tier | Threshold |
+|---|---|
+| Tier 1 | `amount` |
+| Tier 2 | `round(amount × multiplier)` |
+| Tier 3 | `round(amount × multiplier²)` |
 
-**Protection**: To keep the race fair, players are restricted from bringing disallowed items into the resource world. Using `/resource`, `/back`, or `/tpa` to travel **into** a resource world from another world will fail if you have restricted items in your inventory.
+Crossing each threshold grants the **`resource`** reward **once**. A single large progress update may cross multiple tiers in one shot, and the rewards are simply queued in order. Rewards are claimable via `/reward claim`.
+
+While inside the active resource world, a **green boss bar** at the top of the screen shows your progress against the next unmet tier; the bar resets to the next tier once you clear the current one and disappears entirely after you clear Tier 3.
+
+**Protection**: To keep the hunt fair, players are restricted from bringing disallowed items into the resource world. Using `/resource`, `/back`, or `/tpa` to travel **into** a resource world from another world will fail if you have restricted items in your inventory.
 
 **Nether Safety**: If no safe 2-block air gap can be found when teleporting to the Nether resource world, or if a teleport would land a player on the Nether roof (above Y=127), the plugin will automatically generate a **5x5 bedrock platform** at Y=64.
 
 **Anti-recount**: Once an item has been counted toward someone's progress, it carries an invisible PDC tag and won't be counted again. Crops, sugar cane, bamboo, and amethyst buds are exempt.
 
-**Configuration** (`plugins/Tweaks/resource_hunt.yml`): separate lists for overworld and nether targets.
+**Configuration** (`plugins/Tweaks/resource_hunt.yml`): separate lists for overworld and nether targets. Each entry is either a bare amount (multiplier defaults to `2.0`) or an explicit `"<amount>:<multiplier>"` string.
 
 ```yaml
 overworld:
-  iron_ore: 7
-  raw_copper: 32
-  diamond: 4
+  iron_ore: "7:2.0"      # tiers: 7, 14, 28
+  raw_copper: "32:1.75"  # tiers: 32, 56, 98
+  diamond: 4             # bare form; tiers: 4, 8, 16
 nether:
-  ancient_debris: 2
+  ancient_debris: "2:2.0"
   ghast_tear: 5
 ```
 
@@ -787,6 +807,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/bloodmoon` | `tweaks.admin.bloodmoon` | Force-activate the Blood Moon event. |
 | `/reward create <name>` | `tweaks.admin.reward` | Create a new reward template. |
 | `/reward edit <name>` | `tweaks.admin.reward` | Open the reward editor GUI. |
+| `/reward give <player> <reward> [count]` | `tweaks.admin.reward` | Queue a reward grant for an online or offline player. |
 | `/whack arena` | `tweaks.admin.whack` | Start Whack-an-Andrew arena setup. |
 | `/whack corner1` | `tweaks.admin.whack` | Set arena corner 1. |
 | `/whack corner2` | `tweaks.admin.whack` | Set arena corner 2. |
@@ -800,6 +821,8 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/lore add <line#> <text>` | `tweaks.admin.itemedit` | Insert a lore line at the 1-indexed position. |
 | `/lore remove <line#>` | `tweaks.admin.itemedit` | Remove the lore line at the 1-indexed position. |
 | `/guicopy [name]` | `tweaks.admin.guicopy` | Save the targeted chest's contents to `plugins/Tweaks/guicopies/<name>.yml`. |
+| `/survival` | `tweaks.admin.gamemode` | Switch your gamemode to Survival. |
+| `/creative` | `tweaks.admin.gamemode` | Switch your gamemode to Creative. |
 
 ---
 
@@ -824,6 +847,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `tweaks.admin.logs` | Use `/logs` and inspect chest logs by punching containers. |
 | `tweaks.admin.itemedit` | Use `/name` and `/lore` to edit the held item. |
 | `tweaks.admin.guicopy` | Use `/guicopy` to snapshot chest contents to disk. |
+| `tweaks.admin.gamemode` | Use `/survival` and `/creative` to switch your own gamemode. |
 | `tweaks.admin.permissions` | Access the `/tprm` GUI and CLI commands. |
 
 ---

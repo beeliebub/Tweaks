@@ -102,3 +102,9 @@ commands:
   guicopy:
     description: Save the targeted chest's contents to plugins/Tweaks/guicopies/<name>.yml (admin).
     usage: /guicopy [name]
+  survival:
+    description: Switch your gamemode to Survival (admin).
+    usage: /survival
+  creative:
+    description: Switch your gamemode to Creative (admin).
+    usage: /creative

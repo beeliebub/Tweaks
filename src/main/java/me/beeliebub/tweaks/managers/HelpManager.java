@@ -407,6 +407,16 @@ public class HelpManager {
                 green("Setup mode persists for batch placement.")
         ), Material.CHEST, 32, ColorUtil.HELP_GRAD_DISPLAY_CHEST, List.of("itemfilter", "blocklog")));
 
+        articles.add(new HelpArticle("gamemode", "Gamemode Shortcuts", List.of(
+                gray("Quick self-only gamemode switches."),
+                cmd("/survival", "Switch to Survival mode."),
+                cmd("/creative", "Switch to Creative mode."),
+                white("Affects only the executing player."),
+                yellow("No-op if already in the target mode."),
+                red("Requires permission: tweaks.admin.gamemode.")
+        ), Material.COMMAND_BLOCK, 39, ColorUtil.HELP_GRAD_ITEM_TOOLS,
+                List.of("item_admin", "blocklog"), Permissions.ADMIN_GAMEMODE));
+
         articles.add(new HelpArticle("item_admin", "Item Tools (Admin)", List.of(
                 gray("Admin tools for editing held items and copying chest GUIs."),
                 cmd("/name <name>", "Set held item display name."),
@@ -441,11 +451,13 @@ public class HelpManager {
         List<HelpArticle> articles = new ArrayList<>();
 
         articles.add(new HelpArticle("resource_hunt", "Resource Hunt", List.of(
-                gray("Server-wide race to gather a target resource."),
+                gray("Individual tiered gather hunt in the resource world."),
                 cmd("/resource", "Travel to the resource world."),
                 white("Target resets each server restart."),
                 white("Progress only counts in resource worlds."),
-                gold("First winner receives a 3× reward."),
+                aqua("Three cumulative tier thresholds:"),
+                white("T1 = amount, T2 = T1×multiplier, T3 = T2×multiplier."),
+                gold("Each tier crossed grants one 'resource' reward."),
                 red("Ender chests are blocked in resource worlds.")
         ), Material.GRASS_BLOCK, 20, ColorUtil.HELP_GRAD_RESOURCE_HUNT, List.of("rewards", "gem_connoisseur")));
 

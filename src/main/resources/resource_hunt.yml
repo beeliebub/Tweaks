@@ -1,26 +1,36 @@
-# Resource Hunt targets — each entry is "material: amount".
-# On every server start the plugin picks one entry at random as the active hunt.
-# The first player to obtain that material in that quantity through block drops in
-# the specified resource world wins the "resource" reward (claimable with /reward claim).
-# Other worlds do not contribute progress.
+# Resource Hunt targets. On every server start the plugin picks one entry at
+# random as the active hunt for the session.
 #
-# Material names follow Bukkit Material constants (case-insensitive). Amount must be > 0.
+# Each entry is either:
+#   <material>: <amount>                  # bare amount; multiplier defaults to 2.0
+#   <material>: "<amount>:<multiplier>"   # explicit amount and tier multiplier (>= 1.0)
+#
+# Each player works through three cumulative tier thresholds:
+#   Tier 1 = amount
+#   Tier 2 = round(amount * multiplier)
+#   Tier 3 = round(amount * multiplier * multiplier)
+# Crossing each threshold grants the "resource" reward (claimable with /reward
+# claim). Drops, mob kills, fishing, and smelter extracts only count in the
+# active resource world.
+#
+# Material names follow Bukkit Material constants (case-insensitive).
+# Amount must be > 0; multiplier is clamped to >= 1.0.
 
 overworld:
-  iron_ore: 7
-  raw_copper: 32
-  raw_gold: 12
-  diamond: 4
-  emerald: 3
-  coal: 32
-  amethyst_shard: 24
+  iron_ore: "7:2.0"
+  raw_copper: "32:1.75"
+  raw_gold: "12:2.0"
+  diamond: "4:2.0"
+  emerald: "3:2.0"
+  coal: "32:2.0"
+  amethyst_shard: "24:2.0"
 
 nether:
-  ancient_debris: 2
-  ghast_tear: 5
-  blaze_rod: 10
-  nether_gold_ore: 32
-  gold_nugget: 64
-  quartz: 64
-  crimson_fungus: 16
-  warped_fungus: 16
+  ancient_debris: "2:2.0"
+  ghast_tear: "5:2.0"
+  blaze_rod: "10:2.0"
+  nether_gold_ore: "32:2.0"
+  gold_nugget: "64:2.0"
+  quartz: "64:2.0"
+  crimson_fungus: "16:2.0"
+  warped_fungus: "16:2.0"
