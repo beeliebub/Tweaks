@@ -82,6 +82,23 @@ commands:
     description: Custom permission system management.
     usage: /tprm <group|user|gui>
     aliases: [tweaksperms, perms]
+  displaychest:
+    description: Toggle display chest setup mode. Click a chest to show its most abundant item.
+    usage: /displaychest
   logs:
     description: View chest interaction logs (admin). Toggle inspector mode then punch a chest.
     usage: /logs
+  lore:
+    description: Edit the lore of the held item (admin).
+    usage: |
+      /lore add <line#> <text>
+      /lore remove <line#>
+  name:
+    description: Set or clear the display name of the held item (admin).
+    usage: |
+      /name <name>
+      /name off
+      /name blank
+  guicopy:
+    description: Save the targeted chest's contents to plugins/Tweaks/guicopies/<name>.yml (admin).
+    usage: /guicopy [name]

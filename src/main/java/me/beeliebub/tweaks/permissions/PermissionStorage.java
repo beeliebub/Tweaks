@@ -60,7 +60,19 @@ public class PermissionStorage {
             try {
                 UUID uuid = UUID.fromString(key);
                 UserPermissions user = new UserPermissions(uuid);
-                user.setGroupName(config.getString(key + ".group"));
+
+                // Multi-group: 'group' is now a list. Fall back to a single-string
+                // value to migrate users.yml files written before the multi-group
+                // refactor.
+                Object rawGroup = config.get(key + ".group");
+                if (rawGroup instanceof List<?> list) {
+                    for (Object entry : list) {
+                        if (entry != null) user.addGroup(entry.toString());
+                    }
+                } else if (rawGroup instanceof String single && !single.isEmpty()) {
+                    user.addGroup(single);
+                }
+
                 List<String> perms = config.getStringList(key + ".permissions");
                 perms.forEach(user::addPermission);
                 users.put(uuid, user);
@@ -75,7 +87,7 @@ public class PermissionStorage {
         YamlConfiguration config = new YamlConfiguration();
         for (UserPermissions user : users) {
             String key = user.getUuid().toString();
-            config.set(key + ".group", user.getGroupName());
+            config.set(key + ".group", new ArrayList<>(user.getGroups()));
             config.set(key + ".permissions", new ArrayList<>(user.getPermissions()));
         }
         try {

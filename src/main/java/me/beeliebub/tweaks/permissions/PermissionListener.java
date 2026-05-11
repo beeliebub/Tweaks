@@ -5,26 +5,34 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
-import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.event.inventory.InventoryDragEvent;
 
 import java.util.UUID;
 
-/**
- * Listens for GUI clicks and chat prompts to manage permissions.
- */
+// Routes clicks/drags inside the /perms GUI hierarchy.
+//
+// Click routing is data-driven: PermissionGUI populates a PermissionHolder with
+// per-slot action/payload maps. This listener cancels every click in the GUI,
+// then dispatches by holder kind + slot to the matching open-* method on
+// PermissionGUI or to a backend mutation on PermissionManager.
+//
+// Async chat handling is preserved for the two prompt types (CREATE_GROUP,
+// SEARCH_USER); the GUI is reopened on the main thread once the prompt resolves.
 public class PermissionListener implements Listener {
+
     private final PermissionManager manager;
 
     public PermissionListener(PermissionManager manager) {
         this.manager = manager;
     }
+
+    // ---------------------------------------------------------------- Chat
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onChat(AsyncChatEvent event) {
@@ -36,191 +44,304 @@ public class PermissionListener implements Listener {
         String message = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
         manager.setPrompt(player.getUniqueId(), null);
 
-        if (prompt == PermissionManager.PromptType.CREATE_GROUP) {
-            if (message.isEmpty() || message.contains(" ")) {
-                player.sendMessage(Component.text("Invalid group name. Names cannot contain spaces.").color(NamedTextColor.RED));
-                return;
-            }
-            if (manager.getGroups().containsKey(message.toLowerCase())) {
-                player.sendMessage(Component.text("Group already exists.").color(NamedTextColor.RED));
-                return;
-            }
+        switch (prompt) {
+            case CREATE_GROUP -> handleCreateGroupPrompt(player, message);
+            case SEARCH_USER -> handleSearchPlayerPrompt(player, message);
+        }
+    }
 
-            manager.getGroups().put(message.toLowerCase(), new PermissionGroup(message));
-            manager.saveGroups();
-            player.sendMessage(Component.text("Group '" + message + "' created!").color(NamedTextColor.GREEN));
-            
-            // Reopen GUI on main thread
-            Bukkit.getScheduler().runTask(manager.getPlugin(), () -> PermissionGUI.openGroupsMenu(player, manager));
-        } else if (prompt == PermissionManager.PromptType.SEARCH_USER) {
-            @SuppressWarnings("deprecation")
-            org.bukkit.OfflinePlayer target = Bukkit.getOfflinePlayer(message);
-            if (!target.hasPlayedBefore() && !target.isOnline()) {
-                player.sendMessage(Component.text("Player '" + message + "' has never played before.").color(NamedTextColor.RED));
-                return;
-            }
+    private void handleCreateGroupPrompt(Player player, String message) {
+        if (message.isEmpty() || message.contains(" ")) {
+            player.sendMessage(Component.text("Invalid group name. Names cannot contain spaces.", NamedTextColor.RED));
+            return;
+        }
+        String key = message.toLowerCase();
+        if (manager.getGroups().containsKey(key)) {
+            player.sendMessage(Component.text("Group already exists.", NamedTextColor.RED));
+            return;
+        }
+        manager.getGroups().put(key, new PermissionGroup(message));
+        manager.saveGroups();
+        player.sendMessage(Component.text("Group '" + message + "' created.", NamedTextColor.GREEN));
+        Bukkit.getScheduler().runTask(manager.getPlugin(), () -> PermissionGUI.openGroupsMenu(player, manager, 0));
+    }
 
-            Bukkit.getScheduler().runTask(manager.getPlugin(), () -> PermissionGUI.openUserEditor(player, target.getUniqueId(), 0, manager));
+    @SuppressWarnings("deprecation")
+    private void handleSearchPlayerPrompt(Player player, String message) {
+        OfflinePlayer target = Bukkit.getOfflinePlayer(message);
+        if (!target.hasPlayedBefore() && !target.isOnline()) {
+            player.sendMessage(Component.text("Player '" + message + "' has never played before.", NamedTextColor.RED));
+            return;
+        }
+        Bukkit.getScheduler().runTask(manager.getPlugin(),
+                () -> PermissionGUI.openUserHub(player, manager, target.getUniqueId()));
+    }
+
+    // ----------------------------------------------------------- GUI clicks
+
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (event.getInventory().getHolder() instanceof PermissionHolder) {
+            event.setCancelled(true);
         }
     }
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        String title = PlainTextComponentSerializer.plainText().serialize(event.getView().title());
-        if (!title.startsWith(PermissionGUI.TITLE_GROUPS) && 
-            !title.startsWith(PermissionGUI.TITLE_USERS) &&
-            !title.startsWith(PermissionGUI.PREFIX_GROUP_EDITOR) &&
-            !title.startsWith(PermissionGUI.PREFIX_USER_EDITOR)) {
-            return;
-        }
-
+        if (!(event.getInventory().getHolder() instanceof PermissionHolder holder)) return;
         event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player)) return;
+        if (event.getClickedInventory() != event.getView().getTopInventory()) return;
 
-        ItemStack clicked = event.getCurrentItem();
-        if (clicked == null || clicked.getType() == Material.AIR) return;
+        int slot = event.getRawSlot();
+        String action = holder.actionAt(slot);
+        String s = holder.stringAt(slot);
+        UUID u = holder.uuidAt(slot);
 
-        ItemMeta meta = clicked.getItemMeta();
-        if (meta == null) return;
-        String itemName = PlainTextComponentSerializer.plainText().serialize(meta.displayName());
-
-        if (title.equals(PermissionGUI.TITLE_GROUPS)) {
-            handleGroupsMenu(player, clicked, itemName);
-        } else if (title.startsWith(PermissionGUI.TITLE_USERS)) {
-            handleUsersMenu(player, clicked, itemName, title);
-        } else if (title.startsWith(PermissionGUI.PREFIX_GROUP_EDITOR)) {
-            handleGroupEditor(player, clicked, itemName, title);
-        } else if (title.startsWith(PermissionGUI.PREFIX_USER_EDITOR)) {
-            handleUserEditor(player, clicked, itemName, title);
-        } else if (title.startsWith(PermissionGUI.TITLE_SELECT_GROUP)) {
-            handleGroupSelection(player, clicked, itemName, title);
+        switch (holder.kind()) {
+            case MAIN -> dispatchMain(player, action);
+            case GROUPS_LIST -> dispatchGroupsList(player, holder, action, s);
+            case GROUP_HUB -> dispatchGroupHub(player, holder, action);
+            case GROUP_PERMS -> dispatchGroupPerms(player, holder, action, s);
+            case GROUP_MEMBERS_TOGGLE -> dispatchGroupMembersToggle(player, holder, action, u);
+            case GROUP_INHERITANCE_PICKER -> dispatchGroupInheritancePicker(player, holder, action, s);
+            case USERS_LIST -> dispatchUsersList(player, holder, action, u);
+            case USER_HUB -> dispatchUserHub(player, holder, action);
+            case USER_PERMS -> dispatchUserPerms(player, holder, action, s);
+            case USER_GROUP_PICKER -> dispatchUserGroupPicker(player, holder, action, s);
         }
     }
 
-    private void handleGroupsMenu(Player player, ItemStack clicked, String itemName) {
-        if (clicked.getType() == Material.CHEST) {
-            PermissionGUI.openGroupEditor(player, itemName, 0, manager);
-        } else if (clicked.getType() == Material.PLAYER_HEAD) {
-            PermissionGUI.openUsersMenu(player, 0, manager);
-        } else if (clicked.getType() == Material.NETHER_STAR) {
-            player.closeInventory();
-            manager.setPrompt(player.getUniqueId(), PermissionManager.PromptType.CREATE_GROUP);
-            player.sendMessage(Component.text("Please type the new group name in chat.").color(NamedTextColor.YELLOW));
+    private void dispatchMain(Player player, String action) {
+        if (action == null) return;
+        switch (action) {
+            case PermissionGUI.ACTION_OPEN_GROUPS -> PermissionGUI.openGroupsMenu(player, manager, 0);
+            case PermissionGUI.ACTION_OPEN_USERS -> PermissionGUI.openUsersMenu(player, manager, 0);
         }
     }
 
-    private void handleUsersMenu(Player player, ItemStack clicked, String itemName, String title) {
-        int page = extractPage(title);
-        if (clicked.getType() == Material.PLAYER_HEAD) {
-            @SuppressWarnings("deprecation")
-            org.bukkit.OfflinePlayer target = Bukkit.getOfflinePlayer(itemName);
-            if (target.hasPlayedBefore() || target.isOnline()) {
-                PermissionGUI.openUserEditor(player, target.getUniqueId(), 0, manager);
+    private void dispatchGroupsList(Player player, PermissionHolder holder, String action, String groupName) {
+        if (action != null) {
+            switch (action) {
+                case PermissionGUI.ACTION_MAIN -> PermissionGUI.openMainMenu(player, manager);
+                case PermissionGUI.ACTION_NEXT -> PermissionGUI.openGroupsMenu(player, manager, holder.page() + 1);
+                case PermissionGUI.ACTION_PREV -> PermissionGUI.openGroupsMenu(player, manager, Math.max(0, holder.page() - 1));
+                case PermissionGUI.ACTION_CREATE_GROUP -> {
+                    player.closeInventory();
+                    manager.setPrompt(player.getUniqueId(), PermissionManager.PromptType.CREATE_GROUP);
+                    player.sendMessage(Component.text("Type the new group name in chat.", NamedTextColor.YELLOW));
+                }
+                default -> {}
             }
-        } else if (clicked.getType() == Material.COMPASS) {
-            player.closeInventory();
-            manager.setPrompt(player.getUniqueId(), PermissionManager.PromptType.SEARCH_USER);
-            player.sendMessage(Component.text("Please type the player name to search for.").color(NamedTextColor.YELLOW));
-        } else if (itemName.equals("Next Page")) {
-            PermissionGUI.openUsersMenu(player, page + 1, manager);
-        } else if (itemName.equals("Previous Page")) {
-            PermissionGUI.openUsersMenu(player, page - 1, manager);
-        } else if (itemName.equals("Back to Groups")) {
-            PermissionGUI.openGroupsMenu(player, manager);
+            return;
+        }
+        if (groupName != null) {
+            PermissionGUI.openGroupHub(player, manager, groupName);
         }
     }
 
-    private void handleGroupEditor(Player player, ItemStack clicked, String itemName, String title) {
-        String groupName = title.substring(PermissionGUI.PREFIX_GROUP_EDITOR.length()).split(" \\(")[0];
-        int page = extractPage(title);
-
-        if (clicked.getType().name().contains("STAINED_GLASS_PANE")) {
-            PermissionGroup group = manager.getGroups().get(groupName.toLowerCase());
-            if (group != null) {
-                if (group.hasDirectPermission(itemName)) group.removePermission(itemName);
-                else group.addPermission(itemName);
+    private void dispatchGroupHub(Player player, PermissionHolder holder, String action) {
+        if (action == null) return;
+        String groupName = holder.groupName();
+        if (groupName == null) return;
+        switch (action) {
+            case PermissionGUI.ACTION_BACK -> PermissionGUI.openGroupsMenu(player, manager, 0);
+            case PermissionGUI.ACTION_EDIT_PERMS -> PermissionGUI.openGroupPerms(player, manager, groupName, 0);
+            case PermissionGUI.ACTION_MANAGE_MEMBERS -> PermissionGUI.openGroupMembersToggle(player, manager, groupName, 0);
+            case PermissionGUI.ACTION_MANAGE_INHERITANCE -> PermissionGUI.openGroupInheritancePicker(player, manager, groupName, 0);
+            case PermissionGUI.ACTION_DELETE_GROUP -> {
+                if (groupName.equalsIgnoreCase("default")) {
+                    player.sendMessage(Component.text("Cannot delete default group.", NamedTextColor.RED));
+                    return;
+                }
+                manager.getGroups().remove(groupName.toLowerCase());
                 manager.saveGroups();
                 refreshAllInGroup(groupName);
-                PermissionGUI.openGroupEditor(player, groupName, page, manager);
+                player.sendMessage(Component.text("Group '" + groupName + "' deleted.", NamedTextColor.GREEN));
+                PermissionGUI.openGroupsMenu(player, manager, 0);
             }
-        } else if (itemName.equals("Next Page")) {
-            PermissionGUI.openGroupEditor(player, groupName, page + 1, manager);
-        } else if (itemName.equals("Previous Page")) {
-            PermissionGUI.openGroupEditor(player, groupName, page - 1, manager);
-        } else if (itemName.equals("Back to Groups")) {
-            PermissionGUI.openGroupsMenu(player, manager);
+            default -> {}
         }
     }
 
-    private void handleUserEditor(Player player, ItemStack clicked, String itemName, String title) {
-        String userName = title.substring(PermissionGUI.PREFIX_USER_EDITOR.length()).split(" \\(")[0];
-        @SuppressWarnings("deprecation")
-        UUID uuid = Bukkit.getOfflinePlayer(userName).getUniqueId();
-        int page = extractPage(title);
-
-        if (clicked.getType().name().contains("STAINED_GLASS_PANE")) {
-            UserPermissions user = manager.getUserPermissions(uuid);
-            if (user.hasDirectPermission(itemName)) user.removePermission(itemName);
-            else user.addPermission(itemName);
-            manager.saveUsers();
-            refreshPlayer(uuid);
-            PermissionGUI.openUserEditor(player, uuid, page, manager);
-        } else if (clicked.getType() == Material.BOOK) {
-            PermissionGUI.openGroupSelectionMenu(player, uuid, manager);
-        } else if (clicked.getType() == Material.TNT) {
-            manager.getUsers().remove(uuid);
-            manager.saveUsers();
-            refreshPlayer(uuid);
-            player.sendMessage(Component.text("User permissions and group reset.").color(NamedTextColor.GREEN));
-            PermissionGUI.openUsersMenu(player, 0, manager);
-        } else if (itemName.equals("Next Page")) {
-            PermissionGUI.openUserEditor(player, uuid, page + 1, manager);
-        } else if (itemName.equals("Previous Page")) {
-            PermissionGUI.openUserEditor(player, uuid, page - 1, manager);
-        } else if (itemName.equals("Back to Users")) {
-            PermissionGUI.openUsersMenu(player, 0, manager);
+    private void dispatchGroupPerms(Player player, PermissionHolder holder, String action, String permission) {
+        String groupName = holder.groupName();
+        if (groupName == null) return;
+        if (action != null) {
+            switch (action) {
+                case PermissionGUI.ACTION_BACK -> PermissionGUI.openGroupHub(player, manager, groupName);
+                case PermissionGUI.ACTION_NEXT -> PermissionGUI.openGroupPerms(player, manager, groupName, holder.page() + 1);
+                case PermissionGUI.ACTION_PREV -> PermissionGUI.openGroupPerms(player, manager, groupName, Math.max(0, holder.page() - 1));
+                default -> {}
+            }
+            return;
+        }
+        if (permission != null) {
+            PermissionGroup group = manager.getGroups().get(groupName.toLowerCase());
+            if (group == null) return;
+            if (group.hasDirectPermission(permission)) group.removePermission(permission);
+            else group.addPermission(permission);
+            manager.saveGroups();
+            refreshAllInGroup(group.getName());
+            PermissionGUI.openGroupPerms(player, manager, groupName, holder.page());
         }
     }
 
-    private void handleGroupSelection(Player player, ItemStack clicked, String itemName, String title) {
-        String userName = title.substring(PermissionGUI.TITLE_SELECT_GROUP.length());
-        @SuppressWarnings("deprecation")
-        UUID uuid = Bukkit.getOfflinePlayer(userName).getUniqueId();
+    private void dispatchGroupMembersToggle(Player player, PermissionHolder holder, String action, UUID target) {
+        String groupName = holder.groupName();
+        if (groupName == null) return;
+        if (action != null) {
+            switch (action) {
+                case PermissionGUI.ACTION_BACK -> PermissionGUI.openGroupHub(player, manager, groupName);
+                case PermissionGUI.ACTION_NEXT -> PermissionGUI.openGroupMembersToggle(player, manager, groupName, holder.page() + 1);
+                case PermissionGUI.ACTION_PREV -> PermissionGUI.openGroupMembersToggle(player, manager, groupName, Math.max(0, holder.page() - 1));
+                default -> {}
+            }
+            return;
+        }
+        if (target != null) {
+            UserPermissions u = manager.getUserPermissions(target);
+            if (u.hasGroup(groupName)) {
+                u.removeGroup(groupName);
+            } else {
+                u.addGroup(groupName);
+            }
 
-        if (clicked.getType() == Material.CHEST) {
-            UserPermissions user = manager.getUserPermissions(uuid);
-            user.setGroupName(itemName.toLowerCase());
             manager.saveUsers();
-            refreshPlayer(uuid);
-            player.sendMessage(Component.text("User " + userName + " assigned to group " + itemName + ".").color(NamedTextColor.GREEN));
-            PermissionGUI.openUserEditor(player, uuid, 0, manager);
-        } else if (itemName.equals("Cancel")) {
-            PermissionGUI.openUserEditor(player, uuid, 0, manager);
+            refreshPlayer(target);
+            PermissionGUI.openGroupMembersToggle(player, manager, groupName, holder.page());
         }
     }
 
-    private int extractPage(String title) {
-        try {
-            String[] parts = title.split("Page ");
-            if (parts.length < 2) return 0;
-            return Integer.parseInt(parts[1].replace(")", "")) - 1;
-        } catch (Exception e) {
-            return 0;
+    private void dispatchGroupInheritancePicker(Player player, PermissionHolder holder, String action, String parentName) {
+        String groupName = holder.groupName();
+        if (groupName == null) return;
+        if (action != null) {
+            switch (action) {
+                case PermissionGUI.ACTION_BACK -> PermissionGUI.openGroupHub(player, manager, groupName);
+                case PermissionGUI.ACTION_NEXT -> PermissionGUI.openGroupInheritancePicker(player, manager, groupName, holder.page() + 1);
+                case PermissionGUI.ACTION_PREV -> PermissionGUI.openGroupInheritancePicker(player, manager, groupName, Math.max(0, holder.page() - 1));
+                default -> {}
+            }
+            return;
+        }
+        if (parentName != null) {
+            PermissionGroup group = manager.getGroups().get(groupName.toLowerCase());
+            if (group == null) return;
+
+            String newParent = parentName.equalsIgnoreCase("none") ? null : parentName.toLowerCase();
+            group.setParentName(newParent);
+            manager.saveGroups();
+            refreshAllInGroup(groupName);
+
+            player.sendMessage(Component.text("Set inheritance for " + groupName + " to " + (newParent == null ? "none" : newParent) + ".", NamedTextColor.GREEN));
+            PermissionGUI.openGroupHub(player, manager, groupName);
+        }
+    }
+
+    private void dispatchUsersList(Player player, PermissionHolder holder, String action, UUID target) {
+        if (action != null) {
+            switch (action) {
+                case PermissionGUI.ACTION_MAIN -> PermissionGUI.openMainMenu(player, manager);
+                case PermissionGUI.ACTION_NEXT -> PermissionGUI.openUsersMenu(player, manager, holder.page() + 1);
+                case PermissionGUI.ACTION_PREV -> PermissionGUI.openUsersMenu(player, manager, Math.max(0, holder.page() - 1));
+                case PermissionGUI.ACTION_SEARCH_PLAYER -> {
+                    player.closeInventory();
+                    manager.setPrompt(player.getUniqueId(), PermissionManager.PromptType.SEARCH_USER);
+                    player.sendMessage(Component.text("Type a player name in chat.", NamedTextColor.YELLOW));
+                }
+                default -> {}
+            }
+            return;
+        }
+        if (target != null) {
+            PermissionGUI.openUserHub(player, manager, target);
+        }
+    }
+
+    private void dispatchUserHub(Player player, PermissionHolder holder, String action) {
+        if (action == null) return;
+        UUID target = holder.userUuid();
+        if (target == null) return;
+        switch (action) {
+            case PermissionGUI.ACTION_BACK -> PermissionGUI.openUsersMenu(player, manager, 0);
+            case PermissionGUI.ACTION_EDIT_PERMS -> PermissionGUI.openUserPerms(player, manager, target, 0);
+            case PermissionGUI.ACTION_EDIT_GROUPS -> PermissionGUI.openUserGroupPicker(player, manager, target, 0);
+            case PermissionGUI.ACTION_RESET_USER -> {
+                manager.getUsers().remove(target);
+                manager.saveUsers();
+                refreshPlayer(target);
+                String name = Bukkit.getOfflinePlayer(target).getName();
+                player.sendMessage(Component.text("Reset " + (name == null ? target.toString() : name) + " to defaults.", NamedTextColor.GREEN));
+                PermissionGUI.openUserHub(player, manager, target);
+            }
+            default -> {}
+        }
+    }
+
+    private void dispatchUserPerms(Player player, PermissionHolder holder, String action, String permission) {
+        UUID target = holder.userUuid();
+        if (target == null) return;
+        if (action != null) {
+            switch (action) {
+                case PermissionGUI.ACTION_BACK -> PermissionGUI.openUserHub(player, manager, target);
+                case PermissionGUI.ACTION_NEXT -> PermissionGUI.openUserPerms(player, manager, target, holder.page() + 1);
+                case PermissionGUI.ACTION_PREV -> PermissionGUI.openUserPerms(player, manager, target, Math.max(0, holder.page() - 1));
+                default -> {}
+            }
+            return;
+        }
+        if (permission != null) {
+            UserPermissions u = manager.getUserPermissions(target);
+            if (u.hasDirectPermission(permission)) u.removePermission(permission);
+            else u.addPermission(permission);
+            manager.saveUsers();
+            refreshPlayer(target);
+            PermissionGUI.openUserPerms(player, manager, target, holder.page());
+        }
+    }
+
+    private void dispatchUserGroupPicker(Player player, PermissionHolder holder, String action, String groupName) {
+        UUID target = holder.userUuid();
+        if (target == null) return;
+        if (action != null) {
+            switch (action) {
+                case PermissionGUI.ACTION_BACK -> PermissionGUI.openUserHub(player, manager, target);
+                case PermissionGUI.ACTION_NEXT -> PermissionGUI.openUserGroupPicker(player, manager, target, holder.page() + 1);
+                case PermissionGUI.ACTION_PREV -> PermissionGUI.openUserGroupPicker(player, manager, target, Math.max(0, holder.page() - 1));
+                default -> {}
+            }
+            return;
+        }
+        if (groupName != null) {
+            UserPermissions u = manager.getUserPermissions(target);
+            if (u.hasGroup(groupName)) {
+                u.removeGroup(groupName);
+            } else {
+                u.addGroup(groupName);
+            }
+            manager.saveUsers();
+            refreshPlayer(target);
+            PermissionGUI.openUserGroupPicker(player, manager, target, holder.page());
         }
     }
 
     private void refreshPlayer(UUID uuid) {
-        Player player = Bukkit.getPlayer(uuid);
-        if (player != null) manager.refreshPlayer(player);
+        Player p = Bukkit.getPlayer(uuid);
+        if (p != null) manager.refreshPlayer(p);
     }
 
     private void refreshAllInGroup(String groupName) {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            UserPermissions user = manager.getUsers().get(player.getUniqueId());
-            if (user != null && groupName.equalsIgnoreCase(user.getGroupName())) {
-                manager.refreshPlayer(player);
-            } else if (user == null && groupName.equalsIgnoreCase("default")) {
-                manager.refreshPlayer(player);
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            UserPermissions u = manager.getUsers().get(p.getUniqueId());
+            boolean inGroup;
+            if (u == null || u.getGroups().isEmpty()) {
+                inGroup = groupName.equalsIgnoreCase("default");
+            } else {
+                inGroup = u.hasGroup(groupName);
+            }
+            if (inGroup) {
+                manager.refreshPlayer(p);
             }
         }
     }

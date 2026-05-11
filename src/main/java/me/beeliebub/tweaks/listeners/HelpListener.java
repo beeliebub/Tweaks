@@ -83,7 +83,7 @@ public class HelpListener implements Listener {
         player.sendMessage(Component.empty());
         player.sendMessage(Component.text("Need help? Type ", NamedTextColor.YELLOW).append(openHelp));
 
-        HelpArticle tip = helpManager.getRandomArticle();
+        HelpArticle tip = helpManager.getRandomArticle(player);
         if (tip != null) {
             Component readMore = Component.text(" [Read]", NamedTextColor.YELLOW)
                     .hoverEvent(HoverEvent.showText(Component.text("Open: " + tip.title(), NamedTextColor.GRAY)))

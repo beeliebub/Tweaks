@@ -71,18 +71,27 @@ public class PermissionManager implements Listener {
         // 1. User direct permissions
         effective.addAll(user.getPermissions());
 
-        // 2. Group permissions (including inheritance)
-        String groupName = user.getGroupName();
-        if (groupName == null) groupName = "default";
-        
-        addInheritedPermissions(groupName, effective, new HashSet<>());
+        // 2. Group permissions (including inheritance).
+        // A single `visited` set is shared across all entry-point groups so that
+        // shared ancestors in the inheritance DAG (e.g. two groups inheriting
+        // from a common parent) contribute their permissions exactly once.
+        Set<String> userGroups = user.getGroups();
+        Set<String> visited = new HashSet<>();
+        if (userGroups.isEmpty()) {
+            // Implicit fallback: users with no explicit groups belong to 'default'.
+            addInheritedPermissions("default", effective, visited);
+        } else {
+            for (String groupName : userGroups) {
+                addInheritedPermissions(groupName, effective, visited);
+            }
+        }
 
         return effective;
     }
 
     private void addInheritedPermissions(String groupName, Set<String> effective, Set<String> visited) {
         if (groupName == null || visited.contains(groupName.toLowerCase())) return;
-        
+
         PermissionGroup group = groups.get(groupName.toLowerCase());
         if (group == null) return;
 

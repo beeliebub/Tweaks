@@ -8,6 +8,7 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Sound;
@@ -20,11 +21,11 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.SkullMeta;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -34,17 +35,17 @@ import java.util.Map;
 // articles in chat. The GUI uses HelpHolder for per-slot id mappings so click routing
 // is driven by data, not by parallel slot arrays. Inventory and join events live in
 // HelpListener (separation of command vs. listener responsibilities).
+//
+// Layout: both menus are 54 slots. Articles and categories carry their own slot
+// indices, so HelpCommand just iterates the data and places items at those slots.
+// Category menus reserve slot 45 for a red-glass "Back" tile; the main menu uses
+// gray-glass decorative panes around the center icons.
 public class HelpCommand implements CommandExecutor, TabCompleter {
 
-    // Centered rows for a 27-slot main menu and a 36-slot category menu.
-    private static final int[] MAIN_SLOTS = {10, 11, 12, 13, 14, 15, 16};
-    private static final int[] CATEGORY_SLOTS = {
-            10, 11, 12, 13, 14, 15, 16,
-            19, 20, 21, 22, 23, 24, 25
-    };
-    private static final int CATEGORY_BACK_SLOT = 31;
-    private static final int MAIN_MENU_SIZE = 27;
-    private static final int CATEGORY_MENU_SIZE = 36;
+    private static final int MENU_SIZE = 54;
+    private static final int CATEGORY_BACK_SLOT = 45;
+
+    private static final MiniMessage MM = MiniMessage.miniMessage();
 
     private final HelpManager helpManager;
 
@@ -67,13 +68,21 @@ public class HelpCommand implements CommandExecutor, TabCompleter {
         String target = args[0].toLowerCase();
         HelpCategory category = helpManager.getCategory(target);
         if (category != null) {
-            openCategoryMenu(player, category);
+            if (category.hasVisibleArticles(player)) {
+                openCategoryMenu(player, category);
+            } else {
+                player.sendMessage(Component.text("You don't have permission to view this category.", NamedTextColor.RED));
+            }
             return true;
         }
 
         HelpArticle article = helpManager.getArticle(target);
         if (article != null) {
-            sendArticle(player, article);
+            if (article.permission() == null || player.hasPermission(article.permission())) {
+                sendArticle(player, article);
+            } else {
+                player.sendMessage(Component.text("You don't have permission to view this article.", NamedTextColor.RED));
+            }
             return true;
         }
 
@@ -83,19 +92,33 @@ public class HelpCommand implements CommandExecutor, TabCompleter {
 
     public void openMainMenu(Player player) {
         HelpHolder holder = new HelpHolder(null);
-        Inventory inv = Bukkit.createInventory(holder, MAIN_MENU_SIZE,
-                Component.text("Help", NamedTextColor.DARK_AQUA, TextDecoration.BOLD));
+        Inventory inv = Bukkit.createInventory(holder, MENU_SIZE,
+                MM.deserialize("<gradient:#FF9A00:#9863E7:#5489FF><b>Help</b></gradient>"));
         holder.attach(inv);
 
-        fillBorder(inv);
+        boolean hasPerms = false;
+        HelpCategory permsCat = helpManager.getCategory("permissions");
+        if (permsCat != null && permsCat.hasVisibleArticles(player)) {
+            hasPerms = true;
+        }
 
-        List<HelpCategory> categories = new ArrayList<>(helpManager.getCategories());
-        for (int i = 0; i < categories.size() && i < MAIN_SLOTS.length; i++) {
-            HelpCategory category = categories.get(i);
-            int slot = MAIN_SLOTS[i];
+        for (HelpCategory category : helpManager.getCategories()) {
+            if (!category.hasVisibleArticles(player)) continue;
+            int slot = category.slot();
+
+            if (hasPerms) {
+                switch (category.id()) {
+                    case "features" -> slot = 29;
+                    case "minigames" -> slot = 31;
+                    case "permissions" -> slot = 33;
+                }
+            }
+
             inv.setItem(slot, categoryIcon(category));
             holder.mapCategory(slot, category.id());
         }
+
+        fillBorder(inv);
 
         player.openInventory(inv);
         player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.7f, 1.0f);
@@ -103,22 +126,21 @@ public class HelpCommand implements CommandExecutor, TabCompleter {
 
     public void openCategoryMenu(Player player, HelpCategory category) {
         HelpHolder holder = new HelpHolder(category.id());
-        Inventory inv = Bukkit.createInventory(holder, CATEGORY_MENU_SIZE,
-                Component.text(category.title(), NamedTextColor.DARK_AQUA, TextDecoration.BOLD));
+        Inventory inv = Bukkit.createInventory(holder, MENU_SIZE,
+                MM.deserialize("<gradient:" + category.gradient() + "><b>" + category.title() + "</b></gradient>"));
         holder.attach(inv);
 
-        fillBorder(inv);
-
-        List<HelpArticle> articles = category.articles();
-        for (int i = 0; i < articles.size() && i < CATEGORY_SLOTS.length; i++) {
-            HelpArticle article = articles.get(i);
-            int slot = CATEGORY_SLOTS[i];
+        for (HelpArticle article : category.articles()) {
+            if (article.permission() != null && !player.hasPermission(article.permission())) continue;
+            int slot = article.slot();
             inv.setItem(slot, articleIcon(article));
             holder.mapArticle(slot, article.id());
         }
 
         inv.setItem(CATEGORY_BACK_SLOT, backIcon());
         holder.markBackSlot(CATEGORY_BACK_SLOT);
+
+        fillBorder(inv);
 
         player.openInventory(inv);
         player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.7f, 1.1f);
@@ -128,7 +150,7 @@ public class HelpCommand implements CommandExecutor, TabCompleter {
         Component divider = Component.text("─────────────────", NamedTextColor.DARK_GRAY);
         player.sendMessage(Component.empty());
         player.sendMessage(divider);
-        player.sendMessage(Component.text(article.title(), NamedTextColor.GOLD, TextDecoration.BOLD));
+        player.sendMessage(MM.deserialize("<gradient:" + article.gradient() + "><b>" + article.title() + "</b></gradient>"));
         player.sendMessage(Component.empty());
 
         for (Component line : article.content()) {
@@ -165,38 +187,51 @@ public class HelpCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        if (!(sender instanceof Player player)) return Collections.emptyList();
         if (args.length != 1) return Collections.emptyList();
 
         String partial = args[0].toLowerCase();
         List<String> options = new ArrayList<>();
         for (HelpCategory c : helpManager.getCategories()) {
-            options.add(c.id());
-            for (HelpArticle a : c.articles()) options.add(a.id());
+            if (c.hasVisibleArticles(player)) {
+                options.add(c.id());
+                for (HelpArticle a : c.articles()) {
+                    if (a.permission() == null || player.hasPermission(a.permission())) {
+                        options.add(a.id());
+                    }
+                }
+            }
         }
         return options.stream().filter(o -> o.startsWith(partial)).toList();
     }
 
     private ItemStack categoryIcon(HelpCategory category) {
-        return makeIcon(category.icon(),
-                Component.text(category.title(), NamedTextColor.YELLOW, TextDecoration.BOLD),
-                List.of(
-                        Component.text(category.articles().size() + " articles", NamedTextColor.GRAY),
-                        Component.empty(),
-                        Component.text("Click to browse", NamedTextColor.DARK_AQUA)
-                ));
+        Component name = MM.deserialize("<gradient:" + category.gradient() + "><b>" + category.title() + "</b></gradient>");
+        Component lore = Component.text("Click to view ", NamedTextColor.GRAY)
+                .append(MM.deserialize("<gradient:" + category.gradient() + "><b>" + category.title().toLowerCase() + "</b></gradient>"))
+                .append(Component.text(" articles!", NamedTextColor.GRAY));
+        return makeIcon(category.icon(), name, List.of(lore));
     }
 
     private ItemStack articleIcon(HelpArticle article) {
-        return makeIcon(article.icon(),
-                Component.text(article.title(), NamedTextColor.AQUA, TextDecoration.BOLD),
-                List.of(
-                        Component.text("Click to read in chat", NamedTextColor.GRAY)
-                ));
+        Component name = MM.deserialize("<gradient:" + article.gradient() + "><b>" + article.title() + "</b></gradient>");
+        Component lore = Component.text("Click to read ", NamedTextColor.GRAY)
+                .append(MM.deserialize("<gradient:" + article.gradient() + "><b>" + article.title().toLowerCase() + "</b></gradient>"))
+                .append(Component.text(" information!", NamedTextColor.GRAY));
+        ItemStack item = makeIcon(article.icon(), name, List.of(lore));
+
+        // Use andrewkm skin for whack-an-andrew article
+        if (article.id().equals("whack") && item.getItemMeta() instanceof SkullMeta skullMeta) {
+            skullMeta.setOwningPlayer(Bukkit.getOfflinePlayer("andrewkm"));
+            item.setItemMeta(skullMeta);
+        }
+
+        return item;
     }
 
     private ItemStack backIcon() {
-        return makeIcon(Material.ARROW,
-                Component.text("Back", NamedTextColor.YELLOW, TextDecoration.BOLD),
+        return makeIcon(Material.RED_STAINED_GLASS_PANE,
+                Component.text("Back", NamedTextColor.RED, TextDecoration.BOLD),
                 List.of(Component.text("Return to the main menu", NamedTextColor.GRAY)));
     }
 

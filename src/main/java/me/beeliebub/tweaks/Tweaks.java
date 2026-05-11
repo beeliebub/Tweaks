@@ -119,6 +119,15 @@ public class Tweaks extends JavaPlugin {
         getCommand("nv").setExecutor(new NightVisionCommand());
         getCommand("more").setExecutor(new MoreCommand());
         getCommand("fullmoon").setExecutor(new FullMoonCommand());
+        LoreCommand loreCommand = new LoreCommand();
+        getCommand("lore").setExecutor(loreCommand);
+        getCommand("lore").setTabCompleter(loreCommand);
+        NameCommand nameCommand = new NameCommand();
+        getCommand("name").setExecutor(nameCommand);
+        getCommand("name").setTabCompleter(nameCommand);
+        GuiCopyCommand guiCopyCommand = new GuiCopyCommand(this);
+        getCommand("guicopy").setExecutor(guiCopyCommand);
+        getCommand("guicopy").setTabCompleter(guiCopyCommand);
         ConfigCommand configCommand = new ConfigCommand(this, resourceHuntItems);
         getCommand("tconfig").setExecutor(configCommand);
         getCommand("tconfig").setTabCompleter(configCommand);
@@ -236,6 +245,11 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(logsCommand, this);
         getServer().getPluginManager().registerEvents(new BlockLogListener(chestLogManager), this);
         getServer().getPluginManager().registerEvents(new BlockLogChunkListener(chestLogManager), this);
+
+        // Display Chest
+        DisplayChestManager displayChestManager = new DisplayChestManager(this);
+        getCommand("displaychest").setExecutor(new DisplayChestCommand(displayChestManager));
+        getServer().getPluginManager().registerEvents(new DisplayChestListener(displayChestManager), this);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
         }

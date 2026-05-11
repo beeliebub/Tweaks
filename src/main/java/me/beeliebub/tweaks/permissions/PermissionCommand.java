@@ -36,7 +36,11 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 0) {
-            sendUsage(sender);
+            if (sender instanceof Player player) {
+                PermissionGUI.openMainMenu(player, manager);
+            } else {
+                sendUsage(sender);
+            }
             return true;
         }
 
@@ -46,7 +50,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(Component.text("Only players can use the GUI.").color(NamedTextColor.RED));
                 return true;
             }
-            PermissionGUI.openGroupsMenu(player, manager);
+            PermissionGUI.openMainMenu(player, manager);
             return true;
         }
 
@@ -62,7 +66,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
 
     private boolean handleGroup(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            sender.sendMessage(Component.text("Usage: /tprm group <name> <create|delete|addperm|delperm|setparent>").color(NamedTextColor.RED));
+            sender.sendMessage(Component.text("Usage: /tprm group <name> <create|delete|addperm|delperm|inherited-from>").color(NamedTextColor.RED));
             return true;
         }
 
@@ -121,9 +125,9 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 refreshAllInGroup(name);
                 sender.sendMessage(Component.text("Removed permission from group '" + name + "'.").color(NamedTextColor.GREEN));
             }
-            case "setparent" -> {
+            case "inherited-from" -> {
                 if (args.length < 4) {
-                    sender.sendMessage(Component.text("Usage: /tprm group <name> setparent <parent|none>").color(NamedTextColor.RED));
+                    sender.sendMessage(Component.text("Usage: /tprm group <name> inherited-from <parent|none>").color(NamedTextColor.RED));
                     return true;
                 }
                 PermissionGroup group = manager.getGroups().get(name);
@@ -139,7 +143,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 group.setParentName(parent);
                 manager.saveGroups();
                 refreshAllInGroup(name);
-                sender.sendMessage(Component.text("Set parent for group '" + name + "' to " + (parent == null ? "none" : parent) + ".").color(NamedTextColor.GREEN));
+                sender.sendMessage(Component.text("Set inheritance for group '" + name + "' to " + (parent == null ? "none" : parent) + ".").color(NamedTextColor.GREEN));
             }
             default -> sender.sendMessage(Component.text("Unknown action.").color(NamedTextColor.RED));
         }
@@ -192,7 +196,9 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Component.text("Group not found.").color(NamedTextColor.RED));
                     return true;
                 }
-                manager.getUserPermissions(uuid).setGroupName(group);
+                UserPermissions u = manager.getUserPermissions(uuid);
+                u.getGroups().clear();
+                if (group != null) u.addGroup(group);
                 manager.saveUsers();
                 refreshPlayer(uuid);
                 sender.sendMessage(Component.text("Set group for user " + target.getName() + " to " + (group == null ? "none" : group) + ".").color(NamedTextColor.GREEN));
@@ -212,9 +218,13 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
     private void refreshAllInGroup(String groupName) {
         for (Player player : Bukkit.getOnlinePlayers()) {
             UserPermissions user = manager.getUsers().get(player.getUniqueId());
-            if (user != null && groupName.equalsIgnoreCase(user.getGroupName())) {
-                manager.refreshPlayer(player);
-            } else if (user == null && groupName.equalsIgnoreCase("default")) {
+            boolean inGroup;
+            if (user == null || user.getGroups().isEmpty()) {
+                inGroup = groupName.equalsIgnoreCase("default");
+            } else {
+                inGroup = user.hasGroup(groupName);
+            }
+            if (inGroup) {
                 manager.refreshPlayer(player);
             }
         }
@@ -223,7 +233,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
     private void sendUsage(CommandSender sender) {
         sender.sendMessage(Component.text("=== Permission Commands ===").color(NamedTextColor.GOLD));
         sender.sendMessage(Component.text("/tprm gui").color(NamedTextColor.YELLOW));
-        sender.sendMessage(Component.text("/tprm group <name> create|delete|addperm|delperm|setparent").color(NamedTextColor.YELLOW));
+        sender.sendMessage(Component.text("/tprm group <name> create|delete|addperm|delperm|inherited-from").color(NamedTextColor.YELLOW));
         sender.sendMessage(Component.text("/tprm user <player> addperm|delperm|setgroup").color(NamedTextColor.YELLOW));
     }
 
@@ -240,14 +250,14 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 return filter(new ArrayList<>(manager.getGroups().keySet()), args[1]);
             }
             if (args.length == 3) {
-                return filter(List.of("create", "delete", "addperm", "delperm", "setparent"), args[2]);
+                return filter(List.of("create", "delete", "addperm", "delperm", "inherited-from"), args[2]);
             }
             if (args.length == 4) {
                 String action = args[2].toLowerCase();
                 if (action.equals("addperm") || action.equals("delperm")) {
                     return filter(Permissions.getAllPermissions(), args[3]);
                 }
-                if (action.equals("setparent")) {
+                if (action.equals("inherited-from")) {
                     List<String> groups = new ArrayList<>(manager.getGroups().keySet());
                     groups.add("none");
                     return filter(groups, args[3]);

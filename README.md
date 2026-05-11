@@ -51,6 +51,8 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Spawn Egg Restrictions](#spawn-egg-restrictions)
 - [Admin Tools](#admin-tools)
   - [Block Log](#block-log)
+  - [Item Editing](#item-editing)
+  - [Chest GUI Copy](#chest-gui-copy)
 - [World Events](#world-events)
   - [Blood Moon](#blood-moon)
 - [Minigames](#minigames)
@@ -464,17 +466,50 @@ Players in the tab list are automatically sorted by their current world profile 
 | `jass:pi` | **[Pi]** (light purple) |
 
 Any other world falls back to the **[Survival]** tag. Players in the lobby appear at the top of the tab list, followed by the standard worlds (overworld, nether, end, resource), then archive, then pi. Tags update automatically when you change worlds. Players who have toggled `/afk` also display a red **[AFK]** suffix after their name — see [AFK](#afk).
-
 ### Help Menu
 
 A comprehensive, interactive help system is available to guide you through the server's features.
 
-- **GUI Access**: Type `/help` to open a categorized menu where you can explore different aspects of gameplay.
+- **GUI Access**: Type `/help` to open a categorized menu where you can explore different aspects of gameplay. Each category and article features a unique, theme-consistent color gradient for easy identification.
+- **Dynamic Layout**: The main menu automatically adjusts its layout based on your permissions, ensuring high-priority admin categories (like Permissions) are easily accessible.
 - **Direct Access**: Use `/help <section>` (e.g., `/help teleportation` or `/help tunneller`) to jump directly to a specific category or article.
 - **Login Tips**: Each time you log in, you'll receive a random gameplay tip to help you discover new features.
 
-### XP Storage Bottles
+---
 
+### Permissions System
+
+A hybrid GUI/CLI permission system with **multi-group membership**, single-parent group inheritance, and per-user overrides.
+
+| Command | Permission | What it does |
+|---|---|---|
+| `/tprm` | `tweaks.admin.permissions` | Open the Permissions GUI. |
+| `/tprm group <name> create` | `tweaks.admin.permissions` | Create a new permission group. |
+| `/tprm group <name> delete` | `tweaks.admin.permissions` | Delete a group ('default' is protected). |
+| `/tprm group <name> addperm <p>` | `tweaks.admin.permissions` | Grant a permission to a group. |
+| `/tprm group <name> delperm <p>` | `tweaks.admin.permissions` | Revoke a permission from a group. |
+| `/tprm group <name> inherited-from <parent\|none>` | `tweaks.admin.permissions` | Set group inheritance. |
+| `/tprm user <player> addperm <p>` | `tweaks.admin.permissions` | Grant a per-user override. |
+| `/tprm user <player> delperm <p>` | `tweaks.admin.permissions` | Revoke a per-user override. |
+| `/tprm user <player> setgroup <g\|none>` | `tweaks.admin.permissions` | Replace a user's group memberships with the named group (or clear all with `none`). Use the GUI's **Edit Groups** menu to assemble multi-group memberships interactively. |
+
+**Multi-group model**: A player may belong to any number of groups simultaneously. A user with no explicit group memberships implicitly resolves to the `default` group at permission-resolution time. Each group may declare a single parent for inheritance, and parent chains are walked recursively per group.
+
+**Effective permissions** for a player are the union of:
+1. The player's direct permission overrides.
+2. The permissions of every group the player belongs to.
+3. Every ancestor group reachable through `inherited-from` chains from those groups.
+
+When two of the player's groups share an ancestor in the inheritance graph, that ancestor's permissions are added exactly once. Cycles in the inheritance graph are skipped safely.
+
+**Permissions GUI**: The visual editor allows managing groups and players with simple click toggles.
+- **Main Menu**: Entry point featuring 'Videowiz92' icon.
+- **Groups Hub**: Manage group permissions, member list (toggle-based), and inheritance.
+- **Users Hub**: Manage player-specific overrides and multi-group memberships. The **Edit Groups** panel lists every group with a glint on the ones the player already belongs to — click any tile to toggle membership.
+
+---
+
+### XP Storage Bottles
 Store your experience levels for later use or trade by brewing **Experience Potions** in a brewing stand.
 
 **Brewing Recipes**:
@@ -592,6 +627,32 @@ A lightweight chest-audit system: every time a player adds or removes items from
 - Ender chests and shulker boxes are **not** tracked (per-player or portable; no useful audit value).
 - Logs persist as long as the chunk does — destroying a chest does not erase its prior history.
 
+### Item Editing
+
+Edit the display name and lore of the item in your main hand. Both commands support legacy `&`-prefixed color codes (e.g. `&c`, `&l`, `&r`) and `&#rrggbb` hex colors. Spaces in the input are preserved naturally, so quoting is not required. The default vanilla italic styling is suppressed automatically — what you type is what you see.
+
+| Command | Permission | What it does |
+|---|---|---|
+| `/name <name>` | `tweaks.admin.itemedit` | Set the held item's display name. |
+| `/name off` | `tweaks.admin.itemedit` | Clear the held item's custom name. |
+| `/lore add <line#> <text>` | `tweaks.admin.itemedit` | Insert a lore line at the 1-indexed position (clamped to end+1). |
+| `/lore remove <line#>` | `tweaks.admin.itemedit` | Remove the lore line at the 1-indexed position. |
+
+### Chest GUI Copy
+
+Save the targeted chest's full contents to a YAML file under `plugins/Tweaks/guicopies/`. Look at a single or double chest within 8 blocks and run the command. The generated file includes:
+- **Human Readable Data**: Each item's properties (material, name, lore, enchants) are stored in Bukkit's standard YAML format for easy inspection or manipulation.
+- **Zero-Data-Loss Base64**: Every item is also serialized to a Base64 string via `ItemStack.serializeAsBytes`, ensuring all NBT and PDC data is preserved.
+- **Java Code Snippet**: A comprehensive, paste-ready Java block that reconstructs the entire inventory. It includes a `buildItem` helper, handles MiniMessage for readable Adventure components, supports specialized ItemMeta (Potions, Books, Banners, etc.), and preserves all PersistentDataContainer (PDC) tags.
+
+The file also records the world key and block coordinates so the snapshot can be restored or audited later.
+
+| Command | Permission | What it does |
+|---|---|---|
+| `/guicopy [name]` | `tweaks.admin.guicopy` | Save the targeted chest. With no name, one is auto-generated from the world and coordinates. |
+
+The `name` argument is restricted to letters, numbers, dots, dashes, and underscores so it cannot escape the `guicopies/` directory. Existing files are silently overwritten — the chat confirmation indicates whether the save was a fresh write or an overwrite.
+
 ---
 
 ## World Events
@@ -698,6 +759,8 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/toolprotect durability <n>` | Set remaining-durability threshold for ToolProtect. |
 | `/afk` | Toggle AFK status. |
 | `/fullmoon` | Show estimate for next full moon. |
+| `/displaychest` | Toggle display chest setup mode. |
+| `/tprm [gui|group|user]` | Manage server-side permissions. |
 | `/help [section]` | Show comprehensive GUI help menu. |
 | `/reward claim` | Claim pending minigame rewards. |
 
@@ -712,6 +775,9 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/delhome <player> <name>` | `tweaks.admin.delhome` | Delete another player's home. |
 | `/homes <player>` | `tweaks.admin.homes` | List another player's homes. |
 | `/nick off <player>` | `tweaks.admin.nick` | Remove another player's nickname. |
+| `/tprm` | `tweaks.admin.permissions` | Open the Permissions GUI. |
+| `/tprm group <name> <create|delete|addperm|delperm|inherited-from>` | `tweaks.admin.permissions` | CLI group management. |
+| `/tprm user <player> <addperm|delperm|setgroup>` | `tweaks.admin.permissions` | CLI user management. |
 | `/tconfig <key> <value>` | `tweaks.admin.config` | Update a config value at runtime. Alias: `/tweaksconfig`. |
 | `/tconfig eggdrop <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable Egg Collector drops for a mob. |
 | `/tconfig spawneregg <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable spawn egg usage on spawners. |
@@ -729,6 +795,11 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/whack stop` | `tweaks.admin.whack` | Stop the current game. |
 | `/whack setreward <1\|2\|3> <name>` | `tweaks.admin.whack` | Set the reward for 1st/2nd/3rd place. |
 | `/logs` | `tweaks.admin.logs` | Toggle chest-log inspector mode. Punch a chest to view its log. |
+| `/name <name>` | `tweaks.admin.itemedit` | Set the held item's display name (color codes + hex). |
+| `/name off` | `tweaks.admin.itemedit` | Clear the held item's custom name. |
+| `/lore add <line#> <text>` | `tweaks.admin.itemedit` | Insert a lore line at the 1-indexed position. |
+| `/lore remove <line#>` | `tweaks.admin.itemedit` | Remove the lore line at the 1-indexed position. |
+| `/guicopy [name]` | `tweaks.admin.guicopy` | Save the targeted chest's contents to `plugins/Tweaks/guicopies/<name>.yml`. |
 
 ---
 
@@ -751,6 +822,9 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `tweaks.admin.reward` | Create and edit rewards. |
 | `tweaks.admin.whack` | Full access to Whack-an-Andrew commands. |
 | `tweaks.admin.logs` | Use `/logs` and inspect chest logs by punching containers. |
+| `tweaks.admin.itemedit` | Use `/name` and `/lore` to edit the held item. |
+| `tweaks.admin.guicopy` | Use `/guicopy` to snapshot chest contents to disk. |
+| `tweaks.admin.permissions` | Access the `/tprm` GUI and CLI commands. |
 
 ---
 
@@ -801,6 +875,38 @@ efficacy: "jass:test9"
 1. Place the JAR in `plugins/`.
 2. Ensure you are running **Paper 26.1.2** with **Java 25**.
 3. Install the required **data pack** for custom enchantments.
+4. Start the server, then update namespaced keys in `config.yml`.
+5. Run `/setwarp spawn` to enable `/spawn`.
+6. Run `/setwarp newspawn` to enable resource world login ejection.
+
+### Data Pack Requirement
+
+The plugin reads namespaced keys from `config.yml` and looks them up in Paper's enchantment registry. Quality variants are looked up directly under `jass:{tier}_{enchantName}`.
+
+### Data Storage
+
+All data is stored in YAML files under `plugins/Tweaks/`:
+
+- `config.yml`: Plugin settings.
+- `homes/<UUID>.yml`: Per-player home locations.
+- `warps.yml`: Server warp locations.
+- `inventories/<UUID>.yml`: Separated inventories, ender chests, and XP.
+- `nick-removals.yml`: Pending nickname removals.
+- `whack.yml`: Whack-an-Andrew configuration.
+- `rewards/`: Reward templates.
+
+### Building from Source
+
+```bash
+./gradlew build
+```
+
+Compiled JAR is in `build/libs/`. Run a dev server with:
+
+```bash
+./gradlew runServer
+```
+ for custom enchantments.
 4. Start the server, then update namespaced keys in `config.yml`.
 5. Run `/setwarp spawn` to enable `/spawn`.
 6. Run `/setwarp newspawn` to enable resource world login ejection.

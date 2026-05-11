@@ -16,7 +16,8 @@ Desktop.ini
 .DS_Store
 
 # Build artifacts
-Tweaks/
+/Tweaks/
+/src/main/resources/temp
 
 *.md
 !README.md
