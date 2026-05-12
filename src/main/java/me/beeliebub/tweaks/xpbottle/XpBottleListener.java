@@ -216,6 +216,7 @@ public class XpBottleListener implements Listener {
                 BlockState st = block.getState();
                 if (st instanceof BrewingStand bs) {
                     bs.getInventory().setIngredient(null);
+                    bs.update();
                 }
                 if (world != null) {
                     world.dropItemNaturally(standCenter, ingredientClone);
@@ -288,6 +289,7 @@ public class XpBottleListener implements Listener {
                     world.dropItemNaturally(standCenter, drop);
                 }
             }
+            bs.update();
         });
     }
 

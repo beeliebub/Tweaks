@@ -493,7 +493,7 @@ public class HelpManager {
                 cmd("/tprm", "Open the visual editor."),
                 red("Requires permission: tweaks.admin.permissions.")
         ), Material.BOOKSHELF, 20, ColorUtil.HELP_GRAD_PERMISSIONS,
-                List.of("permissions_groups", "permissions_users", "permissions_gui"),
+                List.of("permissions_groups", "permissions_players", "permissions_gui"),
                 Permissions.ADMIN_PERMISSIONS));
 
         articles.add(new HelpArticle("permissions_groups", "Groups Management", List.of(

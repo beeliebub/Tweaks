@@ -242,7 +242,7 @@ public class ResourceHunt implements Listener {
         }
 
         if (!isActive()) return;
-        boolean canCount = worldKey.equals(activeWorldKey) && !isFullyComplete(event.getPlayer().getUniqueId());
+        boolean canCount = worldKey.contains(activeWorldKey) && !isFullyComplete(event.getPlayer().getUniqueId());
 
         int gained = 0;
         for (Item item : event.getItems()) {
@@ -275,7 +275,7 @@ public class ResourceHunt implements Listener {
         }
 
         if (!isActive()) return;
-        boolean canCount = worldKey.equals(activeWorldKey) && !isFullyComplete(player.getUniqueId());
+        boolean canCount = worldKey.contains(activeWorldKey) && !isFullyComplete(player.getUniqueId());
 
         int gained = 0;
         for (ItemStack stack : drops) {
@@ -301,7 +301,7 @@ public class ResourceHunt implements Listener {
 
         Player killer = entity.getKiller();
         if (killer == null) return;
-        boolean canCount = worldKey.equals(activeWorldKey) && !isFullyComplete(killer.getUniqueId());
+        boolean canCount = worldKey.contains(activeWorldKey) && !isFullyComplete(killer.getUniqueId());
 
         int gained = 0;
         for (ItemStack stack : event.getDrops()) {
@@ -572,7 +572,7 @@ public class ResourceHunt implements Listener {
     }
 
     public static boolean isResourceWorld(String worldKey) {
-        return TARGET_WORLD_KEY.equals(worldKey) || TARGET_WORLD_NETHER_KEY.equals(worldKey);
+        return worldKey.contains(TARGET_WORLD_KEY) || worldKey.contains(TARGET_WORLD_NETHER_KEY);
     }
 
     /**

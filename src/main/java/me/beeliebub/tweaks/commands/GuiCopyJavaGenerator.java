@@ -36,7 +36,7 @@ import java.util.Set;
 // LeatherArmor, Banner, EnchantmentStorage — each have a dedicated branch so common NBT
 // (effects, pages, fireworks, owners, dye colors, banner patterns, stored enchants) survives.
 // PDC handling covers all primitive types plus byte/int/long arrays and nested TAG_CONTAINERs.
-final class GuiCopyJavaGenerator {
+public final class GuiCopyJavaGenerator {
 
     private static final MiniMessage MM = MiniMessage.miniMessage();
 
@@ -45,7 +45,7 @@ final class GuiCopyJavaGenerator {
     private GuiCopyJavaGenerator() {
     }
 
-    static String generate(Inventory inventory) {
+    public static String generate(Inventory inventory) {
         return new GuiCopyJavaGenerator().build(inventory);
     }
 

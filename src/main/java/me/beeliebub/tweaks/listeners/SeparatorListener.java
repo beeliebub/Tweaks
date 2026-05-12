@@ -51,9 +51,9 @@ public class SeparatorListener implements Listener {
     }
 
     private String getProfileForWorldKey(String worldKey) {
-        if (worldKey.equalsIgnoreCase(ARCHIVE_WORLD_KEY)) return PROFILE_ARCHIVE;
-        if (worldKey.equalsIgnoreCase(LOBBY_WORLD_KEY)) return PROFILE_LOBBY;
-        if (worldKey.equalsIgnoreCase(PI_WORLD_KEY)) return PROFILE_PI;
+        if (worldKey.contains(ARCHIVE_WORLD_KEY)) return PROFILE_ARCHIVE;
+        if (worldKey.contains(LOBBY_WORLD_KEY)) return PROFILE_LOBBY;
+        if (worldKey.contains(PI_WORLD_KEY)) return PROFILE_PI;
         return PROFILE_STANDARD;
     }
 
@@ -117,7 +117,7 @@ public class SeparatorListener implements Listener {
         // a /spawn round-trip from loading an empty profile back into the player's slots.
         if (event.getKeepInventory()) return;
 
-        Player player = event.getPlayer();
+        Player player = event.getEntity();
         UUID uuid = player.getUniqueId();
         recentDeaths.add(uuid);
 
