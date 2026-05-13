@@ -62,7 +62,7 @@ commands:
     usage: /fullmoon
   itemfilter:
     description: Configure your personal item pickup filter (whitelist or blacklist mode).
-    usage: /itemfilter [toggle | mode | add <item> | remove <item> | list [clear]]
+    usage: /itemfilter [toggle | mode | add <item...> | remove <item...> | list | clear [whitelist|blacklist|both]]
     aliases: [if]
   toolprotect:
     description: Block use of low-durability epic/legendary diamond/netherite tools (default ON).

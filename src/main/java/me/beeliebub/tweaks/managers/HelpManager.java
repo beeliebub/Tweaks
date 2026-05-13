@@ -285,7 +285,8 @@ public class HelpManager {
                 green("Highest quality tier is extracted first."),
                 yellow("Chance does NOT reset on failure."),
                 red("Failures consume the enchant without producing a book."),
-                red("The bundle is consumed on use.")
+                red("The bundle is consumed on use."),
+                red("Cannot extract from tools with Spawner Pickup or Egg Collector.")
         ), Material.BUNDLE, 32, ColorUtil.HELP_GRAD_DISENCHANTING, List.of("tiers")));
 
         return new HelpCategory("enchantments", "Custom Enchantments", articles, Material.ENCHANTED_BOOK, 22, ColorUtil.HELP_GRAD_CUSTOM_ENCHANTS);
@@ -347,10 +348,10 @@ public class HelpManager {
                 gray("Filters which items you pick up. State is per-profile."),
                 cmd("/if toggle", "Enable/disable the filter."),
                 cmd("/if mode", "Switch Whitelist/Blacklist."),
-                cmd("/if add <item>", "Add an item to the active list."),
-                cmd("/if remove <item>", "Remove an item."),
+                cmd("/if add <item>...", "Add item(s) to the active list."),
+                cmd("/if remove <item>...", "Remove item(s)."),
                 cmd("/if list", "Show the active list."),
-                cmd("/if list clear", "Clear the active list.")
+                cmd("/if clear [mode]", "Clear list(s).")
         ), Material.BARRIER, 14, ColorUtil.HELP_GRAD_ITEM_FILTER, List.of("telekinesis", "profiles")));
 
         articles.add(new HelpArticle("afk", "AFK", List.of(

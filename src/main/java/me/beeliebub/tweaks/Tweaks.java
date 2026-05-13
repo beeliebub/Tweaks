@@ -14,6 +14,8 @@ import me.beeliebub.tweaks.managers.*;
 import me.beeliebub.tweaks.permissions.PermissionCommand;
 import me.beeliebub.tweaks.permissions.PermissionListener;
 import me.beeliebub.tweaks.permissions.PermissionManager;
+import me.beeliebub.tweaks.recipes.ResourceRupee;
+import me.beeliebub.tweaks.recipes.ResourceRupeeListener;
 import me.beeliebub.tweaks.minigames.RewardCommand;
 import me.beeliebub.tweaks.minigames.RewardListener;
 import me.beeliebub.tweaks.minigames.RewardManager;
@@ -203,7 +205,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new Efficacy(this, qualityRegistry), this);
 
         // Disenchanting Bundle
-        getServer().getPluginManager().registerEvents(new DisenchantingBundle(this, qualityRegistry), this);
+        getServer().getPluginManager().registerEvents(new DisenchantingBundle(this, qualityRegistry, spawnerPickup, eggCollector), this);
 
         // Quality Enchantment Listeners
         getServer().getPluginManager().registerEvents(new EnchantTableListener(qualityRegistry, bloodMoonManager), this);
@@ -218,6 +220,10 @@ public class Tweaks extends JavaPlugin {
 
         // XP storage bottles (custom brewing-stand recipe + drinkable bottles)
         getServer().getPluginManager().registerEvents(new XpBottleListener(this), this);
+
+        // Resource Rupee currency (renamed emerald + emerald block with crafting grid conversion)
+        ResourceRupee resourceRupee = new ResourceRupee();
+        getServer().getPluginManager().registerEvents(new ResourceRupeeListener(resourceRupee), this);
 
         getCommand("resource").setExecutor(new ResourceCommand(resourceHunt, resourceHuntItems));
 

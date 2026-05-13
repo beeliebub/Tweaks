@@ -63,9 +63,10 @@ public class ItemFilterCommand implements CommandExecutor, TabCompleter, Listene
             case "add"    -> handleAdd(player, args);
             case "remove" -> handleRemove(player, args);
             case "list"   -> handleList(player, args);
+            case "clear"  -> handleClear(player, args);
             default -> {
                 player.sendMessage(Component.text(
-                        "Usage: /if [toggle | mode | add <item> | remove <item> | list [clear]]",
+                        "Usage: /if [toggle | mode | add <item...> | remove <item...> | list | clear [whitelist|blacklist|both]]",
                         NamedTextColor.YELLOW));
                 yield true;
             }
@@ -106,62 +107,96 @@ public class ItemFilterCommand implements CommandExecutor, TabCompleter, Listene
 
     private boolean handleAdd(Player player, String[] args) {
         if (args.length < 2) {
-            player.sendMessage(Component.text("Usage: /if add <item>", NamedTextColor.YELLOW));
-            return true;
-        }
-        Material material = Material.matchMaterial(args[1]);
-        if (material == null || !material.isItem()) {
-            player.sendMessage(Component.text("Unknown item: " + args[1], NamedTextColor.RED));
+            player.sendMessage(Component.text("Usage: /if add <item...>", NamedTextColor.YELLOW));
             return true;
         }
         String mode = getMode(player);
         List<String> list = new ArrayList<>(getList(player, mode));
-        String key = material.getKey().toString();
-        if (list.contains(key)) {
-            player.sendMessage(Component.text(prettyMaterial(material) + " is already in your " + mode + ".",
-                    NamedTextColor.YELLOW));
-            return true;
+        for (int i = 1; i < args.length; i++) {
+            String arg = args[i];
+            Material material = Material.matchMaterial(arg);
+            if (material == null || !material.isItem()) {
+                player.sendMessage(Component.text("Unknown item: " + arg, NamedTextColor.RED));
+                continue;
+            }
+            String key = material.getKey().toString();
+            if (list.contains(key)) {
+                player.sendMessage(Component.text(prettyMaterial(material) + " is already in your " + mode + ".",
+                        NamedTextColor.YELLOW));
+                continue;
+            }
+            list.add(key);
+            player.sendMessage(Component.text("Added ", NamedTextColor.GREEN)
+                    .append(Component.text(prettyMaterial(material), NamedTextColor.AQUA))
+                    .append(Component.text(" to your " + mode + ".", NamedTextColor.GREEN)));
         }
-        list.add(key);
         setList(player, mode, list);
-        player.sendMessage(Component.text("Added ", NamedTextColor.GREEN)
-                .append(Component.text(prettyMaterial(material), NamedTextColor.AQUA))
-                .append(Component.text(" to your " + mode + ".", NamedTextColor.GREEN)));
         return true;
     }
 
     private boolean handleRemove(Player player, String[] args) {
         if (args.length < 2) {
-            player.sendMessage(Component.text("Usage: /if remove <item>", NamedTextColor.YELLOW));
-            return true;
-        }
-        Material material = Material.matchMaterial(args[1]);
-        if (material == null) {
-            player.sendMessage(Component.text("Unknown item: " + args[1], NamedTextColor.RED));
+            player.sendMessage(Component.text("Usage: /if remove <item...>", NamedTextColor.YELLOW));
             return true;
         }
         String mode = getMode(player);
         List<String> list = new ArrayList<>(getList(player, mode));
-        if (!list.remove(material.getKey().toString())) {
-            player.sendMessage(Component.text(prettyMaterial(material) + " isn't in your " + mode + ".",
-                    NamedTextColor.YELLOW));
-            return true;
+        for (int i = 1; i < args.length; i++) {
+            String arg = args[i];
+            Material material = Material.matchMaterial(arg);
+            if (material == null) {
+                player.sendMessage(Component.text("Unknown item: " + arg, NamedTextColor.RED));
+                continue;
+            }
+            if (!list.remove(material.getKey().toString())) {
+                player.sendMessage(Component.text(prettyMaterial(material) + " isn't in your " + mode + ".",
+                        NamedTextColor.YELLOW));
+                continue;
+            }
+            player.sendMessage(Component.text("Removed ", NamedTextColor.GREEN)
+                    .append(Component.text(prettyMaterial(material), NamedTextColor.AQUA))
+                    .append(Component.text(" from your " + mode + ".", NamedTextColor.GREEN)));
         }
         setList(player, mode, list);
-        player.sendMessage(Component.text("Removed ", NamedTextColor.GREEN)
-                .append(Component.text(prettyMaterial(material), NamedTextColor.AQUA))
-                .append(Component.text(" from your " + mode + ".", NamedTextColor.GREEN)));
         return true;
     }
 
     private boolean handleList(Player player, String[] args) {
         if (args.length > 1 && args[1].equalsIgnoreCase("clear")) {
+            // Backwards compatibility: /if list clear → clears the active mode's list.
             String mode = getMode(player);
             setList(player, mode, List.of());
             player.sendMessage(Component.text("Your " + mode + " has been cleared.", NamedTextColor.GREEN));
             return true;
         }
         showList(player);
+        return true;
+    }
+
+    private boolean handleClear(Player player, String[] args) {
+        String target = args.length > 1 ? args[1].toLowerCase(Locale.ROOT) : "active";
+        switch (target) {
+            case "active" -> {
+                String mode = getMode(player);
+                setList(player, mode, List.of());
+                player.sendMessage(Component.text("Your " + mode + " has been cleared.", NamedTextColor.GREEN));
+            }
+            case MODE_WHITELIST -> {
+                setList(player, MODE_WHITELIST, List.of());
+                player.sendMessage(Component.text("Your whitelist has been cleared.", NamedTextColor.GREEN));
+            }
+            case MODE_BLACKLIST -> {
+                setList(player, MODE_BLACKLIST, List.of());
+                player.sendMessage(Component.text("Your blacklist has been cleared.", NamedTextColor.GREEN));
+            }
+            case "both" -> {
+                setList(player, MODE_WHITELIST, List.of());
+                setList(player, MODE_BLACKLIST, List.of());
+                player.sendMessage(Component.text("Both your whitelist and blacklist have been cleared.", NamedTextColor.GREEN));
+            }
+            default -> player.sendMessage(Component.text(
+                    "Usage: /if clear [whitelist|blacklist|both]", NamedTextColor.YELLOW));
+        }
         return true;
     }
 
@@ -203,29 +238,40 @@ public class ItemFilterCommand implements CommandExecutor, TabCompleter, Listene
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                        @NotNull String alias, @NotNull String @NotNull [] args) {
         if (args.length == 1) {
-            return prefixFilter(List.of("toggle", "mode", "add", "remove", "list"), args[0]);
+            return prefixFilter(List.of("toggle", "mode", "add", "remove", "list", "clear"), args[0]);
         }
-        if (args.length != 2) return List.of();
+        if (args.length < 2) return List.of();
 
-        String partial = args[1].toLowerCase(Locale.ROOT);
+        String sub = args[0].toLowerCase(Locale.ROOT);
+        String partial = args[args.length - 1].toLowerCase(Locale.ROOT);
 
-        if (args[0].equalsIgnoreCase("list")) {
+        if (sub.equals("list") && args.length == 2) {
             return prefixFilter(List.of("clear"), partial);
         }
 
-        if (args[0].equalsIgnoreCase("remove") && sender instanceof Player p) {
-            // Suggest only what's actually in the player's current list
+        if (sub.equals("clear") && args.length == 2) {
+            return prefixFilter(List.of(MODE_WHITELIST, MODE_BLACKLIST, "both"), partial);
+        }
+
+        if (sub.equals("remove") && sender instanceof Player p) {
+            // Suggest only what's actually in the player's current list, minus items already
+            // typed earlier on the same line so the same item isn't suggested twice.
             List<String> entries = getList(p, getMode(p)).stream()
                     .map(s -> s.startsWith("minecraft:") ? s.substring(10) : s)
                     .toList();
-            return prefixFilter(entries, args[1]);
+            List<String> alreadyTyped = alreadyTypedItems(args);
+            List<String> filtered = entries.stream()
+                    .filter(e -> !alreadyTyped.contains(e))
+                    .toList();
+            return prefixFilter(filtered, partial);
         }
-        if (args[0].equalsIgnoreCase("add")) {
+        if (sub.equals("add")) {
+            List<String> alreadyTyped = alreadyTypedItems(args);
             List<String> matches = new ArrayList<>(50);
             for (Material m : Material.values()) {
                 if (!m.isItem()) continue;
                 String name = m.getKey().getKey();
-                if (name.startsWith(partial)) {
+                if (name.startsWith(partial) && !alreadyTyped.contains(name)) {
                     matches.add(name);
                     if (matches.size() >= 50) break;
                 }
@@ -233,6 +279,17 @@ public class ItemFilterCommand implements CommandExecutor, TabCompleter, Listene
             return matches;
         }
         return List.of();
+    }
+
+    // Collect previously typed item args (everything between args[1] and the in-progress final
+    // arg) so tab completion can avoid suggesting duplicates on multi-item lines.
+    private static List<String> alreadyTypedItems(String[] args) {
+        if (args.length <= 2) return List.of();
+        List<String> typed = new ArrayList<>(args.length - 2);
+        for (int i = 1; i < args.length - 1; i++) {
+            typed.add(args[i].toLowerCase(Locale.ROOT));
+        }
+        return typed;
     }
 
     private static List<String> prefixFilter(List<String> options, String partial) {

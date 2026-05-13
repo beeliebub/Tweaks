@@ -87,4 +87,27 @@ class PermissionGUITest {
         assertNotNull(top);
         assertTrue(top.getHolder() instanceof PermissionHolder holder && holder.kind() == PermissionHolder.MenuKind.USER_HUB);
     }
+
+    @Test
+    void openGroupPerms() {
+        Map<String, PermissionGroup> groups = new HashMap<>();
+        groups.put("admin", new PermissionGroup("admin"));
+        when(manager.getGroups()).thenReturn(groups);
+
+        PermissionGUI.openGroupPerms(player, manager, "admin", 0);
+        Inventory top = player.getOpenInventory().getTopInventory();
+        assertNotNull(top);
+        assertTrue(top.getHolder() instanceof PermissionHolder holder && holder.kind() == PermissionHolder.MenuKind.GROUP_PERMS);
+    }
+
+    @Test
+    void openUserPerms() {
+        UUID uuid = UUID.randomUUID();
+        when(manager.getUserPermissions(uuid)).thenReturn(new UserPermissions(uuid));
+
+        PermissionGUI.openUserPerms(player, manager, uuid, 0);
+        Inventory top = player.getOpenInventory().getTopInventory();
+        assertNotNull(top);
+        assertTrue(top.getHolder() instanceof PermissionHolder holder && holder.kind() == PermissionHolder.MenuKind.USER_PERMS);
+    }
 }

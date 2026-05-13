@@ -37,10 +37,14 @@ public class DisenchantingBundle implements Listener {
 
     private final Tweaks plugin;
     private final QualityRegistry qualityRegistry;
+    private final SpawnerPickup spawnerPickup;
+    private final EggCollector eggCollector;
 
-    public DisenchantingBundle(Tweaks plugin, QualityRegistry qualityRegistry) {
+    public DisenchantingBundle(Tweaks plugin, QualityRegistry qualityRegistry, SpawnerPickup spawnerPickup, EggCollector eggCollector) {
         this.plugin = plugin;
         this.qualityRegistry = qualityRegistry;
+        this.spawnerPickup = spawnerPickup;
+        this.eggCollector = eggCollector;
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -54,13 +58,38 @@ public class DisenchantingBundle implements Listener {
         // Case 1: Clicking a bundle with an enchanted item on cursor
         if (isBundleWithLore(clicked) && isEnchanted(cursor)) {
             event.setCancelled(true);
+            if (isRestricted(cursor)) {
+                sendRestrictedMessage(player);
+                return;
+            }
             processDisenchant(player, cursor, clicked);
         }
         // Case 2: Clicking an enchanted item with a bundle on cursor
         else if (isBundleWithLore(cursor) && isEnchanted(clicked)) {
             event.setCancelled(true);
+            if (isRestricted(clicked)) {
+                sendRestrictedMessage(player);
+                return;
+            }
             processDisenchant(player, clicked, cursor);
         }
+        }
+
+        // Spawner Pickup and Egg Collector store their remaining-uses counter on the tool itself,
+        // and the tool self-destructs after 5 successful uses. Stripping them via the bundle would
+        // let players sidestep that wear-down cost, so we refuse the operation entirely.
+        private boolean isRestricted(ItemStack item) {
+        if (item == null) return false;
+        Enchantment sp = spawnerPickup == null ? null : spawnerPickup.getEnchantment();
+        Enchantment ec = eggCollector == null ? null : eggCollector.getEnchantment();
+        if (sp != null && item.containsEnchantment(sp)) return true;
+        if (ec != null && item.containsEnchantment(ec)) return true;
+        return false;
+        }
+
+        private void sendRestrictedMessage(Player player) {
+        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
+        player.sendMessage(Component.text("The bundle recoils — that tool's magic resists extraction.", NamedTextColor.RED));
         }
 
         private boolean isBundleWithLore(ItemStack item) {

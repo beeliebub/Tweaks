@@ -109,6 +109,7 @@ public class PermissionListener implements Listener {
             case USER_HUB -> dispatchUserHub(player, holder, action);
             case USER_PERMS -> dispatchUserPerms(player, holder, action, s);
             case USER_GROUP_PICKER -> dispatchUserGroupPicker(player, holder, action, s);
+            default -> {}
         }
     }
 

@@ -404,12 +404,12 @@ The filter is **off by default**. Whether it's enabled, which mode is active, an
 | `/itemfilter` | Show your current state (enabled/disabled, mode, item count). |
 | `/itemfilter toggle` | Turn the filter on or off. |
 | `/itemfilter mode` | Swap between whitelist and blacklist mode. |
-| `/itemfilter add <item>` | Add an item to your active list. |
-| `/itemfilter remove <item>` | Remove an item from your active list. |
+| `/itemfilter add <item>...` | Add one or more items to your active list. |
+| `/itemfilter remove <item>...` | Remove one or more items from your active list. |
 | `/itemfilter list` | Show the contents of your active list. |
-| `/itemfilter list clear` | Clear your currently active list. |
+| `/itemfilter clear [mode]` | Clear a specific list (`whitelist`, `blacklist`, `both`), or active list if omitted. |
 
-`/if` is a short alias for `/itemfilter`. Item names use the standard form (e.g. `cobblestone`, `oak_log`, `diamond`); tab completion suggests matches on `add`, your current list contents on `remove`, and `clear` on `list`. No permission required — every player can manage their own filter.
+`/if` is a short alias for `/itemfilter`. Item names use the standard form (e.g. `cobblestone`, `oak_log`, `diamond`); tab completion suggests matches on `add`, your current list contents on `remove`, and lists for `clear`. No permission required — every player can manage their own filter.
 
 ### Tool Protect
 
@@ -547,6 +547,7 @@ Any **bundle with lore** (any custom lore will work) can be used to safely (or m
 - **First Enchantment**: The highest-tier enchantment is **guaranteed** (100% chance) to be given back as a book. If there are multiple enchantments at the highest tier, one is picked at random to be the guaranteed extraction.
 - **Subsequent Enchantments**: After each **successful** book extraction, the chance for the next enchantment to become a book decreases (100% -> 80% -> 60% -> 40% -> 20% -> 0%).
 - **Failure**: If an extraction roll fails, the enchantment is still removed from the item, but no book is given (it is lost to the void). After a failure, the success chance for the next enchantment **remains at its current level**.
+- **Restrictions**: The Disenchanting Bundle **cannot** be used on tools containing the **Spawner Pickup** or **Egg Collector** enchantments. The bundle will refuse the extraction to prevent players from bypassing the limited uses of these enchants.
 
 This mechanic provides a strategic way to recover powerful enchantments from tools at the cost of the bundle itself and the risk of losing some enchantments on heavily enchanted items.
 
@@ -774,7 +775,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/nv` | Toggle night vision. |
 | `/nick <nickname>` | Set your display name with color codes. |
 | `/nick off` | Remove your nickname. |
-| `/itemfilter [toggle\|mode\|add <item>\|remove <item>\|list [clear]]` | Manage pickup filter. Alias: `/if`. |
+| `/itemfilter [toggle\|mode\|add <item>...\|remove <item>...\|list\|clear [mode]]` | Manage pickup filter. Alias: `/if`. |
 | `/toolprotect [on\|off]` | Toggle ToolProtect on/off. |
 | `/toolprotect durability <n>` | Set remaining-durability threshold for ToolProtect. |
 | `/afk` | Toggle AFK status. |
