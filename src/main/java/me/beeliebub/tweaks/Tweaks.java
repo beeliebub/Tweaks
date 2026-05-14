@@ -8,6 +8,8 @@ import me.beeliebub.tweaks.combos.*;
 import me.beeliebub.tweaks.commands.*;
 import me.beeliebub.tweaks.cosmetics.*;
 import me.beeliebub.tweaks.enchantments.*;
+import me.beeliebub.tweaks.enchantments.modes.EnchantMode;
+import me.beeliebub.tweaks.enchantments.modes.EnchantModeListener;
 import me.beeliebub.tweaks.enchantments.quality.*;
 import me.beeliebub.tweaks.listeners.*;
 import me.beeliebub.tweaks.managers.*;
@@ -191,18 +193,22 @@ public class Tweaks extends JavaPlugin {
         GemConnoisseur gemConnoisseur = new GemConnoisseur(this, telekinesis, resourceHunt);
         SpawnerPickup spawnerPickup = new SpawnerPickup(this);
         EggCollector eggCollector = new EggCollector(this, qualityRegistry);
+        EnchantMode enchantMode = new EnchantMode(this);
+        Tunneller tunneller = new Tunneller(this, telekinesis, smelter, gemConnoisseur, qualityRegistry, fortuneQuality, silkTouchQuality, resourceHunt, enchantMode);
+        Efficacy efficacy = new Efficacy(this, qualityRegistry, enchantMode);
 
         getServer().getPluginManager().registerEvents(telekinesis, this);
         getServer().getPluginManager().registerEvents(smelter, this);
         getServer().getPluginManager().registerEvents(lumberjack, this);
         getServer().getPluginManager().registerEvents(gemConnoisseur, this);
-        getServer().getPluginManager().registerEvents(new Tunneller(this, telekinesis, smelter, gemConnoisseur, qualityRegistry, fortuneQuality, silkTouchQuality, resourceHunt), this);
+        getServer().getPluginManager().registerEvents(tunneller, this);
         getServer().getPluginManager().registerEvents(spawnerPickup, this);
         getServer().getPluginManager().registerEvents(eggCollector, this);
         getServer().getPluginManager().registerEvents(new AnvilListener(spawnerPickup, eggCollector), this);
         replant = new Replant(this, telekinesis, lumberjack);
         getServer().getPluginManager().registerEvents(replant, this);
-        getServer().getPluginManager().registerEvents(new Efficacy(this, qualityRegistry), this);
+        getServer().getPluginManager().registerEvents(efficacy, this);
+        getServer().getPluginManager().registerEvents(new EnchantModeListener(enchantMode, tunneller, efficacy), this);
 
         // Disenchanting Bundle
         getServer().getPluginManager().registerEvents(new DisenchantingBundle(this, qualityRegistry, spawnerPickup, eggCollector), this);
@@ -220,6 +226,10 @@ public class Tweaks extends JavaPlugin {
 
         // XP storage bottles (custom brewing-stand recipe + drinkable bottles)
         getServer().getPluginManager().registerEvents(new XpBottleListener(this), this);
+
+        // Dice Converter: throwing a splash potion with this enchantment briefly blocks
+        // the thrower from picking up other splash_potion item entities.
+        getServer().getPluginManager().registerEvents(new DiceConverterListener(this), this);
 
         // Resource Rupee currency (renamed emerald + emerald block with crafting grid conversion)
         ResourceRupee resourceRupee = new ResourceRupee();
@@ -240,6 +250,14 @@ public class Tweaks extends JavaPlugin {
 
         // Minigames - Resource Hunt
         getServer().getPluginManager().registerEvents(resourceHunt, this);
+        getServer().getPluginManager().registerEvents(
+                new me.beeliebub.tweaks.minigames.resource.ResourceCraftListener(this, resourceHunt), this);
+
+        // /condense depends on ResourceHunt for the resource_hunt_counted PDC plumbing,
+        // so it has to be registered after the hunt is constructed.
+        CondenseCommand condenseCommand = new CondenseCommand(resourceHunt);
+        getCommand("condense").setExecutor(condenseCommand);
+        getCommand("condense").setTabCompleter(condenseCommand);
 
         // Minigames - Whack an Andrew
         WhackConfig whackConfig = new WhackConfig(this);
@@ -268,6 +286,6 @@ public class Tweaks extends JavaPlugin {
         if (permissionManager != null) {
             permissionManager.shutdown();
         }
-        }
+    }
 
-        }
+}

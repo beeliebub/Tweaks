@@ -234,7 +234,9 @@ public class HelpManager {
                 white("Epic 9×9, Legendary 11×11."),
                 white("Skips air, liquids, and unbreakable blocks."),
                 red("Costs durability per extra block broken."),
-                green("Stacks with Smelter and Gem Connoisseur.")
+                green("Stacks with Smelter and Gem Connoisseur."),
+                aqua("Mode cycling:"),
+                white("Sneak + right-click to cycle area down (wraps to max).")
         ), Material.DIAMOND_PICKAXE, 14, ColorUtil.HELP_GRAD_TUNNELLER, List.of("tiers")));
 
         articles.add(new HelpArticle("lumberjack", "Lumberjack", List.of(
@@ -278,6 +280,14 @@ public class HelpManager {
                 yellow("Quality Looting grants extra rolls.")
         ), Material.ALLAY_SPAWN_EGG, 30, ColorUtil.HELP_GRAD_EGG_COLLECTOR, List.of("spawner_pickup", "tiers")));
 
+        articles.add(new HelpArticle("dice_converter", "Dice Converter", List.of(
+                gray("Special enchantment for splash potions (from Dice data pack)."),
+                aqua("Effect:"),
+                white("When thrown, the player is temporarily blocked"),
+                white("from picking up splash potions for 2 seconds."),
+                yellow("Prevents accidental self-pickup of the 'dice' potion.")
+        ), Material.SPLASH_POTION, 31, ColorUtil.HELP_GRAD_CUSTOM_ENCHANTS, List.of("telekinesis")));
+
         articles.add(new HelpArticle("disenchanting", "Disenchanting Bundle", List.of(
                 gray("Extracts enchantments into books via lore-tagged bundles."),
                 aqua("Per-extract success chance:"),
@@ -302,14 +312,16 @@ public class HelpManager {
                 white("Fortune/Looting: up to 5 bonus rolls."),
                 white("Luck of the Sea: up to 100% treasure rate."),
                 white("Tunneller/Efficacy: up to 11×11 area."),
-                white("Silk Touch: extends to special blocks (see /help silk_quality).")
+                white("Silk Touch: extends to special blocks (see /help silk_quality)."),
+                aqua("Mode cycling:"),
+                white("Sneak + right-click Tunneller/Efficacy to cycle area size down.")
         ), Material.NETHER_STAR, 20, ColorUtil.HELP_GRAD_QUALITY_TIERS, List.of("blood_moon", "tunneller", "silk_quality")));
 
         articles.add(new HelpArticle("blood_moon", "Blood Moon", List.of(
                 gray("Server event with a 50% chance during full-moon nights."),
                 aqua("Effects:"),
                 red("Quality enchant chance: 10% → 50%."),
-                red("Sleep is blocked until dawn."),
+                red("Sleep is blocked once the night's fate is rolled."),
                 red("Red boss bar tracks night progress."),
                 cmd("/fullmoon", "Show next full moon estimate.")
         ), Material.NETHER_WART_BLOCK, 24, ColorUtil.HELP_GRAD_BLOOD_MOON, List.of("tiers")));
@@ -407,6 +419,19 @@ public class HelpManager {
                 white("State stored in the chunk PDC."),
                 green("Setup mode persists for batch placement.")
         ), Material.CHEST, 32, ColorUtil.HELP_GRAD_DISPLAY_CHEST, List.of("itemfilter", "blocklog")));
+
+        articles.add(new HelpArticle("condense", "Condense", List.of(
+                gray("Compacts 9x granular items into their block form."),
+                cmd("/condense", "Condense the held item type only."),
+                cmd("/condense all", "Condense every eligible material in your inventory."),
+                aqua("Eligible (vanilla 9:1, both crafting directions):"),
+                white("Iron, Gold, Diamond, Emerald, Netherite, Lapis,"),
+                white("Redstone, Coal, Copper, Raw Iron/Gold/Copper,"),
+                white("Slime, Wheat, Bone Meal, Nether Wart."),
+                green("Resource Hunt items are condensable; the block inherits the tag."),
+                yellow("Items with custom name, lore, enchants, or other PDC tags are skipped."),
+                red("Mixed pools (e.g. 5 tagged + 4 untagged) do NOT merge.")
+        ), Material.IRON_BLOCK, 34, ColorUtil.HELP_GRAD_CONDENSE, List.of("itemfilter", "resource_hunt")));
 
         articles.add(new HelpArticle("gamemode", "Gamemode Shortcuts", List.of(
                 gray("Quick self-only gamemode switches."),

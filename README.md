@@ -39,6 +39,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Flight](#flight)
   - [Night Vision](#night-vision)
   - [Item Filter](#item-filter)
+  - [Condense](#condense)
   - [Tool Protect](#tool-protect)
   - [AFK](#afk)
   - [Tab List](#tab-list)
@@ -322,6 +323,8 @@ Quality variants of Tunneller and Efficacy enlarge the affected area:
 
 Durability cost still scales with each extra block broken, and Unbreaking continues to mitigate that cost normally.
 
+**Mode cycling**: **Shift + Right-Click** a Tunneller or Efficacy tool to cycle its area down one size. A Legendary tool cycles `11x11 → 9x9 → 7x7 → 5x5 → 3x3 → 11x11`. The current mode is shown as a `Mode: NxN` lore line and is also flashed in the action bar on each cycle. Mode is stored per-item in PDC, so different tools can keep different modes. While sneaking, the tool's usual right-click action (Efficacy path/till/strip) is suppressed so the same input doesn't both cycle the mode and trigger the area effect.
+
 ### Supported Enchantments
 
 20 enchantment types have quality variants that the data pack registers and the plugin recognizes:
@@ -410,6 +413,19 @@ The filter is **off by default**. Whether it's enabled, which mode is active, an
 | `/itemfilter clear [mode]` | Clear a specific list (`whitelist`, `blacklist`, `both`), or active list if omitted. |
 
 `/if` is a short alias for `/itemfilter`. Item names use the standard form (e.g. `cobblestone`, `oak_log`, `diamond`); tab completion suggests matches on `add`, your current list contents on `remove`, and lists for `clear`. No permission required — every player can manage their own filter.
+
+### Condense
+
+Compact 9x granular items in your inventory into their block form. Only materials with a vanilla **9:1 forward and 1:9 reverse** recipe are eligible — so the block can always be uncrafted back into the original items.
+
+| Command | What it does |
+|---|---|
+| `/condense` | Condenses only the type of item you are currently holding. |
+| `/condense all` | Condenses every eligible material across your inventory. |
+
+**Eligible materials**: Iron Ingot, Gold Ingot, Diamond, Emerald, Netherite Ingot, Lapis Lazuli, Redstone, Coal, Copper Ingot, Raw Iron, Raw Gold, Raw Copper, Slime Ball, Wheat, Bone Meal, Nether Wart.
+
+Items with a custom display name, lore, enchantments, custom model data, or other persistent data tags are skipped to avoid destroying special items. However, items carrying the **Resource Hunt** tag are eligible for condensation; the resulting block will inherit the tag. Mixed pools (e.g. 5 tagged ingots and 4 untagged ingots) will **not** be merged. Remainders that don't divide evenly into 9 are left in your inventory; produced blocks that don't fit drop at your feet.
 
 ### Tool Protect
 
@@ -528,6 +544,10 @@ Store your experience levels for later use or trade by brewing **Experience Poti
 - **Usage**: Simply drink the bottle to receive the stored experience. The vanilla drinking animation and sound apply, and you'll receive a glass bottle back.
 
 This system ensures that experience can be safely stored and transferred without loss, using a clean, vanilla-friendly brewing mechanic.
+
+### Dice Converter
+
+If the **Dice** data pack is installed, splash potions carrying the `dqc.dice:dice_converter` enchantment will trigger a temporary **2-second pickup block** for the throwing player. This prevents you from accidentally picking up the "dice" item immediately after launching it.
 
 ---
 
@@ -678,7 +698,7 @@ A rare server-wide event that turns the night crimson and supercharges enchantin
 
 **What it does**: While a Blood Moon is active, the chance for an enchantment rolled at the enchanting table to become a [quality variant](#enchantment-quality) is boosted from **10% to 50%** per applicable enchantment. Tier weights (uncommon/rare/epic/legendary) still apply on top of that.
 
-**How it ends**: The Blood Moon fades automatically at the next dawn. **Sleeping is blocked** while a Blood Moon is active.
+**How it ends**: The Blood Moon fades automatically at the next dawn. **Sleeping is blocked** once the night's fate is rolled (at dusk), preventing players from skipping the event before it officially begins.
 
 **Checking the moon**: Any player can run `/fullmoon` to see a rough estimate of how many real-world minutes remain until the next full-moon night begins.
 
@@ -714,7 +734,7 @@ While inside the active resource world, a **green boss bar** at the top of the s
 
 **Nether Safety**: If no safe 2-block air gap can be found when teleporting to the Nether resource world, or if a teleport would land a player on the Nether roof (above Y=127), the plugin will automatically generate a **5x5 bedrock platform** at Y=64.
 
-**Anti-recount**: Once an item has been counted toward someone's progress, it carries an invisible PDC tag and won't be counted again. Crops, sugar cane, bamboo, and amethyst buds are exempt.
+**Anti-recount**: Once an item has been counted toward someone's progress, it carries an invisible PDC tag and won't be counted again. This tag is also applied to items **crafted** inside resource worlds to prevent exploit loops. Crops, sugar cane, bamboo, and amethyst buds are exempt.
 
 **Configuration** (`plugins/Tweaks/resource_hunt.yml`): separate lists for overworld and nether targets. Each entry is either a bare amount (multiplier defaults to `2.0`) or an explicit `"<amount>:<multiplier>"` string.
 
@@ -742,6 +762,8 @@ nether:
 | Login eject | Players logging in inside a resource world are sent to `/warp newspawn`. |
 | Item Whitelist | Restricts items that can be brought in via `/resource`, `/back`, or `/tpa`. |
 | Ender Chests | Cannot be opened or used while in a resource world. |
+
+---
 
 ### Rewards
 
@@ -776,6 +798,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/nick <nickname>` | Set your display name with color codes. |
 | `/nick off` | Remove your nickname. |
 | `/itemfilter [toggle\|mode\|add <item>...\|remove <item>...\|list\|clear [mode]]` | Manage pickup filter. Alias: `/if`. |
+| `/condense [all]` | Compact 9x granular items into their block form. |
 | `/toolprotect [on\|off]` | Toggle ToolProtect on/off. |
 | `/toolprotect durability <n>` | Set remaining-durability threshold for ToolProtect. |
 | `/afk` | Toggle AFK status. |
@@ -900,38 +923,6 @@ efficacy: "jass:test9"
 1. Place the JAR in `plugins/`.
 2. Ensure you are running **Paper 26.1.2** with **Java 25**.
 3. Install the required **data pack** for custom enchantments.
-4. Start the server, then update namespaced keys in `config.yml`.
-5. Run `/setwarp spawn` to enable `/spawn`.
-6. Run `/setwarp newspawn` to enable resource world login ejection.
-
-### Data Pack Requirement
-
-The plugin reads namespaced keys from `config.yml` and looks them up in Paper's enchantment registry. Quality variants are looked up directly under `jass:{tier}_{enchantName}`.
-
-### Data Storage
-
-All data is stored in YAML files under `plugins/Tweaks/`:
-
-- `config.yml`: Plugin settings.
-- `homes/<UUID>.yml`: Per-player home locations.
-- `warps.yml`: Server warp locations.
-- `inventories/<UUID>.yml`: Separated inventories, ender chests, and XP.
-- `nick-removals.yml`: Pending nickname removals.
-- `whack.yml`: Whack-an-Andrew configuration.
-- `rewards/`: Reward templates.
-
-### Building from Source
-
-```bash
-./gradlew build
-```
-
-Compiled JAR is in `build/libs/`. Run a dev server with:
-
-```bash
-./gradlew runServer
-```
- for custom enchantments.
 4. Start the server, then update namespaced keys in `config.yml`.
 5. Run `/setwarp spawn` to enable `/spawn`.
 6. Run `/setwarp newspawn` to enable resource world login ejection.

@@ -27,6 +27,7 @@ spawner-pickup: "jass:test6"
 egg-collector: "jass:test7"
 replant: "jass:test8"
 efficacy: "jass:test9"
+dice-converter: "dqc.dice:dice_converter"
 
 # Drop rates for gem-connoisseur. Each entry is a 1-in-N chance per block mined.
 gem-connoisseur-rates:

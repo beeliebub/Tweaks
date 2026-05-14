@@ -54,6 +54,9 @@ commands:
     description: Whack an Andrew minigame admin commands
   more:
     description: Maximize the stack size of the held item
+  condense:
+    description: Condense 9x granular items into their block form.
+    usage: /condense [all]
   bloodmoon:
     description: Force the next full moon to be a Blood Moon (admin).
     usage: /bloodmoon

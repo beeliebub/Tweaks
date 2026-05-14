@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.enchantments;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.enchantments.modes.EnchantMode;
 import me.beeliebub.tweaks.enchantments.quality.FortuneQualityListener;
 import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
 import me.beeliebub.tweaks.enchantments.quality.QualityTier;
@@ -48,11 +49,12 @@ public class Tunneller implements Listener {
     private final FortuneQualityListener fortuneQuality;
     private final SilkTouchQualityListener silkTouchQuality;
     private final ResourceHunt resourceHunt;
+    private final EnchantMode enchantMode;
 
     public Tunneller(Tweaks plugin, Telekinesis telekinesis, Smelter smelter,
                      GemConnoisseur gemConnoisseur, QualityRegistry qualityRegistry,
                      FortuneQualityListener fortuneQuality, SilkTouchQualityListener silkTouchQuality,
-                     ResourceHunt resourceHunt) {
+                     ResourceHunt resourceHunt, EnchantMode enchantMode) {
         String raw = plugin.getConfig().getString("tunneller");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.telekinesis = telekinesis;
@@ -62,6 +64,7 @@ public class Tunneller implements Listener {
         this.fortuneQuality = fortuneQuality;
         this.silkTouchQuality = silkTouchQuality;
         this.resourceHunt = resourceHunt;
+        this.enchantMode = enchantMode;
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -146,15 +149,25 @@ public class Tunneller implements Listener {
         }
     }
 
-    // Determine the mining radius from the tool's tunneller enchantment.
+    // Determine the maximum mining radius from the tool's tunneller enchantment.
     // Returns 1 for common (3x3), 2-5 for quality tiers, or 0 if no tunneller enchant found.
-    private int getRadius(ItemStack tool) {
+    // The radius is independent of the player's selected mode — see getRadius for the effective
+    // radius after mode-cycling.
+    public int getMaxRadius(ItemStack tool) {
         if (enchantment != null && tool.containsEnchantment(enchantment)) return 1;
         if (qualityRegistry != null) {
             QualityTier tier = qualityRegistry.getToolQualityTier(tool, "tunneller");
             if (tier != null) return tier.getAreaRadius();
         }
         return 0;
+    }
+
+    // Effective radius after applying the player's chosen mode (sneak-right-click cycles down).
+    // Defaults to the tool's max when no mode has been set.
+    private int getRadius(ItemStack tool) {
+        int max = getMaxRadius(tool);
+        if (max <= 0) return 0;
+        return enchantMode != null ? enchantMode.getMode(tool, max) : max;
     }
 
     // Break a single block, applying smelter/gem drops and routing to inventory or ground.

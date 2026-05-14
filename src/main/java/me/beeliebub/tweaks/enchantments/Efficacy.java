@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.enchantments;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.enchantments.modes.EnchantMode;
 import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
 import me.beeliebub.tweaks.enchantments.quality.QualityTier;
 import org.bukkit.Axis;
@@ -82,11 +83,13 @@ public class Efficacy implements Listener {
 
     private final Enchantment enchantment;
     private final QualityRegistry qualityRegistry;
+    private final EnchantMode enchantMode;
 
-    public Efficacy(Tweaks plugin, QualityRegistry qualityRegistry) {
+    public Efficacy(Tweaks plugin, QualityRegistry qualityRegistry, EnchantMode enchantMode) {
         String raw = plugin.getConfig().getString("efficacy");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.qualityRegistry = qualityRegistry;
+        this.enchantMode = enchantMode;
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -134,15 +137,25 @@ public class Efficacy implements Listener {
         }
     }
 
-    // Determine the area radius from the tool's efficacy enchantment.
+    // Determine the maximum area radius from the tool's efficacy enchantment.
     // Returns 1 for common (3x3), 2-5 for quality tiers, or 0 if no efficacy enchant found.
-    private int getRadius(ItemStack tool) {
+    // The radius is independent of the player's selected mode — see getRadius for the effective
+    // radius after mode-cycling.
+    public int getMaxRadius(ItemStack tool) {
         if (hasEnchant(tool)) return 1;
         if (qualityRegistry != null && tool != null && !tool.isEmpty()) {
             QualityTier tier = qualityRegistry.getToolQualityTier(tool, "efficacy");
             if (tier != null) return tier.getAreaRadius();
         }
         return 0;
+    }
+
+    // Effective radius after applying the player's chosen mode (sneak-right-click cycles down).
+    // Defaults to the tool's max when no mode has been set.
+    private int getRadius(ItemStack tool) {
+        int max = getMaxRadius(tool);
+        if (max <= 0) return 0;
+        return enchantMode != null ? enchantMode.getMode(tool, max) : max;
     }
 
     private void handleShovel(Block clicked, Player player, int radius) {

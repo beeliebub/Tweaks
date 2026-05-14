@@ -28,6 +28,9 @@ import java.util.concurrent.ThreadLocalRandom;
 public class BloodMoonManager implements Listener {
 
     private static final long FULL_MOON_PHASE = 0L;
+    // Roll just before the vanilla sleep window opens (time 12542) so we can deny sleep
+    // attempts that happen before the announcement at NIGHT_START_TICK.
+    private static final long ROLL_TICK = 12000L;
     private static final long NIGHT_START_TICK = 13000L;
     private static final long NIGHT_DURATION_TICKS = 11000L; // 24000 - 13000
     private static final long DAY_LENGTH_TICKS = 24000L;
@@ -39,6 +42,7 @@ public class BloodMoonManager implements Listener {
     private boolean active = false;
     private long activationDay = -1L;
     private long lastRolledDay = -1L;
+    private long scheduledDay = -1L;
     private BukkitTask pollTask;
     private BossBar bossBar;
 
@@ -113,14 +117,26 @@ public class BloodMoonManager implements Listener {
             } else {
                 updateBossBar(dayTime);
             }
+            return;
         }
 
-        if (!active && moonPhase == FULL_MOON_PHASE && dayTime >= NIGHT_START_TICK
+        // Drop a schedule that never activated (e.g. /time set jumped past the night).
+        if (scheduledDay >= 0 && currentDay != scheduledDay) {
+            scheduledDay = -1L;
+        }
+
+        // Roll once per full-moon evening, before vanilla allows sleep at tick 12542.
+        if (moonPhase == FULL_MOON_PHASE && dayTime >= ROLL_TICK && dayTime < DAY_LENGTH_TICKS
                 && currentDay != lastRolledDay) {
             lastRolledDay = currentDay;
             if (ThreadLocalRandom.current().nextDouble() < ACTIVATION_CHANCE) {
-                activate(currentDay);
+                scheduledDay = currentDay;
             }
+        }
+
+        // Announcement and visible activation are deferred to full nightfall.
+        if (scheduledDay == currentDay && dayTime >= NIGHT_START_TICK) {
+            activate(currentDay);
         }
     }
 
@@ -144,6 +160,7 @@ public class BloodMoonManager implements Listener {
 
     private void deactivate() {
         active = false;
+        scheduledDay = -1L;
         plugin.getLogger().info("Blood Moon has ended.");
         
         if (bossBar != null) {
@@ -199,7 +216,7 @@ public class BloodMoonManager implements Listener {
 
     @EventHandler
     public void onBedEnter(PlayerBedEnterEvent event) {
-        if (!active) return;
+        if (!active && scheduledDay < 0) return;
         event.setCancelled(true);
         event.getPlayer().sendMessage(Component.text("The Blood Moon's energy prevents you from sleeping.")
                 .color(NamedTextColor.RED));

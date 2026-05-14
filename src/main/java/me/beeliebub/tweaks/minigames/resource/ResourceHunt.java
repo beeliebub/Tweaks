@@ -406,6 +406,20 @@ public class ResourceHunt implements Listener {
         return meta != null && meta.getPersistentDataContainer().has(countedKey, PersistentDataType.BYTE);
     }
 
+    // Public accessor for siblings in this package (e.g. ResourceCraftListener) that need
+    // to apply the counted tag without re-implementing the PDC plumbing.
+    public boolean markItemAsCounted(ItemStack stack) {
+        return markCounted(stack);
+    }
+
+    public boolean isItemCounted(ItemStack stack) {
+        return isCounted(stack);
+    }
+
+    public NamespacedKey countedTagKey() {
+        return countedKey;
+    }
+
     // Returns true if meta was modified (caller may need to push the stack back onto an Item entity).
     private boolean markCounted(ItemStack stack) {
         if (stack == null || stack.getType().isAir()) return false;
