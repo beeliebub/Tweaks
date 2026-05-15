@@ -71,4 +71,12 @@ public final class ColorUtil {
     public static final String HELP_GRAD_PERMS_GROUPS = "#FFE066:#FFC700:#E48400:#A85C00";
     public static final String HELP_GRAD_PERMS_USERS = "#FFE066:#FFC700:#E48400:#A85C00";
     public static final String HELP_GRAD_PERMS_TPRM_USAGE = "#FFE066:#FFC700:#E48400:#A85C00";
+
+    // Land protection help category. Stone-grey palette signals territorial /
+    // boundary semantics distinct from the warmer feature categories.
+    public static final String HELP_GRAD_PROTECTION = "#B0B0B0:#A8AAAE:#A0A4AC:#989EAA:#9098A8:#8892A6:#808CA4:#7886A2:#7080A0:#687A9E:#60749C:#586E9A:#506898";
+    public static final String HELP_GRAD_PROTECTION_CLAIM = "#B0B0B0:#9098A8:#7080A0:#506898";
+    public static final String HELP_GRAD_PROTECTION_UNCLAIM = "#B0B0B0:#9098A8:#7080A0:#506898";
+    public static final String HELP_GRAD_PROTECTION_MEMBERS = "#B0B0B0:#9098A8:#7080A0:#506898";
+    public static final String HELP_GRAD_PROTECTION_FLAGS = "#B0B0B0:#9098A8:#7080A0:#506898";
 }

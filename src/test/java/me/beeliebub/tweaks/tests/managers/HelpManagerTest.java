@@ -76,12 +76,9 @@ class HelpManagerTest {
 
     @Test
     void crossReferenceValidationRunsAndOnlyComplainsAboutKnownExistingMisses() {
-        // Snapshot of currently broken cross-references (tracked separately as bd bugs).
-        // Any *new* warning beyond this set fails the test so regressions are caught immediately.
-        Set<String> known = Set.of(
-                "Help: article 'flight' references unknown article 'teleportation'",
-                "Help: article 'permissions_overview' references unknown article 'permissions_users'"
-        );
+        // All previous broken cross-references (flight -> teleportation, permissions_overview -> permissions_users)
+        // have been fixed. Any new warning fails the test.
+        Set<String> known = Set.of();
         for (LogRecord w : warnings) {
             if (!w.getMessage().contains("references unknown article")) continue;
             assertTrue(known.contains(w.getMessage()),

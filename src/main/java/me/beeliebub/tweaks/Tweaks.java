@@ -16,6 +16,16 @@ import me.beeliebub.tweaks.managers.*;
 import me.beeliebub.tweaks.permissions.PermissionCommand;
 import me.beeliebub.tweaks.permissions.PermissionListener;
 import me.beeliebub.tweaks.permissions.PermissionManager;
+import me.beeliebub.tweaks.protection.ChunkListener;
+import me.beeliebub.tweaks.protection.PendingStampsStore;
+import me.beeliebub.tweaks.protection.ProtectionCommand;
+import me.beeliebub.tweaks.protection.ProtectionKeys;
+import me.beeliebub.tweaks.protection.ProtectionListener;
+import me.beeliebub.tweaks.protection.ProtectionManager;
+import me.beeliebub.tweaks.protection.RegionLoader;
+import me.beeliebub.tweaks.protection.RegionSelectionManager;
+import me.beeliebub.tweaks.protection.SelectionWandListener;
+import org.bukkit.Material;
 import me.beeliebub.tweaks.recipes.ResourceRupee;
 import me.beeliebub.tweaks.recipes.ResourceRupeeListener;
 import me.beeliebub.tweaks.minigames.RewardCommand;
@@ -34,9 +44,29 @@ public class Tweaks extends JavaPlugin {
 
     private StorageManager storageManager;
     private PermissionManager permissionManager;
+    private ProtectionManager protectionManager;
+    private PendingStampsStore pendingStampsStore;
+    private RegionSelectionManager regionSelectionManager;
+    private Material protectionSelectionTool = Material.REDSTONE;
     private int maxHomes;
     private Telekinesis telekinesis;
     private Replant replant;
+
+    public ProtectionManager getProtectionManager() {
+        return protectionManager;
+    }
+
+    public PermissionManager getPermissionManager() {
+        return permissionManager;
+    }
+
+    public RegionSelectionManager getRegionSelectionManager() {
+        return regionSelectionManager;
+    }
+
+    public Material getProtectionSelectionTool() {
+        return protectionSelectionTool;
+    }
 
     public Telekinesis getTelekinesis() {
         return telekinesis;
@@ -54,6 +84,28 @@ public class Tweaks extends JavaPlugin {
         maxHomes = getConfig().getInt("max-homes", 3);
         storageManager = new StorageManager(this);
         permissionManager = new PermissionManager(this);
+        protectionManager = new ProtectionManager(this);
+        ProtectionKeys.init(this);
+        String configuredTool = getConfig().getString("protection.selection-tool", "REDSTONE");
+        Material resolvedTool = Material.matchMaterial(configuredTool);
+        if (resolvedTool == null) {
+            getLogger().warning("protection.selection-tool '" + configuredTool + "' is not a valid Material; falling back to REDSTONE");
+        } else {
+            protectionSelectionTool = resolvedTool;
+        }
+        new RegionLoader(getLogger()).load(
+                new java.io.File(getDataFolder(), "regions"),
+                protectionManager.regions());
+        pendingStampsStore = new PendingStampsStore(this, getDataFolder(), protectionManager.pendingStamps());
+        pendingStampsStore.load();
+        pendingStampsStore.start(20L * 60 * 5); // snapshot every 5 minutes
+        regionSelectionManager = new RegionSelectionManager(this);
+        regionSelectionManager.start();
+        getServer().getPluginManager().registerEvents(new ChunkListener(protectionManager), this);
+        getServer().getPluginManager().registerEvents(new ProtectionListener(protectionManager), this);
+        getServer().getPluginManager().registerEvents(regionSelectionManager, this);
+        getServer().getPluginManager().registerEvents(new SelectionWandListener(this, regionSelectionManager), this);
+        ProtectionCommand.register(this, protectionManager, regionSelectionManager);
 
         // Resource Hunt Items Manager
         ResourceHuntItems resourceHuntItems = new ResourceHuntItems(this);
@@ -160,7 +212,7 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new ResourceWorldListener(this, storageManager), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(this, storageManager), this);
         getServer().getPluginManager().registerEvents(new TrampleListener(), this);
-        getServer().getPluginManager().registerEvents(new MobGriefListener(), this);
+        getServer().getPluginManager().registerEvents(new MobGriefListener(protectionManager), this);
         getServer().getPluginManager().registerEvents(new SpawnerEggListener(this), this);
         getServer().getPluginManager().registerEvents(new VillagerTradeListener(), this);
 
@@ -285,6 +337,17 @@ public class Tweaks extends JavaPlugin {
         public void onDisable() {
         if (permissionManager != null) {
             permissionManager.shutdown();
+        }
+        if (pendingStampsStore != null) {
+            pendingStampsStore.stop();
+            try {
+                pendingStampsStore.writeNow();
+            } catch (java.io.IOException e) {
+                getLogger().warning("Final pending_stamps flush failed: " + e.getMessage());
+            }
+        }
+        if (regionSelectionManager != null) {
+            regionSelectionManager.stop();
         }
     }
 

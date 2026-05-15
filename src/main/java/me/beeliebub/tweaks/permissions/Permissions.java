@@ -34,6 +34,12 @@ public final class Permissions {
 
     public static final String ADMIN_PERMISSIONS = "tweaks.admin.permissions";
 
+    public static final String PROTECTION_CLAIM = "tweaks.protection.claim";
+    public static final String PROTECTION_UNCLAIM = "tweaks.protection.unclaim";
+    public static final String PROTECTION_MEMBER = "tweaks.protection.member";
+    public static final String PROTECTION_FLAG = "tweaks.protection.flag";
+    public static final String PROTECTION_INFO = "tweaks.protection.info";
+
     /**
      * Gets all permission constants defined in this class using reflection.
      * Useful for GUI lists and tab completion.

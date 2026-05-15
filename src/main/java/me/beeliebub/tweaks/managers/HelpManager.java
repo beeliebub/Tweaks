@@ -86,6 +86,7 @@ public class HelpManager {
         addCategory(buildFeatures());
         addCategory(buildMinigames());
         addCategory(buildPermissions());
+        addCategory(buildProtection());
         validateCrossReferences();
     }
 
@@ -354,7 +355,7 @@ public class HelpManager {
                 aqua("Eligibility:"),
                 white("Fly-enabled worlds (Lobby, Archive)."),
                 white("Earned via a server advancement.")
-        ), Material.ELYTRA, 12, ColorUtil.HELP_GRAD_FLIGHT, List.of("profiles", "teleportation")));
+        ), Material.ELYTRA, 12, ColorUtil.HELP_GRAD_FLIGHT, List.of("profiles", "homes")));
 
         articles.add(new HelpArticle("itemfilter", "Item Filter", List.of(
                 gray("Filters which items you pick up. State is per-profile."),
@@ -590,5 +591,59 @@ public class HelpManager {
                 Permissions.ADMIN_PERMISSIONS));
 
         return new HelpCategory("permissions", "Permissions", articles, Material.BOOKSHELF, 34, ColorUtil.HELP_GRAD_PERMISSIONS);
+    }
+
+    private HelpCategory buildProtection() {
+        List<HelpArticle> articles = new ArrayList<>();
+
+        articles.add(new HelpArticle("protection_claim", "Claim", List.of(
+                gray("Mark a rectangle of chunks as your protected territory."),
+                cmd("/region claim <name> <x1> <z1> <x2> <z2>", "Claim a region in your current world."),
+                aqua("Notes:"),
+                white("- Endpoints may be supplied in any order; the box normalizes."),
+                white("- Coverage is chunk-granular: any block inside an affected chunk is protected."),
+                white("- Claims of <=5 chunks stamp immediately; larger claims stamp lazily as chunks load."),
+                red("Requires permission: " + Permissions.PROTECTION_CLAIM + ".")
+        ), Material.OAK_FENCE, 20, ColorUtil.HELP_GRAD_PROTECTION_CLAIM,
+                List.of("protection_unclaim", "protection_members", "protection_flags"),
+                Permissions.PROTECTION_CLAIM));
+
+        articles.add(new HelpArticle("protection_unclaim", "Unclaim", List.of(
+                gray("Logically delete a region. Pointer cleanup happens lazily on chunk load."),
+                cmd("/region unclaim <name>", "Remove a region by id."),
+                aqua("Notes:"),
+                white("- The region is gone the instant the command returns."),
+                white("- Stale PDC pointers are stripped from chunks as they next load."),
+                red("Requires permission: " + Permissions.PROTECTION_UNCLAIM + ".")
+        ), Material.BARRIER, 22, ColorUtil.HELP_GRAD_PROTECTION_UNCLAIM,
+                List.of("protection_claim", "protection_members"),
+                Permissions.PROTECTION_UNCLAIM));
+
+        articles.add(new HelpArticle("protection_members", "Members", List.of(
+                gray("Members can act inside a region regardless of its flags."),
+                cmd("/region addmember <name> <player>", "Grant a player member status."),
+                cmd("/region removemember <name> <player>", "Revoke a player's member status."),
+                aqua("Notes:"),
+                white("- Owners always count as members and cannot be removed."),
+                white("- Overlapping regions are independent — a member of A is still subject to B."),
+                red("Requires permission: " + Permissions.PROTECTION_MEMBER + ".")
+        ), Material.PLAYER_HEAD, 24, ColorUtil.HELP_GRAD_PROTECTION_MEMBERS,
+                List.of("protection_claim", "protection_flags"),
+                Permissions.PROTECTION_MEMBER));
+
+        articles.add(new HelpArticle("protection_flags", "Flags", List.of(
+                gray("Per-region toggles. A set flag means non-members may perform the action."),
+                cmd("/region flag <name> <flag> <true|false>", "Toggle a flag."),
+                aqua("Available flags:"),
+                white("- BLOCK_BREAK / BLOCK_PLACE"),
+                white("- CONTAINER_ACCESS / INTERACT / REDSTONE"),
+                white("- EXPLOSION / PVP / MOB_GRIEFING"),
+                yellow("All overlapping regions must independently permit an action."),
+                red("Requires permission: " + Permissions.PROTECTION_FLAG + ".")
+        ), Material.OAK_SIGN, 30, ColorUtil.HELP_GRAD_PROTECTION_FLAGS,
+                List.of("protection_claim", "protection_members"),
+                Permissions.PROTECTION_FLAG));
+
+        return new HelpCategory("protection", "Land Protection", articles, Material.OAK_FENCE, 36, ColorUtil.HELP_GRAD_PROTECTION);
     }
 }
