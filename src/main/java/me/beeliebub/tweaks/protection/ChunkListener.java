@@ -13,7 +13,7 @@ import java.util.Set;
 // Single ChunkLoadEvent listener that performs the two lazy-resolution
 // passes required by the hybrid architecture:
 //
-//   1. Pending-stamp drain (Sprint 2.3): if the loading chunk's key is in
+//   1. Pending-stamp drain: if the loading chunk's key is in
 //      the pending stamps map, merge the queued RegionIDs into its PDC and
 //      atomically remove the pending entry. Synchronous on purpose — the
 //      ChunkLoadEvent fires on the main thread exactly when the chunk is
@@ -21,7 +21,7 @@ import java.util.Set;
 //      race (Edge Case 5: stamping an orphaned chunk reference leaks
 //      memory and silently loses the protection flag).
 //
-//   2. Orphan cleanup (Sprint 2.4): cross-reference the chunk's PDC with
+//   2. Orphan cleanup: cross-reference the chunk's PDC with
 //      the orphaned-regions set. Any dead RegionID is stripped from the
 //      pointer list. This amortizes the physical cost of huge unclaims
 //      over organic exploration instead of flooding the chunk I/O queue

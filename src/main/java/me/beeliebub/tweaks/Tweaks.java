@@ -24,6 +24,7 @@ import me.beeliebub.tweaks.protection.ProtectionListener;
 import me.beeliebub.tweaks.protection.ProtectionManager;
 import me.beeliebub.tweaks.protection.RegionLoader;
 import me.beeliebub.tweaks.protection.RegionSelectionManager;
+import me.beeliebub.tweaks.protection.RegionWriter;
 import me.beeliebub.tweaks.protection.SelectionWandListener;
 import org.bukkit.Material;
 import me.beeliebub.tweaks.recipes.ResourceRupee;
@@ -93,9 +94,9 @@ public class Tweaks extends JavaPlugin {
         } else {
             protectionSelectionTool = resolvedTool;
         }
-        new RegionLoader(getLogger()).load(
-                new java.io.File(getDataFolder(), "regions"),
-                protectionManager.regions());
+        java.io.File regionsDir = new java.io.File(getDataFolder(), "regions");
+        new RegionLoader(getLogger()).load(regionsDir, protectionManager.regions());
+        protectionManager.setWriter(new RegionWriter(this, regionsDir));
         pendingStampsStore = new PendingStampsStore(this, getDataFolder(), protectionManager.pendingStamps());
         pendingStampsStore.load();
         pendingStampsStore.start(20L * 60 * 5); // snapshot every 5 minutes

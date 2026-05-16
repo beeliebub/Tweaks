@@ -39,6 +39,7 @@ public final class Permissions {
     public static final String PROTECTION_MEMBER = "tweaks.protection.member";
     public static final String PROTECTION_FLAG = "tweaks.protection.flag";
     public static final String PROTECTION_INFO = "tweaks.protection.info";
+    public static final String PROTECTION_ADMIN = "tweaks.protection.admin";
 
     /**
      * Gets all permission constants defined in this class using reflection.

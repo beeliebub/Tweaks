@@ -190,4 +190,60 @@ class RegionLoaderTest {
 
         assertEquals(1, loaded);
     }
+
+    @Test
+    void parsesBoundsWhenPresent(@TempDir Path tmp) throws Exception {
+        write(tmp.resolve("home.yml"), """
+                id: home
+                owner: %s
+                bounds:
+                  min_chunk_x: -3
+                  min_chunk_z: 4
+                  max_chunk_x: 2
+                  max_chunk_z: 7
+                """.formatted(OWNER));
+        ConcurrentHashMap<String, Region> cache = new ConcurrentHashMap<>();
+
+        loader.load(tmp.toFile(), cache);
+
+        Region r = cache.get("home");
+        assertNotNull(r.bounds());
+        assertEquals(-3, r.bounds().minChunkX());
+        assertEquals(4, r.bounds().minChunkZ());
+        assertEquals(2, r.bounds().maxChunkX());
+        assertEquals(7, r.bounds().maxChunkZ());
+    }
+
+    @Test
+    void boundsAbsentLeavesFieldNull(@TempDir Path tmp) throws Exception {
+        write(tmp.resolve("home.yml"), """
+                id: home
+                owner: %s
+                """.formatted(OWNER));
+        ConcurrentHashMap<String, Region> cache = new ConcurrentHashMap<>();
+
+        loader.load(tmp.toFile(), cache);
+
+        assertNull(cache.get("home").bounds());
+    }
+
+    @Test
+    void boundsWithMinGreaterThanMaxAreDropped(@TempDir Path tmp) throws Exception {
+        write(tmp.resolve("home.yml"), """
+                id: home
+                owner: %s
+                bounds:
+                  min_chunk_x: 5
+                  min_chunk_z: 5
+                  max_chunk_x: 0
+                  max_chunk_z: 0
+                """.formatted(OWNER));
+        ConcurrentHashMap<String, Region> cache = new ConcurrentHashMap<>();
+
+        loader.load(tmp.toFile(), cache);
+
+        Region r = cache.get("home");
+        assertNotNull(r);
+        assertNull(r.bounds());
+    }
 }

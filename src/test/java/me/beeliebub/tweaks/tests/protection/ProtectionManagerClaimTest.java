@@ -50,7 +50,46 @@ class ProtectionManagerClaimTest {
 
         mgr.claim(r, world, 0, 0, 15, 15);
 
-        assertSame(r, mgr.regions().get("home"));
+        Region cached = mgr.regions().get("home");
+        assertNotNull(cached);
+        assertEquals(r.id(), cached.id());
+        assertEquals(r.owner(), cached.owner());
+    }
+
+    @Test
+    void claimStampsBoundsFromClaimBox() {
+        ProtectionManager mgr = new ProtectionManager(mock(Tweaks.class));
+        World world = mock(World.class);
+        when(world.getChunkAtAsync(anyInt(), anyInt(), anyBoolean()))
+                .thenAnswer(inv -> CompletableFuture.completedFuture(fakeChunk()));
+
+        // Block-AABB (0,0)-(31,47) spans chunks x=[0,1], z=[0,2].
+        mgr.claim(region("plot"), world, 0, 0, 31, 47);
+
+        Region.RegionBounds bounds = mgr.regions().get("plot").bounds();
+        assertNotNull(bounds);
+        assertEquals(0, bounds.minChunkX());
+        assertEquals(0, bounds.minChunkZ());
+        assertEquals(1, bounds.maxChunkX());
+        assertEquals(2, bounds.maxChunkZ());
+    }
+
+    @Test
+    void claimNormalizesReversedClaimBox() {
+        ProtectionManager mgr = new ProtectionManager(mock(Tweaks.class));
+        World world = mock(World.class);
+        when(world.getChunkAtAsync(anyInt(), anyInt(), anyBoolean()))
+                .thenAnswer(inv -> CompletableFuture.completedFuture(fakeChunk()));
+
+        // Pass max coords first; bounds should still come out min < max.
+        mgr.claim(region("plot"), world, 47, 31, 0, 0);
+
+        Region.RegionBounds bounds = mgr.regions().get("plot").bounds();
+        assertNotNull(bounds);
+        assertEquals(0, bounds.minChunkX());
+        assertEquals(0, bounds.minChunkZ());
+        assertEquals(2, bounds.maxChunkX());
+        assertEquals(1, bounds.maxChunkZ());
     }
 
     @Test

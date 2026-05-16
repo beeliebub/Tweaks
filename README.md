@@ -61,6 +61,12 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Whack an Andrew](#whack-an-andrew)
   - [Resource Hunt](#resource-hunt)
   - [Rewards](#rewards)
+- [Land Protection](#land-protection)
+  - [Claims & Selection](#claims--selection)
+  - [Members & Sub-regions](#members--sub-regions)
+  - [Advanced Flags & Targeting](#advanced-flags--targeting)
+  - [Material-Specific Flags](#material-specific-flags)
+  - [Resolution Priority](#resolution-priority)
 - [Commands Reference](#commands-reference)
 - [Permissions Reference](#permissions-reference)
 - [Configuration](#configuration)
@@ -775,6 +781,64 @@ A system for creating and distributing item rewards. Rewards are created by admi
 
 ---
 
+## Land Protection
+
+A hybrid, PDC-backed land protection system that allows players and admins to claim territory, manage members, and configure fine-grained action flags.
+
+### Claims & Selection
+
+Territory is claimed in **full-chunk increments**.
+
+1.  **Selection**: Use the **Gold Hoe** (default selection tool) to mark two corners of your desired area.
+    - **Left-click** a block to set Position 1.
+    - **Right-click** a block to set Position 2.
+    - A particle outline will show your current selection.
+    - Use `/region clear` (alias `/rg clear`) to drop your current selection.
+2.  **Claiming**: Run `/region claim <name>` to protect the selected chunks.
+    - **Overlap Prevention**: You cannot claim territory that overlaps an existing region in the same world unless you own it.
+3.  **Visuals**: Use `/region info` while standing in a claim to see its boundaries and details.
+4.  **Restore Selection**: Use `/region select <name>` to restore the selection wand boundaries to match an existing region you own.
+
+### Members & Sub-regions
+
+Regions support both members and hierarchical parenting.
+
+- **Members**: Members can bypass most protection flags (e.g. they can always build/break). Use `/region addmember <name> <player>` to grant access.
+- **Sub-regions**: You can nest one region inside another using `/region setparent <child> <parent>`.
+  - Sub-regions must be at least one full chunk.
+  - Sub-region flags **override** their parent's flags.
+  - **Containment**: A sub-region must be fully contained within its parent's boundaries.
+  - **Sibling Separation**: A sub-region cannot overlap another sub-region belonging to the same parent.
+  - Membership is independent; being a member of a parent does not automatically make you a member of its children.
+
+### Advanced Flags & Targeting
+
+Flags control what non-members can do in a region. Rules can target specific groups:
+
+**Syntax**: `/region flag <name> <flag> <value...> [target]`
+
+- **Targets**: `owner`, `member`, `default` (everyone), or a permission group name (e.g. `admin`).
+- **Boolean Flags**: `BLOCK_BREAK`, `BLOCK_PLACE`, `CONTAINER_ACCESS`, `INTERACT`, `REDSTONE`, `EXPLOSION`, `PVP`, `MOB_GRIEFING`.
+  - Use `true|false` as the value.
+- **Material-Specific Flags**: `ALLOW_BLOCK_BREAK`, `DENY_BLOCK_BREAK`, `ALLOW_BLOCK_PLACE`, `DENY_BLOCK_PLACE`.
+  - Use a space-separated list of block materials as the value.
+- **Gamerule Overrides**: Region flags take precedence over world gamerules. For example, if `MOB_GRIEFING` is set to `true` in a region, creepers will destroy blocks there even if the world's `mobGriefing` is `false`.
+
+### Command UX & Tab Completion
+
+- **Usage Info**: If you run a protection command incorrectly, the plugin will display friendly usage information (filtered by your permissions).
+- **Tab Completion**: Region ID suggestions are filtered to only show regions you own. Admins with the `tweaks.protection.admin` permission see all regions (limited to the first 100 results).
+
+### Resolution Priority
+
+When an action occurs, the system checks rules in this order:
+1.  **Material Lists**: If the block is in a `DENY` list, the action is blocked. If in an `ALLOW` list, it's permitted.
+2.  **Targeted Boolean Rules**: The most specific rule wins: `GROUP` > `OWNER` > `MEMBER` > `DEFAULT`.
+3.  **Hierarchy**: If no rule is found in the current region, the system walks up to the **parent region** and repeats the check.
+4.  **Wilderness Default**: If no rule is found in the entire hierarchy, members are allowed and non-members are blocked.
+
+---
+
 ## Commands Reference
 
 ### Player Commands
@@ -806,6 +870,7 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/displaychest` | Toggle display chest setup mode. |
 | `/tprm [gui|group|user]` | Manage server-side permissions. |
 | `/help [section]` | Show comprehensive GUI help menu. |
+| `/region <subcommand>` | Land protection management. Alias: `/rg`. |
 | `/reward claim` | Claim pending minigame rewards. |
 
 ### Admin Commands
@@ -822,6 +887,17 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | `/tprm` | `tweaks.admin.permissions` | Open the Permissions GUI. |
 | `/tprm group <name> <create|delete|addperm|delperm|inherited-from>` | `tweaks.admin.permissions` | CLI group management. |
 | `/tprm user <player> <addperm|delperm|setgroup>` | `tweaks.admin.permissions` | CLI user management. |
+| `/region claim <name>` | `tweaks.protection.claim` | Claim territory using wand selection. |
+| `/region unclaim <name>` | `tweaks.protection.unclaim` | Remove a region claim. |
+| `/region info [name]` | `tweaks.protection.info` | Show region details. Alias: `/rg i`. |
+| `/region select <name>` | `tweaks.protection.claim` | Restore wand selection to match a region. |
+| `/region clear` | `tweaks.protection.claim` | Drop the current wand selection. |
+| `/region addmember <r> <p>` | `tweaks.protection.member` | Add a member to a region. |
+| `/region removemember <r> <p>` | `tweaks.protection.member` | Remove a member from a region. |
+| `/region flag <r> <f> <v...>` | `tweaks.protection.flag` | Set a targeted boolean or material flag. |
+| `/region unflag <r> <f> [t]` | `tweaks.protection.flag` | Remove a targeted flag rule or material list. |
+| `/region setparent <c> <p>` | `tweaks.protection.claim` | Nest a region inside another. |
+| `/region unsetparent <c>` | `tweaks.protection.claim` | Remove region parenting. |
 | `/tconfig <key> <value>` | `tweaks.admin.config` | Update a config value at runtime. Alias: `/tweaksconfig`. |
 | `/tconfig eggdrop <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable Egg Collector drops for a mob. |
 | `/tconfig spawneregg <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable spawn egg usage on spawners. |
@@ -855,6 +931,11 @@ A system for creating and distributing item rewards. Rewards are created by admi
 | Permission | What it grants |
 |---|---|
 | `tweaks.bypass.homes` | Bypass the max homes limit. |
+| `tweaks.protection.claim` | Create/delete regions and set parenting. |
+| `tweaks.protection.unclaim` | Delete any region claim. |
+| `tweaks.protection.info` | View region details via `/region info`. |
+| `tweaks.protection.member` | Add/remove members from regions. |
+| `tweaks.protection.flag` | Configure region flags and material rules. |
 | `tweaks.admin.home` | Teleport to other players' homes. |
 | `tweaks.admin.sethome` | Set homes for other players. |
 | `tweaks.admin.delhome` | Delete other players' homes. |

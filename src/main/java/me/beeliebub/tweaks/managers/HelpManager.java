@@ -598,51 +598,75 @@ public class HelpManager {
 
         articles.add(new HelpArticle("protection_claim", "Claim", List.of(
                 gray("Mark a rectangle of chunks as your protected territory."),
-                cmd("/region claim <name> <x1> <z1> <x2> <z2>", "Claim a region in your current world."),
-                aqua("Notes:"),
-                white("- Endpoints may be supplied in any order; the box normalizes."),
-                white("- Coverage is chunk-granular: any block inside an affected chunk is protected."),
-                white("- Claims of <=5 chunks stamp immediately; larger claims stamp lazily as chunks load."),
+                cmd("/region claim <name>", "Claim the current wand selection."),
+                aqua("Workflow:"),
+                white("- Use the selection wand (default: Gold Hoe) to pick corners."),
+                white("- Left-click corner 1, Right-click corner 2."),
+                white("- Particle outlines show the current selection."),
+                white("- Use /region clear to drop the current selection."),
+                white("- Coverage is chunk-granular: entire chunks are claimed."),
+                white("- Claims <= 5 chunks stamp immediately; others stamp as chunks load."),
+                yellow("Alias: /rg claim"),
                 red("Requires permission: " + Permissions.PROTECTION_CLAIM + ".")
         ), Material.OAK_FENCE, 20, ColorUtil.HELP_GRAD_PROTECTION_CLAIM,
-                List.of("protection_unclaim", "protection_members", "protection_flags"),
+                List.of("protection_info", "protection_members", "protection_flags"),
                 Permissions.PROTECTION_CLAIM));
 
-        articles.add(new HelpArticle("protection_unclaim", "Unclaim", List.of(
-                gray("Logically delete a region. Pointer cleanup happens lazily on chunk load."),
-                cmd("/region unclaim <name>", "Remove a region by id."),
-                aqua("Notes:"),
-                white("- The region is gone the instant the command returns."),
-                white("- Stale PDC pointers are stripped from chunks as they next load."),
-                red("Requires permission: " + Permissions.PROTECTION_UNCLAIM + ".")
-        ), Material.BARRIER, 22, ColorUtil.HELP_GRAD_PROTECTION_UNCLAIM,
-                List.of("protection_claim", "protection_members"),
-                Permissions.PROTECTION_UNCLAIM));
+        articles.add(new HelpArticle("protection_info", "Region Info", List.of(
+                gray("View details about regions at your location or by name."),
+                cmd("/region info [name]", "Show details for a specific region."),
+                cmd("/rg i", "Quick info for where you are standing."),
+                cmd("/region select <name>", "Restore selection boundaries from a region."),
+                aqua("Displays:"),
+                white("- Region ID, Owner, Parent (if sub-region)."),
+                white("- Members list."),
+                white("- Active flag rules (including targeted rules)."),
+                red("Requires permission: " + Permissions.PROTECTION_INFO + ".")
+        ), Material.BOOK, 22, ColorUtil.HELP_GRAD_PROTECTION_CLAIM,
+                List.of("protection_claim", "protection_flags"),
+                Permissions.PROTECTION_INFO));
 
-        articles.add(new HelpArticle("protection_members", "Members", List.of(
-                gray("Members can act inside a region regardless of its flags."),
-                cmd("/region addmember <name> <player>", "Grant a player member status."),
-                cmd("/region removemember <name> <player>", "Revoke a player's member status."),
-                aqua("Notes:"),
-                white("- Owners always count as members and cannot be removed."),
-                white("- Overlapping regions are independent — a member of A is still subject to B."),
+        articles.add(new HelpArticle("protection_members", "Members & Hierarchy", List.of(
+                gray("Manage who can build and how sub-regions interact."),
+                cmd("/region addmember <name> <player>", "Add a member."),
+                cmd("/region removemember <name> <player>", "Remove a member."),
+                cmd("/region setparent <child> <parent>", "Create a sub-region relationship."),
+                aqua("Hierarchy:"),
+                white("- Sub-region flags override their parent(s)."),
+                white("- Child must be fully contained within parent bounds."),
+                white("- Membership is independent at each level."),
+                yellow("Alias: /rg addmember, /rg removemember"),
                 red("Requires permission: " + Permissions.PROTECTION_MEMBER + ".")
         ), Material.PLAYER_HEAD, 24, ColorUtil.HELP_GRAD_PROTECTION_MEMBERS,
                 List.of("protection_claim", "protection_flags"),
                 Permissions.PROTECTION_MEMBER));
 
-        articles.add(new HelpArticle("protection_flags", "Flags", List.of(
-                gray("Per-region toggles. A set flag means non-members may perform the action."),
-                cmd("/region flag <name> <flag> <true|false>", "Toggle a flag."),
-                aqua("Available flags:"),
-                white("- BLOCK_BREAK / BLOCK_PLACE"),
-                white("- CONTAINER_ACCESS / INTERACT / REDSTONE"),
-                white("- EXPLOSION / PVP / MOB_GRIEFING"),
-                yellow("All overlapping regions must independently permit an action."),
+        articles.add(new HelpArticle("protection_flags", "Precision Flags", List.of(
+                gray("Control actions within regions with targeted rules."),
+                cmd("/region flag <name> <flag> <value...> [target]", "Set a flag rule."),
+                aqua("Flag Types:"),
+                white("- Boolean (BLOCK_BREAK, PVP, etc.): use true|false."),
+                white("- Material (ALLOW_BLOCK_BREAK, etc.): use block list."),
+                aqua("Targeting (Boolean only):"),
+                white("- [target] can be: owner, member, or permission group (e.g. group:admin)."),
+                white("- Priority: GROUP > OWNER > MEMBER > DEFAULT."),
+                green("- Region flags override world gamerules (e.g. mobGriefing)."),
                 red("Requires permission: " + Permissions.PROTECTION_FLAG + ".")
         ), Material.OAK_SIGN, 30, ColorUtil.HELP_GRAD_PROTECTION_FLAGS,
-                List.of("protection_claim", "protection_members"),
+                List.of("protection_claim", "protection_info"),
                 Permissions.PROTECTION_FLAG));
+
+        articles.add(new HelpArticle("protection_unclaim", "Unclaim", List.of(
+                gray("Logically delete a region and its hierarchy links."),
+                cmd("/region unclaim <name>", "Remove a region."),
+                aqua("Notes:"),
+                white("- If it has children, they become root-level regions."),
+                white("- Pointers are purged from chunk PDC as players visit."),
+                yellow("Alias: /rg unclaim"),
+                red("Requires permission: " + Permissions.PROTECTION_UNCLAIM + ".")
+        ), Material.BARRIER, 34, ColorUtil.HELP_GRAD_PROTECTION_UNCLAIM,
+                List.of("protection_claim", "protection_info"),
+                Permissions.PROTECTION_UNCLAIM));
 
         return new HelpCategory("protection", "Land Protection", articles, Material.OAK_FENCE, 36, ColorUtil.HELP_GRAD_PROTECTION);
     }

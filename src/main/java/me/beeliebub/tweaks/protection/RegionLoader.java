@@ -144,7 +144,43 @@ public final class RegionLoader {
             parent = null;
         }
 
-        return new Region(id, owner, members, flagRules, materialFlags, parent);
+        Region.RegionBounds bounds = parseBounds(id, yaml);
+        String worldRaw = yaml.getString("world");
+        String world = (worldRaw == null || worldRaw.isBlank()) ? null : worldRaw;
+
+        return new Region(id, owner, members, flagRules, materialFlags, parent, bounds, world);
+    }
+
+    // Parse the optional `bounds:` section. Returns null when missing (legacy
+    // regions written before bounds were stored) — /region select handles the
+    // null gracefully by emitting a "re-claim required" error.
+    //
+    // Schema:
+    //   bounds:
+    //     min_chunk_x: -3
+    //     min_chunk_z: 4
+    //     max_chunk_x: 2
+    //     max_chunk_z: 7
+    private Region.RegionBounds parseBounds(String regionId, YamlConfiguration yaml) {
+        if (!yaml.contains("bounds")) return null;
+        ConfigurationSection section = yaml.getConfigurationSection("bounds");
+        if (section == null) return null;
+        for (String key : new String[] {"min_chunk_x", "min_chunk_z", "max_chunk_x", "max_chunk_z"}) {
+            if (!section.isInt(key)) {
+                logger.warning("Region '" + regionId + "': bounds is missing or non-integer key '"
+                        + key + "'; dropping bounds");
+                return null;
+            }
+        }
+        int minX = section.getInt("min_chunk_x");
+        int minZ = section.getInt("min_chunk_z");
+        int maxX = section.getInt("max_chunk_x");
+        int maxZ = section.getInt("max_chunk_z");
+        if (minX > maxX || minZ > maxZ) {
+            logger.warning("Region '" + regionId + "': bounds min > max; dropping bounds");
+            return null;
+        }
+        return new Region.RegionBounds(minX, minZ, maxX, maxZ);
     }
 
     // Parse the optional `material_flags:` map. Schema:

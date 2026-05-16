@@ -36,19 +36,64 @@ import java.util.UUID;
 // flag rule on the child falls through to the parent (and on up the chain).
 // Hierarchy lookups happen in ProtectionManager because they need the live
 // regions cache to resolve ids.
+//
+// `bounds` is the chunk-AABB the region was claimed with. Nullable because
+// regions persisted before the bounds field was added load without it; new
+// claims always set it. Used by /region select to restore the player's
+// pos1/pos2 to the originally-claimed box without scanning every chunk PDC.
+//
+// `worldName` records the Bukkit world the region was claimed in. Pairs with
+// `bounds` for overlap-prevention checks (two regions occupying the same
+// chunk coords in different worlds do NOT conflict). Nullable for the same
+// "loaded before the field existed" reason as bounds.
 public record Region(
         String id,
         UUID owner,
         List<UUID> members,
         Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules,
         Map<RegionFlag, Set<Material>> materialFlags,
-        String parentId
+        String parentId,
+        RegionBounds bounds,
+        String worldName
 ) {
+
+    // Inclusive chunk-coordinate AABB. Stored as four ints rather than two
+    // packed chunk keys so the YAML serialization stays readable (min_chunk_x:
+    // -5 reads cleaner than a 64-bit key) and so a future "move/resize" path
+    // can tweak one edge without re-packing.
+    public record RegionBounds(int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ) {
+        public RegionBounds {
+            if (minChunkX > maxChunkX || minChunkZ > maxChunkZ) {
+                throw new IllegalArgumentException(
+                        "Bounds min must be <= max: x[" + minChunkX + ".." + maxChunkX
+                                + "] z[" + minChunkZ + ".." + maxChunkZ + "]");
+            }
+        }
+    }
 
     public Region {
         members = List.copyOf(members);
         flagRules = deepCopyFlagRules(flagRules);
         materialFlags = deepCopyMaterialFlags(materialFlags);
+    }
+
+    // Pre-bounds canonical constructor used by every call site written before
+    // the field existed. Keeps tests and admin tooling that build Regions
+    // by hand from having to thread `null` through their argument lists.
+    public Region(String id, UUID owner, List<UUID> members,
+                  Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules,
+                  Map<RegionFlag, Set<Material>> materialFlags,
+                  String parentId) {
+        this(id, owner, members, flagRules, materialFlags, parentId, null, null);
+    }
+
+    // Bounds-aware constructor without world (legacy bounds-only call sites).
+    public Region(String id, UUID owner, List<UUID> members,
+                  Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules,
+                  Map<RegionFlag, Set<Material>> materialFlags,
+                  String parentId,
+                  RegionBounds bounds) {
+        this(id, owner, members, flagRules, materialFlags, parentId, bounds, null);
     }
 
     private static Map<RegionFlag, Map<FlagTarget, Boolean>> deepCopyFlagRules(
@@ -80,7 +125,7 @@ public record Region(
     // call sites that only care about boolean rules.
     public Region(String id, UUID owner, List<UUID> members,
                   Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules) {
-        this(id, owner, members, flagRules, Map.of(), null);
+        this(id, owner, members, flagRules, Map.of(), null, null, null);
     }
 
     // Convenience constructor without material flags but WITH parent — for
@@ -88,7 +133,7 @@ public record Region(
     public Region(String id, UUID owner, List<UUID> members,
                   Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules,
                   String parentId) {
-        this(id, owner, members, flagRules, Map.of(), parentId);
+        this(id, owner, members, flagRules, Map.of(), parentId, null, null);
     }
 
     // Legacy constructor preserved so call sites (and tests) that still pass an
@@ -96,7 +141,7 @@ public record Region(
     // listed flag is translated to a DEFAULT-target rule with value=true,
     // matching the pre-refactor "flag in set = non-members may act" semantic.
     public Region(String id, UUID owner, List<UUID> members, EnumSet<RegionFlag> legacyFlags) {
-        this(id, owner, members, legacyToTargeted(legacyFlags), Map.of(), null);
+        this(id, owner, members, legacyToTargeted(legacyFlags), Map.of(), null, null, null);
     }
 
     private static Map<RegionFlag, Map<FlagTarget, Boolean>> legacyToTargeted(EnumSet<RegionFlag> legacyFlags) {
@@ -251,13 +296,21 @@ public record Region(
         } else {
             newMaterials.put(flag, Set.copyOf(EnumSet.copyOf(materials)));
         }
-        return new Region(id, owner, members, flagRules, newMaterials, parentId);
+        return new Region(id, owner, members, flagRules, newMaterials, parentId, bounds, worldName);
     }
 
     // Returns a copy of this region with the parent pointer rewritten. Passing
     // null clears the parent (promotes the region back to top-level).
     public Region withParent(String newParentId) {
         String normalized = (newParentId == null || newParentId.isBlank()) ? null : newParentId;
-        return new Region(id, owner, members, flagRules, materialFlags, normalized);
+        return new Region(id, owner, members, flagRules, materialFlags, normalized, bounds, worldName);
+    }
+
+    public Region withBounds(RegionBounds newBounds) {
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, newBounds, worldName);
+    }
+
+    public Region withWorld(String newWorldName) {
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, newWorldName);
     }
 }

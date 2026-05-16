@@ -53,9 +53,17 @@ public final class ProtectionManager {
     private final Set<String> orphanedRegions = ConcurrentHashMap.newKeySet();
 
     private final Tweaks plugin;
+    private RegionWriter writer;
 
     public ProtectionManager(Tweaks plugin) {
         this.plugin = plugin;
+    }
+
+    // Optional persister for region YAML files. Wired by Tweaks#onEnable
+    // after the loader populates the cache. May be null in tests or before
+    // wiring completes; mutators no-op the disk write when null.
+    public void setWriter(RegionWriter writer) {
+        this.writer = writer;
     }
 
     public Tweaks plugin() {
@@ -75,7 +83,7 @@ public final class ProtectionManager {
     }
 
     // ------------------------------------------------------------------
-    // Tiered claim engine (Sprint 3)
+    // Tiered claim engine
     // ------------------------------------------------------------------
 
     // Claims spanning at most this many chunks are stamped immediately via
@@ -93,14 +101,98 @@ public final class ProtectionManager {
     // is currently loaded when a lazy claim is created, its PDC will not
     // gain the pointer until it next unloads + reloads. A follow-up bead
     // can stamp already-loaded chunks immediately on the lazy path.
+    // Discriminated result for claim() so callers can react to specific
+    // failure modes (overlap with foreign region, duplicate id) without
+    // string-matching error messages.
+    public enum ClaimResult { OK, ID_TAKEN, OVERLAPS_FOREIGN_REGION }
+
+    // Attempt to claim. Returns OK and starts stamping; otherwise returns the
+    // reason without mutating state. `pendingChunks` is filled with the
+    // CompletableFuture that signals "all immediate PDC writes done" so the
+    // caller can chain a message or persistence step; null on non-OK results.
+    public ClaimResult tryClaim(Region region, World world, int x1, int z1, int x2, int z2,
+                                java.util.concurrent.atomic.AtomicReference<CompletableFuture<Void>> pendingChunks) {
+        if (regions.containsKey(region.id())) return ClaimResult.ID_TAKEN;
+
+        Region.RegionBounds bounds = new Region.RegionBounds(
+                GeometryUtil.blockToChunk(Math.min(x1, x2)),
+                GeometryUtil.blockToChunk(Math.min(z1, z2)),
+                GeometryUtil.blockToChunk(Math.max(x1, x2)),
+                GeometryUtil.blockToChunk(Math.max(z1, z2)));
+
+        // Overlap policy: a claim is rejected only if it overlaps an existing
+        // region in the same world that the claimer does NOT own. The owner-
+        // permits-self carve-out is what lets a player carve a sub-region
+        // out of their own larger claim before running /region setparent.
+        UUID claimer = region.owner();
+        String worldName = world.getName();
+        for (Region other : regions.values()) {
+            if (other.bounds() == null) continue;
+            if (other.worldName() == null || !other.worldName().equals(worldName)) continue;
+            if (claimer != null && other.isOwner(claimer)) continue;
+            if (boundsIntersect(bounds, other.bounds())) {
+                return ClaimResult.OVERLAPS_FOREIGN_REGION;
+            }
+        }
+
+        Region stamped = region
+                .withBounds(region.bounds() == null ? bounds : region.bounds())
+                .withWorld(region.worldName() == null ? worldName : region.worldName());
+        regions.put(stamped.id(), stamped);
+        if (writer != null) {
+            writer.queue(stamped);
+        }
+        long[] keys = GeometryUtil.chunkKeysInBox(x1, z1, x2, z2);
+        CompletableFuture<Void> done;
+        if (keys.length <= ASYNC_STAMP_THRESHOLD) {
+            done = claimAsync(world, keys, stamped.id());
+        } else {
+            claimLazy(keys, stamped.id());
+            done = CompletableFuture.completedFuture(null);
+        }
+        if (pendingChunks != null) pendingChunks.set(done);
+        return ClaimResult.OK;
+    }
+
+    // Legacy claim() preserved so existing tests and the command-layer path
+    // (which doesn't care about the discriminated result for back-compat) keep
+    // working. Throws IllegalStateException on a duplicate id and IGNORES
+    // overlap-policy rejections — kept identical to pre-overlap behavior so
+    // tests written before this feature don't need to be rewritten just to
+    // express "skip the overlap check, I'm testing chunk stamping".
     public CompletableFuture<Void> claim(Region region, World world, int x1, int z1, int x2, int z2) {
-        regions.put(region.id(), region);
+        Region.RegionBounds bounds = new Region.RegionBounds(
+                GeometryUtil.blockToChunk(Math.min(x1, x2)),
+                GeometryUtil.blockToChunk(Math.min(z1, z2)),
+                GeometryUtil.blockToChunk(Math.max(x1, x2)),
+                GeometryUtil.blockToChunk(Math.max(z1, z2)));
+        Region stamped = region
+                .withBounds(region.bounds() == null ? bounds : region.bounds())
+                .withWorld(region.worldName() == null ? world.getName() : region.worldName());
+        regions.put(stamped.id(), stamped);
+        if (writer != null) {
+            writer.queue(stamped);
+        }
         long[] keys = GeometryUtil.chunkKeysInBox(x1, z1, x2, z2);
         if (keys.length <= ASYNC_STAMP_THRESHOLD) {
-            return claimAsync(world, keys, region.id());
+            return claimAsync(world, keys, stamped.id());
         }
-        claimLazy(keys, region.id());
+        claimLazy(keys, stamped.id());
         return CompletableFuture.completedFuture(null);
+    }
+
+    private static boolean boundsIntersect(Region.RegionBounds a, Region.RegionBounds b) {
+        return a.minChunkX() <= b.maxChunkX()
+                && a.maxChunkX() >= b.minChunkX()
+                && a.minChunkZ() <= b.maxChunkZ()
+                && a.maxChunkZ() >= b.minChunkZ();
+    }
+
+    private static boolean boundsContains(Region.RegionBounds outer, Region.RegionBounds inner) {
+        return inner.minChunkX() >= outer.minChunkX()
+                && inner.maxChunkX() <= outer.maxChunkX()
+                && inner.minChunkZ() >= outer.minChunkZ()
+                && inner.maxChunkZ() <= outer.maxChunkZ();
     }
 
     private CompletableFuture<Void> claimAsync(World world, long[] keys, String regionId) {
@@ -133,7 +225,7 @@ public final class ProtectionManager {
     }
 
     // ------------------------------------------------------------------
-    // Pointer lookup (Sprint 4.1)
+    // Pointer lookup
     // ------------------------------------------------------------------
 
     // O(1) resolution of a location to its applicable Regions: read the
@@ -399,7 +491,7 @@ public final class ProtectionManager {
     }
 
     // ------------------------------------------------------------------
-    // Mutators (Sprint 5 execution binding)
+    // Mutators (Execution binding)
     //
     // Region is immutable, so every change to ownership/members/flags
     // builds a fresh Region and atomically replaces the cache entry.
@@ -422,7 +514,7 @@ public final class ProtectionManager {
         List<UUID> newMembers = new ArrayList<>(r.members());
         newMembers.add(member);
         regions.put(id, new Region(r.id(), r.owner(), newMembers,
-                r.flagRules(), r.materialFlags(), r.parentId()));
+                r.flagRules(), r.materialFlags(), r.parentId(), r.bounds(), r.worldName()));
         return true;
     }
 
@@ -432,7 +524,7 @@ public final class ProtectionManager {
         List<UUID> newMembers = new ArrayList<>(r.members());
         newMembers.remove(member);
         regions.put(id, new Region(r.id(), r.owner(), newMembers,
-                r.flagRules(), r.materialFlags(), r.parentId()));
+                r.flagRules(), r.materialFlags(), r.parentId(), r.bounds(), r.worldName()));
         return true;
     }
 
@@ -444,7 +536,10 @@ public final class ProtectionManager {
         UNKNOWN_PARENT,
         SELF_REFERENCE,
         CYCLE,
-        NO_CHANGE
+        NO_CHANGE,
+        DIFFERENT_WORLDS,
+        NOT_CONTAINED_IN_PARENT,
+        OVERLAPS_SIBLING
     }
 
     // Reparent (or unparent — pass null) a region. Validates that:
@@ -461,14 +556,42 @@ public final class ProtectionManager {
         String normalized = (newParentId == null || newParentId.isBlank()) ? null : newParentId;
         if (normalized != null) {
             if (normalized.equals(childId)) return SetParentResult.SELF_REFERENCE;
-            if (!regions.containsKey(normalized)) return SetParentResult.UNKNOWN_PARENT;
+            Region parent = regions.get(normalized);
+            if (parent == null) return SetParentResult.UNKNOWN_PARENT;
             if (wouldCreateCycle(childId, normalized)) return SetParentResult.CYCLE;
+
+            // Geometry checks only run when both regions have bounds + world
+            // recorded — legacy claims (loaded before those fields existed)
+            // are exempt so admins can still reparent them via /region
+            // setparent without first re-claiming. Once both sides have
+            // bounds, we enforce containment and sibling non-overlap.
+            if (child.bounds() != null && parent.bounds() != null) {
+                if (child.worldName() != null && parent.worldName() != null
+                        && !child.worldName().equals(parent.worldName())) {
+                    return SetParentResult.DIFFERENT_WORLDS;
+                }
+                if (!boundsContains(parent.bounds(), child.bounds())) {
+                    return SetParentResult.NOT_CONTAINED_IN_PARENT;
+                }
+                for (Region sibling : regions.values()) {
+                    if (sibling.id().equals(childId)) continue;
+                    if (!normalized.equals(sibling.parentId())) continue;
+                    if (sibling.bounds() == null) continue;
+                    if (boundsIntersect(child.bounds(), sibling.bounds())) {
+                        return SetParentResult.OVERLAPS_SIBLING;
+                    }
+                }
+            }
         }
 
         String current = child.parentId();
         if (java.util.Objects.equals(current, normalized)) return SetParentResult.NO_CHANGE;
 
-        regions.put(childId, child.withParent(normalized));
+        Region updated = child.withParent(normalized);
+        regions.put(childId, updated);
+        if (writer != null) {
+            writer.queue(updated);
+        }
         return SetParentResult.OK;
     }
 
