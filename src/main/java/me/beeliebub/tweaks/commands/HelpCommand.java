@@ -4,14 +4,13 @@ import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.ActionButton;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.action.DialogAction;
+import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
 import me.beeliebub.tweaks.managers.HelpManager;
 import me.beeliebub.tweaks.managers.HelpManager.HelpArticle;
 import me.beeliebub.tweaks.managers.HelpManager.HelpCategory;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
-import net.kyori.adventure.text.event.ClickEvent;
-import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -69,7 +68,7 @@ public class HelpCommand implements CommandExecutor, TabCompleter {
         HelpArticle article = helpManager.getArticle(target);
         if (article != null) {
             if (article.permission() == null || player.hasPermission(article.permission())) {
-                sendArticle(player, article);
+                openArticle(player, article);
             } else {
                 player.sendMessage(Component.text("You don't have permission to view this article.", NamedTextColor.RED));
             }
@@ -158,49 +157,83 @@ public class HelpCommand implements CommandExecutor, TabCompleter {
                 .width(BUTTON_WIDTH)
                 .action(DialogAction.customClick(
                         (view, audience) -> {
-                            if (audience instanceof Player p) sendArticle(p, article);
+                            if (audience instanceof Player p) openArticle(p, article);
                         },
                         ClickCallback.Options.builder().build()))
                 .build();
     }
 
-    public void sendArticle(Player player, HelpArticle article) {
-        Component divider = Component.text("─────────────────", NamedTextColor.DARK_GRAY);
-        player.sendMessage(Component.empty());
-        player.sendMessage(divider);
-        player.sendMessage(MM.deserialize("<gradient:" + article.gradient() + "><b>" + article.title() + "</b></gradient>"));
-        player.sendMessage(Component.empty());
+    // Renders an article as a Paper Dialog (title gradient + body lines + related-
+    // article jump buttons + Back to the owning category). Replaces the prior
+    // chat-message dump so the entire /help flow stays inside the GUI.
+    public void openArticle(Player player, HelpArticle article) {
+        HelpCategory owningCategory = findCategoryOf(article);
 
+        Component title = MM.deserialize("<gradient:" + article.gradient() + "><b>" + article.title() + "</b></gradient>")
+                .decoration(TextDecoration.ITALIC, false);
+
+        List<DialogBody> body = new ArrayList<>();
         for (Component line : article.content()) {
-            player.sendMessage(line);
+            body.add(DialogBody.plainMessage(line, BUTTON_WIDTH));
         }
 
-        List<String> related = article.relatedArticles();
-        if (related != null && !related.isEmpty()) {
-            Component line = Component.text("See also: ", NamedTextColor.DARK_AQUA);
-            boolean first = true;
-            for (String refId : related) {
-                HelpArticle ref = helpManager.getArticle(refId);
-                if (ref == null) continue;
-                if (!first) line = line.append(Component.text(", ", NamedTextColor.DARK_GRAY));
-                line = line.append(Component.text("[" + ref.title() + "]", NamedTextColor.AQUA)
-                        .hoverEvent(HoverEvent.showText(Component.text("Open: " + ref.title(), NamedTextColor.GRAY)))
-                        .clickEvent(ClickEvent.runCommand("/help " + refId)));
-                first = false;
-            }
-            if (!first) {
-                player.sendMessage(Component.empty());
-                player.sendMessage(line);
-            }
+        List<ActionButton> jumpButtons = new ArrayList<>();
+        for (String refId : article.relatedArticles()) {
+            HelpArticle ref = helpManager.getArticle(refId);
+            if (ref == null) continue;
+            if (ref.permission() != null && !player.hasPermission(ref.permission())) continue;
+            jumpButtons.add(ActionButton.builder(
+                            MM.deserialize("<gradient:" + ref.gradient() + ">See also: " + ref.title() + "</gradient>")
+                                    .decoration(TextDecoration.ITALIC, false))
+                    .tooltip(Component.text("Open " + ref.title(), NamedTextColor.GRAY))
+                    .width(BUTTON_WIDTH)
+                    .action(DialogAction.customClick(
+                            (view, audience) -> {
+                                if (audience instanceof Player p) openArticle(p, ref);
+                            },
+                            ClickCallback.Options.builder().build()))
+                    .build());
         }
 
-        player.sendMessage(Component.empty());
-        player.sendMessage(Component.text("[Open Help Menu]", NamedTextColor.YELLOW)
-                .hoverEvent(HoverEvent.showText(Component.text("Back to the help GUI", NamedTextColor.GRAY)))
-                .clickEvent(ClickEvent.runCommand("/help")));
-        player.sendMessage(divider);
+        ActionButton back = ActionButton.builder(
+                        Component.text("Back", NamedTextColor.RED, TextDecoration.BOLD)
+                                .decoration(TextDecoration.ITALIC, false))
+                .tooltip(Component.text(owningCategory != null
+                                ? "Return to " + owningCategory.title()
+                                : "Return to the help menu",
+                        NamedTextColor.GRAY))
+                .width(BUTTON_WIDTH)
+                .action(DialogAction.customClick(
+                        (view, audience) -> {
+                            if (!(audience instanceof Player p)) return;
+                            if (owningCategory != null) {
+                                openCategoryMenu(p, owningCategory);
+                            } else {
+                                openMainMenu(p);
+                            }
+                        },
+                        ClickCallback.Options.builder().build()))
+                .build();
 
+        Dialog dialog = Dialog.create(b -> b.empty()
+                .base(DialogBase.builder(title)
+                        .canCloseWithEscape(true)
+                        .pause(false)
+                        .body(body)
+                        .build())
+                .type(DialogType.multiAction(jumpButtons, back, 1)));
+
+        player.showDialog(dialog);
         player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.5f, 1.0f);
+    }
+
+    private HelpCategory findCategoryOf(HelpArticle article) {
+        for (HelpCategory category : helpManager.getCategories()) {
+            for (HelpArticle a : category.articles()) {
+                if (a.id().equals(article.id())) return category;
+            }
+        }
+        return null;
     }
 
     @Override

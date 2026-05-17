@@ -3,7 +3,6 @@ package me.beeliebub.tweaks.protection;
 import me.beeliebub.tweaks.Tweaks;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -80,12 +79,9 @@ public final class SelectionWandListener implements Listener {
         }
     }
 
-    public static final Material WAND_MATERIAL = Material.STONE_AXE;
-
-    @SuppressWarnings("unused") // plugin retained for constructor compatibility; tool is hardcoded now.
     private boolean isWand(ItemStack item) {
         if (item == null) return false;
-        return item.getType() == WAND_MATERIAL;
+        return item.getType() == plugin.getProtectionSelectionTool();
     }
 
     private static void announce(Player player, String label, long chunkKey, RegionSelection sel) {

@@ -494,9 +494,10 @@ Players in the tab list are automatically sorted by their current world profile 
 Any other world falls back to the **[Survival]** tag. Players in the lobby appear at the top of the tab list, followed by the standard worlds (overworld, nether, end, resource), then archive, then pi. Tags update automatically when you change worlds. Players who have toggled `/afk` also display a red **[AFK]** suffix after their name — see [AFK](#afk).
 ### Help Menu
 
-A comprehensive, interactive help system is available to guide you through the server's features.
+A comprehensive, interactive help system is available to guide you through the server's features. The entire system — including the category menu and individual articles — is rendered via **Paper Dialogs** (clickable GUIs) for a seamless, immersive experience.
 
-- **GUI Access**: Type `/help` to open a categorized menu where you can explore different aspects of gameplay. Each category and article features a unique, theme-consistent color gradient for easy identification.
+- **GUI Access**: Type `/help` to open a categorized menu. Each category and article features a unique, theme-consistent color gradient for easy identification.
+- **Articles**: Clicking a category opens its article list, and clicking an article opens its full content (title, body, and related-article jumps) within the GUI. Use the **[Back]** button to return to the category.
 - **Dynamic Layout**: The main menu automatically adjusts its layout based on your permissions, ensuring high-priority admin categories (like Permissions) are easily accessible.
 - **Direct Access**: Use `/help <section>` (e.g., `/help teleportation` or `/help tunneller`) to jump directly to a specific category or article.
 - **Login Tips**: Each time you log in, you'll receive a random gameplay tip to help you discover new features.
@@ -664,13 +665,17 @@ Render a floating preview of chest contents as a non-solid `ItemDisplay` entity.
 
 | Command | Permission | What it does |
 |---|---|---|
-| `/displaychest [hand\|off]` | `tweaks.admin.displaychest` | Toggle setup mode. While on, **left-click** any chest to spawn or update its display. |
+| `/displaychest [hand\|side\|hand side\|off]` | `tweaks.admin.displaychest` | Toggle setup/removal mode. While on, **left-click** any chest to spawn or update its display. |
 
 **How it works**:
-- **Source Priority**: by default, the plugin clones the item in **Slot 0** (the top-left slot) of the chest. Use `/displaychest hand` to override this and use your **currently held item** as the source for the next chest you click.
-- **Centering**: the display is automatically centered over the container. For double chests, it calculates the midpoint of both halves to ensure perfect alignment.
-- **Persistence**: display state (including entity UUIDs) is stored in the chunk's Persistent Data Container (PDC). Old displays at the same location are automatically cleaned up when a new one is placed.
-- **Removal**: use `/displaychest off` to enter removal mode, then click a chest to remove its display.
+- **Source Priority**: By default, the plugin clones the item in **Slot 0** (the top-left slot) of the chest.
+- **Hand Mode**: Use `/displaychest hand` to enter live-hand mode. In this mode, clicking a chest will use whatever item you are **currently holding** at that moment, rather than the chest's contents.
+- **Side Mode**: Use `/displaychest side` (or `/displaychest hand side`) to embed the item flush with the clicked face instead of floating it above the container.
+  - **Block Items**: Render embedded inside the block with only the clicked face visible (flush with the surface).
+  - **Non-Block Items**: Render flat against the face, similar to an item frame.
+- **Centering & Rotation**: Floating displays are automatically centered over the container. The spawned `ItemDisplay` uses a **VERTICAL billboard** rotation, meaning it automatically rotates to face whoever is looking at it from any angle. For double chests, it calculates the midpoint of both halves.
+- **Persistence**: Display state (including entity UUIDs) is stored in the chunk's Persistent Data Container (PDC). Old displays at the same location are automatically cleaned up when a new one is placed.
+- **Removal**: Use `/displaychest off` to enter removal mode, then click a chest to remove its display. This removes both top-floating and side-embedded entries from any clicked face.
 
 ### Item Editing
 
@@ -806,7 +811,7 @@ A hybrid, PDC-backed land protection system that allows players and admins to cl
 
 Territory is claimed in **full-chunk increments**.
 
-1.  **Selection**: Use the **Stone Axe** (or `/region wand`) to mark two corners of your desired area.
+1.  **Selection**: Use the selection wand (or `/region wand`) to mark two corners of your desired area. The wand material is configurable in `config.yml` via `protection.selection-tool` (defaults to **Stone Axe**).
     - **Left-click** a block to select chunk 1.
     - **Right-click** a block to select chunk 2.
     - **Relaxed Input**: Clicking any block in a chunk anchors that entire chunk (no corner snapping required).
@@ -930,7 +935,7 @@ When an action occurs, the system checks rules in this order:
 | `/region info [name]` | `tweaks.protection.info` | Show region details. Alias: `/rg i`. |
 | `/region select <name>` | `tweaks.protection.claim` | Restore wand selection to match a region. |
 | `/region clear` | `tweaks.protection.claim` | Drop the current wand selection. |
-| `/region wand` | `tweaks.protection.claim` | Get the selection wand (Stone Axe). |
+| `/region wand` | `tweaks.protection.claim` | Get the selection wand. |
 | `/region addmember <r> <p>` | `tweaks.protection.member` | Add a member to a region. Alias: `/rg am`. |
 | `/region removemember <r> <p>` | `tweaks.protection.member` | Remove a member from a region. Alias: `/rg rm`. |
 | `/region addmanager <r> <p>` | `tweaks.protection.member` | Add a manager to a region. Alias: `/rg aman`. |

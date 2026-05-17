@@ -48,7 +48,7 @@ public class Tweaks extends JavaPlugin {
     private ProtectionManager protectionManager;
     private PendingStampsStore pendingStampsStore;
     private RegionSelectionManager regionSelectionManager;
-    private Material protectionSelectionTool = Material.REDSTONE;
+    private Material protectionSelectionTool = Material.STONE_AXE;
     private int maxHomes;
     private Telekinesis telekinesis;
     private Replant replant;
@@ -87,10 +87,10 @@ public class Tweaks extends JavaPlugin {
         permissionManager = new PermissionManager(this);
         protectionManager = new ProtectionManager(this);
         ProtectionKeys.init(this);
-        String configuredTool = getConfig().getString("protection.selection-tool", "REDSTONE");
+        String configuredTool = getConfig().getString("protection.selection-tool", "STONE_AXE");
         Material resolvedTool = Material.matchMaterial(configuredTool);
         if (resolvedTool == null) {
-            getLogger().warning("protection.selection-tool '" + configuredTool + "' is not a valid Material; falling back to REDSTONE");
+            getLogger().warning("protection.selection-tool '" + configuredTool + "' is not a valid Material; falling back to STONE_AXE");
         } else {
             protectionSelectionTool = resolvedTool;
         }
@@ -339,7 +339,9 @@ public class Tweaks extends JavaPlugin {
 
         // Display Chest
         DisplayChestManager displayChestManager = new DisplayChestManager(this);
-        getCommand("displaychest").setExecutor(new DisplayChestCommand(displayChestManager));
+        DisplayChestCommand displayChestCommand = new DisplayChestCommand(displayChestManager);
+        getCommand("displaychest").setExecutor(displayChestCommand);
+        getCommand("displaychest").setTabCompleter(displayChestCommand);
         getServer().getPluginManager().registerEvents(new DisplayChestListener(displayChestManager), this);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");

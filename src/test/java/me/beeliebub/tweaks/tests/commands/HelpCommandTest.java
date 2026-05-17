@@ -66,7 +66,12 @@ class HelpCommandTest {
                 ColorUtil.HELP_GRAD_HOMES, List.of());
         when(helpManager.getArticle("test")).thenReturn(article);
 
-        helpCommand.onCommand(player, null, "help", new String[]{"test"});
+        // openArticle now opens a Paper Dialog (previously sent chat messages); the
+        // registry-less MockBukkit environment throws on Dialog.create — verifying
+        // the article lookup ran is enough to prove the dialog path was entered.
+        runIgnoringRegistry(() ->
+                helpCommand.onCommand(player, null, "help", new String[]{"test"})
+        );
 
         verify(helpManager).getArticle("test");
     }

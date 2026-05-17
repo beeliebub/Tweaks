@@ -414,9 +414,14 @@ public class HelpManager {
 
         articles.add(new HelpArticle("display_chest", "Display Chest", List.of(
                 gray("Renders a floating preview of chest contents as an ItemDisplay."),
-                cmd("/displaychest [hand]", "Toggle setup mode; click chests to add."),
+                cmd("/displaychest [hand|side|hand side|off]", "Toggle setup/removal mode; click chests."),
                 white("Auto-centers over single and double chests."),
                 white("Defaults to slot 0; use 'hand' to use your held item."),
+                white("Use 'side' to embed flush with the clicked face."),
+                white("- Block items: embedded (clicked face visible)."),
+                white("- Non-block: flat against face (item frame style)."),
+                white("Billboard: items rotate to always face the viewer."),
+                white("Removal: 'off' mode removes both top and side displays."),
                 white("State stored in the chunk PDC."),
                 green("Setup mode persists for batch placement.")
         ), Material.CHEST, 32, ColorUtil.HELP_GRAD_DISPLAY_CHEST, List.of("itemfilter", "blocklog")));
@@ -622,8 +627,9 @@ public class HelpManager {
                 cmd("/region select <name>", "Restore selection boundaries from a region."),
                 aqua("Displays:"),
                 white("- Region ID, Owner, Parent (if sub-region)."),
-                white("- Members list."),
+                white("- Members list: hover '(N entries)' for full names."),
                 white("- Active flag rules (including targeted rules)."),
+                white("- Mob-spawn entity lists (ALLOW/DENY_MOB_SPAWN)."),
                 yellow("Aliases: /rg i, /rg am, /rg rm"),
                 red("Requires permission: " + Permissions.PROTECTION_INFO + ".")
         ), Material.BOOK, 22, ColorUtil.HELP_GRAD_PROTECTION_CLAIM,

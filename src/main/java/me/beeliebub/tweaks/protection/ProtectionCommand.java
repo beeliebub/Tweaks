@@ -4,7 +4,9 @@ import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.permissions.PermissionManager;
 import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
@@ -168,7 +170,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
             new UsageEntry("/region clear",
                     "Drop your active wand selection.", Permissions.PROTECTION_CLAIM),
             new UsageEntry("/region wand",
-                    "Receive a region selection wand (stone axe).", Permissions.PROTECTION_CLAIM),
+                    "Receive a region selection wand.", Permissions.PROTECTION_CLAIM),
             new UsageEntry("/region select <name>",
                     "Restore a region's outline onto your selection.", Permissions.PROTECTION_INFO),
             new UsageEntry("/region unclaim <name>",
@@ -310,15 +312,18 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
                 "Cleared your selection.", NamedTextColor.GREEN));
     }
 
-    // /region wand  — hands the player a vanilla stone axe configured as the
-    // selection wand.
+    // /region wand  — hands the player the configured selection-tool material
+    // (config: protection.selection-tool) with a labelled display name.
     private void handleWand(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Component.text(
                     "Only players can receive a wand.", NamedTextColor.RED));
             return;
         }
-        ItemStack wand = new ItemStack(SelectionWandListener.WAND_MATERIAL);
+        Material tool = plugin.getProtectionSelectionTool();
+        ItemStack wand = new ItemStack(tool);
+        wand.editMeta(meta -> meta.displayName(Component.text("Region Selection Wand", NamedTextColor.AQUA)
+                .decoration(TextDecoration.ITALIC, false)));
         var overflow = player.getInventory().addItem(wand);
         if (!overflow.isEmpty()) {
             player.getWorld().dropItemNaturally(player.getLocation(), wand);
@@ -925,9 +930,16 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         if (!region.materialFlags().isEmpty()) {
             sender.sendMessage(Component.text("Material lists for '" + name + "':", NamedTextColor.AQUA));
             for (Map.Entry<RegionFlag, Set<Material>> e : region.materialFlags().entrySet()) {
-                sender.sendMessage(Component.text(
-                        "  " + e.getKey().name() + " (" + e.getValue().size() + " entries)",
-                        NamedTextColor.GRAY));
+                sender.sendMessage(Component.text("  ", NamedTextColor.GRAY)
+                        .append(materialListLine(e.getKey(), e.getValue())));
+            }
+            any = true;
+        }
+        if (!region.entityFlags().isEmpty()) {
+            sender.sendMessage(Component.text("Entity lists for '" + name + "':", NamedTextColor.AQUA));
+            for (Map.Entry<RegionFlag, Set<EntityType>> e : region.entityFlags().entrySet()) {
+                sender.sendMessage(Component.text("  ", NamedTextColor.GRAY)
+                        .append(entityListLine(e.getKey(), e.getValue())));
             }
             any = true;
         }
@@ -935,6 +947,37 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Component.text(
                     "Region '" + name + "' has no flag rules.", NamedTextColor.YELLOW));
         }
+    }
+
+    // Hoverable label for one material-list flag entry: "FLAG_NAME (N entries)" — hover
+    // text reveals the full Material list so /rg i stays readable when lists are long.
+    private static Component materialListLine(RegionFlag flag, Set<Material> materials) {
+        String summary = flag.name() + " (" + materials.size() + " entr"
+                + (materials.size() == 1 ? "y" : "ies") + ")";
+        Component hover = Component.text(joinNames(materials, Material::name), NamedTextColor.WHITE);
+        return Component.text(summary, NamedTextColor.GRAY)
+                .hoverEvent(HoverEvent.showText(hover));
+    }
+
+    // Hoverable label for one entity-list flag entry: "FLAG_NAME (N entries)" — hover
+    // text reveals the full EntityType list (e.g. CREEPER, ZOMBIE for ALLOW_MOB_SPAWN).
+    private static Component entityListLine(RegionFlag flag, Set<EntityType> entities) {
+        String summary = flag.name() + " (" + entities.size() + " entr"
+                + (entities.size() == 1 ? "y" : "ies") + ")";
+        Component hover = Component.text(joinNames(entities, EntityType::name), NamedTextColor.WHITE);
+        return Component.text(summary, NamedTextColor.GRAY)
+                .hoverEvent(HoverEvent.showText(hover));
+    }
+
+    private static <T> String joinNames(Set<T> values, java.util.function.Function<T, String> nameOf) {
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (T v : values) {
+            if (!first) sb.append(", ");
+            sb.append(nameOf.apply(v));
+            first = false;
+        }
+        return sb.toString();
     }
 
     // ------------------------------------------------------------------
@@ -1027,9 +1070,15 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         if (!region.materialFlags().isEmpty()) {
             sender.sendMessage(Component.text("    material flags:", NamedTextColor.GRAY));
             for (Map.Entry<RegionFlag, Set<Material>> e : region.materialFlags().entrySet()) {
-                sender.sendMessage(Component.text(
-                        "      " + e.getKey().name() + " (" + e.getValue().size() + " entries)",
-                        NamedTextColor.GRAY));
+                sender.sendMessage(Component.text("      ", NamedTextColor.GRAY)
+                        .append(materialListLine(e.getKey(), e.getValue())));
+            }
+        }
+        if (!region.entityFlags().isEmpty()) {
+            sender.sendMessage(Component.text("    entity flags:", NamedTextColor.GRAY));
+            for (Map.Entry<RegionFlag, Set<EntityType>> e : region.entityFlags().entrySet()) {
+                sender.sendMessage(Component.text("      ", NamedTextColor.GRAY)
+                        .append(entityListLine(e.getKey(), e.getValue())));
             }
         }
     }
