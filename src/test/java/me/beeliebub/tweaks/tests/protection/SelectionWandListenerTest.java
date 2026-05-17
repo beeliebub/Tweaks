@@ -34,7 +34,7 @@ class SelectionWandListenerTest {
     @BeforeEach
     void setUp() {
         plugin = mock(Tweaks.class);
-        when(plugin.getProtectionSelectionTool()).thenReturn(Material.REDSTONE);
+        when(plugin.getProtectionSelectionTool()).thenReturn(Material.STONE_AXE);
         selections = new RegionSelectionManager(plugin);
         listener = new SelectionWandListener(plugin, selections);
         world = mock(World.class);
@@ -68,7 +68,7 @@ class SelectionWandListenerTest {
 
     @Test
     void leftClickWithWandOnCornerSetsPos1AndCancels() {
-        ItemStack wand = new ItemStack(Material.REDSTONE);
+        ItemStack wand = new ItemStack(Material.STONE_AXE);
         Player p = playerWith(wand);
         Block corner = cornerBlock(0, 0);
         PlayerInteractEvent event = interactWith(p, Action.LEFT_CLICK_BLOCK, corner, wand);
@@ -84,7 +84,7 @@ class SelectionWandListenerTest {
 
     @Test
     void rightClickWithWandOnCornerSetsPos2() {
-        ItemStack wand = new ItemStack(Material.REDSTONE);
+        ItemStack wand = new ItemStack(Material.STONE_AXE);
         Player p = playerWith(wand);
         Block corner = cornerBlock(31, 31); // chunk (1, 1)
         PlayerInteractEvent event = interactWith(p, Action.RIGHT_CLICK_BLOCK, corner, wand);
@@ -98,20 +98,19 @@ class SelectionWandListenerTest {
     }
 
     @Test
-    void nonCornerClickIsRejectedAndPositionNotSet() {
-        ItemStack wand = new ItemStack(Material.REDSTONE);
+    void midChunkClickAnchorsTheContainingChunk() {
+        ItemStack wand = new ItemStack(Material.STONE_AXE);
         Player p = playerWith(wand);
-        Block middle = cornerBlock(7, 8); // mid-chunk
+        Block middle = cornerBlock(7, 8); // mid-chunk (0, 0)
         PlayerInteractEvent event = interactWith(p, Action.LEFT_CLICK_BLOCK, middle, wand);
 
         listener.onInteract(event);
 
-        // Event still cancelled (player meant to use the wand), but no selection recorded.
+        // Clicking anywhere inside a chunk anchors that whole chunk — no corner snap required.
         verify(event).setCancelled(true);
-        verify(p).sendMessage(any(net.kyori.adventure.text.Component.class));
         RegionSelection sel = selections.get(PLAYER);
-        assertTrue(sel == null || !sel.hasPos1(),
-                "non-corner click must not record a position");
+        assertNotNull(sel);
+        assertEquals(GeometryUtil.chunkKey(0, 0), sel.pos1());
     }
 
     @Test
@@ -139,7 +138,7 @@ class SelectionWandListenerTest {
 
     @Test
     void nullClickedBlockIgnored() {
-        ItemStack wand = new ItemStack(Material.REDSTONE);
+        ItemStack wand = new ItemStack(Material.STONE_AXE);
         Player p = playerWith(wand);
         PlayerInteractEvent event = interactWith(p, Action.LEFT_CLICK_BLOCK, null, wand);
 
@@ -150,7 +149,7 @@ class SelectionWandListenerTest {
 
     @Test
     void nonClickActionIgnored() {
-        ItemStack wand = new ItemStack(Material.REDSTONE);
+        ItemStack wand = new ItemStack(Material.STONE_AXE);
         Player p = playerWith(wand);
         PlayerInteractEvent event = interactWith(p, Action.PHYSICAL, cornerBlock(0, 0), wand);
 
@@ -161,7 +160,7 @@ class SelectionWandListenerTest {
 
     @Test
     void blockBreakWithWandIsCancelled() {
-        Player p = playerWith(new ItemStack(Material.REDSTONE));
+        Player p = playerWith(new ItemStack(Material.STONE_AXE));
         BlockBreakEvent event = mock(BlockBreakEvent.class);
         when(event.getPlayer()).thenReturn(p);
 
@@ -183,7 +182,7 @@ class SelectionWandListenerTest {
 
     @Test
     void sequentialLeftThenRightCompletesSelection() {
-        ItemStack wand = new ItemStack(Material.REDSTONE);
+        ItemStack wand = new ItemStack(Material.STONE_AXE);
         Player p = playerWith(wand);
 
         listener.onInteract(interactWith(p, Action.LEFT_CLICK_BLOCK, cornerBlock(0, 0), wand));

@@ -1,13 +1,5 @@
 package me.beeliebub.tweaks.protection;
 
-import com.mojang.brigadier.Command;
-import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import com.mojang.brigadier.context.CommandContext;
-import com.mojang.brigadier.suggestion.SuggestionProvider;
-import io.papermc.paper.command.brigadier.CommandSourceStack;
-import io.papermc.paper.command.brigadier.Commands;
-import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.permissions.PermissionManager;
 import me.beeliebub.tweaks.permissions.Permissions;
@@ -16,261 +8,167 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
-// Brigadier-backed /region command tree. Registered via Paper's
-// LifecycleEventManager so the dispatcher is synced to clients during the
-// COMMANDS lifecycle phase — clients then validate arguments before sending
-// the packet, dropping malformed input on the client side and saving
-// server-thread cycles.
+// Legacy CommandExecutor + TabCompleter implementation for the /region (alias
+// /rg) command tree. Stays on plugin.yml registration to match the rest of the
+// project; the dispatcher walks args[0] for the subcommand and routes to the
+// matching handle* method, and onTabComplete mirrors the same layout so each
+// argument slot suggests the right value (region IDs, player names, flag
+// names, targets, materials, entities, ...).
 //
-// Why .requires() instead of in-executor permission checks: the requires
-// predicate runs during tree synchronization, so players who lack a node's
-// permission never see that branch at all (the command literally does not
-// exist for them in their client-side tab completion). Falling back to an
-// in-executor check would expose the syntax but reject at runtime — less
-// pleasant and gives away protection internals to non-admins.
+// Permission gating: each subcommand checks its own permission first, returning
+// an empty-action no-op message when the sender lacks it. Tab completion also
+// filters subcommand names by permission so the visible suggestion list mirrors
+// the actions the sender can actually run.
 //
 // Flag-vs-material unification: /region flag accepts BOTH boolean and material
-// flags via a greedy "value" argument. Boolean flags take "true|false [target]";
+// flags via a trailing value list. Boolean flags take "true|false [target]";
 // material flags take a space-separated list of block materials (which replaces
 // the existing list — there's no add/remove, edit by unflagging and re-adding).
 // /region flag <name> <flag> with no value lists the current rules/materials.
 // /region unflag clears the rule (for boolean: per-target; for material: the
 // entire list).
-@SuppressWarnings("UnstableApiUsage")
-public final class ProtectionCommand {
+public final class ProtectionCommand implements CommandExecutor, TabCompleter {
 
-    // Suggestion providers need access to the manager/permissions, but
-    // Brigadier's SuggestionProvider doesn't carry user data. We thread them
-    // through ThreadLocals scoped to the lifecycle handler invocation.
-    private static final ThreadLocal<ProtectionManager> CURRENT_MANAGER = new ThreadLocal<>();
-    private static final ThreadLocal<PermissionManager> CURRENT_PERMISSIONS = new ThreadLocal<>();
-
-    private static final SuggestionProvider<CommandSourceStack> FLAG_SUGGESTIONS = (ctx, builder) -> {
-        for (RegionFlag flag : RegionFlag.values()) {
-            if (flag.name().toLowerCase().startsWith(builder.getRemainingLowerCase())) {
-                builder.suggest(flag.name());
-            }
-        }
-        return builder.buildFuture();
-    };
-
-    // Suggestions for the `<value>` greedy arg of /region flag. The provider
-    // branches on the previously-bound `flag` arg:
-    //   * boolean flag → first token suggests "true|false"; once a space has
-    //     been typed, subsequent tokens suggest TARGET_SUGGESTIONS.
-    //   * material flag → suggest block Material names, space-separated and
-    //     re-suggesting only from the last whitespace token so the user can
-    //     pile materials onto a single command line without re-completing
-    //     the names they have already chosen.
-    // The greedy arg shares its prefix with the user's raw input, so we drive
-    // off `builder.getRemaining()` rather than building a fresh prefix.
-    private static final SuggestionProvider<CommandSourceStack> FLAG_VALUE_SUGGESTIONS = (ctx, builder) -> {
-        RegionFlag flag = peekFlag(ctx);
-        if (flag == null) return builder.buildFuture();
-
-        String remaining = builder.getRemaining();
-        if (flag.isMaterialFlag()) {
-            return suggestMaterialTokens(builder, remaining);
-        }
-        return suggestBoolThenTarget(builder, remaining);
-    };
-
-    private static RegionFlag peekFlag(CommandContext<CommandSourceStack> ctx) {
-        try {
-            String raw = StringArgumentType.getString(ctx, "flag").toUpperCase(Locale.ROOT);
-            return RegionFlag.valueOf(raw);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
-    }
-
-    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions>
-            suggestMaterialTokens(com.mojang.brigadier.suggestion.SuggestionsBuilder builder, String remaining) {
-        int lastSpace = remaining.lastIndexOf(' ');
-        String prefix = (lastSpace >= 0 ? remaining.substring(lastSpace + 1) : remaining)
-                .toLowerCase(Locale.ROOT);
-        com.mojang.brigadier.suggestion.SuggestionsBuilder offset =
-                lastSpace >= 0 ? builder.createOffset(builder.getStart() + lastSpace + 1) : builder;
-        for (Material m : Material.values()) {
-            if (!m.isBlock()) continue;
-            String name = m.name().toLowerCase(Locale.ROOT);
-            if (name.startsWith(prefix)) offset.suggest(name);
-        }
-        return offset.buildFuture();
-    }
-
-    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions>
-            suggestBoolThenTarget(com.mojang.brigadier.suggestion.SuggestionsBuilder builder, String remaining) {
-        int firstSpace = remaining.indexOf(' ');
-        if (firstSpace < 0) {
-            String prefix = remaining.toLowerCase(Locale.ROOT);
-            if ("true".startsWith(prefix)) builder.suggest("true");
-            if ("false".startsWith(prefix)) builder.suggest("false");
-            return builder.buildFuture();
-        }
-        String targetPrefix = remaining.substring(firstSpace + 1).toLowerCase(Locale.ROOT);
-        com.mojang.brigadier.suggestion.SuggestionsBuilder offset =
-                builder.createOffset(builder.getStart() + firstSpace + 1);
-        suggestTargets(offset, targetPrefix);
-        return offset.buildFuture();
-    }
-
-    private static void suggestTargets(com.mojang.brigadier.suggestion.SuggestionsBuilder builder, String prefix) {
-        if ("owner".startsWith(prefix)) builder.suggest("owner");
-        if ("member".startsWith(prefix)) builder.suggest("member");
-        if ("default".startsWith(prefix)) builder.suggest("default");
-        PermissionManager pm = CURRENT_PERMISSIONS.get();
-        if (pm != null) {
-            for (String groupName : pm.getGroups().keySet()) {
-                String lower = groupName.toLowerCase(Locale.ROOT);
-                if (lower.startsWith(prefix)) builder.suggest(lower);
-            }
-        }
-    }
-
-    // Cap on region-name suggestions per tab keypress. Brigadier's wire format
-    // tolerates thousands but the client's scrollable GUI surfaces at most a
-    // few dozen at once, and dumping hundreds of names also leaks knowledge of
-    // every admin region to the player. 100 is generous for normal use while
-    // keeping the suggestion packet small.
+    // Cap on region-name suggestions per tab keypress. Walking the live cache
+    // is O(regions); 100 stays well under any client-side list rendering pain
+    // point while also limiting the leak of admin region names to non-admins.
     private static final int MAX_REGION_SUGGESTIONS = 100;
 
-    // Region-name suggestion provider with ownership-aware filtering:
-    //   * console / players holding PROTECTION_ADMIN see every region;
-    //   * everyone else only sees the regions they own.
-    // Walking the live cache once per keypress is O(regions), which is fine
-    // for any realistic server (the cache is in-memory and the cap below
-    // short-circuits the loop on large servers).
-    private static final SuggestionProvider<CommandSourceStack> REGION_ID_SUGGESTIONS = (ctx, builder) -> {
-        ProtectionManager mgr = CURRENT_MANAGER.get();
-        if (mgr == null) return builder.buildFuture();
-        CommandSender sender = ctx.getSource().getSender();
-        boolean admin = !(sender instanceof Player) || sender.hasPermission(Permissions.PROTECTION_ADMIN);
-        java.util.UUID actor = (sender instanceof Player p) ? p.getUniqueId() : null;
-        String prefix = builder.getRemainingLowerCase();
-        int count = 0;
-        for (Map.Entry<String, Region> entry : mgr.regions().entrySet()) {
-            if (count >= MAX_REGION_SUGGESTIONS) break;
-            if (!admin && (actor == null || !entry.getValue().isOwner(actor))) continue;
-            String id = entry.getKey();
-            if (id.toLowerCase(Locale.ROOT).startsWith(prefix)) {
-                builder.suggest(id);
-                count++;
-            }
-        }
-        return builder.buildFuture();
-    };
+    private final Tweaks plugin;
+    private final ProtectionManager protection;
+    private final RegionSelectionManager selections;
 
-    // Online players — used by /region addmember.
-    private static final SuggestionProvider<CommandSourceStack> ONLINE_PLAYER_SUGGESTIONS = (ctx, builder) -> {
-        String prefix = builder.getRemainingLowerCase();
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            if (p.getName().toLowerCase(Locale.ROOT).startsWith(prefix)) {
-                builder.suggest(p.getName());
-            }
-        }
-        return builder.buildFuture();
-    };
-
-    // Members of the region referenced by the `name` argument earlier in the
-    // path — used by /region removemember so the player isn't asked to
-    // remember UUIDs of offline members.
-    private static final SuggestionProvider<CommandSourceStack> REGION_MEMBER_SUGGESTIONS = (ctx, builder) -> {
-        ProtectionManager mgr = CURRENT_MANAGER.get();
-        String prefix = builder.getRemainingLowerCase();
-        if (mgr == null) return builder.buildFuture();
-        String regionName;
-        try {
-            regionName = StringArgumentType.getString(ctx, "name");
-        } catch (IllegalArgumentException e) {
-            return builder.buildFuture();
-        }
-        Region r = mgr.regions().get(regionName);
-        if (r == null) return builder.buildFuture();
-        for (java.util.UUID member : r.members()) {
-            OfflinePlayer p = Bukkit.getOfflinePlayer(member);
-            String name = p.getName();
-            if (name != null && name.toLowerCase(Locale.ROOT).startsWith(prefix)) {
-                builder.suggest(name);
-            }
-        }
-        return builder.buildFuture();
-    };
-
-    private static final SuggestionProvider<CommandSourceStack> TARGET_SUGGESTIONS = (ctx, builder) -> {
-        suggestTargets(builder, builder.getRemainingLowerCase());
-        return builder.buildFuture();
-    };
-
-    private ProtectionCommand() {}
-
-    public static void register(Tweaks plugin, ProtectionManager protection, RegionSelectionManager selections) {
-        plugin.getLifecycleManager().registerEventHandler(
-                LifecycleEvents.COMMANDS, event -> {
-                    CURRENT_MANAGER.set(protection);
-                    CURRENT_PERMISSIONS.set(plugin.getPermissionManager());
-                    try {
-                        event.registrar().register(
-                                buildTree(protection, selections, plugin.getPermissionManager()).build(),
-                                "Tweaks land protection commands",
-                                java.util.List.of("rg")
-                        );
-                    } finally {
-                        CURRENT_MANAGER.remove();
-                        CURRENT_PERMISSIONS.remove();
-                    }
-                });
+    public ProtectionCommand(Tweaks plugin, ProtectionManager protection, RegionSelectionManager selections) {
+        this.plugin = plugin;
+        this.protection = protection;
+        this.selections = selections;
     }
 
-    private static LiteralArgumentBuilder<CommandSourceStack> buildTree(
-            ProtectionManager protection, RegionSelectionManager selections, PermissionManager permissions) {
-        return Commands.literal("region")
-                .executes(ProtectionCommand::showRootUsage)
-                .then(claimNode(protection, selections))
-                .then(clearNode(selections))
-                .then(selectNode(protection, selections))
-                .then(unclaimNode(protection))
-                .then(memberNode(protection, "addmember", Permissions.PROTECTION_MEMBER, true))
-                .then(memberNode(protection, "removemember", Permissions.PROTECTION_MEMBER, false))
-                .then(flagNode(protection, permissions))
-                .then(unflagNode(protection, permissions))
-                .then(flagsNode(protection))
-                .then(infoNode(protection))
-                .then(setParentNode(protection))
-                .then(unsetParentNode(protection));
+    private PermissionManager permissions() {
+        return plugin == null ? null : plugin.getPermissionManager();
+    }
+
+    // ------------------------------------------------------------------
+    // Subcommand registry — drives both dispatch and tab completion.
+    // ------------------------------------------------------------------
+
+    private record Subcommand(String name, String permission, boolean visibleInUsage) {}
+
+    private static final List<Subcommand> SUBCOMMANDS = List.of(
+            new Subcommand("claim",         Permissions.PROTECTION_CLAIM,   true),
+            new Subcommand("clear",         Permissions.PROTECTION_CLAIM,   true),
+            new Subcommand("wand",          Permissions.PROTECTION_CLAIM,   true),
+            new Subcommand("select",        Permissions.PROTECTION_INFO,    true),
+            new Subcommand("unclaim",       Permissions.PROTECTION_UNCLAIM, true),
+            new Subcommand("addmember",     Permissions.PROTECTION_MEMBER,  true),
+            new Subcommand("removemember",  Permissions.PROTECTION_MEMBER,  true),
+            new Subcommand("am",            Permissions.PROTECTION_MEMBER,  false),
+            new Subcommand("rm",            Permissions.PROTECTION_MEMBER,  false),
+            new Subcommand("addmanager",    Permissions.PROTECTION_MEMBER,  true),
+            new Subcommand("removemanager", Permissions.PROTECTION_MEMBER,  true),
+            new Subcommand("aman",          Permissions.PROTECTION_MEMBER,  false),
+            new Subcommand("rman",          Permissions.PROTECTION_MEMBER,  false),
+            new Subcommand("flag",          Permissions.PROTECTION_FLAG,    true),
+            new Subcommand("unflag",        Permissions.PROTECTION_FLAG,    true),
+            new Subcommand("flags",         Permissions.PROTECTION_FLAG,    true),
+            new Subcommand("info",          Permissions.PROTECTION_INFO,    true),
+            new Subcommand("i",             Permissions.PROTECTION_INFO,    false),
+            new Subcommand("setparent",     Permissions.PROTECTION_CLAIM,   true),
+            new Subcommand("unsetparent",   Permissions.PROTECTION_CLAIM,   true),
+            new Subcommand("gui",           Permissions.PROTECTION_INFO,    true)
+    );
+
+    private static Subcommand findSubcommand(String name) {
+        if (name == null) return null;
+        String lower = name.toLowerCase(Locale.ROOT);
+        for (Subcommand sc : SUBCOMMANDS) {
+            if (sc.name().equals(lower)) return sc;
+        }
+        return null;
+    }
+
+    @Override
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
+                             @NotNull String label, @NotNull String[] args) {
+        if (args.length == 0) {
+            showRootUsage(sender);
+            return true;
+        }
+        Subcommand sc = findSubcommand(args[0]);
+        if (sc == null) {
+            sender.sendMessage(Component.text("Unknown subcommand: " + args[0], NamedTextColor.RED));
+            showRootUsage(sender);
+            return true;
+        }
+        if (!sender.hasPermission(sc.permission())) {
+            sender.sendMessage(Component.text(
+                    "You don't have permission for /region " + sc.name() + ".",
+                    NamedTextColor.RED));
+            return true;
+        }
+        String[] sub = popFirst(args);
+        switch (sc.name()) {
+            case "claim"          -> handleClaim(sender, sub);
+            case "clear"          -> handleClear(sender);
+            case "wand"           -> handleWand(sender);
+            case "select"         -> handleSelect(sender, sub);
+            case "unclaim"        -> handleUnclaim(sender, sub);
+            case "addmember", "am"        -> handleMember(sender, sub, true);
+            case "removemember", "rm"     -> handleMember(sender, sub, false);
+            case "addmanager", "aman"     -> handleManager(sender, sub, true);
+            case "removemanager", "rman"  -> handleManager(sender, sub, false);
+            case "flag"           -> handleFlag(sender, sub);
+            case "unflag"         -> handleUnflag(sender, sub);
+            case "flags"          -> handleFlags(sender, sub);
+            case "info", "i"      -> handleInfo(sender, sub);
+            case "setparent"      -> handleSetParent(sender, sub);
+            case "unsetparent"    -> handleUnsetParent(sender, sub);
+            case "gui"            -> handleGui(sender, sub);
+            default               -> showRootUsage(sender);
+        }
+        return true;
+    }
+
+    private static String[] popFirst(String[] args) {
+        if (args.length <= 1) return new String[0];
+        String[] out = new String[args.length - 1];
+        System.arraycopy(args, 1, out, 0, out.length);
+        return out;
     }
 
     // ------------------------------------------------------------------
     // Usage / help messaging
-    //
-    // Brigadier's default "Unknown or incomplete command" error is unhelpful
-    // for new players. We add a fallback `.executes(usage)` on every literal
-    // node that lacks one of its own; the usage handler prints the relevant
-    // syntax in the project's house style (yellow header + dim syntax lines)
-    // and is gated by .requires(), so users only see syntax for branches
-    // they have permission to run.
-    //
-    // The root `/region` invocation falls through to showRootUsage, which
-    // walks USAGE_ENTRIES and prints one line per subcommand the sender
-    // can execute. Entries the sender lacks permission for are silently
-    // omitted, preserving the "permissions-aware tab completion" contract.
     // ------------------------------------------------------------------
 
     private record UsageEntry(String syntax, String description, String permission) {}
 
-    private static final java.util.List<UsageEntry> USAGE_ENTRIES = java.util.List.of(
+    private static final List<UsageEntry> USAGE_ENTRIES = List.of(
             new UsageEntry("/region claim <name>",
                     "Claim your wand selection as a named region.", Permissions.PROTECTION_CLAIM),
             new UsageEntry("/region clear",
                     "Drop your active wand selection.", Permissions.PROTECTION_CLAIM),
+            new UsageEntry("/region wand",
+                    "Receive a region selection wand (stone axe).", Permissions.PROTECTION_CLAIM),
             new UsageEntry("/region select <name>",
                     "Restore a region's outline onto your selection.", Permissions.PROTECTION_INFO),
             new UsageEntry("/region unclaim <name>",
@@ -279,22 +177,27 @@ public final class ProtectionCommand {
                     "Add a member to a region.", Permissions.PROTECTION_MEMBER),
             new UsageEntry("/region removemember <name> <player>",
                     "Remove a member from a region.", Permissions.PROTECTION_MEMBER),
+            new UsageEntry("/region addmanager <name> <player>",
+                    "Promote a player to manager on a region (owner-only).", Permissions.PROTECTION_MEMBER),
+            new UsageEntry("/region removemanager <name> <player>",
+                    "Demote a manager (owner-only).", Permissions.PROTECTION_MEMBER),
             new UsageEntry("/region flag <name> <flag> [true|false|materials...]",
                     "Set a flag rule, or list rules when no value is given.", Permissions.PROTECTION_FLAG),
             new UsageEntry("/region unflag <name> <flag> [target]",
                     "Remove a flag rule (clears material list for material flags).", Permissions.PROTECTION_FLAG),
-            new UsageEntry("/region flags <name>",
-                    "List every flag rule on a region.", Permissions.PROTECTION_FLAG),
+            new UsageEntry("/region flags [name]",
+                    "List flag rules on a region (defaults to your current location).", Permissions.PROTECTION_FLAG),
             new UsageEntry("/region info [name]",
                     "Show region info here, or by name.", Permissions.PROTECTION_INFO),
             new UsageEntry("/region setparent <child> <parent>",
                     "Nest one region as a sub-region of another.", Permissions.PROTECTION_CLAIM),
             new UsageEntry("/region unsetparent <child>",
-                    "Promote a sub-region back to top-level.", Permissions.PROTECTION_CLAIM)
+                    "Promote a sub-region back to top-level.", Permissions.PROTECTION_CLAIM),
+            new UsageEntry("/region gui [name]",
+                    "Open the management dialog for a region.", Permissions.PROTECTION_INFO)
     );
 
-    private static int showRootUsage(CommandContext<CommandSourceStack> ctx) {
-        CommandSender sender = ctx.getSource().getSender();
+    private static void showRootUsage(CommandSender sender) {
         sender.sendMessage(Component.text("Region commands:", NamedTextColor.YELLOW));
         int shown = 0;
         for (UsageEntry entry : USAGE_ENTRIES) {
@@ -308,66 +211,50 @@ public final class ProtectionCommand {
                     "  (you don't have permission for any region subcommand)",
                     NamedTextColor.DARK_GRAY));
         }
-        return Command.SINGLE_SUCCESS;
     }
 
-    // Build a fallback .executes() handler that prints the usage line for one
-    // specific subcommand. Bound by syntax-prefix matching against
-    // USAGE_ENTRIES so each subcommand picks up the correct line without
-    // anyone hand-wiring two strings in two places.
-    private static Command<CommandSourceStack> usageFor(String literalPrefix) {
-        return ctx -> {
-            CommandSender sender = ctx.getSource().getSender();
-            for (UsageEntry entry : USAGE_ENTRIES) {
-                if (entry.syntax().equals(literalPrefix) || entry.syntax().startsWith(literalPrefix + " ")) {
-                    if (!sender.hasPermission(entry.permission())) continue;
-                    sender.sendMessage(Component.text("Usage:", NamedTextColor.YELLOW));
-                    sender.sendMessage(Component.text("  " + entry.syntax(), NamedTextColor.GRAY)
-                            .append(Component.text(" — " + entry.description(), NamedTextColor.DARK_GRAY)));
-                    return Command.SINGLE_SUCCESS;
-                }
+    private static void showUsage(CommandSender sender, String literalPrefix) {
+        for (UsageEntry entry : USAGE_ENTRIES) {
+            if (entry.syntax().equals(literalPrefix) || entry.syntax().startsWith(literalPrefix + " ")) {
+                if (!sender.hasPermission(entry.permission())) continue;
+                sender.sendMessage(Component.text("Usage:", NamedTextColor.YELLOW));
+                sender.sendMessage(Component.text("  " + entry.syntax(), NamedTextColor.GRAY)
+                        .append(Component.text(" — " + entry.description(), NamedTextColor.DARK_GRAY)));
+                return;
             }
-            return showRootUsage(ctx);
-        };
+        }
+        showRootUsage(sender);
     }
+
+    // ------------------------------------------------------------------
+    // Subcommand handlers
+    // ------------------------------------------------------------------
 
     // /region claim <name>  — reads the wand-driven Pos1/Pos2 selection.
-    private static LiteralArgumentBuilder<CommandSourceStack> claimNode(
-            ProtectionManager protection, RegionSelectionManager selections) {
-        return Commands.literal("claim")
-                .requires(s -> s.getSender().hasPermission(Permissions.PROTECTION_CLAIM))
-                .executes(usageFor("/region claim <name>"))
-                .then(Commands.argument("name", StringArgumentType.word())
-                        .executes(ctx -> runClaim(ctx, protection, selections)));
-    }
-
-    private static int runClaim(
-            CommandContext<CommandSourceStack> ctx,
-            ProtectionManager protection,
-            RegionSelectionManager selections) {
-        CommandSender sender = ctx.getSource().getSender();
+    private void handleClaim(CommandSender sender, String[] args) {
+        if (args.length < 1) { showUsage(sender, "/region claim <name>"); return; }
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Component.text("Only players can claim regions.", NamedTextColor.RED));
-            return 0;
+            return;
         }
-        String name = StringArgumentType.getString(ctx, "name");
-        if (protection.regions().containsKey(name)) {
-            sender.sendMessage(Component.text("Region '" + name + "' already exists.", NamedTextColor.RED));
-            return 0;
+        String name = args[0];
+        if (protection.byName(player.getWorld(), name) != null) {
+            sender.sendMessage(Component.text(
+                    "Region '" + name + "' already exists in this world.", NamedTextColor.RED));
+            return;
         }
-
         RegionSelection sel = selections.get(player.getUniqueId());
         if (sel == null || !sel.isComplete()) {
             sender.sendMessage(Component.text(
                     "Set Pos1 (left-click) and Pos2 (right-click) on chunk corners with your wand first.",
                     NamedTextColor.RED));
-            return 0;
+            return;
         }
         if (sel.world() != player.getWorld()) {
             sender.sendMessage(Component.text(
                     "Your selection is in a different world. Re-select in this world.",
                     NamedTextColor.RED));
-            return 0;
+            return;
         }
 
         int cx1 = GeometryUtil.chunkX(sel.pos1());
@@ -387,14 +274,14 @@ public final class ProtectionCommand {
             case ID_TAKEN -> {
                 sender.sendMessage(Component.text(
                         "Region '" + name + "' already exists.", NamedTextColor.RED));
-                return 0;
+                return;
             }
             case OVERLAPS_FOREIGN_REGION -> {
                 sender.sendMessage(Component.text(
                         "Your selection overlaps a region you don't own. "
                                 + "Adjust pos1/pos2 or ask the owner to add you.",
                         NamedTextColor.RED));
-                return 0;
+                return;
             }
             case OK -> { /* fall through to success message */ }
         }
@@ -404,75 +291,68 @@ public final class ProtectionCommand {
         sender.sendMessage(Component.text(
                 "Claimed region '" + name + "' (" + chunks + " chunk" + (chunks == 1 ? "" : "s") + ").",
                 NamedTextColor.GREEN));
-        return Command.SINGLE_SUCCESS;
     }
 
-    // /region clear  — drop the player's Pos1/Pos2 selection. The particle
-    // outline disappears on the next ticker pass (≤5 ticks).
-    private static LiteralArgumentBuilder<CommandSourceStack> clearNode(RegionSelectionManager selections) {
-        return Commands.literal("clear")
-                .requires(s -> s.getSender().hasPermission(Permissions.PROTECTION_CLAIM))
-                .executes(ctx -> {
-                    CommandSender sender = ctx.getSource().getSender();
-                    if (!(sender instanceof Player player)) {
-                        sender.sendMessage(Component.text(
-                                "Only players have selections to clear.", NamedTextColor.RED));
-                        return 0;
-                    }
-                    if (selections.get(player.getUniqueId()) == null) {
-                        sender.sendMessage(Component.text(
-                                "You have no active selection.", NamedTextColor.YELLOW));
-                        return 0;
-                    }
-                    selections.clear(player.getUniqueId());
-                    sender.sendMessage(Component.text(
-                            "Cleared your selection.", NamedTextColor.GREEN));
-                    return Command.SINGLE_SUCCESS;
-                });
+    // /region clear  — drop the player's Pos1/Pos2 selection.
+    private void handleClear(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Component.text(
+                    "Only players have selections to clear.", NamedTextColor.RED));
+            return;
+        }
+        if (selections.get(player.getUniqueId()) == null) {
+            sender.sendMessage(Component.text(
+                    "You have no active selection.", NamedTextColor.YELLOW));
+            return;
+        }
+        selections.clear(player.getUniqueId());
+        sender.sendMessage(Component.text(
+                "Cleared your selection.", NamedTextColor.GREEN));
+    }
+
+    // /region wand  — hands the player a vanilla stone axe configured as the
+    // selection wand.
+    private void handleWand(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Component.text(
+                    "Only players can receive a wand.", NamedTextColor.RED));
+            return;
+        }
+        ItemStack wand = new ItemStack(SelectionWandListener.WAND_MATERIAL);
+        var overflow = player.getInventory().addItem(wand);
+        if (!overflow.isEmpty()) {
+            player.getWorld().dropItemNaturally(player.getLocation(), wand);
+            sender.sendMessage(Component.text(
+                    "Inventory full — wand dropped at your feet.", NamedTextColor.YELLOW));
+        } else {
+            sender.sendMessage(Component.text(
+                    "Received a region selection wand. Left-click = Pos1, right-click = Pos2.",
+                    NamedTextColor.GREEN));
+        }
     }
 
     // /region select <name>  — restore a region's pos1/pos2 onto the calling
-    // player's wand selection so the particle outline renders that region's
-    // chunk-AABB. Useful for inspecting an existing claim before reshaping it
-    // or as a visual confirmation aid for admins.
-    //
-    // Gating: the .requires() predicate keeps the branch out of tab completion
-    // for players without PROTECTION_INFO, then the executor additionally
-    // checks region ownership — only the owner OR PROTECTION_ADMIN may select
-    // a region, since the outline visualizes the protected area.
-    private static LiteralArgumentBuilder<CommandSourceStack> selectNode(
-            ProtectionManager protection, RegionSelectionManager selections) {
-        return Commands.literal("select")
-                .requires(s -> s.getSender().hasPermission(Permissions.PROTECTION_INFO))
-                .executes(usageFor("/region select <name>"))
-                .then(Commands.argument("name", StringArgumentType.word())
-                        .suggests(REGION_ID_SUGGESTIONS)
-                        .executes(ctx -> runSelect(ctx, protection, selections)));
-    }
-
-    private static int runSelect(
-            CommandContext<CommandSourceStack> ctx,
-            ProtectionManager protection,
-            RegionSelectionManager selections) {
-        CommandSender sender = ctx.getSource().getSender();
+    // player's wand selection.
+    private void handleSelect(CommandSender sender, String[] args) {
+        if (args.length < 1) { showUsage(sender, "/region select <name>"); return; }
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Component.text(
                     "Only players can hold a selection.", NamedTextColor.RED));
-            return 0;
+            return;
         }
-        String name = StringArgumentType.getString(ctx, "name");
-        Region region = protection.regions().get(name);
+        String name = args[0];
+        Region region = resolveRegion(sender, name);
         if (region == null) {
             sender.sendMessage(Component.text(
                     "No region named '" + name + "'.", NamedTextColor.RED));
-            return 0;
+            return;
         }
         boolean isOwner = region.isOwner(player.getUniqueId());
         if (!isOwner && !player.hasPermission(Permissions.PROTECTION_ADMIN)) {
             sender.sendMessage(Component.text(
                     "Only the region owner or admins can select '" + name + "'.",
                     NamedTextColor.RED));
-            return 0;
+            return;
         }
         Region.RegionBounds bounds = region.bounds();
         if (bounds == null) {
@@ -480,7 +360,7 @@ public final class ProtectionCommand {
                     "Region '" + name + "' was claimed before bounds were tracked. "
                             + "Unclaim and re-claim it to refresh.",
                     NamedTextColor.RED));
-            return 0;
+            return;
         }
 
         RegionSelection sel = selections.getOrCreate(player, player.getWorld());
@@ -493,56 +373,52 @@ public final class ProtectionCommand {
                 "Selected '" + name + "' (" + chunks + " chunk" + (chunks == 1 ? "" : "s")
                         + "). Outline shown in your current world.",
                 NamedTextColor.GREEN));
-        return Command.SINGLE_SUCCESS;
     }
 
-    // /region unclaim <name>
-    private static LiteralArgumentBuilder<CommandSourceStack> unclaimNode(ProtectionManager protection) {
-        return Commands.literal("unclaim")
-                .requires(s -> s.getSender().hasPermission(Permissions.PROTECTION_UNCLAIM))
-                .executes(usageFor("/region unclaim <name>"))
-                .then(Commands.argument("name", StringArgumentType.word())
-                        .suggests(REGION_ID_SUGGESTIONS)
-                        .executes(ctx -> {
-                            CommandSender sender = ctx.getSource().getSender();
-                            String name = StringArgumentType.getString(ctx, "name");
-                            if (!protection.unclaim(name)) {
-                                sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
-                                return 0;
-                            }
-                            sender.sendMessage(Component.text("Unclaimed region '" + name + "'. Pointer cleanup will run lazily.",
-                                    NamedTextColor.GREEN));
-                            return Command.SINGLE_SUCCESS;
-                        }));
+    // /region unclaim <name>  — owner/admin-only. Managers cannot unclaim.
+    private void handleUnclaim(CommandSender sender, String[] args) {
+        if (args.length < 1) { showUsage(sender, "/region unclaim <name>"); return; }
+        String name = args[0];
+        Region region = resolveRegion(sender, name);
+        if (region == null) {
+            sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
+            return;
+        }
+        if (!isOwnerOrAdmin(sender, region)) {
+            sender.sendMessage(Component.text(
+                    "Only the region owner can unclaim '" + name + "'.",
+                    NamedTextColor.RED));
+            return;
+        }
+        if (!protection.unclaim(name)) {
+            sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
+            return;
+        }
+        sender.sendMessage(Component.text(
+                "Unclaimed region '" + name + "'. Pointer cleanup will run lazily.",
+                NamedTextColor.GREEN));
     }
 
     // /region addmember|removemember <name> <player>
-    private static LiteralArgumentBuilder<CommandSourceStack> memberNode(
-            ProtectionManager protection, String literal, String permission, boolean add) {
-        SuggestionProvider<CommandSourceStack> playerSuggestions =
-                add ? ONLINE_PLAYER_SUGGESTIONS : REGION_MEMBER_SUGGESTIONS;
-        String usagePrefix = "/region " + literal + " <name> <player>";
-        return Commands.literal(literal)
-                .requires(s -> s.getSender().hasPermission(permission))
-                .executes(usageFor(usagePrefix))
-                .then(Commands.argument("name", StringArgumentType.word())
-                        .suggests(REGION_ID_SUGGESTIONS)
-                        .executes(usageFor(usagePrefix))
-                        .then(Commands.argument("player", StringArgumentType.word())
-                                .suggests(playerSuggestions)
-                                .executes(ctx -> runMember(ctx, protection, add))));
-    }
+    @SuppressWarnings("deprecation")
+    private void handleMember(CommandSender sender, String[] args, boolean add) {
+        String usagePrefix = "/region " + (add ? "addmember" : "removemember") + " <name> <player>";
+        if (args.length < 2) { showUsage(sender, usagePrefix); return; }
+        String name = args[0];
+        String playerName = args[1];
 
-    @SuppressWarnings("deprecation") // getOfflinePlayer(String) is the only way to resolve from a literal name arg
-    private static int runMember(CommandContext<CommandSourceStack> ctx, ProtectionManager protection, boolean add) {
-        CommandSender sender = ctx.getSource().getSender();
-        String name = StringArgumentType.getString(ctx, "name");
-        String playerName = StringArgumentType.getString(ctx, "player");
+        Region region = resolveRegion(sender, name);
+        if (region != null && !isOwnerManagerOrAdmin(sender, region)) {
+            sender.sendMessage(Component.text(
+                    "Only the region owner, a manager, or an admin can edit members.",
+                    NamedTextColor.RED));
+            return;
+        }
 
         OfflinePlayer target = Bukkit.getOfflinePlayer(playerName);
         if (target.getUniqueId() == null) {
             sender.sendMessage(Component.text("Unknown player '" + playerName + "'.", NamedTextColor.RED));
-            return 0;
+            return;
         }
 
         boolean ok = add
@@ -553,94 +429,252 @@ public final class ProtectionCommand {
                     ? "Could not add — region missing or player already a member."
                     : "Could not remove — region missing or player not a member.",
                     NamedTextColor.RED));
-            return 0;
+            return;
         }
         sender.sendMessage(Component.text(
                 (add ? "Added " : "Removed ") + playerName + " "
                         + (add ? "to" : "from") + " '" + name + "'.",
                 NamedTextColor.GREEN));
-        return Command.SINGLE_SUCCESS;
     }
 
-    // /region flag <name> <flag>                     — list this flag's rules/materials
-    // /region flag <name> <flag> true|false [target] — set boolean rule
-    // /region flag <name> <flag> <material> [...]    — replace material list (material flags only)
-    //
-    // value is a greedy string so a multi-material list ("stone dirt grass_block")
-    // and the optional [target] both parse via a single arg slot. The executor
-    // branches on flag.isMaterialFlag() to interpret the tokens.
-    private static LiteralArgumentBuilder<CommandSourceStack> flagNode(
-            ProtectionManager protection, PermissionManager permissions) {
-        return Commands.literal("flag")
-                .requires(s -> s.getSender().hasPermission(Permissions.PROTECTION_FLAG))
-                .executes(usageFor("/region flag <name> <flag> [true|false|materials...]"))
-                .then(Commands.argument("name", StringArgumentType.word())
-                        .suggests(REGION_ID_SUGGESTIONS)
-                        .executes(usageFor("/region flag <name> <flag> [true|false|materials...]"))
-                        .then(Commands.argument("flag", StringArgumentType.word())
-                                .suggests(FLAG_SUGGESTIONS)
-                                .executes(ctx -> runListSingleFlag(ctx, protection))
-                                .then(Commands.argument("value", StringArgumentType.greedyString())
-                                        .suggests(FLAG_VALUE_SUGGESTIONS)
-                                        .executes(ctx -> runSetFlag(ctx, protection, permissions)))));
+    // /region addmanager|removemanager <name> <player>  — owner-only by design.
+    @SuppressWarnings("deprecation")
+    private void handleManager(CommandSender sender, String[] args, boolean add) {
+        String usagePrefix = "/region " + (add ? "addmanager" : "removemanager") + " <name> <player>";
+        if (args.length < 2) { showUsage(sender, usagePrefix); return; }
+        String name = args[0];
+        String playerName = args[1];
+
+        Region region = resolveRegion(sender, name);
+        if (region == null) {
+            sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
+            return;
+        }
+
+        boolean isAdmin = !(sender instanceof Player) || sender.hasPermission(Permissions.PROTECTION_ADMIN);
+        if (!isAdmin) {
+            Player asPlayer = (Player) sender;
+            if (!region.isOwner(asPlayer.getUniqueId())) {
+                sender.sendMessage(Component.text(
+                        "Only the region owner can edit the manager set.", NamedTextColor.RED));
+                return;
+            }
+        }
+
+        OfflinePlayer target = Bukkit.getOfflinePlayer(playerName);
+        if (target.getUniqueId() == null) {
+            sender.sendMessage(Component.text("Unknown player '" + playerName + "'.", NamedTextColor.RED));
+            return;
+        }
+        if (add && region.owner().equals(target.getUniqueId())) {
+            sender.sendMessage(Component.text(
+                    "The owner is implicitly a manager — promotion is unnecessary.",
+                    NamedTextColor.YELLOW));
+            return;
+        }
+
+        boolean ok = add
+                ? protection.addManager(name, target.getUniqueId())
+                : protection.removeManager(name, target.getUniqueId());
+        if (!ok) {
+            sender.sendMessage(Component.text(add
+                    ? "Could not add — player is already a manager."
+                    : "Could not remove — player is not a manager.",
+                    NamedTextColor.RED));
+            return;
+        }
+        sender.sendMessage(Component.text(
+                (add ? "Promoted " : "Demoted ") + playerName + " "
+                        + (add ? "to manager on " : "from manager on ") + "'" + name + "'.",
+                NamedTextColor.GREEN));
+    }
+
+    // /region flag <name> <flag> [value tokens...]
+    private void handleFlag(CommandSender sender, String[] args) {
+        String usagePrefix = "/region flag <name> <flag> [true|false|materials...]";
+        if (args.length < 2) { showUsage(sender, usagePrefix); return; }
+        String name = args[0];
+        String flagToken = args[1];
+        String rawValue = joinFrom(args, 2);
+        if (rawValue.isEmpty()) {
+            runListSingleFlag(sender, name, flagToken);
+            return;
+        }
+        runSetFlag(sender, protection, permissions(), name, flagToken, rawValue);
     }
 
     // /region unflag <name> <flag> [target]
-    // For boolean flags: removes the (flag, target) rule (DEFAULT if no target).
-    // For material flags: clears the entire material list (target ignored).
-    private static LiteralArgumentBuilder<CommandSourceStack> unflagNode(
-            ProtectionManager protection, PermissionManager permissions) {
-        return Commands.literal("unflag")
-                .requires(s -> s.getSender().hasPermission(Permissions.PROTECTION_FLAG))
-                .executes(usageFor("/region unflag <name> <flag> [target]"))
-                .then(Commands.argument("name", StringArgumentType.word())
-                        .suggests(REGION_ID_SUGGESTIONS)
-                        .executes(usageFor("/region unflag <name> <flag> [target]"))
-                        .then(Commands.argument("flag", StringArgumentType.word())
-                                .suggests(FLAG_SUGGESTIONS)
-                                .executes(ctx -> runRemoveFlag(ctx, protection, permissions, null))
-                                .then(Commands.argument("target", StringArgumentType.word())
-                                        .suggests(TARGET_SUGGESTIONS)
-                                        .executes(ctx -> runRemoveFlag(ctx, protection, permissions,
-                                                StringArgumentType.getString(ctx, "target"))))));
+    private void handleUnflag(CommandSender sender, String[] args) {
+        String usagePrefix = "/region unflag <name> <flag> [target]";
+        if (args.length < 2) { showUsage(sender, usagePrefix); return; }
+        String name = args[0];
+        String flagToken = args[1];
+        String rawTarget = (args.length >= 3) ? args[2] : null;
+        runRemoveFlag(sender, protection, permissions(), name, flagToken, rawTarget);
     }
 
-    // /region flags <name>  — list every (flag, target, value) rule on a region.
-    private static LiteralArgumentBuilder<CommandSourceStack> flagsNode(ProtectionManager protection) {
-        return Commands.literal("flags")
-                .requires(s -> s.getSender().hasPermission(Permissions.PROTECTION_FLAG))
-                .executes(usageFor("/region flags <name>"))
-                .then(Commands.argument("name", StringArgumentType.word())
-                        .suggests(REGION_ID_SUGGESTIONS)
-                        .executes(ctx -> runListFlags(ctx, protection)));
+    // /region flags [name]
+    private void handleFlags(CommandSender sender, String[] args) {
+        if (args.length == 0) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(Component.text(
+                        "Console must supply a region name: /region flags <name>.",
+                        NamedTextColor.RED));
+                return;
+            }
+            List<Region> here = protection.regionsAt(player.getLocation());
+            if (here.isEmpty()) {
+                sender.sendMessage(Component.text(
+                        "You are standing in wilderness — no region to list flags for.",
+                        NamedTextColor.YELLOW));
+                return;
+            }
+            for (Region region : here) {
+                printRegionFlags(sender, region);
+            }
+            return;
+        }
+        String name = args[0];
+        Region region = resolveRegion(sender, name);
+        if (region == null) {
+            sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
+            return;
+        }
+        printRegionFlags(sender, region);
     }
 
-    // /region info [name]  — summary of a region, or of every region at the
-    // sender's current location if no name is given.
-    private static LiteralArgumentBuilder<CommandSourceStack> infoNode(ProtectionManager protection) {
-        return Commands.literal("info")
-                .requires(s -> s.getSender().hasPermission(Permissions.PROTECTION_INFO))
-                .executes(ctx -> runInfoHere(ctx, protection))
-                .then(Commands.argument("name", StringArgumentType.word())
-                        .suggests(REGION_ID_SUGGESTIONS)
-                        .executes(ctx -> runInfoNamed(ctx, protection)));
+    // /region info [name] (alias: /region i)
+    private void handleInfo(CommandSender sender, String[] args) {
+        if (args.length == 0) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(Component.text(
+                        "Console must supply a region name: /region info <name>.",
+                        NamedTextColor.RED));
+                return;
+            }
+            List<Region> here = protection.regionsAt(player.getLocation());
+            if (here.isEmpty()) {
+                sender.sendMessage(Component.text(
+                        "You are standing in wilderness — no region claimed here.",
+                        NamedTextColor.YELLOW));
+                return;
+            }
+            sender.sendMessage(Component.text(
+                    "Region" + (here.size() == 1 ? "" : "s") + " at your location:",
+                    NamedTextColor.AQUA));
+            for (Region r : here) {
+                printRegion(sender, r);
+            }
+            return;
+        }
+        String name = args[0];
+        Region region = resolveRegion(sender, name);
+        if (region == null) {
+            sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
+            return;
+        }
+        printRegion(sender, region);
     }
 
-    private static int runSetFlag(
-            CommandContext<CommandSourceStack> ctx,
-            ProtectionManager protection,
-            PermissionManager permissions) {
-        CommandSender sender = ctx.getSource().getSender();
-        String name = StringArgumentType.getString(ctx, "name");
-        if (!protection.regions().containsKey(name)) {
+    // /region setparent <child> <parent>
+    private void handleSetParent(CommandSender sender, String[] args) {
+        if (args.length < 2) { showUsage(sender, "/region setparent <child> <parent>"); return; }
+        String child = args[0];
+        String parent = args[1];
+        reportParentResult(sender, child, parent, protection.setParent(child, parent));
+    }
+
+    // /region unsetparent <child>
+    private void handleUnsetParent(CommandSender sender, String[] args) {
+        if (args.length < 1) { showUsage(sender, "/region unsetparent <child>"); return; }
+        String child = args[0];
+        reportParentResult(sender, child, null, protection.setParent(child, null));
+    }
+
+    // /region gui [name]
+    private void handleGui(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            if (args.length == 0) {
+                sender.sendMessage(Component.text(
+                        "Console must supply a region name: /region gui <name>.",
+                        NamedTextColor.RED));
+            } else {
+                sender.sendMessage(Component.text(
+                        "Only players can open the region dialog.", NamedTextColor.RED));
+            }
+            return;
+        }
+        if (args.length == 0) {
+            List<Region> here = protection.regionsAt(player.getLocation());
+            if (here.isEmpty()) {
+                player.sendMessage(Component.text(
+                        "You are standing in wilderness — stand inside a region, or run /region gui <name>.",
+                        NamedTextColor.YELLOW));
+                return;
+            }
+            openGuiFor(player, pickLeaf(here));
+            return;
+        }
+        String name = args[0];
+        Region region = resolveRegion(sender, name);
+        if (region == null) {
+            sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
+            return;
+        }
+        openGuiFor(player, region);
+    }
+
+    private void openGuiFor(Player player, Region region) {
+        if (!isOwnerManagerOrAdmin(player, region)) {
+            player.sendMessage(Component.text(
+                    "Only the region owner, a manager, or an admin can open '" + region.id() + "'.",
+                    NamedTextColor.RED));
+            return;
+        }
+        RegionGUI.openRegionHub(player, region, protection);
+    }
+
+    // From a candidate list of overlapping regions at one chunk, return the
+    // leaf — a region whose id is not the parentId of any other region in the
+    // list.
+    private static Region pickLeaf(List<Region> candidates) {
+        if (candidates.size() == 1) return candidates.getFirst();
+        Set<String> parentIds = new HashSet<>();
+        for (Region r : candidates) {
+            if (r.hasParent()) parentIds.add(r.parentId());
+        }
+        for (Region r : candidates) {
+            if (!parentIds.contains(r.id())) return r;
+        }
+        return candidates.getFirst();
+    }
+
+    // ------------------------------------------------------------------
+    // Flag set / remove / list helpers
+    // ------------------------------------------------------------------
+
+    // Package-private for ProtectionCommandTest. The legacy onCommand path
+    // calls this with already-resolved tokens; the test bypasses dispatch and
+    // exercises this method directly.
+    static int runSetFlag(CommandSender sender, ProtectionManager protection,
+                          PermissionManager permissions,
+                          String name, String flagToken, String rawValue) {
+        Region region = resolveRegionFor(sender, protection, name);
+        if (region == null) {
             sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
             return 0;
         }
-        RegionFlag flag = parseFlagArg(sender, ctx);
+        if (!isOwnerManagerOrAdmin(sender, region)) {
+            sender.sendMessage(Component.text(
+                    "Only the region owner, a manager, or an admin can edit flags.",
+                    NamedTextColor.RED));
+            return 0;
+        }
+        RegionFlag flag = parseFlagToken(sender, flagToken);
         if (flag == null) return 0;
 
-        String rawValue = StringArgumentType.getString(ctx, "value").trim();
-        if (rawValue.isEmpty()) {
+        String trimmed = rawValue == null ? "" : rawValue.trim();
+        if (trimmed.isEmpty()) {
             sender.sendMessage(Component.text(
                     "Missing value. For boolean flags use 'true|false [target]'; "
                             + "for material flags supply a space-separated list of block names.",
@@ -648,9 +682,83 @@ public final class ProtectionCommand {
             return 0;
         }
 
-        return flag.isMaterialFlag()
-                ? applyMaterialFlag(sender, protection, name, flag, rawValue)
-                : applyBooleanFlag(sender, protection, permissions, name, flag, rawValue);
+        if (flag.isMaterialFlag()) {
+            return applyMaterialFlag(sender, protection, name, flag, trimmed);
+        }
+        if (flag.isEntityFlag()) {
+            return applyEntityFlag(sender, protection, name, flag, trimmed);
+        }
+        return applyBooleanFlag(sender, protection, permissions, name, flag, trimmed);
+    }
+
+    static int runRemoveFlag(CommandSender sender, ProtectionManager protection,
+                             PermissionManager permissions,
+                             String name, String flagToken, String rawTarget) {
+        Region region = resolveRegionFor(sender, protection, name);
+        if (region == null) {
+            sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
+            return 0;
+        }
+        if (!isOwnerManagerOrAdmin(sender, region)) {
+            sender.sendMessage(Component.text(
+                    "Only the region owner, a manager, or an admin can edit flags.",
+                    NamedTextColor.RED));
+            return 0;
+        }
+        RegionFlag flag = parseFlagToken(sender, flagToken);
+        if (flag == null) return 0;
+
+        if (flag.isMaterialFlag()) {
+            if (rawTarget != null) {
+                sender.sendMessage(Component.text(
+                        "'" + flag.name() + "' is a material-list flag; targets do not apply. "
+                                + "Use /region unflag " + name + " " + flag.name() + " to clear the list.",
+                        NamedTextColor.YELLOW));
+            }
+            if (!protection.clearMaterials(name, flag)) {
+                sender.sendMessage(Component.text(
+                        "No change — '" + flag.name() + "' list is already empty.",
+                        NamedTextColor.YELLOW));
+                return 0;
+            }
+            sender.sendMessage(Component.text(
+                    "Cleared '" + name + "' " + flag.name() + " material list.",
+                    NamedTextColor.GREEN));
+            return 1;
+        }
+
+        if (flag.isEntityFlag()) {
+            if (rawTarget != null) {
+                sender.sendMessage(Component.text(
+                        "'" + flag.name() + "' is an entity-list flag; targets do not apply. "
+                                + "Use /region unflag " + name + " " + flag.name() + " to clear the list.",
+                        NamedTextColor.YELLOW));
+            }
+            if (!protection.clearEntities(name, flag)) {
+                sender.sendMessage(Component.text(
+                        "No change — '" + flag.name() + "' list is already empty.",
+                        NamedTextColor.YELLOW));
+                return 0;
+            }
+            sender.sendMessage(Component.text(
+                    "Cleared '" + name + "' " + flag.name() + " entity list.",
+                    NamedTextColor.GREEN));
+            return 1;
+        }
+
+        FlagTarget target = resolveTarget(sender, permissions, rawTarget);
+        if (target == null) return 0;
+
+        if (!protection.removeFlag(name, flag, target)) {
+            sender.sendMessage(Component.text(
+                    "No rule to remove for flag " + flag.name() + " [" + target.toKey() + "].",
+                    NamedTextColor.RED));
+            return 0;
+        }
+        sender.sendMessage(Component.text(
+                "Removed rule on '" + name + "' for flag " + flag.name() + " [" + target.toKey() + "].",
+                NamedTextColor.GREEN));
+        return 1;
     }
 
     private static int applyMaterialFlag(
@@ -673,7 +781,30 @@ public final class ProtectionCommand {
                 "Set '" + name + "' " + flag.name() + " to " + materials.size()
                         + " material" + (materials.size() == 1 ? "" : "s") + ".",
                 NamedTextColor.GREEN));
-        return Command.SINGLE_SUCCESS;
+        return 1;
+    }
+
+    private static int applyEntityFlag(
+            CommandSender sender, ProtectionManager protection,
+            String name, RegionFlag flag, String rawValue) {
+        EnumSet<EntityType> entities = parseEntities(sender, rawValue);
+        if (entities == null) return 0;
+        if (entities.isEmpty()) {
+            sender.sendMessage(Component.text(
+                    "Supply at least one entity type name.", NamedTextColor.RED));
+            return 0;
+        }
+        if (!protection.setEntities(name, flag, entities)) {
+            sender.sendMessage(Component.text(
+                    "No change — entity list already matches the requested set.",
+                    NamedTextColor.YELLOW));
+            return 0;
+        }
+        sender.sendMessage(Component.text(
+                "Set '" + name + "' " + flag.name() + " to " + entities.size()
+                        + " entity type" + (entities.size() == 1 ? "" : "s") + ".",
+                NamedTextColor.GREEN));
+        return 1;
     }
 
     private static int applyBooleanFlag(
@@ -713,78 +844,27 @@ public final class ProtectionCommand {
                 "Region '" + name + "' flag " + flag.name() + " ["
                         + target.toKey() + "] set to " + value + ".",
                 NamedTextColor.GREEN));
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private static int runRemoveFlag(
-            CommandContext<CommandSourceStack> ctx,
-            ProtectionManager protection,
-            PermissionManager permissions,
-            String rawTarget) {
-        CommandSender sender = ctx.getSource().getSender();
-        String name = StringArgumentType.getString(ctx, "name");
-        if (!protection.regions().containsKey(name)) {
-            sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
-            return 0;
-        }
-        RegionFlag flag = parseFlagArg(sender, ctx);
-        if (flag == null) return 0;
-
-        if (flag.isMaterialFlag()) {
-            if (rawTarget != null) {
-                sender.sendMessage(Component.text(
-                        "'" + flag.name() + "' is a material-list flag; targets do not apply. "
-                                + "Use /region unflag " + name + " " + flag.name() + " to clear the list.",
-                        NamedTextColor.YELLOW));
-            }
-            if (!protection.clearMaterials(name, flag)) {
-                sender.sendMessage(Component.text(
-                        "No change — '" + flag.name() + "' list is already empty.",
-                        NamedTextColor.YELLOW));
-                return 0;
-            }
-            sender.sendMessage(Component.text(
-                    "Cleared '" + name + "' " + flag.name() + " material list.",
-                    NamedTextColor.GREEN));
-            return Command.SINGLE_SUCCESS;
-        }
-
-        FlagTarget target = resolveTarget(sender, permissions, rawTarget);
-        if (target == null) return 0;
-
-        if (!protection.removeFlag(name, flag, target)) {
-            sender.sendMessage(Component.text(
-                    "No rule to remove for flag " + flag.name() + " [" + target.toKey() + "].",
-                    NamedTextColor.RED));
-            return 0;
-        }
-        sender.sendMessage(Component.text(
-                "Removed rule on '" + name + "' for flag " + flag.name() + " [" + target.toKey() + "].",
-                NamedTextColor.GREEN));
-        return Command.SINGLE_SUCCESS;
+        return 1;
     }
 
     // /region flag <name> <flag>  — list the current rules / material entries
-    // for one specific flag. Material flags print their full material set;
-    // boolean flags print every (target, value) rule.
-    private static int runListSingleFlag(CommandContext<CommandSourceStack> ctx, ProtectionManager protection) {
-        CommandSender sender = ctx.getSource().getSender();
-        String name = StringArgumentType.getString(ctx, "name");
-        Region region = protection.regions().get(name);
+    // for one specific flag.
+    private void runListSingleFlag(CommandSender sender, String name, String flagToken) {
+        Region region = resolveRegion(sender, name);
         if (region == null) {
             sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
-            return 0;
+            return;
         }
-        RegionFlag flag = parseFlagArg(sender, ctx);
-        if (flag == null) return 0;
+        RegionFlag flag = parseFlagToken(sender, flagToken);
+        if (flag == null) return;
 
         if (flag.isMaterialFlag()) {
-            java.util.Set<Material> materials = region.materialsFor(flag);
+            Set<Material> materials = region.materialsFor(flag);
             if (materials.isEmpty()) {
                 sender.sendMessage(Component.text(
                         "'" + name + "' has no " + flag.name() + " materials.",
                         NamedTextColor.YELLOW));
-                return Command.SINGLE_SUCCESS;
+                return;
             }
             sender.sendMessage(Component.text(
                     "'" + name + "' " + flag.name() + " (" + materials.size() + "):",
@@ -792,7 +872,24 @@ public final class ProtectionCommand {
             for (Material m : materials) {
                 sender.sendMessage(Component.text("  • " + m.name(), NamedTextColor.GRAY));
             }
-            return Command.SINGLE_SUCCESS;
+            return;
+        }
+
+        if (flag.isEntityFlag()) {
+            Set<EntityType> entities = region.entitiesFor(flag);
+            if (entities.isEmpty()) {
+                sender.sendMessage(Component.text(
+                        "'" + name + "' has no " + flag.name() + " entities.",
+                        NamedTextColor.YELLOW));
+                return;
+            }
+            sender.sendMessage(Component.text(
+                    "'" + name + "' " + flag.name() + " (" + entities.size() + "):",
+                    NamedTextColor.AQUA));
+            for (EntityType t : entities) {
+                sender.sendMessage(Component.text("  • " + t.name(), NamedTextColor.GRAY));
+            }
+            return;
         }
 
         Map<FlagTarget, Boolean> rules = region.rulesFor(flag);
@@ -800,7 +897,7 @@ public final class ProtectionCommand {
             sender.sendMessage(Component.text(
                     "'" + name + "' has no rules for " + flag.name() + ".",
                     NamedTextColor.YELLOW));
-            return Command.SINGLE_SUCCESS;
+            return;
         }
         sender.sendMessage(Component.text(
                 "'" + name + "' " + flag.name() + ":", NamedTextColor.AQUA));
@@ -809,17 +906,10 @@ public final class ProtectionCommand {
                     "  [" + rule.getKey().toKey() + "] = " + rule.getValue(),
                     rule.getValue() ? NamedTextColor.GREEN : NamedTextColor.RED));
         }
-        return Command.SINGLE_SUCCESS;
     }
 
-    private static int runListFlags(CommandContext<CommandSourceStack> ctx, ProtectionManager protection) {
-        CommandSender sender = ctx.getSource().getSender();
-        String name = StringArgumentType.getString(ctx, "name");
-        Region region = protection.regions().get(name);
-        if (region == null) {
-            sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
-            return 0;
-        }
+    private static void printRegionFlags(CommandSender sender, Region region) {
+        String name = region.id();
         boolean any = false;
         if (!region.flagRules().isEmpty()) {
             sender.sendMessage(Component.text("Flag rules for '" + name + "':", NamedTextColor.AQUA));
@@ -834,7 +924,7 @@ public final class ProtectionCommand {
         }
         if (!region.materialFlags().isEmpty()) {
             sender.sendMessage(Component.text("Material lists for '" + name + "':", NamedTextColor.AQUA));
-            for (Map.Entry<RegionFlag, java.util.Set<Material>> e : region.materialFlags().entrySet()) {
+            for (Map.Entry<RegionFlag, Set<Material>> e : region.materialFlags().entrySet()) {
                 sender.sendMessage(Component.text(
                         "  " + e.getKey().name() + " (" + e.getValue().size() + " entries)",
                         NamedTextColor.GRAY));
@@ -845,11 +935,136 @@ public final class ProtectionCommand {
             sender.sendMessage(Component.text(
                     "Region '" + name + "' has no flag rules.", NamedTextColor.YELLOW));
         }
-        return Command.SINGLE_SUCCESS;
     }
 
-    private static RegionFlag parseFlagArg(CommandSender sender, CommandContext<CommandSourceStack> ctx) {
-        String raw = StringArgumentType.getString(ctx, "flag").toUpperCase(Locale.ROOT);
+    // ------------------------------------------------------------------
+    // Parent / info
+    // ------------------------------------------------------------------
+
+    private static void reportParentResult(CommandSender sender, String child, String parent,
+                                           ProtectionManager.SetParentResult result) {
+        switch (result) {
+            case OK -> {
+                if (parent == null) {
+                    sender.sendMessage(Component.text(
+                            "Region '" + child + "' is now top-level.", NamedTextColor.GREEN));
+                } else {
+                    sender.sendMessage(Component.text(
+                            "Region '" + child + "' is now a sub-region of '" + parent + "'.",
+                            NamedTextColor.GREEN));
+                }
+            }
+            case NO_CHANGE -> sender.sendMessage(Component.text(
+                    "No change — region already has that parent.", NamedTextColor.YELLOW));
+            case UNKNOWN_CHILD -> sender.sendMessage(Component.text(
+                    "No region named '" + child + "'.", NamedTextColor.RED));
+            case UNKNOWN_PARENT -> sender.sendMessage(Component.text(
+                    "Unknown parent region '" + parent + "'.", NamedTextColor.RED));
+            case SELF_REFERENCE -> sender.sendMessage(Component.text(
+                    "A region cannot be its own parent.", NamedTextColor.RED));
+            case CYCLE -> sender.sendMessage(Component.text(
+                    "Refused — that would create a parent cycle.", NamedTextColor.RED));
+            case DIFFERENT_WORLDS -> sender.sendMessage(Component.text(
+                    "Refused — child and parent are in different worlds.", NamedTextColor.RED));
+            case NOT_CONTAINED_IN_PARENT -> sender.sendMessage(Component.text(
+                    "Refused — child region is not fully contained inside its parent's bounds.",
+                    NamedTextColor.RED));
+            case OVERLAPS_SIBLING -> sender.sendMessage(Component.text(
+                    "Refused — child would overlap another sub-region of the same parent.",
+                    NamedTextColor.RED));
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private static String resolveName(UUID uuid) {
+        if (uuid == null) return "<unknown>";
+        OfflinePlayer p = Bukkit.getOfflinePlayer(uuid);
+        String name = p.getName();
+        return (name == null || name.isEmpty()) ? uuid.toString() : name;
+    }
+
+    private static void printRegion(CommandSender sender, Region region) {
+        sender.sendMessage(Component.text("• " + region.id(), NamedTextColor.GREEN));
+        if (region.hasParent()) {
+            sender.sendMessage(Component.text(
+                    "    parent: " + region.parentId(), NamedTextColor.GRAY));
+        }
+        sender.sendMessage(Component.text("    owner: " + resolveName(region.owner()), NamedTextColor.GRAY));
+        if (!region.managers().isEmpty()) {
+            StringBuilder sb = new StringBuilder("    managers: ");
+            boolean first = true;
+            for (UUID m : region.managers()) {
+                if (!first) sb.append(", ");
+                sb.append(resolveName(m));
+                first = false;
+            }
+            sender.sendMessage(Component.text(sb.toString(), NamedTextColor.GRAY));
+        }
+        if (region.members().isEmpty()) {
+            sender.sendMessage(Component.text("    members: (none)", NamedTextColor.GRAY));
+        } else {
+            StringBuilder sb = new StringBuilder("    members: ");
+            boolean first = true;
+            for (UUID m : region.members()) {
+                if (!first) sb.append(", ");
+                sb.append(resolveName(m));
+                first = false;
+            }
+            sender.sendMessage(Component.text(sb.toString(), NamedTextColor.GRAY));
+        }
+        if (region.flagRules().isEmpty()) {
+            sender.sendMessage(Component.text("    flags: (none)", NamedTextColor.GRAY));
+        } else {
+            sender.sendMessage(Component.text("    flags:", NamedTextColor.GRAY));
+            for (Map.Entry<RegionFlag, Map<FlagTarget, Boolean>> e : region.flagRules().entrySet()) {
+                for (Map.Entry<FlagTarget, Boolean> rule : e.getValue().entrySet()) {
+                    sender.sendMessage(Component.text(
+                            "      " + e.getKey().name() + " [" + rule.getKey().toKey() + "] = " + rule.getValue(),
+                            rule.getValue() ? NamedTextColor.GREEN : NamedTextColor.RED));
+                }
+            }
+        }
+        if (!region.materialFlags().isEmpty()) {
+            sender.sendMessage(Component.text("    material flags:", NamedTextColor.GRAY));
+            for (Map.Entry<RegionFlag, Set<Material>> e : region.materialFlags().entrySet()) {
+                sender.sendMessage(Component.text(
+                        "      " + e.getKey().name() + " (" + e.getValue().size() + " entries)",
+                        NamedTextColor.GRAY));
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Region resolution / authorization
+    // ------------------------------------------------------------------
+
+    private Region resolveRegion(CommandSender sender, String name) {
+        return resolveRegionFor(sender, protection, name);
+    }
+
+    private static Region resolveRegionFor(CommandSender sender, ProtectionManager protection, String name) {
+        if (sender instanceof Player p) {
+            Region scoped = protection.byName(p.getWorld(), name);
+            if (scoped != null) return scoped;
+        }
+        return protection.byNameAnyWorld(name);
+    }
+
+    private static boolean isOwnerOrAdmin(CommandSender sender, Region region) {
+        if (sender.hasPermission(Permissions.PROTECTION_ADMIN)) return true;
+        if (!(sender instanceof Player p)) return true;
+        return region.isOwner(p.getUniqueId());
+    }
+
+    private static boolean isOwnerManagerOrAdmin(CommandSender sender, Region region) {
+        if (sender.hasPermission(Permissions.PROTECTION_ADMIN)) return true;
+        if (!(sender instanceof Player p)) return true;
+        return region.isOwner(p.getUniqueId()) || region.isManager(p.getUniqueId());
+    }
+
+    private static RegionFlag parseFlagToken(CommandSender sender, String token) {
+        if (token == null) return null;
+        String raw = token.toUpperCase(Locale.ROOT);
         try {
             return RegionFlag.valueOf(raw);
         } catch (IllegalArgumentException e) {
@@ -858,9 +1073,6 @@ public final class ProtectionCommand {
         }
     }
 
-    // Parse a whitespace- or comma-separated list of material names into an
-    // EnumSet. Returns null (with an error message already sent) if any token
-    // failed to resolve to a Material.
     private static EnumSet<Material> parseMaterials(CommandSender sender, String raw) {
         EnumSet<Material> out = EnumSet.noneOf(Material.class);
         if (raw == null || raw.isBlank()) return out;
@@ -882,169 +1094,22 @@ public final class ProtectionCommand {
         return out;
     }
 
-    // /region setparent <child> <parent>  — nest <child> under <parent>.
-    private static LiteralArgumentBuilder<CommandSourceStack> setParentNode(ProtectionManager protection) {
-        return Commands.literal("setparent")
-                .requires(s -> s.getSender().hasPermission(Permissions.PROTECTION_CLAIM))
-                .executes(usageFor("/region setparent <child> <parent>"))
-                .then(Commands.argument("child", StringArgumentType.word())
-                        .suggests(REGION_ID_SUGGESTIONS)
-                        .executes(usageFor("/region setparent <child> <parent>"))
-                        .then(Commands.argument("parent", StringArgumentType.word())
-                                .suggests(REGION_ID_SUGGESTIONS)
-                                .executes(ctx -> runSetParent(ctx, protection))));
-    }
-
-    // /region unsetparent <child>  — promote <child> back to top-level.
-    private static LiteralArgumentBuilder<CommandSourceStack> unsetParentNode(ProtectionManager protection) {
-        return Commands.literal("unsetparent")
-                .requires(s -> s.getSender().hasPermission(Permissions.PROTECTION_CLAIM))
-                .executes(usageFor("/region unsetparent <child>"))
-                .then(Commands.argument("child", StringArgumentType.word())
-                        .suggests(REGION_ID_SUGGESTIONS)
-                        .executes(ctx -> runUnsetParent(ctx, protection)));
-    }
-
-    private static int runSetParent(CommandContext<CommandSourceStack> ctx, ProtectionManager protection) {
-        CommandSender sender = ctx.getSource().getSender();
-        String child = StringArgumentType.getString(ctx, "child");
-        String parent = StringArgumentType.getString(ctx, "parent");
-        return reportParentResult(sender, child, parent, protection.setParent(child, parent));
-    }
-
-    private static int runUnsetParent(CommandContext<CommandSourceStack> ctx, ProtectionManager protection) {
-        CommandSender sender = ctx.getSource().getSender();
-        String child = StringArgumentType.getString(ctx, "child");
-        return reportParentResult(sender, child, null, protection.setParent(child, null));
-    }
-
-    private static int reportParentResult(CommandSender sender, String child, String parent,
-                                          ProtectionManager.SetParentResult result) {
-        switch (result) {
-            case OK -> {
-                if (parent == null) {
-                    sender.sendMessage(Component.text(
-                            "Region '" + child + "' is now top-level.", NamedTextColor.GREEN));
-                } else {
-                    sender.sendMessage(Component.text(
-                            "Region '" + child + "' is now a sub-region of '" + parent + "'.",
-                            NamedTextColor.GREEN));
-                }
-                return Command.SINGLE_SUCCESS;
-            }
-            case NO_CHANGE -> {
+    private static EnumSet<EntityType> parseEntities(CommandSender sender, String raw) {
+        EnumSet<EntityType> out = EnumSet.noneOf(EntityType.class);
+        if (raw == null || raw.isBlank()) return out;
+        for (String token : raw.split("[\\s,]+")) {
+            if (token.isEmpty()) continue;
+            try {
+                out.add(EntityType.valueOf(token.toUpperCase(Locale.ROOT)));
+            } catch (IllegalArgumentException e) {
                 sender.sendMessage(Component.text(
-                        "No change — region already has that parent.", NamedTextColor.YELLOW));
-                return 0;
-            }
-            case UNKNOWN_CHILD -> sender.sendMessage(Component.text(
-                    "No region named '" + child + "'.", NamedTextColor.RED));
-            case UNKNOWN_PARENT -> sender.sendMessage(Component.text(
-                    "Unknown parent region '" + parent + "'.", NamedTextColor.RED));
-            case SELF_REFERENCE -> sender.sendMessage(Component.text(
-                    "A region cannot be its own parent.", NamedTextColor.RED));
-            case CYCLE -> sender.sendMessage(Component.text(
-                    "Refused — that would create a parent cycle.", NamedTextColor.RED));
-            case DIFFERENT_WORLDS -> sender.sendMessage(Component.text(
-                    "Refused — child and parent are in different worlds.", NamedTextColor.RED));
-            case NOT_CONTAINED_IN_PARENT -> sender.sendMessage(Component.text(
-                    "Refused — child region is not fully contained inside its parent's bounds.",
-                    NamedTextColor.RED));
-            case OVERLAPS_SIBLING -> sender.sendMessage(Component.text(
-                    "Refused — child would overlap another sub-region of the same parent.",
-                    NamedTextColor.RED));
-        }
-        return 0;
-    }
-
-    private static int runInfoNamed(CommandContext<CommandSourceStack> ctx, ProtectionManager protection) {
-        CommandSender sender = ctx.getSource().getSender();
-        String name = StringArgumentType.getString(ctx, "name");
-        Region region = protection.regions().get(name);
-        if (region == null) {
-            sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
-            return 0;
-        }
-        printRegion(sender, region);
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private static int runInfoHere(CommandContext<CommandSourceStack> ctx, ProtectionManager protection) {
-        CommandSender sender = ctx.getSource().getSender();
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text(
-                    "Console must supply a region name: /region info <name>.",
-                    NamedTextColor.RED));
-            return 0;
-        }
-        List<Region> here = protection.regionsAt(player.getLocation());
-        if (here.isEmpty()) {
-            sender.sendMessage(Component.text(
-                    "You are standing in wilderness — no region claimed here.",
-                    NamedTextColor.YELLOW));
-            return Command.SINGLE_SUCCESS;
-        }
-        sender.sendMessage(Component.text(
-                "Region" + (here.size() == 1 ? "" : "s") + " at your location:",
-                NamedTextColor.AQUA));
-        for (Region r : here) {
-            printRegion(sender, r);
-        }
-        return Command.SINGLE_SUCCESS;
-    }
-
-    @SuppressWarnings("deprecation") // Bukkit#getOfflinePlayer(UUID) is the supported sync path
-    private static String resolveName(java.util.UUID uuid) {
-        if (uuid == null) return "<unknown>";
-        OfflinePlayer p = Bukkit.getOfflinePlayer(uuid);
-        String name = p.getName();
-        return (name == null || name.isEmpty()) ? uuid.toString() : name;
-    }
-
-    private static void printRegion(CommandSender sender, Region region) {
-        sender.sendMessage(Component.text("• " + region.id(), NamedTextColor.GREEN));
-        if (region.hasParent()) {
-            sender.sendMessage(Component.text(
-                    "    parent: " + region.parentId(), NamedTextColor.GRAY));
-        }
-        sender.sendMessage(Component.text("    owner: " + resolveName(region.owner()), NamedTextColor.GRAY));
-        if (region.members().isEmpty()) {
-            sender.sendMessage(Component.text("    members: (none)", NamedTextColor.GRAY));
-        } else {
-            StringBuilder sb = new StringBuilder("    members: ");
-            boolean first = true;
-            for (java.util.UUID m : region.members()) {
-                if (!first) sb.append(", ");
-                sb.append(resolveName(m));
-                first = false;
-            }
-            sender.sendMessage(Component.text(sb.toString(), NamedTextColor.GRAY));
-        }
-        if (region.flagRules().isEmpty()) {
-            sender.sendMessage(Component.text("    flags: (none)", NamedTextColor.GRAY));
-        } else {
-            sender.sendMessage(Component.text("    flags:", NamedTextColor.GRAY));
-            for (Map.Entry<RegionFlag, Map<FlagTarget, Boolean>> e : region.flagRules().entrySet()) {
-                for (Map.Entry<FlagTarget, Boolean> rule : e.getValue().entrySet()) {
-                    sender.sendMessage(Component.text(
-                            "      " + e.getKey().name() + " [" + rule.getKey().toKey() + "] = " + rule.getValue(),
-                            rule.getValue() ? NamedTextColor.GREEN : NamedTextColor.RED));
-                }
+                        "Unknown entity type '" + token + "'.", NamedTextColor.RED));
+                return null;
             }
         }
-        if (!region.materialFlags().isEmpty()) {
-            sender.sendMessage(Component.text("    material flags:", NamedTextColor.GRAY));
-            for (Map.Entry<RegionFlag, java.util.Set<Material>> e : region.materialFlags().entrySet()) {
-                sender.sendMessage(Component.text(
-                        "      " + e.getKey().name() + " (" + e.getValue().size() + " entries)",
-                        NamedTextColor.GRAY));
-            }
-        }
+        return out;
     }
 
-    // Parse the user-supplied target arg and verify any GROUP target maps to a
-    // real permission group. Returns null and sends an error message on
-    // failure so callers can short-circuit with `return 0`.
     private static FlagTarget resolveTarget(CommandSender sender, PermissionManager permissions, String rawTarget) {
         FlagTarget target = FlagTarget.parseCommandArg(rawTarget);
         if (target.type() == FlagTarget.Type.GROUP) {
@@ -1057,5 +1122,268 @@ public final class ProtectionCommand {
             }
         }
         return target;
+    }
+
+    private static String joinFrom(String[] args, int fromIndex) {
+        if (fromIndex >= args.length) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = fromIndex; i < args.length; i++) {
+            if (i > fromIndex) sb.append(' ');
+            sb.append(args[i]);
+        }
+        return sb.toString();
+    }
+
+    // ==================================================================
+    // Tab completion
+    // ==================================================================
+
+    @Override
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
+                                                @NotNull String alias, @NotNull String[] args) {
+        if (args.length == 0) return Collections.emptyList();
+
+        if (args.length == 1) {
+            return filterByPrefix(visibleSubcommands(sender), args[0]);
+        }
+
+        Subcommand sc = findSubcommand(args[0]);
+        if (sc == null) return Collections.emptyList();
+        if (!sender.hasPermission(sc.permission())) return Collections.emptyList();
+
+        return switch (sc.name()) {
+            case "claim" -> Collections.emptyList(); // <name> is freeform
+            case "clear", "wand" -> Collections.emptyList();
+            case "select", "unclaim" -> {
+                if (args.length == 2) yield regionSuggestions(sender, args[1]);
+                yield Collections.emptyList();
+            }
+            case "addmember", "am", "addmanager", "aman" -> memberOrManagerSuggestions(
+                    sender, args, /*membersOfRegion=*/false, /*managersOfRegion=*/false);
+            case "removemember", "rm" -> memberOrManagerSuggestions(
+                    sender, args, /*membersOfRegion=*/true, /*managersOfRegion=*/false);
+            case "removemanager", "rman" -> memberOrManagerSuggestions(
+                    sender, args, /*membersOfRegion=*/false, /*managersOfRegion=*/true);
+            case "flag" -> flagSuggestions(sender, args);
+            case "unflag" -> unflagSuggestions(sender, args);
+            case "flags", "info", "i", "gui" -> {
+                if (args.length == 2) yield regionSuggestions(sender, args[1]);
+                yield Collections.emptyList();
+            }
+            case "setparent" -> {
+                if (args.length == 2 || args.length == 3) yield regionSuggestions(sender, args[args.length - 1]);
+                yield Collections.emptyList();
+            }
+            case "unsetparent" -> {
+                if (args.length == 2) yield regionSuggestions(sender, args[1]);
+                yield Collections.emptyList();
+            }
+            default -> Collections.emptyList();
+        };
+    }
+
+    private List<String> visibleSubcommands(CommandSender sender) {
+        List<String> out = new ArrayList<>();
+        for (Subcommand sc : SUBCOMMANDS) {
+            if (!sc.visibleInUsage()) continue; // Hide aliases from the primary suggestion list.
+            if (sender.hasPermission(sc.permission())) out.add(sc.name());
+        }
+        return out;
+    }
+
+    // Region ID suggestions: admins see every region in their world (or every
+    // region for console); everyone else only sees regions they own in their
+    // current world. Mirrors the Brigadier predecessor's ownership-aware filter.
+    private List<String> regionSuggestions(CommandSender sender, String partial) {
+        boolean admin = !(sender instanceof Player) || sender.hasPermission(Permissions.PROTECTION_ADMIN);
+        UUID actor = (sender instanceof Player p) ? p.getUniqueId() : null;
+        String senderWorld = (sender instanceof Player p) ? p.getWorld().getName() : null;
+        String prefix = partial == null ? "" : partial.toLowerCase(Locale.ROOT);
+
+        List<String> out = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (Map.Entry<String, Region> entry : protection.regions().entrySet()) {
+            if (out.size() >= MAX_REGION_SUGGESTIONS) break;
+            Region region = entry.getValue();
+            if (!admin && (actor == null || !region.isOwner(actor))) continue;
+            if (senderWorld != null && region.worldName() != null
+                    && !region.worldName().equals(senderWorld)) continue;
+            String id = region.id();
+            if (!seen.add(id)) continue;
+            if (id.toLowerCase(Locale.ROOT).startsWith(prefix)) {
+                out.add(id);
+            }
+        }
+        return out;
+    }
+
+    private List<String> memberOrManagerSuggestions(CommandSender sender, String[] args,
+                                                    boolean membersOfRegion, boolean managersOfRegion) {
+        if (args.length == 2) {
+            return regionSuggestions(sender, args[1]);
+        }
+        if (args.length == 3) {
+            String prefix = args[2].toLowerCase(Locale.ROOT);
+            if (membersOfRegion) {
+                return regionMemberNames(args[1], prefix);
+            }
+            if (managersOfRegion) {
+                return regionManagerNames(args[1], prefix);
+            }
+            return onlinePlayerNames(prefix);
+        }
+        return Collections.emptyList();
+    }
+
+    @SuppressWarnings("deprecation")
+    private List<String> regionMemberNames(String regionName, String prefix) {
+        Region r = protection.byNameAnyWorld(regionName);
+        if (r == null) return Collections.emptyList();
+        List<String> out = new ArrayList<>();
+        for (UUID member : r.members()) {
+            OfflinePlayer p = Bukkit.getOfflinePlayer(member);
+            String name = p.getName();
+            if (name != null && name.toLowerCase(Locale.ROOT).startsWith(prefix)) {
+                out.add(name);
+            }
+        }
+        return out;
+    }
+
+    @SuppressWarnings("deprecation")
+    private List<String> regionManagerNames(String regionName, String prefix) {
+        Region r = protection.byNameAnyWorld(regionName);
+        if (r == null) return Collections.emptyList();
+        List<String> out = new ArrayList<>();
+        for (UUID manager : r.managers()) {
+            OfflinePlayer p = Bukkit.getOfflinePlayer(manager);
+            String name = p.getName();
+            if (name != null && name.toLowerCase(Locale.ROOT).startsWith(prefix)) {
+                out.add(name);
+            }
+        }
+        return out;
+    }
+
+    private static List<String> onlinePlayerNames(String prefix) {
+        List<String> out = new ArrayList<>();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (p.getName().toLowerCase(Locale.ROOT).startsWith(prefix)) {
+                out.add(p.getName());
+            }
+        }
+        return out;
+    }
+
+    // Tab completion for /region flag <name> <flag> [value tokens...]
+    //
+    // Layout:
+    //   args[1] = "flag" subcommand (consumed before this method runs)
+    //   args[2] = region name        (we suggest region IDs)
+    //   args[3] = flag name          (we suggest RegionFlag values)
+    //   args[4+] = value tokens      (boolean/target OR material list OR entity list)
+    // Note: args[0] in this method is the subcommand literal ("flag"), so
+    // when we say "args[1]" we mean the second positional arg overall.
+    private List<String> flagSuggestions(CommandSender sender, String[] args) {
+        if (args.length == 2) return regionSuggestions(sender, args[1]);
+        if (args.length == 3) return flagNameSuggestions(args[2]);
+
+        RegionFlag flag = tryParseFlag(args[2]);
+        if (flag == null) return Collections.emptyList();
+        String partial = args[args.length - 1];
+
+        if (flag.isMaterialFlag()) {
+            return blockMaterialNames(partial);
+        }
+        if (flag.isEntityFlag()) {
+            return entityTypeNames(partial);
+        }
+        // Boolean: args[3] = true|false, args[4] = target
+        if (args.length == 4) {
+            return filterByPrefix(List.of("true", "false"), partial);
+        }
+        if (args.length == 5) {
+            return targetNames(partial);
+        }
+        return Collections.emptyList();
+    }
+
+    // Tab completion for /region unflag <name> <flag> [target]
+    private List<String> unflagSuggestions(CommandSender sender, String[] args) {
+        if (args.length == 2) return regionSuggestions(sender, args[1]);
+        if (args.length == 3) return flagNameSuggestions(args[2]);
+        if (args.length == 4) {
+            RegionFlag flag = tryParseFlag(args[2]);
+            if (flag != null && (flag.isMaterialFlag() || flag.isEntityFlag())) {
+                return Collections.emptyList(); // targets do not apply
+            }
+            return targetNames(args[3]);
+        }
+        return Collections.emptyList();
+    }
+
+    private static RegionFlag tryParseFlag(String token) {
+        if (token == null) return null;
+        try {
+            return RegionFlag.valueOf(token.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static List<String> flagNameSuggestions(String partial) {
+        String prefix = partial == null ? "" : partial.toLowerCase(Locale.ROOT);
+        List<String> out = new ArrayList<>();
+        for (RegionFlag flag : RegionFlag.values()) {
+            String n = flag.name();
+            if (n.toLowerCase(Locale.ROOT).startsWith(prefix)) out.add(n);
+        }
+        return out;
+    }
+
+    private static List<String> blockMaterialNames(String partial) {
+        String prefix = partial == null ? "" : partial.toLowerCase(Locale.ROOT);
+        List<String> out = new ArrayList<>();
+        for (Material m : Material.values()) {
+            if (!m.isBlock()) continue;
+            String name = m.name().toLowerCase(Locale.ROOT);
+            if (name.startsWith(prefix)) out.add(name);
+        }
+        return out;
+    }
+
+    private static List<String> entityTypeNames(String partial) {
+        String prefix = partial == null ? "" : partial.toLowerCase(Locale.ROOT);
+        List<String> out = new ArrayList<>();
+        for (EntityType t : EntityType.values()) {
+            String name = t.name().toLowerCase(Locale.ROOT);
+            if (name.startsWith(prefix)) out.add(name);
+        }
+        return out;
+    }
+
+    private List<String> targetNames(String partial) {
+        String prefix = partial == null ? "" : partial.toLowerCase(Locale.ROOT);
+        List<String> out = new ArrayList<>();
+        for (String fixed : List.of("owner", "manager", "member", "default")) {
+            if (fixed.startsWith(prefix)) out.add(fixed);
+        }
+        PermissionManager pm = permissions();
+        if (pm != null) {
+            for (String groupName : pm.getGroups().keySet()) {
+                String lower = groupName.toLowerCase(Locale.ROOT);
+                if (lower.startsWith(prefix)) out.add(lower);
+            }
+        }
+        return out;
+    }
+
+    private static List<String> filterByPrefix(List<String> options, String partial) {
+        String prefix = partial == null ? "" : partial.toLowerCase(Locale.ROOT);
+        List<String> out = new ArrayList<>();
+        for (String opt : options) {
+            if (opt.toLowerCase(Locale.ROOT).startsWith(prefix)) out.add(opt);
+        }
+        return out;
     }
 }

@@ -97,4 +97,45 @@ class ProtectionManagerMutationTest {
         assertTrue(mgr.setFlag("plain", RegionFlag.PVP, true));
         assertTrue(mgr.regions().get("plain").hasFlag(RegionFlag.PVP));
     }
+
+    @Test
+    void addManagerInsertsAndPersistsImmutability() {
+        Region before = mgr.regions().get("home");
+        assertTrue(mgr.addManager("home", OTHER));
+
+        Region after = mgr.regions().get("home");
+        assertNotSame(before, after, "must replace with a new Region");
+        assertTrue(after.isManager(OTHER));
+        assertFalse(before.isManager(OTHER), "addManager must not mutate the prior Region");
+        assertEquals(before.owner(), after.owner());
+    }
+
+    @Test
+    void removeManagerDropsAnExistingPromotion() {
+        assertTrue(mgr.addManager("home", OTHER));
+        assertTrue(mgr.removeManager("home", OTHER));
+        assertFalse(mgr.regions().get("home").isManager(OTHER));
+    }
+
+    @Test
+    void addManagerIsIdempotent() {
+        assertTrue(mgr.addManager("home", OTHER));
+        assertFalse(mgr.addManager("home", OTHER));
+    }
+
+    @Test
+    void removeManagerUnknownReturnsFalse() {
+        assertFalse(mgr.removeManager("home", OTHER));
+    }
+
+    @Test
+    void managerCountedAsMemberForFallbackDefault() {
+        // After promotion, the manager should be recognised as a member by the
+        // default permission fallback — `isMember` is the boolean the listener
+        // checks when no rule applies.
+        mgr.addManager("home", OTHER);
+        Region r = mgr.regions().get("home");
+        assertTrue(r.isMember(OTHER));
+        assertTrue(r.isManager(OTHER));
+    }
 }

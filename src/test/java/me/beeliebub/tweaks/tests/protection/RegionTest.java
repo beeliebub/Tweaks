@@ -77,4 +77,25 @@ class RegionTest {
         assertTrue(r.hasFlag(RegionFlag.EXPLOSION));
         assertFalse(r.hasFlag(RegionFlag.BLOCK_BREAK));
     }
+
+    @Test
+    void addAndRemoveManagerProduceNewRegionWithUpdatedSet() {
+        UUID manager = UUID.fromString("00000000-0000-0000-0000-0000000000aa");
+        Region base = new Region("home", OWNER, List.of(MEMBER), EnumSet.noneOf(RegionFlag.class));
+
+        Region promoted = base.addManager(manager);
+        assertTrue(promoted.isManager(manager));
+        assertFalse(base.isManager(manager), "addManager must not mutate the original record");
+
+        Region demoted = promoted.removeManager(manager);
+        assertFalse(demoted.isManager(manager));
+    }
+
+    @Test
+    void managerIsTreatedAsMemberForDefaultFallback() {
+        UUID manager = UUID.fromString("00000000-0000-0000-0000-0000000000aa");
+        Region r = new Region("home", OWNER, List.of(MEMBER), EnumSet.noneOf(RegionFlag.class))
+                .addManager(manager);
+        assertTrue(r.isMember(manager), "managers should be implicit members for permission fallback");
+    }
 }

@@ -74,6 +74,73 @@ public final class ProtectionManager {
         return regions;
     }
 
+    // ------------------------------------------------------------------
+    // Per-world cache addressing
+    //
+    // Region uniqueness is enforced per world rather than globally. The cache
+    // key composition uses "<worldName>:<regionId>" when the region carries a
+    // world tag (new claims always do), or the bare regionId for legacy regions
+    // loaded from pre-per-world YAML (which stay at plain keys until they get
+    // touched / migrated).
+    //
+    // The two forms coexist in the same ConcurrentHashMap so tests that put
+    // null-world regions at plain keys continue to work alongside new claims
+    // stored at composite keys.
+    // ------------------------------------------------------------------
+
+    public static String keyOf(String worldName, String id) {
+        return (worldName == null || worldName.isEmpty()) ? id : worldName + ":" + id;
+    }
+
+    public static String keyOf(Region region) {
+        return region == null ? null : keyOf(region.worldName(), region.id());
+    }
+
+    // World-aware lookup: returns the region named `id` in the specified world,
+    // falling back to a plain-keyed legacy region if no world-tagged match is
+    // found. Pass world=null to skip the composite-key probe (legacy-only).
+    public Region byName(World world, String id) {
+        if (id == null) return null;
+        if (world != null) {
+            Region hit = regions.get(keyOf(world.getName(), id));
+            if (hit != null) return hit;
+        }
+        return regions.get(id);
+    }
+
+    // Search every world for a region with this id and return the first match
+    // (legacy plain-key entries first, then world-tagged). Used by commands
+    // run from console where there is no implicit world context.
+    public Region byNameAnyWorld(String id) {
+        if (id == null) return null;
+        Region exact = regions.get(id);
+        if (exact != null) return exact;
+        String suffix = ":" + id;
+        for (var e : regions.entrySet()) {
+            if (e.getKey().endsWith(suffix)) return e.getValue();
+        }
+        return null;
+    }
+
+    // Reassigns null-worldName regions to `defaultWorldName` so they participate
+    // in the per-world uniqueness model. Idempotent; safe to call after a
+    // successful load to upgrade old YAML on first launch under the new layout.
+    public int migrateLegacyRegions(String defaultWorldName) {
+        if (defaultWorldName == null || defaultWorldName.isEmpty()) return 0;
+        int migrated = 0;
+        for (var e : new ArrayList<>(regions.entrySet())) {
+            String key = e.getKey();
+            Region r = e.getValue();
+            if (r.worldName() != null) continue;
+            Region updated = r.withWorld(defaultWorldName);
+            regions.remove(key);
+            regions.put(keyOf(updated), updated);
+            if (writer != null) writer.queue(updated);
+            migrated++;
+        }
+        return migrated;
+    }
+
     public ConcurrentHashMap<Long, Set<String>> pendingStamps() {
         return pendingStamps;
     }
@@ -112,7 +179,15 @@ public final class ProtectionManager {
     // caller can chain a message or persistence step; null on non-OK results.
     public ClaimResult tryClaim(Region region, World world, int x1, int z1, int x2, int z2,
                                 java.util.concurrent.atomic.AtomicReference<CompletableFuture<Void>> pendingChunks) {
-        if (regions.containsKey(region.id())) return ClaimResult.ID_TAKEN;
+        String worldName = world.getName();
+        // Per-world uniqueness: a same-name region in a DIFFERENT world is fine.
+        if (regions.containsKey(keyOf(worldName, region.id()))) return ClaimResult.ID_TAKEN;
+        // Also block on a legacy plain-keyed region with this id (it has no
+        // explicit world, so we conservatively assume same-world ambiguity).
+        Region legacy = regions.get(region.id());
+        if (legacy != null && (legacy.worldName() == null || legacy.worldName().equals(worldName))) {
+            return ClaimResult.ID_TAKEN;
+        }
 
         Region.RegionBounds bounds = new Region.RegionBounds(
                 GeometryUtil.blockToChunk(Math.min(x1, x2)),
@@ -125,7 +200,6 @@ public final class ProtectionManager {
         // permits-self carve-out is what lets a player carve a sub-region
         // out of their own larger claim before running /region setparent.
         UUID claimer = region.owner();
-        String worldName = world.getName();
         for (Region other : regions.values()) {
             if (other.bounds() == null) continue;
             if (other.worldName() == null || !other.worldName().equals(worldName)) continue;
@@ -138,7 +212,7 @@ public final class ProtectionManager {
         Region stamped = region
                 .withBounds(region.bounds() == null ? bounds : region.bounds())
                 .withWorld(region.worldName() == null ? worldName : region.worldName());
-        regions.put(stamped.id(), stamped);
+        regions.put(keyOf(stamped), stamped);
         if (writer != null) {
             writer.queue(stamped);
         }
@@ -169,7 +243,7 @@ public final class ProtectionManager {
         Region stamped = region
                 .withBounds(region.bounds() == null ? bounds : region.bounds())
                 .withWorld(region.worldName() == null ? world.getName() : region.worldName());
-        regions.put(stamped.id(), stamped);
+        regions.put(keyOf(stamped), stamped);
         if (writer != null) {
             writer.queue(stamped);
         }
@@ -237,8 +311,11 @@ public final class ProtectionManager {
         List<String> ids = PDCUtil.read(chunk);
         if (ids.isEmpty()) return List.of();
         List<Region> resolved = new ArrayList<>(ids.size());
+        World world = chunk.getWorld();
         for (String id : ids) {
-            Region r = regions.get(id);
+            // World-aware lookup so a per-world region named the same as another
+            // world's region resolves to the correct one for this chunk.
+            Region r = byName(world, id);
             if (r != null) resolved.add(r);
         }
         return resolved;
@@ -322,8 +399,9 @@ public final class ProtectionManager {
         Region cursor = start;
         while (cursor != null && visited.add(cursor.id())) {
             boolean isOwner = actor != null && cursor.isOwner(actor);
+            boolean isManager = actor != null && cursor.isManager(actor);
             boolean isMember = actor != null && cursor.isMember(actor);
-            Optional<Boolean> resolved = cursor.resolveFlag(flag, isOwner, isMember, groups);
+            Optional<Boolean> resolved = cursor.resolveFlag(flag, isOwner, isManager, isMember, groups);
             if (resolved.isPresent()) return resolved;
             cursor = cursor.hasParent() ? regions.get(cursor.parentId()) : null;
         }
@@ -378,8 +456,9 @@ public final class ProtectionManager {
             if (matVerdict.isPresent()) return matVerdict;
 
             boolean isOwner = actor != null && cursor.isOwner(actor);
+            boolean isManager = actor != null && cursor.isManager(actor);
             boolean isMember = actor != null && cursor.isMember(actor);
-            Optional<Boolean> boolVerdict = cursor.resolveFlag(baseFlag, isOwner, isMember, groups);
+            Optional<Boolean> boolVerdict = cursor.resolveFlag(baseFlag, isOwner, isManager, isMember, groups);
             if (boolVerdict.isPresent()) return boolVerdict;
 
             cursor = cursor.hasParent() ? regions.get(cursor.parentId()) : null;
@@ -390,7 +469,7 @@ public final class ProtectionManager {
     // -- Material flag mutators ---------------------------------------------
 
     public boolean setMaterials(String id, RegionFlag flag, Set<Material> materials) {
-        Region r = regions.get(id);
+        Region r = byNameAnyWorld(id);
         if (r == null) return false;
         if (!flag.isMaterialFlag()) {
             throw new IllegalArgumentException("Not a material-list flag: " + flag);
@@ -400,12 +479,13 @@ public final class ProtectionManager {
                 ? Set.of()
                 : EnumSet.copyOf(materials);
         if (current.equals(normalized)) return false;
-        regions.put(id, r.withMaterials(flag, normalized));
+        Region updated = r.withMaterials(flag, normalized);
+        regions.put(keyOf(updated), updated);
         return true;
     }
 
     public boolean addMaterials(String id, RegionFlag flag, Set<Material> materials) {
-        Region r = regions.get(id);
+        Region r = byNameAnyWorld(id);
         if (r == null || materials == null || materials.isEmpty()) return false;
         if (!flag.isMaterialFlag()) {
             throw new IllegalArgumentException("Not a material-list flag: " + flag);
@@ -414,12 +494,13 @@ public final class ProtectionManager {
         merged.addAll(r.materialsFor(flag));
         boolean changed = merged.addAll(materials);
         if (!changed) return false;
-        regions.put(id, r.withMaterials(flag, merged));
+        Region updated = r.withMaterials(flag, merged);
+        regions.put(keyOf(updated), updated);
         return true;
     }
 
     public boolean removeMaterials(String id, RegionFlag flag, Set<Material> materials) {
-        Region r = regions.get(id);
+        Region r = byNameAnyWorld(id);
         if (r == null || materials == null || materials.isEmpty()) return false;
         if (!flag.isMaterialFlag()) {
             throw new IllegalArgumentException("Not a material-list flag: " + flag);
@@ -430,18 +511,20 @@ public final class ProtectionManager {
         reduced.addAll(current);
         boolean changed = reduced.removeAll(materials);
         if (!changed) return false;
-        regions.put(id, r.withMaterials(flag, reduced));
+        Region updated = r.withMaterials(flag, reduced);
+        regions.put(keyOf(updated), updated);
         return true;
     }
 
     public boolean clearMaterials(String id, RegionFlag flag) {
-        Region r = regions.get(id);
+        Region r = byNameAnyWorld(id);
         if (r == null) return false;
         if (!flag.isMaterialFlag()) {
             throw new IllegalArgumentException("Not a material-list flag: " + flag);
         }
         if (r.materialsFor(flag).isEmpty()) return false;
-        regions.put(id, r.withMaterials(flag, Set.of()));
+        Region updated = r.withMaterials(flag, Set.of());
+        regions.put(keyOf(updated), updated);
         return true;
     }
 
@@ -502,29 +585,95 @@ public final class ProtectionManager {
     // ------------------------------------------------------------------
 
     public boolean unclaim(String id) {
-        Region removed = regions.remove(id);
-        if (removed == null) return false;
-        orphanedRegions.add(id);
+        Region r = byNameAnyWorld(id);
+        if (r == null) return false;
+        regions.remove(keyOf(r));
+        orphanedRegions.add(r.id());
         return true;
     }
 
     public boolean addMember(String id, UUID member) {
-        Region r = regions.get(id);
+        Region r = byNameAnyWorld(id);
         if (r == null || r.members().contains(member)) return false;
         List<UUID> newMembers = new ArrayList<>(r.members());
         newMembers.add(member);
-        regions.put(id, new Region(r.id(), r.owner(), newMembers,
-                r.flagRules(), r.materialFlags(), r.parentId(), r.bounds(), r.worldName()));
+        Region updated = r.withMembers(newMembers);
+        regions.put(keyOf(updated), updated);
+        if (writer != null) writer.queue(updated);
         return true;
     }
 
     public boolean removeMember(String id, UUID member) {
-        Region r = regions.get(id);
+        Region r = byNameAnyWorld(id);
         if (r == null || !r.members().contains(member)) return false;
         List<UUID> newMembers = new ArrayList<>(r.members());
         newMembers.remove(member);
-        regions.put(id, new Region(r.id(), r.owner(), newMembers,
-                r.flagRules(), r.materialFlags(), r.parentId(), r.bounds(), r.worldName()));
+        Region updated = r.withMembers(newMembers);
+        regions.put(keyOf(updated), updated);
+        if (writer != null) writer.queue(updated);
+        return true;
+    }
+
+    public boolean addManager(String id, UUID manager) {
+        Region r = byNameAnyWorld(id);
+        if (r == null || manager == null || r.managers().contains(manager)) return false;
+        Region updated = r.addManager(manager);
+        regions.put(keyOf(updated), updated);
+        if (writer != null) writer.queue(updated);
+        return true;
+    }
+
+    public boolean removeManager(String id, UUID manager) {
+        Region r = byNameAnyWorld(id);
+        if (r == null || manager == null || !r.managers().contains(manager)) return false;
+        Region updated = r.removeManager(manager);
+        regions.put(keyOf(updated), updated);
+        if (writer != null) writer.queue(updated);
+        return true;
+    }
+
+    // Entity-list resolution for CreatureSpawnEvent gating. Returns true if any
+    // region applicable at `loc` lists `type` in its `flag` entity set. Used by
+    // ProtectionListener#onCreatureSpawn to evaluate DENY_MOB_SPAWN /
+    // ALLOW_MOB_SPAWN before falling back to the boolean MOB_SPAWNING rule.
+    public boolean isEntityListed(Location loc, RegionFlag flag, org.bukkit.entity.EntityType type) {
+        if (!flag.isEntityFlag()) return false;
+        List<Region> applicable = regionsAt(loc);
+        for (Region r : applicable) {
+            if (r.entitiesFor(flag).contains(type)) return true;
+        }
+        return false;
+    }
+
+    // -- Entity-list mutators -----------------------------------------------
+
+    public boolean setEntities(String id, RegionFlag flag, Set<org.bukkit.entity.EntityType> entities) {
+        Region r = byNameAnyWorld(id);
+        if (r == null) return false;
+        if (!flag.isEntityFlag()) {
+            throw new IllegalArgumentException("Not an entity-list flag: " + flag);
+        }
+        Set<org.bukkit.entity.EntityType> current = r.entitiesFor(flag);
+        Set<org.bukkit.entity.EntityType> normalized = (entities == null || entities.isEmpty())
+                ? Set.of()
+                : EnumSet.copyOf(entities);
+        if (current.equals(normalized)) return false;
+        Region updated = r.withEntities(flag, normalized);
+        regions.put(keyOf(updated), updated);
+        if (writer != null) writer.queue(updated);
+        return true;
+    }
+
+    public boolean clearEntities(String id, RegionFlag flag) {
+        Region r = byNameAnyWorld(id);
+        if (r == null) return false;
+        if (!flag.isEntityFlag()) {
+            throw new IllegalArgumentException("Not an entity-list flag: " + flag);
+        }
+        if (r.entitiesFor(flag).isEmpty()) return false;
+        Region updated = r.withEntities(flag, Set.of());
+        regions.put(keyOf(updated), updated);
+        if (writer != null) writer.queue(updated);
         return true;
     }
 
@@ -550,13 +699,13 @@ public final class ProtectionManager {
     // Returns a discriminated result so the command layer can produce a
     // specific error message without re-walking the cache.
     public SetParentResult setParent(String childId, String newParentId) {
-        Region child = regions.get(childId);
+        Region child = byNameAnyWorld(childId);
         if (child == null) return SetParentResult.UNKNOWN_CHILD;
 
         String normalized = (newParentId == null || newParentId.isBlank()) ? null : newParentId;
         if (normalized != null) {
             if (normalized.equals(childId)) return SetParentResult.SELF_REFERENCE;
-            Region parent = regions.get(normalized);
+            Region parent = byNameAnyWorld(normalized);
             if (parent == null) return SetParentResult.UNKNOWN_PARENT;
             if (wouldCreateCycle(childId, normalized)) return SetParentResult.CYCLE;
 
@@ -588,7 +737,7 @@ public final class ProtectionManager {
         if (java.util.Objects.equals(current, normalized)) return SetParentResult.NO_CHANGE;
 
         Region updated = child.withParent(normalized);
-        regions.put(childId, updated);
+        regions.put(keyOf(updated), updated);
         if (writer != null) {
             writer.queue(updated);
         }
@@ -600,7 +749,7 @@ public final class ProtectionManager {
         String cursor = candidateParentId;
         while (cursor != null && visited.add(cursor)) {
             if (cursor.equals(childId)) return true;
-            Region step = regions.get(cursor);
+            Region step = byNameAnyWorld(cursor);
             if (step == null) return false;
             cursor = step.parentId();
         }
@@ -619,11 +768,12 @@ public final class ProtectionManager {
             throw new IllegalArgumentException(
                     flag + " is a material-list flag; use setMaterials / addMaterials.");
         }
-        Region r = regions.get(id);
+        Region r = byNameAnyWorld(id);
         if (r == null) return false;
         Boolean current = r.rulesFor(flag).get(target);
         if (current != null && current == value) return false;
-        regions.put(id, r.withFlagRule(flag, target, value));
+        Region updated = r.withFlagRule(flag, target, value);
+        regions.put(keyOf(updated), updated);
         return true;
     }
 
@@ -634,10 +784,11 @@ public final class ProtectionManager {
             throw new IllegalArgumentException(
                     flag + " is a material-list flag; use clearMaterials / removeMaterials.");
         }
-        Region r = regions.get(id);
+        Region r = byNameAnyWorld(id);
         if (r == null) return false;
         if (!r.rulesFor(flag).containsKey(target)) return false;
-        regions.put(id, r.withFlagRule(flag, target, null));
+        Region updated = r.withFlagRule(flag, target, null);
+        regions.put(keyOf(updated), updated);
         return true;
     }
 

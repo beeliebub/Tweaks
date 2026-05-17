@@ -97,6 +97,15 @@ public class Tweaks extends JavaPlugin {
         java.io.File regionsDir = new java.io.File(getDataFolder(), "regions");
         new RegionLoader(getLogger()).load(regionsDir, protectionManager.regions());
         protectionManager.setWriter(new RegionWriter(this, regionsDir));
+        // Per-world refactor migration: regions saved before the world field
+        // existed get assigned to the primary loaded world (overworld) so they
+        // participate in per-world uniqueness going forward. Idempotent.
+        if (!getServer().getWorlds().isEmpty()) {
+            int migrated = protectionManager.migrateLegacyRegions(getServer().getWorlds().getFirst().getName());
+            if (migrated > 0) {
+                getLogger().info("Migrated " + migrated + " legacy region(s) to default world");
+            }
+        }
         pendingStampsStore = new PendingStampsStore(this, getDataFolder(), protectionManager.pendingStamps());
         pendingStampsStore.load();
         pendingStampsStore.start(20L * 60 * 5); // snapshot every 5 minutes
@@ -106,7 +115,9 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new ProtectionListener(protectionManager), this);
         getServer().getPluginManager().registerEvents(regionSelectionManager, this);
         getServer().getPluginManager().registerEvents(new SelectionWandListener(this, regionSelectionManager), this);
-        ProtectionCommand.register(this, protectionManager, regionSelectionManager);
+        ProtectionCommand protectionCommand = new ProtectionCommand(this, protectionManager, regionSelectionManager);
+        getCommand("region").setExecutor(protectionCommand);
+        getCommand("region").setTabCompleter(protectionCommand);
 
         // Resource Hunt Items Manager
         ResourceHuntItems resourceHuntItems = new ResourceHuntItems(this);

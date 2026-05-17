@@ -67,6 +67,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Advanced Flags & Targeting](#advanced-flags--targeting)
   - [Material-Specific Flags](#material-specific-flags)
   - [Resolution Priority](#resolution-priority)
+  - [Region GUI](#region-gui)
 - [Commands Reference](#commands-reference)
 - [Permissions Reference](#permissions-reference)
 - [Configuration](#configuration)
@@ -525,10 +526,10 @@ A hybrid GUI/CLI permission system with **multi-group membership**, single-paren
 
 When two of the player's groups share an ancestor in the inheritance graph, that ancestor's permissions are added exactly once. Cycles in the inheritance graph are skipped safely.
 
-**Permissions GUI**: The visual editor allows managing groups and players with simple click toggles.
-- **Main Menu**: Entry point featuring 'Videowiz92' icon.
-- **Groups Hub**: Manage group permissions, member list (toggle-based), and inheritance.
-- **Users Hub**: Manage player-specific overrides and multi-group memberships. The **Edit Groups** panel lists every group with a glint on the ones the player already belongs to — click any tile to toggle membership.
+**Permissions GUI**: The visual editor is a tree of Paper Dialogs (multi-action and confirmation) that lets you manage groups and players with simple click toggles. List screens paginate at 12 entries per page; toggle buttons prefix `✓` for "on" and `✗` for "off".
+- **Main Menu**: Entry point with `Groups` and `Players` buttons.
+- **Groups Hub**: Manage group permissions, member list (toggle-based), and inheritance. The **+ Create Group** button opens a name-entry dialog; **Delete Group** is hidden for the protected `default` group.
+- **Users Hub**: Manage player-specific overrides and multi-group memberships. The **Edit Groups** panel lists every group with a `✓` marker on the ones the player already belongs to — click any entry to toggle membership. The **⌕ Search Player** button on the players list opens a name-entry dialog for looking up offline players.
 
 ---
 
@@ -789,21 +790,26 @@ A hybrid, PDC-backed land protection system that allows players and admins to cl
 
 Territory is claimed in **full-chunk increments**.
 
-1.  **Selection**: Use the **Gold Hoe** (default selection tool) to mark two corners of your desired area.
-    - **Left-click** a block to set Position 1.
-    - **Right-click** a block to set Position 2.
+1.  **Selection**: Use the **Stone Axe** (or `/region wand`) to mark two corners of your desired area.
+    - **Left-click** a block to select chunk 1.
+    - **Right-click** a block to select chunk 2.
+    - **Relaxed Input**: Clicking any block in a chunk anchors that entire chunk (no corner snapping required).
     - A particle outline will show your current selection.
     - Use `/region clear` (alias `/rg clear`) to drop your current selection.
 2.  **Claiming**: Run `/region claim <name>` to protect the selected chunks.
     - **Overlap Prevention**: You cannot claim territory that overlaps an existing region in the same world unless you own it.
+    - **Per-World Uniqueness**: Region names are unique per world. Two regions can share a name (e.g., "home") if they are in different worlds.
 3.  **Visuals**: Use `/region info` while standing in a claim to see its boundaries and details.
 4.  **Restore Selection**: Use `/region select <name>` to restore the selection wand boundaries to match an existing region you own.
 
-### Members & Sub-regions
+### Roles & Hierarchy
 
-Regions support both members and hierarchical parenting.
+Regions support multiple roles and hierarchical parenting.
 
-- **Members**: Members can bypass most protection flags (e.g. they can always build/break). Use `/region addmember <name> <player>` to grant access.
+- **Roles**:
+  - **Owner**: Full control. Can unclaim, transfer ownership, and manage managers/members.
+  - **Manager**: Delegated control. Can edit flags, add/remove members, and add/remove other managers. Cannot unclaim or transfer ownership.
+  - **Member**: Build access. Can bypass most protection flags (e.g. they can always build/break).
 - **Sub-regions**: You can nest one region inside another using `/region setparent <child> <parent>`.
   - Sub-regions must be at least one full chunk.
   - Sub-region flags **override** their parent's flags.
@@ -815,11 +821,13 @@ Regions support both members and hierarchical parenting.
 
 Flags control what non-members can do in a region. Rules can target specific groups:
 
-**Syntax**: `/region flag <name> <flag> <value...> [target]`
+**Syntax**: `/region flag [name] <flag> <value...> [target]`
 
-- **Targets**: `owner`, `member`, `default` (everyone), or a permission group name (e.g. `admin`).
-- **Boolean Flags**: `BLOCK_BREAK`, `BLOCK_PLACE`, `CONTAINER_ACCESS`, `INTERACT`, `REDSTONE`, `EXPLOSION`, `PVP`, `MOB_GRIEFING`.
+- **Defaults**: If `[name]` is omitted, it defaults to the region you are currently standing in.
+- **Targets**: `owner`, `manager`, `member`, `default` (everyone), or a permission group name (e.g. `admin`).
+- **Boolean Flags**: `BLOCK_BREAK`, `BLOCK_PLACE`, `CONTAINER_ACCESS`, `INTERACT`, `REDSTONE`, `EXPLOSION`, `PVP`, `MOB_GRIEFING`, `MOB_SPAWNING`, `INVINCIBILITY`.
   - Use `true|false` as the value.
+- **EntityType-Specific Flags**: `ALLOW_MOB_SPAWN`, `DENY_MOB_SPAWN`. (No-op pending entity-list storage).
 - **Material-Specific Flags**: `ALLOW_BLOCK_BREAK`, `DENY_BLOCK_BREAK`, `ALLOW_BLOCK_PLACE`, `DENY_BLOCK_PLACE`.
   - Use a space-separated list of block materials as the value.
 - **Gamerule Overrides**: Region flags take precedence over world gamerules. For example, if `MOB_GRIEFING` is set to `true` in a region, creepers will destroy blocks there even if the world's `mobGriefing` is `false`.
@@ -827,13 +835,26 @@ Flags control what non-members can do in a region. Rules can target specific gro
 ### Command UX & Tab Completion
 
 - **Usage Info**: If you run a protection command incorrectly, the plugin will display friendly usage information (filtered by your permissions).
-- **Tab Completion**: Region ID suggestions are filtered to only show regions you own. Admins with the `tweaks.protection.admin` permission see all regions (limited to the first 100 results).
+- **Tab Completion**: Fully implemented for the legacy command system.
+  - **Subcommands**: Filtered based on your permissions.
+  - **Region IDs**: Suggestions are ownership-aware. Owners and managers see their regions. Admins with the `tweaks.protection.admin` permission see all regions in their current world (limited to the first 100 results).
+  - **Players**: Online players are suggested for `addmember`/`addmanager`, while current members/managers are suggested for `removemember`/`removemanager`.
+  - **Flags & Targets**: Region flags, targets, block materials, and entity types are fully tab-completable.
+
+### Region GUI
+
+Type `/region gui` while standing in a region you own (or manage) to open a clickable Paper Dialog dashboard for that claim — no need to remember flag/target syntax. Pass an explicit name (`/region gui <name>`) to manage a region from elsewhere. Standing in overlapping sub-regions opens the innermost (leaf) one. Owners and managers can open their own regions; admins with `tweaks.protection.admin` can open any region.
+
+From the dialog you can:
+- Toggle boolean flags and per-role overrides (owner/manager/member/group).
+- Add or remove members and managers.
+- Edit material and entity lists for flags that support them.
 
 ### Resolution Priority
 
 When an action occurs, the system checks rules in this order:
 1.  **Material Lists**: If the block is in a `DENY` list, the action is blocked. If in an `ALLOW` list, it's permitted.
-2.  **Targeted Boolean Rules**: The most specific rule wins: `GROUP` > `OWNER` > `MEMBER` > `DEFAULT`.
+2.  **Targeted Boolean Rules**: The most specific rule wins: `GROUP` > `OWNER` > `MANAGER` > `MEMBER` > `DEFAULT`.
 3.  **Hierarchy**: If no rule is found in the current region, the system walks up to the **parent region** and repeats the check.
 4.  **Wilderness Default**: If no rule is found in the entire hierarchy, members are allowed and non-members are blocked.
 
@@ -888,16 +909,20 @@ When an action occurs, the system checks rules in this order:
 | `/tprm group <name> <create|delete|addperm|delperm|inherited-from>` | `tweaks.admin.permissions` | CLI group management. |
 | `/tprm user <player> <addperm|delperm|setgroup>` | `tweaks.admin.permissions` | CLI user management. |
 | `/region claim <name>` | `tweaks.protection.claim` | Claim territory using wand selection. |
-| `/region unclaim <name>` | `tweaks.protection.unclaim` | Remove a region claim. |
+| `/region unclaim <name>` | `tweaks.protection.unclaim` | Remove a region claim. Alias: `/rg unclaim`. |
 | `/region info [name]` | `tweaks.protection.info` | Show region details. Alias: `/rg i`. |
 | `/region select <name>` | `tweaks.protection.claim` | Restore wand selection to match a region. |
 | `/region clear` | `tweaks.protection.claim` | Drop the current wand selection. |
-| `/region addmember <r> <p>` | `tweaks.protection.member` | Add a member to a region. |
-| `/region removemember <r> <p>` | `tweaks.protection.member` | Remove a member from a region. |
-| `/region flag <r> <f> <v...>` | `tweaks.protection.flag` | Set a targeted boolean or material flag. |
+| `/region wand` | `tweaks.protection.claim` | Get the selection wand (Stone Axe). |
+| `/region addmember <r> <p>` | `tweaks.protection.member` | Add a member to a region. Alias: `/rg am`. |
+| `/region removemember <r> <p>` | `tweaks.protection.member` | Remove a member from a region. Alias: `/rg rm`. |
+| `/region addmanager <r> <p>` | `tweaks.protection.member` | Add a manager to a region. Alias: `/rg aman`. |
+| `/region removemanager <r> <p>` | `tweaks.protection.member` | Remove a manager from a region. Alias: `/rg rman`. |
+| `/region flag [name] <f> <v...>` | `tweaks.protection.flag` | Set a targeted boolean or material flag. |
 | `/region unflag <r> <f> [t]` | `tweaks.protection.flag` | Remove a targeted flag rule or material list. |
 | `/region setparent <c> <p>` | `tweaks.protection.claim` | Nest a region inside another. |
 | `/region unsetparent <c>` | `tweaks.protection.claim` | Remove region parenting. |
+| `/region gui [name]` | `tweaks.protection.info` | Open the dialog dashboard for a region (owners, managers, admins). |
 | `/tconfig <key> <value>` | `tweaks.admin.config` | Update a config value at runtime. Alias: `/tweaksconfig`. |
 | `/tconfig eggdrop <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable Egg Collector drops for a mob. |
 | `/tconfig spawneregg <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable spawn egg usage on spawners. |

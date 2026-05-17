@@ -22,6 +22,7 @@ public class DisplayChestManager {
     private final JavaPlugin plugin;
     private final Set<UUID> setupModePlayers = new HashSet<>();
     private final Set<UUID> removalModePlayers = new HashSet<>();
+    private final Map<UUID, ItemStack> setupHandOverrides = new HashMap<>();
     private final NamespacedKey pdcKey;
 
     public DisplayChestManager(JavaPlugin plugin) {
@@ -32,12 +33,26 @@ public class DisplayChestManager {
     public boolean toggleSetupMode(UUID playerId) {
         if (setupModePlayers.contains(playerId)) {
             setupModePlayers.remove(playerId);
+            setupHandOverrides.remove(playerId);
             return false;
         } else {
             removalModePlayers.remove(playerId); // Disable removal mode if enabling setup mode
             setupModePlayers.add(playerId);
+            setupHandOverrides.remove(playerId);
             return true;
         }
+    }
+
+    public void setHandOverride(UUID playerId, ItemStack item) {
+        if (item == null) {
+            setupHandOverrides.remove(playerId);
+        } else {
+            setupHandOverrides.put(playerId, item);
+        }
+    }
+
+    public ItemStack getHandOverride(UUID playerId) {
+        return setupHandOverrides.get(playerId);
     }
 
     public boolean isSetupMode(UUID playerId) {
@@ -93,13 +108,26 @@ public class DisplayChestManager {
     }
 
     public void processChest(Block block) {
+        processChest(block, null);
+    }
+
+    public void processChest(Block block, ItemStack handOverride) {
         if (!(block.getState() instanceof Chest)) return;
         Chest chest = (Chest) block.getState();
         Inventory inventory = chest.getInventory();
-        
-        Material mostAbundant = findMostAbundantItem(inventory);
-        if (mostAbundant == null || mostAbundant == Material.AIR) {
-            return;
+
+        // Source priority: explicit hand override > slot 0 of the chest. Missing/AIR sources abort.
+        ItemStack sourceItem;
+        if (handOverride != null && handOverride.getType() != Material.AIR) {
+            sourceItem = handOverride.clone();
+            sourceItem.setAmount(1);
+        } else {
+            ItemStack slotZero = inventory.getItem(0);
+            if (slotZero == null || slotZero.getType() == Material.AIR) {
+                return;
+            }
+            sourceItem = slotZero.clone();
+            sourceItem.setAmount(1);
         }
 
         Location center;
@@ -129,18 +157,25 @@ public class DisplayChestManager {
         }
 
         Chunk chunk = primaryBlock.getChunk();
-        
+
         removeExistingDisplaysAt(chunk, center);
 
+        // Bake the spawn yaw to point the entity north (yaw 180 in Bukkit coords) so the
+        // model orientation is independent of the chest's block-data facing direction.
+        center.setYaw(180f);
+        center.setPitch(0f);
+
         ItemDisplay display = (ItemDisplay) block.getWorld().spawnEntity(center, EntityType.ITEM_DISPLAY);
-        display.setItemStack(new ItemStack(mostAbundant, 1));
-        display.setBillboard(Display.Billboard.CENTER);
-        
+        display.setItemStack(sourceItem);
+        // FIXED billboard preserves the baked rotation rather than tracking the camera.
+        display.setBillboard(Display.Billboard.FIXED);
+        display.setRotation(180f, 0f);
+
         // Adjust scale to match normal item stack size (approx 0.5)
         org.bukkit.util.Transformation transformation = display.getTransformation();
         transformation.getScale().set(0.5f, 0.5f, 0.5f);
         display.setTransformation(transformation);
-        
+
         storeDisplayInChunk(chunk, display.getUniqueId());
     }
     
@@ -194,24 +229,4 @@ public class DisplayChestManager {
         pdc.set(pdcKey, PersistentDataType.STRING, currentData);
     }
 
-    private Material findMostAbundantItem(Inventory inventory) {
-        Map<Material, Integer> itemCounts = new EnumMap<>(Material.class);
-        for (ItemStack item : inventory.getContents()) {
-            if (item != null && item.getType() != Material.AIR) {
-                itemCounts.put(item.getType(), itemCounts.getOrDefault(item.getType(), 0) + item.getAmount());
-            }
-        }
-
-        Material bestMaterial = null;
-        int maxCount = -1;
-
-        for (Map.Entry<Material, Integer> entry : itemCounts.entrySet()) {
-            if (entry.getValue() > maxCount) {
-                maxCount = entry.getValue();
-                bestMaterial = entry.getKey();
-            }
-        }
-
-        return bestMaterial;
-    }
 }

@@ -63,7 +63,8 @@ class ProtectionManagerOverlapTest {
         ProtectionManager.ClaimResult result = mgr.tryClaim(
                 newRegion("home", PLAYER_A), overworld, 0, 0, 31, 31, null);
         assertEquals(ProtectionManager.ClaimResult.OK, result);
-        assertNotNull(mgr.regions().get("home"));
+        // tryClaim stores under the composite "<world>:<id>" key per per-world refactor.
+        assertNotNull(mgr.byName(overworld, "home"));
     }
 
     @Test
@@ -98,6 +99,34 @@ class ProtectionManagerOverlapTest {
         ProtectionManager.ClaimResult result = mgr.tryClaim(
                 newRegion("hell", PLAYER_B), nether, 0, 0, 31, 31, null);
         assertEquals(ProtectionManager.ClaimResult.OK, result);
+    }
+
+    @Test
+    void identicalRegionNamesInDifferentWorldsCoexist() {
+        // Per-world uniqueness DoD: a region named "home" must be claimable
+        // independently in two different worlds without conflict.
+        assertEquals(ProtectionManager.ClaimResult.OK,
+                mgr.tryClaim(newRegion("home", PLAYER_A), overworld, 0, 0, 31, 31, null));
+        assertEquals(ProtectionManager.ClaimResult.OK,
+                mgr.tryClaim(newRegion("home", PLAYER_B), nether, 0, 0, 31, 31, null));
+
+        Region overworldHome = mgr.byName(overworld, "home");
+        Region netherHome = mgr.byName(nether, "home");
+        assertNotNull(overworldHome);
+        assertNotNull(netherHome);
+        assertNotSame(overworldHome, netherHome);
+        assertEquals(PLAYER_A, overworldHome.owner());
+        assertEquals(PLAYER_B, netherHome.owner());
+    }
+
+    @Test
+    void sameWorldDuplicateNameStillRejected() {
+        // Sanity check: per-world uniqueness must not weaken the same-world
+        // duplicate guard.
+        assertEquals(ProtectionManager.ClaimResult.OK,
+                mgr.tryClaim(newRegion("home", PLAYER_A), overworld, 0, 0, 15, 15, null));
+        assertEquals(ProtectionManager.ClaimResult.ID_TAKEN,
+                mgr.tryClaim(newRegion("home", PLAYER_B), overworld, 32, 32, 47, 47, null));
     }
 
     @Test

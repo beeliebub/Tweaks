@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.protection;
 
 import org.bukkit.Material;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -23,6 +24,14 @@ import java.util.UUID;
 // reading flags and acting on them would re-introduce the race conditions the
 // hybrid architecture is designed to eliminate. To change any field,
 // construct a new Region and atomically replace the cache entry.
+//
+// Membership roles:
+//   * owner       — single UUID, set at claim time.
+//   * managers    — UUIDs with the same access as members PLUS the ability to
+//                   edit flags and add/remove members. Cannot unclaim, edit
+//                   the manager set, or change ownership. Resolves between
+//                   OWNER and MEMBER in flag-target priority order.
+//   * members     — UUIDs allowed to act inside the region (default permit).
 //
 // Two flag tables share resolution duties:
 //   * flagRules     — Map<RegionFlag, Map<FlagTarget, Boolean>> for the
@@ -54,7 +63,9 @@ public record Region(
         Map<RegionFlag, Set<Material>> materialFlags,
         String parentId,
         RegionBounds bounds,
-        String worldName
+        String worldName,
+        List<UUID> managers,
+        Map<RegionFlag, Set<org.bukkit.entity.EntityType>> entityFlags
 ) {
 
     // Inclusive chunk-coordinate AABB. Stored as four ints rather than two
@@ -75,6 +86,8 @@ public record Region(
         members = List.copyOf(members);
         flagRules = deepCopyFlagRules(flagRules);
         materialFlags = deepCopyMaterialFlags(materialFlags);
+        managers = managers == null ? List.of() : List.copyOf(managers);
+        entityFlags = deepCopyEntityFlags(entityFlags);
     }
 
     // Pre-bounds canonical constructor used by every call site written before
@@ -84,7 +97,7 @@ public record Region(
                   Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules,
                   Map<RegionFlag, Set<Material>> materialFlags,
                   String parentId) {
-        this(id, owner, members, flagRules, materialFlags, parentId, null, null);
+        this(id, owner, members, flagRules, materialFlags, parentId, null, null, List.of(), Map.of());
     }
 
     // Bounds-aware constructor without world (legacy bounds-only call sites).
@@ -93,7 +106,18 @@ public record Region(
                   Map<RegionFlag, Set<Material>> materialFlags,
                   String parentId,
                   RegionBounds bounds) {
-        this(id, owner, members, flagRules, materialFlags, parentId, bounds, null);
+        this(id, owner, members, flagRules, materialFlags, parentId, bounds, null, List.of(), Map.of());
+    }
+
+    // World + bounds constructor without managers/entityFlags — legacy 8-arg
+    // call sites (and existing tests) keep compiling with empty manager lists.
+    public Region(String id, UUID owner, List<UUID> members,
+                  Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules,
+                  Map<RegionFlag, Set<Material>> materialFlags,
+                  String parentId,
+                  RegionBounds bounds,
+                  String worldName) {
+        this(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, List.of(), Map.of());
     }
 
     private static Map<RegionFlag, Map<FlagTarget, Boolean>> deepCopyFlagRules(
@@ -121,11 +145,24 @@ public record Region(
         return Collections.unmodifiableMap(copy);
     }
 
+    private static Map<RegionFlag, Set<org.bukkit.entity.EntityType>> deepCopyEntityFlags(
+            Map<RegionFlag, Set<org.bukkit.entity.EntityType>> source) {
+        if (source == null || source.isEmpty()) return Map.of();
+        Map<RegionFlag, Set<org.bukkit.entity.EntityType>> copy = new EnumMap<>(RegionFlag.class);
+        for (Map.Entry<RegionFlag, Set<org.bukkit.entity.EntityType>> e : source.entrySet()) {
+            if (!e.getKey().isEntityFlag()) continue;
+            Set<org.bukkit.entity.EntityType> inner = e.getValue();
+            if (inner == null || inner.isEmpty()) continue;
+            copy.put(e.getKey(), Set.copyOf(EnumSet.copyOf(inner)));
+        }
+        return Collections.unmodifiableMap(copy);
+    }
+
     // Convenience constructor without material flags or parent — for pre-fyu2
     // call sites that only care about boolean rules.
     public Region(String id, UUID owner, List<UUID> members,
                   Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules) {
-        this(id, owner, members, flagRules, Map.of(), null, null, null);
+        this(id, owner, members, flagRules, Map.of(), null, null, null, List.of(), Map.of());
     }
 
     // Convenience constructor without material flags but WITH parent — for
@@ -133,7 +170,7 @@ public record Region(
     public Region(String id, UUID owner, List<UUID> members,
                   Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules,
                   String parentId) {
-        this(id, owner, members, flagRules, Map.of(), parentId, null, null);
+        this(id, owner, members, flagRules, Map.of(), parentId, null, null, List.of(), Map.of());
     }
 
     // Legacy constructor preserved so call sites (and tests) that still pass an
@@ -141,7 +178,7 @@ public record Region(
     // listed flag is translated to a DEFAULT-target rule with value=true,
     // matching the pre-refactor "flag in set = non-members may act" semantic.
     public Region(String id, UUID owner, List<UUID> members, EnumSet<RegionFlag> legacyFlags) {
-        this(id, owner, members, legacyToTargeted(legacyFlags), Map.of(), null, null, null);
+        this(id, owner, members, legacyToTargeted(legacyFlags), Map.of(), null, null, null, List.of(), Map.of());
     }
 
     private static Map<RegionFlag, Map<FlagTarget, Boolean>> legacyToTargeted(EnumSet<RegionFlag> legacyFlags) {
@@ -157,8 +194,13 @@ public record Region(
         return owner.equals(uuid);
     }
 
+    public boolean isManager(UUID uuid) {
+        return uuid != null && managers.contains(uuid);
+    }
+
     public boolean isMember(UUID uuid) {
-        return owner.equals(uuid) || members.contains(uuid);
+        if (uuid == null) return false;
+        return owner.equals(uuid) || managers.contains(uuid) || members.contains(uuid);
     }
 
     public boolean hasParent() {
@@ -197,6 +239,18 @@ public record Region(
         return materialFlags.getOrDefault(flag, Set.of());
     }
 
+    // Read-only view of the entity-type set for one entity-list flag.
+    public Set<org.bukkit.entity.EntityType> entitiesFor(RegionFlag flag) {
+        return entityFlags.getOrDefault(flag, Set.of());
+    }
+
+    // Three-arg legacy overload for callers that haven't been updated to
+    // pass actorIsManager. Routes to the 5-arg variant with actorIsManager=false.
+    public Optional<Boolean> resolveFlag(
+            RegionFlag flag, boolean actorIsOwner, boolean actorIsMember, Set<String> actorGroups) {
+        return resolveFlag(flag, actorIsOwner, false, actorIsMember, actorGroups);
+    }
+
     // Resolve the effective rule for an actor at this region for one BOOLEAN
     // flag.
     //
@@ -204,14 +258,19 @@ public record Region(
     //   1. GROUP rule (any group the actor belongs to). When more than one
     //      group rule matches, ALLOW wins.
     //   2. OWNER (only if actor is the region owner).
-    //   3. MEMBER (only if actor is a region member; owner counts as member).
-    //   4. DEFAULT (catch-all).
+    //   3. MANAGER (only if actor is a region manager; owner counts as manager
+    //      for the purposes of falling through to the MANAGER bucket since
+    //      OWNER is checked first).
+    //   4. MEMBER (only if actor is a region member; owner/manager count as
+    //      members for fallback to MEMBER bucket).
+    //   5. DEFAULT (catch-all).
     //
     // Returns Optional.empty() when no rule applies; the caller then either
     // walks up the parent chain (sub-region case) or falls back to the legacy
     // "members allowed, non-members blocked" default.
     public Optional<Boolean> resolveFlag(
-            RegionFlag flag, boolean actorIsOwner, boolean actorIsMember, Set<String> actorGroups) {
+            RegionFlag flag, boolean actorIsOwner, boolean actorIsManager, boolean actorIsMember,
+            Set<String> actorGroups) {
         Map<FlagTarget, Boolean> rules = flagRules.get(flag);
         if (rules == null || rules.isEmpty()) return Optional.empty();
 
@@ -231,6 +290,10 @@ public record Region(
 
         if (actorIsOwner) {
             Boolean v = rules.get(FlagTarget.OWNER);
+            if (v != null) return Optional.of(v);
+        }
+        if (actorIsManager) {
+            Boolean v = rules.get(FlagTarget.MANAGER);
             if (v != null) return Optional.of(v);
         }
         if (actorIsMember) {
@@ -253,6 +316,17 @@ public record Region(
         if (deny != null && deny.contains(material)) return Optional.of(false);
         Set<Material> allow = materialFlags.get(allowFlag);
         if (allow != null && allow.contains(material)) return Optional.of(true);
+        return Optional.empty();
+    }
+
+    // Resolve an entity-list verdict for a CreatureSpawnEvent (or similar).
+    // `denyFlag` should be the DENY_* variant; `allowFlag` the ALLOW_* variant.
+    public Optional<Boolean> resolveEntity(
+            RegionFlag denyFlag, RegionFlag allowFlag, org.bukkit.entity.EntityType type) {
+        Set<org.bukkit.entity.EntityType> deny = entityFlags.get(denyFlag);
+        if (deny != null && deny.contains(type)) return Optional.of(false);
+        Set<org.bukkit.entity.EntityType> allow = entityFlags.get(allowFlag);
+        if (allow != null && allow.contains(type)) return Optional.of(true);
         return Optional.empty();
     }
 
@@ -280,7 +354,7 @@ public record Region(
         } else {
             newRules.put(flag, updated);
         }
-        return new Region(id, owner, members, newRules, materialFlags, parentId);
+        return new Region(id, owner, members, newRules, materialFlags, parentId, bounds, worldName, managers, entityFlags);
     }
 
     // Return a new Region with the material set for `flag` replaced wholesale.
@@ -296,21 +370,63 @@ public record Region(
         } else {
             newMaterials.put(flag, Set.copyOf(EnumSet.copyOf(materials)));
         }
-        return new Region(id, owner, members, flagRules, newMaterials, parentId, bounds, worldName);
+        return new Region(id, owner, members, flagRules, newMaterials, parentId, bounds, worldName, managers, entityFlags);
+    }
+
+    // Return a new Region with the entity-type set for `flag` replaced wholesale.
+    public Region withEntities(RegionFlag flag, Set<org.bukkit.entity.EntityType> entities) {
+        if (!flag.isEntityFlag()) {
+            throw new IllegalArgumentException("Not an entity-list flag: " + flag);
+        }
+        Map<RegionFlag, Set<org.bukkit.entity.EntityType>> newEntities = new EnumMap<>(RegionFlag.class);
+        newEntities.putAll(entityFlags);
+        if (entities == null || entities.isEmpty()) {
+            newEntities.remove(flag);
+        } else {
+            newEntities.put(flag, Set.copyOf(EnumSet.copyOf(entities)));
+        }
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, managers, newEntities);
     }
 
     // Returns a copy of this region with the parent pointer rewritten. Passing
     // null clears the parent (promotes the region back to top-level).
     public Region withParent(String newParentId) {
         String normalized = (newParentId == null || newParentId.isBlank()) ? null : newParentId;
-        return new Region(id, owner, members, flagRules, materialFlags, normalized, bounds, worldName);
+        return new Region(id, owner, members, flagRules, materialFlags, normalized, bounds, worldName, managers, entityFlags);
     }
 
     public Region withBounds(RegionBounds newBounds) {
-        return new Region(id, owner, members, flagRules, materialFlags, parentId, newBounds, worldName);
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, newBounds, worldName, managers, entityFlags);
     }
 
     public Region withWorld(String newWorldName) {
-        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, newWorldName);
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, newWorldName, managers, entityFlags);
+    }
+
+    public Region withMembers(List<UUID> newMembers) {
+        return new Region(id, owner, members(newMembers), flagRules, materialFlags, parentId, bounds, worldName, managers, entityFlags);
+    }
+
+    public Region withManagers(List<UUID> newManagers) {
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName,
+                newManagers == null ? List.of() : newManagers, entityFlags);
+    }
+
+    public Region addManager(UUID uuid) {
+        if (uuid == null || managers.contains(uuid)) return this;
+        List<UUID> updated = new ArrayList<>(managers);
+        updated.add(uuid);
+        return withManagers(updated);
+    }
+
+    public Region removeManager(UUID uuid) {
+        if (uuid == null || !managers.contains(uuid)) return this;
+        List<UUID> updated = new ArrayList<>(managers);
+        updated.remove(uuid);
+        return withManagers(updated);
+    }
+
+    private static List<UUID> members(List<UUID> raw) {
+        return raw == null ? List.of() : raw;
     }
 }

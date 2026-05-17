@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.protection;
 import org.bukkit.Material;
 import org.bukkit.Tag;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -10,7 +11,10 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.CreatureSpawnEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 
 import java.util.EnumSet;
@@ -146,5 +150,49 @@ public final class ProtectionListener implements Listener {
     private void filterExplosion(java.util.List<Block> blocks) {
         blocks.removeIf(b -> !protection.isAllowed(
                 b.getLocation(), null, RegionFlag.EXPLOSION));
+    }
+
+    // ------------------------------------------------------------------
+    // 4.5 Mob spawning + invincibility flags
+    // ------------------------------------------------------------------
+
+    // CreatureSpawnEvent gating. Resolution order matches the bead:
+    //   1. DENY_MOB_SPAWN list (if the spawning entity type is listed → cancel)
+    //   2. ALLOW_MOB_SPAWN list (if listed → permit explicitly)
+    //   3. MOB_SPAWNING boolean rule (false → cancel; absent → vanilla)
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onCreatureSpawn(CreatureSpawnEvent event) {
+        var loc = event.getLocation();
+        var type = event.getEntityType();
+        if (protection.isEntityListed(loc, RegionFlag.DENY_MOB_SPAWN, type)) {
+            event.setCancelled(true);
+            return;
+        }
+        if (protection.isEntityListed(loc, RegionFlag.ALLOW_MOB_SPAWN, type)) {
+            return;
+        }
+        if (!protection.isAllowed(loc, null, RegionFlag.MOB_SPAWNING)) {
+            event.setCancelled(true);
+        }
+    }
+
+    // INVINCIBILITY suppresses incoming damage and hunger drain for the player
+    // while inside a region that has explicitly opted them in (audience-aware).
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onEntityDamage(EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        if (protection.isExplicitlyAllowed(
+                player.getLocation(), player.getUniqueId(), RegionFlag.INVINCIBILITY)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onFoodLevelChange(FoodLevelChangeEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        if (protection.isExplicitlyAllowed(
+                player.getLocation(), player.getUniqueId(), RegionFlag.INVINCIBILITY)) {
+            event.setCancelled(true);
+        }
     }
 }

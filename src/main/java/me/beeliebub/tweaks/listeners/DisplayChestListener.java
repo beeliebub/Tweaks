@@ -11,6 +11,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.inventory.ItemStack;
 
 public class DisplayChestListener implements Listener {
 
@@ -35,7 +36,8 @@ public class DisplayChestListener implements Listener {
             if (block != null && block.getState() instanceof Chest) {
                 event.setCancelled(true);
                 if (isSetup) {
-                    displayChestManager.processChest(block);
+                    ItemStack handOverride = displayChestManager.getHandOverride(player.getUniqueId());
+                    displayChestManager.processChest(block, handOverride);
                     player.sendMessage(Component.text("Display chest generated/updated!").color(NamedTextColor.GREEN));
                 } else {
                     displayChestManager.removeDisplay(block);

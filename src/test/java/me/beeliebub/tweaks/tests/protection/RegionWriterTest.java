@@ -80,4 +80,38 @@ class RegionWriterTest {
         assertEquals(5, b.maxChunkX());
         assertEquals(5, b.maxChunkZ());
     }
+
+    @Test
+    void writeNowPlacesWorldTaggedRegionsInWorldSubdirectory(@TempDir Path tmp) throws Exception {
+        RegionWriter writer = new RegionWriter(mock(Tweaks.class), tmp.toFile());
+        Region overworldHome = new Region("home", OWNER, List.of(), Map.of(), Map.of(), null,
+                new Region.RegionBounds(0, 0, 1, 1), "world");
+        Region netherHome = new Region("home", OWNER, List.of(), Map.of(), Map.of(), null,
+                new Region.RegionBounds(0, 0, 1, 1), "world_nether");
+
+        writer.writeNow(overworldHome);
+        writer.writeNow(netherHome);
+
+        File overworldPath = new File(new File(tmp.toFile(), "world"), "home.yml");
+        File netherPath = new File(new File(tmp.toFile(), "world_nether"), "home.yml");
+        assertTrue(overworldPath.exists(), "world/home.yml should exist");
+        assertTrue(netherPath.exists(), "world_nether/home.yml should exist");
+    }
+
+    @Test
+    void managerListRoundTripsThroughYaml(@TempDir Path tmp) throws Exception {
+        UUID manager = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        Region original = new Region("plot", OWNER, List.of(MEMBER), Map.of(), Map.of(), null,
+                null, "world").addManager(manager);
+
+        RegionWriter writer = new RegionWriter(mock(Tweaks.class), tmp.toFile());
+        writer.writeNow(original);
+
+        ConcurrentHashMap<String, Region> reloaded = new ConcurrentHashMap<>();
+        new RegionLoader(Logger.getLogger("test")).load(tmp.toFile(), reloaded);
+        Region back = reloaded.get("world:plot");
+        assertNotNull(back, "world-tagged region should load under composite key");
+        assertTrue(back.isManager(manager));
+        assertTrue(back.isMember(manager));
+    }
 }

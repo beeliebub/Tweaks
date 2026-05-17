@@ -25,12 +25,11 @@ import org.bukkit.inventory.ItemStack;
 // the same reason — creative mode breaks blocks instantly via a separate
 // event path that PlayerInteractEvent cancellation doesn't cover.
 //
-// Corner restriction: only blocks at chunk-corner coordinates (xMod and
-// zMod both ∈ {0, 15}) accept the click. Non-corner clicks emit a chat
-// hint and leave the selection untouched. The constraint exists to give
-// the player a visible "snap" — clicking the middle of a chunk would
-// resolve to the same chunk, but the user would have no tactile sense of
-// which chunk they were actually anchoring.
+// Chunk-granular input: clicking any block in a chunk anchors that entire
+// chunk. The wand resolves the clicked block to its containing chunk via
+// GeometryUtil.blockToChunk, so the player never has to hunt for chunk
+// corners — the particle outline (rendered by RegionSelectionManager)
+// shows the resulting chunk perimeter.
 public final class SelectionWandListener implements Listener {
 
     private final Tweaks plugin;
@@ -57,13 +56,6 @@ public final class SelectionWandListener implements Listener {
         event.setCancelled(true);
 
         Player player = event.getPlayer();
-        if (!GeometryUtil.isChunkCornerBlock(block.getX(), block.getZ())) {
-            player.sendMessage(Component.text(
-                    "That block isn't a chunk corner. Click the 2x2 corner of any chunk.",
-                    NamedTextColor.RED));
-            return;
-        }
-
         long chunkKey = GeometryUtil.chunkKey(
                 GeometryUtil.blockToChunk(block.getX()),
                 GeometryUtil.blockToChunk(block.getZ()));
@@ -88,9 +80,12 @@ public final class SelectionWandListener implements Listener {
         }
     }
 
+    public static final Material WAND_MATERIAL = Material.STONE_AXE;
+
+    @SuppressWarnings("unused") // plugin retained for constructor compatibility; tool is hardcoded now.
     private boolean isWand(ItemStack item) {
         if (item == null) return false;
-        return item.getType() == plugin.getProtectionSelectionTool();
+        return item.getType() == WAND_MATERIAL;
     }
 
     private static void announce(Player player, String label, long chunkKey, RegionSelection sel) {

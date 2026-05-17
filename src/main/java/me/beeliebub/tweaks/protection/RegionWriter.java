@@ -58,8 +58,12 @@ public final class RegionWriter {
             if (!regionsDir.exists() && !regionsDir.mkdirs()) {
                 throw new IOException("Could not create regions directory " + regionsDir);
             }
-            File target = locate(region.id());
-            File tmp = new File(target.getParentFile(), target.getName() + ".tmp");
+            File target = locate(region);
+            File parent = target.getParentFile();
+            if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                throw new IOException("Could not create region parent directory " + parent);
+            }
+            File tmp = new File(parent, target.getName() + ".tmp");
 
             YamlConfiguration yaml = new YamlConfiguration();
             serialize(yaml, region);
@@ -74,16 +78,35 @@ public final class RegionWriter {
         }
     }
 
-    // Resolve the canonical write path for a region. If a file with this
-    // region's id already exists somewhere in the tree (admin sharded the
-    // YAMLs under subdirectories), overwrite it in place rather than
-    // duplicating it at the root.
-    private File locate(String id) {
-        File flat = new File(regionsDir, id + ".yml");
-        if (flat.exists()) return flat;
+    // Resolve the canonical write path for a region. World-tagged regions write
+    // to a world-specific subdirectory (regions/<worldName>/<id>.yml) so two
+    // regions sharing a name in different worlds don't collide on disk. Legacy
+    // null-world regions stay at the flat root path and may reuse an existing
+    // file found anywhere in the tree.
+    //
+    // Crucially, world-tagged regions NEVER fall back to a file outside their
+    // own world subdirectory — otherwise saving a same-name region from a
+    // different world would overwrite the wrong file.
+    private File locate(Region region) {
+        String id = region.id();
+        String worldName = region.worldName();
+        if (worldName == null || worldName.isEmpty()) {
+            File flat = new File(regionsDir, id + ".yml");
+            if (flat.exists()) return flat;
+            File existing = findExisting(regionsDir, id + ".yml");
+            return existing != null ? existing : flat;
+        }
+        // World-tagged: only resolve inside the world's own subdir.
+        File worldDir = new File(regionsDir, worldName);
+        File preferred = new File(worldDir, id + ".yml");
+        if (preferred.exists()) return preferred;
+        File nested = findExistingUnder(worldDir, id + ".yml");
+        return nested != null ? nested : preferred;
+    }
 
-        File existing = findExisting(regionsDir, id + ".yml");
-        return existing != null ? existing : flat;
+    private File findExistingUnder(File dir, String fileName) {
+        if (!dir.exists() || !dir.isDirectory()) return null;
+        return findExisting(dir, fileName);
     }
 
     private File findExisting(File dir, String fileName) {
@@ -109,6 +132,14 @@ public final class RegionWriter {
             memberStrings.add(m.toString());
         }
         yaml.set("members", memberStrings);
+
+        if (!region.managers().isEmpty()) {
+            List<String> managerStrings = new ArrayList<>(region.managers().size());
+            for (UUID m : region.managers()) {
+                managerStrings.add(m.toString());
+            }
+            yaml.set("managers", managerStrings);
+        }
 
         if (region.hasParent()) {
             yaml.set("parent", region.parentId());
@@ -143,6 +174,17 @@ public final class RegionWriter {
                     names.add(m.name());
                 }
                 mat.set(e.getKey().name(), names);
+            }
+        }
+
+        if (!region.entityFlags().isEmpty()) {
+            ConfigurationSection ent = yaml.createSection("entity_flags");
+            for (Map.Entry<RegionFlag, Set<org.bukkit.entity.EntityType>> e : region.entityFlags().entrySet()) {
+                List<String> names = new ArrayList<>(e.getValue().size());
+                for (org.bukkit.entity.EntityType t : e.getValue()) {
+                    names.add(t.name());
+                }
+                ent.set(e.getKey().name(), names);
             }
         }
     }

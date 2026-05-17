@@ -78,37 +78,4 @@ class GeometryUtilTest {
         assertEquals(GeometryUtil.chunkKey(1, 0), keys[1]);
     }
 
-    @Test
-    void isChunkCornerBlockAcceptsAllFourCorners() {
-        // Chunk (0,0): blocks (0,0), (0,15), (15,0), (15,15)
-        assertTrue(GeometryUtil.isChunkCornerBlock(0, 0));
-        assertTrue(GeometryUtil.isChunkCornerBlock(0, 15));
-        assertTrue(GeometryUtil.isChunkCornerBlock(15, 0));
-        assertTrue(GeometryUtil.isChunkCornerBlock(15, 15));
-    }
-
-    @Test
-    void isChunkCornerBlockRejectsInteriorBlocks() {
-        assertFalse(GeometryUtil.isChunkCornerBlock(1, 1));
-        assertFalse(GeometryUtil.isChunkCornerBlock(7, 7));
-        assertFalse(GeometryUtil.isChunkCornerBlock(14, 14));
-    }
-
-    @Test
-    void isChunkCornerBlockRejectsEdgeButNotCornerBlocks() {
-        // (0, 5) is on the west edge but not at the NW/SW corner
-        assertFalse(GeometryUtil.isChunkCornerBlock(0, 5));
-        assertFalse(GeometryUtil.isChunkCornerBlock(5, 0));
-        assertFalse(GeometryUtil.isChunkCornerBlock(15, 8));
-    }
-
-    @Test
-    void isChunkCornerBlockHandlesNegativeCoordinates() {
-        // Block (-1, -1) is xMod=15, zMod=15 -> SE corner of chunk (-1,-1). Corner.
-        assertTrue(GeometryUtil.isChunkCornerBlock(-1, -1));
-        // Block (-16, -16) is xMod=0, zMod=0 -> NW corner of chunk (-1,-1). Corner.
-        assertTrue(GeometryUtil.isChunkCornerBlock(-16, -16));
-        // Block (-8, -8) is interior.
-        assertFalse(GeometryUtil.isChunkCornerBlock(-8, -8));
-    }
 }
