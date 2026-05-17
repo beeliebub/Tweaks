@@ -22,7 +22,9 @@ class RegionFlagTest {
             RegionFlag.REDSTONE,
             RegionFlag.EXPLOSION,
             RegionFlag.PVP,
-            RegionFlag.MOB_GRIEFING
+            RegionFlag.MOB_GRIEFING,
+            RegionFlag.MOB_SPAWNING,
+            RegionFlag.INVINCIBILITY
     );
 
     private static final Set<RegionFlag> MATERIAL_FLAGS = EnumSet.of(
@@ -32,13 +34,19 @@ class RegionFlagTest {
             RegionFlag.DENY_BLOCK_PLACE
     );
 
+    private static final Set<RegionFlag> ENTITY_FLAGS = EnumSet.of(
+            RegionFlag.ALLOW_MOB_SPAWN,
+            RegionFlag.DENY_MOB_SPAWN
+    );
+
     @Test
-    void everyFlagIsClassifiedExactlyOnceAsBooleanOrMaterial() {
+    void everyFlagIsClassifiedExactlyOnce() {
         for (RegionFlag f : RegionFlag.values()) {
-            boolean asBoolean = BOOLEAN_FLAGS.contains(f);
-            boolean asMaterial = MATERIAL_FLAGS.contains(f);
-            assertNotEquals(asBoolean, asMaterial,
-                    "Flag " + f + " must be in exactly one of the two classifier sets — "
+            int hits = (BOOLEAN_FLAGS.contains(f) ? 1 : 0)
+                    + (MATERIAL_FLAGS.contains(f) ? 1 : 0)
+                    + (ENTITY_FLAGS.contains(f) ? 1 : 0);
+            assertEquals(1, hits,
+                    "Flag " + f + " must be in exactly one classifier set — "
                             + "did a new flag get added without updating RegionFlagTest?");
         }
     }
@@ -47,17 +55,34 @@ class RegionFlagTest {
     void enumValuesEqualsClassifierUnion() {
         Set<RegionFlag> union = EnumSet.copyOf(BOOLEAN_FLAGS);
         union.addAll(MATERIAL_FLAGS);
+        union.addAll(ENTITY_FLAGS);
         assertEquals(union, EnumSet.allOf(RegionFlag.class),
-                "RegionFlag enum has values not categorized by this test. Add them to BOOLEAN_FLAGS or MATERIAL_FLAGS.");
+                "RegionFlag enum has values not categorized by this test. Add them to one of BOOLEAN_FLAGS, MATERIAL_FLAGS, or ENTITY_FLAGS.");
     }
 
     @Test
     void isMaterialFlagAgreesWithExpectedClassification() {
         for (RegionFlag f : BOOLEAN_FLAGS) {
-            assertFalse(f.isMaterialFlag(), f + " should be a boolean flag");
+            assertFalse(f.isMaterialFlag(), f + " should not be a material-list flag");
         }
         for (RegionFlag f : MATERIAL_FLAGS) {
             assertTrue(f.isMaterialFlag(), f + " should be a material-list flag");
+        }
+        for (RegionFlag f : ENTITY_FLAGS) {
+            assertFalse(f.isMaterialFlag(), f + " should not be a material-list flag");
+        }
+    }
+
+    @Test
+    void isEntityFlagAgreesWithExpectedClassification() {
+        for (RegionFlag f : BOOLEAN_FLAGS) {
+            assertFalse(f.isEntityFlag(), f + " should not be an entity-list flag");
+        }
+        for (RegionFlag f : MATERIAL_FLAGS) {
+            assertFalse(f.isEntityFlag(), f + " should not be an entity-list flag");
+        }
+        for (RegionFlag f : ENTITY_FLAGS) {
+            assertTrue(f.isEntityFlag(), f + " should be an entity-list flag");
         }
     }
 

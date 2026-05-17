@@ -2,7 +2,6 @@ package me.beeliebub.tweaks.tests.permissions;
 
 import me.beeliebub.tweaks.permissions.PermissionGroup;
 import me.beeliebub.tweaks.permissions.PermissionManager;
-import me.beeliebub.tweaks.permissions.PermissionManager.PromptType;
 import me.beeliebub.tweaks.permissions.UserPermissions;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.BeforeEach;
@@ -155,23 +154,8 @@ class PermissionManagerTest {
         assertNotNull(perms);
     }
 
-    @Test
-    void setPromptStoresAndGetPromptReturns() {
-        UUID uuid = UUID.randomUUID();
-        manager.setPrompt(uuid, PromptType.CREATE_GROUP);
-        assertEquals(PromptType.CREATE_GROUP, manager.getPrompt(uuid));
-    }
-
-    @Test
-    void setPromptWithNullClearsExistingEntry() {
-        UUID uuid = UUID.randomUUID();
-        manager.setPrompt(uuid, PromptType.SEARCH_USER);
-        manager.setPrompt(uuid, null);
-        assertNull(manager.getPrompt(uuid));
-    }
-
-    @Test
-    void getPromptForUnknownUserReturnsNull() {
-        assertNull(manager.getPrompt(UUID.randomUUID()));
-    }
+    // The PromptType enum and setPrompt/getPrompt API were removed after the
+    // /perms GUI migrated to Paper Dialogs (Tweaks-7fov). The two prompts that
+    // used them (CREATE_GROUP, SEARCH_USER) are now confirmation dialogs with
+    // DialogInput.text fields, handled entirely inside PermissionGUI.
 }

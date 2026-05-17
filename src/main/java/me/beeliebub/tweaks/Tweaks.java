@@ -48,7 +48,7 @@ public class Tweaks extends JavaPlugin {
     private ProtectionManager protectionManager;
     private PendingStampsStore pendingStampsStore;
     private RegionSelectionManager regionSelectionManager;
-    private Material protectionSelectionTool = Material.REDSTONE;
+    private Material protectionSelectionTool = Material.STONE_AXE;
     private int maxHomes;
     private Telekinesis telekinesis;
     private Replant replant;
@@ -87,16 +87,25 @@ public class Tweaks extends JavaPlugin {
         permissionManager = new PermissionManager(this);
         protectionManager = new ProtectionManager(this);
         ProtectionKeys.init(this);
-        String configuredTool = getConfig().getString("protection.selection-tool", "REDSTONE");
+        String configuredTool = getConfig().getString("protection.selection-tool", "STONE_AXE");
         Material resolvedTool = Material.matchMaterial(configuredTool);
         if (resolvedTool == null) {
-            getLogger().warning("protection.selection-tool '" + configuredTool + "' is not a valid Material; falling back to REDSTONE");
+            getLogger().warning("protection.selection-tool '" + configuredTool + "' is not a valid Material; falling back to STONE_AXE");
         } else {
             protectionSelectionTool = resolvedTool;
         }
         java.io.File regionsDir = new java.io.File(getDataFolder(), "regions");
         new RegionLoader(getLogger()).load(regionsDir, protectionManager.regions());
         protectionManager.setWriter(new RegionWriter(this, regionsDir));
+        // Per-world refactor migration: regions saved before the world field
+        // existed get assigned to the primary loaded world (overworld) so they
+        // participate in per-world uniqueness going forward. Idempotent.
+        if (!getServer().getWorlds().isEmpty()) {
+            int migrated = protectionManager.migrateLegacyRegions(getServer().getWorlds().getFirst().getName());
+            if (migrated > 0) {
+                getLogger().info("Migrated " + migrated + " legacy region(s) to default world");
+            }
+        }
         pendingStampsStore = new PendingStampsStore(this, getDataFolder(), protectionManager.pendingStamps());
         pendingStampsStore.load();
         pendingStampsStore.start(20L * 60 * 5); // snapshot every 5 minutes
@@ -106,7 +115,9 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new ProtectionListener(protectionManager), this);
         getServer().getPluginManager().registerEvents(regionSelectionManager, this);
         getServer().getPluginManager().registerEvents(new SelectionWandListener(this, regionSelectionManager), this);
-        ProtectionCommand.register(this, protectionManager, regionSelectionManager);
+        ProtectionCommand protectionCommand = new ProtectionCommand(this, protectionManager, regionSelectionManager);
+        getCommand("region").setExecutor(protectionCommand);
+        getCommand("region").setTabCompleter(protectionCommand);
 
         // Resource Hunt Items Manager
         ResourceHuntItems resourceHuntItems = new ResourceHuntItems(this);
@@ -328,7 +339,9 @@ public class Tweaks extends JavaPlugin {
 
         // Display Chest
         DisplayChestManager displayChestManager = new DisplayChestManager(this);
-        getCommand("displaychest").setExecutor(new DisplayChestCommand(displayChestManager));
+        DisplayChestCommand displayChestCommand = new DisplayChestCommand(displayChestManager);
+        getCommand("displaychest").setExecutor(displayChestCommand);
+        getCommand("displaychest").setTabCompleter(displayChestCommand);
         getServer().getPluginManager().registerEvents(new DisplayChestListener(displayChestManager), this);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");

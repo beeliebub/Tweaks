@@ -86,8 +86,8 @@ commands:
     usage: /tprm <group|user|gui>
     aliases: [tweaksperms, perms]
   displaychest:
-    description: Toggle display chest setup mode. Click a chest to show its most abundant item.
-    usage: /displaychest
+    description: Toggle display chest setup mode. Click a chest to show its top-left item, or your held item with the [hand] override.
+    usage: /displaychest [hand|off]
   logs:
     description: View chest interaction logs (admin). Toggle inspector mode then punch a chest.
     usage: /logs
@@ -111,3 +111,17 @@ commands:
   creative:
     description: Switch your gamemode to Creative (admin).
     usage: /creative
+  region:
+    description: Land protection management — claim regions, set flags, manage members.
+    usage: |
+      /region claim <name>
+      /region wand | clear | select <name>
+      /region unclaim <name>
+      /region addmember|removemember <name> <player>
+      /region addmanager|removemanager <name> <player>
+      /region flag <name> <flag> [true|false|materials...]
+      /region unflag <name> <flag> [target]
+      /region flags [name] | info [name]
+      /region setparent <child> <parent> | unsetparent <child>
+      /region gui [name]
+    aliases: [rg]

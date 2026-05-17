@@ -8,20 +8,21 @@ import java.util.Objects;
 // A region's flag table is keyed (RegionFlag, FlagTarget) -> Boolean, allowing
 // the same flag to carry different verdicts for different players inside the
 // same region (e.g. PVP=false for the default audience, PVP=true for the
-// "duelists" permission group). The four target kinds are evaluated in
+// "duelists" permission group). The five target kinds are evaluated in
 // priority order at lookup time inside Region#resolveFlag:
-//   GROUP > OWNER > MEMBER > DEFAULT
+//   GROUP > OWNER > MANAGER > MEMBER > DEFAULT
 // The "first matching kind wins" rule keeps resolution O(1) without sorting
 // while still letting admins layer overrides cleanly.
 public record FlagTarget(Type type, String groupName) {
 
-    public enum Type { DEFAULT, OWNER, MEMBER, GROUP }
+    public enum Type { DEFAULT, OWNER, MANAGER, MEMBER, GROUP }
 
-    // Sentinel constants for the three role-based targets. Reusing them keeps
+    // Sentinel constants for the four role-based targets. Reusing them keeps
     // the inner Map<FlagTarget, Boolean> hash buckets small and avoids the
     // micro-allocations that would happen if every flag rule rebuilt its key.
     public static final FlagTarget DEFAULT = new FlagTarget(Type.DEFAULT, null);
     public static final FlagTarget OWNER = new FlagTarget(Type.OWNER, null);
+    public static final FlagTarget MANAGER = new FlagTarget(Type.MANAGER, null);
     public static final FlagTarget MEMBER = new FlagTarget(Type.MEMBER, null);
 
     public FlagTarget {
@@ -40,12 +41,13 @@ public record FlagTarget(Type type, String groupName) {
         return new FlagTarget(Type.GROUP, name.toLowerCase(Locale.ROOT));
     }
 
-    // Canonical serialized form: "default", "owner", "member", or "group:<name>".
+    // Canonical serialized form: "default", "owner", "manager", "member", or "group:<name>".
     // Used as the YAML key under flags.<FLAG_NAME> and by /region flags listing.
     public String toKey() {
         return switch (type) {
             case DEFAULT -> "default";
             case OWNER -> "owner";
+            case MANAGER -> "manager";
             case MEMBER -> "member";
             case GROUP -> "group:" + groupName;
         };
@@ -59,6 +61,7 @@ public record FlagTarget(Type type, String groupName) {
         return switch (lower) {
             case "default" -> DEFAULT;
             case "owner" -> OWNER;
+            case "manager" -> MANAGER;
             case "member" -> MEMBER;
             default -> {
                 if (lower.startsWith("group:")) {
@@ -74,6 +77,7 @@ public record FlagTarget(Type type, String groupName) {
     // Parse a user-supplied target arg from /region flag.
     //   null / blank -> DEFAULT (no [target] provided)
     //   "owner"      -> OWNER
+    //   "manager"    -> MANAGER
     //   "member"     -> MEMBER
     //   any other    -> GROUP:<that string, lowercased>
     // The caller is expected to validate the resulting group name against
@@ -84,6 +88,7 @@ public record FlagTarget(Type type, String groupName) {
         return switch (lower) {
             case "default" -> DEFAULT;
             case "owner" -> OWNER;
+            case "manager" -> MANAGER;
             case "member" -> MEMBER;
             default -> group(lower);
         };

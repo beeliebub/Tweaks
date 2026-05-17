@@ -6,7 +6,7 @@ max-homes: 15
 # /region claim <name>. Must be a Material name from the Bukkit registry;
 # falls back to REDSTONE if the name doesn't resolve.
 protection:
-  selection-tool: REDSTONE
+  selection-tool: STONE_AXE
 
 # Drop chance percentage for Egg Collector enchantment (0.0 - 100.0).
 egg-collector-drop-chance: 0.5

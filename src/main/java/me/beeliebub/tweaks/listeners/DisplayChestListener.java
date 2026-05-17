@@ -4,6 +4,7 @@ import me.beeliebub.tweaks.managers.DisplayChestManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.Chest;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -35,7 +36,17 @@ public class DisplayChestListener implements Listener {
             if (block != null && block.getState() instanceof Chest) {
                 event.setCancelled(true);
                 if (isSetup) {
-                    displayChestManager.processChest(block);
+                    if (displayChestManager.isEmbedSide(player.getUniqueId())) {
+                        // Side mode: embed on the clicked face. Fall back to a
+                        // sensible default if the event somehow carries no
+                        // face (shouldn't happen on a RIGHT/LEFT_CLICK_BLOCK,
+                        // but be defensive).
+                        BlockFace face = event.getBlockFace();
+                        if (face == null) face = BlockFace.UP;
+                        displayChestManager.processChestSide(block, face, player);
+                    } else {
+                        displayChestManager.processChest(block, player);
+                    }
                     player.sendMessage(Component.text("Display chest generated/updated!").color(NamedTextColor.GREEN));
                 } else {
                     displayChestManager.removeDisplay(block);

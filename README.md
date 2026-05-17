@@ -52,12 +52,14 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Spawn Egg Restrictions](#spawn-egg-restrictions)
 - [Admin Tools](#admin-tools)
   - [Block Log](#block-log)
+  - [Display Chests](#display-chests)
   - [Item Editing](#item-editing)
   - [Chest GUI Copy](#chest-gui-copy)
   - [Gamemode Shortcuts](#gamemode-shortcuts)
 - [World Events](#world-events)
   - [Blood Moon](#blood-moon)
 - [Minigames](#minigames)
+  - [Resource Rupee](#resource-rupee)
   - [Whack an Andrew](#whack-an-andrew)
   - [Resource Hunt](#resource-hunt)
   - [Rewards](#rewards)
@@ -67,6 +69,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Advanced Flags & Targeting](#advanced-flags--targeting)
   - [Material-Specific Flags](#material-specific-flags)
   - [Resolution Priority](#resolution-priority)
+  - [Region GUI](#region-gui)
 - [Commands Reference](#commands-reference)
 - [Permissions Reference](#permissions-reference)
 - [Configuration](#configuration)
@@ -491,9 +494,10 @@ Players in the tab list are automatically sorted by their current world profile 
 Any other world falls back to the **[Survival]** tag. Players in the lobby appear at the top of the tab list, followed by the standard worlds (overworld, nether, end, resource), then archive, then pi. Tags update automatically when you change worlds. Players who have toggled `/afk` also display a red **[AFK]** suffix after their name — see [AFK](#afk).
 ### Help Menu
 
-A comprehensive, interactive help system is available to guide you through the server's features.
+A comprehensive, interactive help system is available to guide you through the server's features. The entire system — including the category menu and individual articles — is rendered via **Paper Dialogs** (clickable GUIs) for a seamless, immersive experience.
 
-- **GUI Access**: Type `/help` to open a categorized menu where you can explore different aspects of gameplay. Each category and article features a unique, theme-consistent color gradient for easy identification.
+- **GUI Access**: Type `/help` to open a categorized menu. Each category and article features a unique, theme-consistent color gradient for easy identification.
+- **Articles**: Clicking a category opens its article list, and clicking an article opens its full content (title, body, and related-article jumps) within the GUI. Use the **[Back]** button to return to the category.
 - **Dynamic Layout**: The main menu automatically adjusts its layout based on your permissions, ensuring high-priority admin categories (like Permissions) are easily accessible.
 - **Direct Access**: Use `/help <section>` (e.g., `/help teleportation` or `/help tunneller`) to jump directly to a specific category or article.
 - **Login Tips**: Each time you log in, you'll receive a random gameplay tip to help you discover new features.
@@ -525,10 +529,10 @@ A hybrid GUI/CLI permission system with **multi-group membership**, single-paren
 
 When two of the player's groups share an ancestor in the inheritance graph, that ancestor's permissions are added exactly once. Cycles in the inheritance graph are skipped safely.
 
-**Permissions GUI**: The visual editor allows managing groups and players with simple click toggles.
-- **Main Menu**: Entry point featuring 'Videowiz92' icon.
-- **Groups Hub**: Manage group permissions, member list (toggle-based), and inheritance.
-- **Users Hub**: Manage player-specific overrides and multi-group memberships. The **Edit Groups** panel lists every group with a glint on the ones the player already belongs to — click any tile to toggle membership.
+**Permissions GUI**: The visual editor is a tree of Paper Dialogs (multi-action and confirmation) that lets you manage groups and players with simple click toggles. List screens paginate at 12 entries per page; toggle buttons prefix `✓` for "on" and `✗` for "off".
+- **Main Menu**: Entry point with `Groups` and `Players` buttons.
+- **Groups Hub**: Manage group permissions, member list (toggle-based), and inheritance. The **+ Create Group** button opens a name-entry dialog; **Delete Group** is hidden for the protected `default` group.
+- **Users Hub**: Manage player-specific overrides and multi-group memberships. The **Edit Groups** panel lists every group with a `✓` marker on the ones the player already belongs to — click any entry to toggle membership. The **⌕ Search Player** button on the players list opens a name-entry dialog for looking up offline players.
 
 ---
 
@@ -654,6 +658,24 @@ A lightweight chest-audit system: every time a player adds or removes items from
 - Hoppers, droppers, and other automation are **not** logged — only direct player interaction counts.
 - Ender chests and shulker boxes are **not** tracked (per-player or portable; no useful audit value).
 - Logs persist as long as the chunk does — destroying a chest does not erase its prior history.
+
+### Display Chests
+
+Render a floating preview of chest contents as a non-solid `ItemDisplay` entity.
+
+| Command | Permission | What it does |
+|---|---|---|
+| `/displaychest [hand\|side\|hand side\|off]` | `tweaks.admin.displaychest` | Toggle setup/removal mode. While on, **left-click** any chest to spawn or update its display. |
+
+**How it works**:
+- **Source Priority**: By default, the plugin clones the item in **Slot 0** (the top-left slot) of the chest.
+- **Hand Mode**: Use `/displaychest hand` to enter live-hand mode. In this mode, clicking a chest will use whatever item you are **currently holding** at that moment, rather than the chest's contents.
+- **Side Mode**: Use `/displaychest side` (or `/displaychest hand side`) to embed the item flush with the clicked face instead of floating it above the container.
+  - **Block Items**: Render embedded inside the block with only the clicked face visible (flush with the surface).
+  - **Non-Block Items**: Render flat against the face, similar to an item frame.
+- **Centering & Rotation**: Floating displays are automatically centered over the container. The spawned `ItemDisplay` uses a **VERTICAL billboard** rotation, meaning it automatically rotates to face whoever is looking at it from any angle. For double chests, it calculates the midpoint of both halves.
+- **Persistence**: Display state (including entity UUIDs) is stored in the chunk's Persistent Data Container (PDC). Old displays at the same location are automatically cleaned up when a new one is placed.
+- **Removal**: Use `/displaychest off` to enter removal mode, then click a chest to remove its display. This removes both top-floating and side-embedded entries from any clicked face.
 
 ### Item Editing
 
@@ -789,21 +811,26 @@ A hybrid, PDC-backed land protection system that allows players and admins to cl
 
 Territory is claimed in **full-chunk increments**.
 
-1.  **Selection**: Use the **Gold Hoe** (default selection tool) to mark two corners of your desired area.
-    - **Left-click** a block to set Position 1.
-    - **Right-click** a block to set Position 2.
+1.  **Selection**: Use the selection wand (or `/region wand`) to mark two corners of your desired area. The wand material is configurable in `config.yml` via `protection.selection-tool` (defaults to **Stone Axe**).
+    - **Left-click** a block to select chunk 1.
+    - **Right-click** a block to select chunk 2.
+    - **Relaxed Input**: Clicking any block in a chunk anchors that entire chunk (no corner snapping required).
     - A particle outline will show your current selection.
     - Use `/region clear` (alias `/rg clear`) to drop your current selection.
 2.  **Claiming**: Run `/region claim <name>` to protect the selected chunks.
     - **Overlap Prevention**: You cannot claim territory that overlaps an existing region in the same world unless you own it.
+    - **Per-World Uniqueness**: Region names are unique per world. Two regions can share a name (e.g., "home") if they are in different worlds.
 3.  **Visuals**: Use `/region info` while standing in a claim to see its boundaries and details.
 4.  **Restore Selection**: Use `/region select <name>` to restore the selection wand boundaries to match an existing region you own.
 
-### Members & Sub-regions
+### Roles & Hierarchy
 
-Regions support both members and hierarchical parenting.
+Regions support multiple roles and hierarchical parenting.
 
-- **Members**: Members can bypass most protection flags (e.g. they can always build/break). Use `/region addmember <name> <player>` to grant access.
+- **Roles**:
+  - **Owner**: Full control. Can unclaim, transfer ownership, and manage managers/members.
+  - **Manager**: Delegated control. Can edit flags, add/remove members, and add/remove other managers. Cannot unclaim or transfer ownership.
+  - **Member**: Build access. Can bypass most protection flags (e.g. they can always build/break).
 - **Sub-regions**: You can nest one region inside another using `/region setparent <child> <parent>`.
   - Sub-regions must be at least one full chunk.
   - Sub-region flags **override** their parent's flags.
@@ -815,11 +842,13 @@ Regions support both members and hierarchical parenting.
 
 Flags control what non-members can do in a region. Rules can target specific groups:
 
-**Syntax**: `/region flag <name> <flag> <value...> [target]`
+**Syntax**: `/region flag [name] <flag> <value...> [target]`
 
-- **Targets**: `owner`, `member`, `default` (everyone), or a permission group name (e.g. `admin`).
-- **Boolean Flags**: `BLOCK_BREAK`, `BLOCK_PLACE`, `CONTAINER_ACCESS`, `INTERACT`, `REDSTONE`, `EXPLOSION`, `PVP`, `MOB_GRIEFING`.
+- **Defaults**: If `[name]` is omitted, it defaults to the region you are currently standing in.
+- **Targets**: `owner`, `manager`, `member`, `default` (everyone), or a permission group name (e.g. `admin`).
+- **Boolean Flags**: `BLOCK_BREAK`, `BLOCK_PLACE`, `CONTAINER_ACCESS`, `INTERACT`, `REDSTONE`, `EXPLOSION`, `PVP`, `MOB_GRIEFING`, `MOB_SPAWNING`, `INVINCIBILITY`.
   - Use `true|false` as the value.
+- **EntityType-Specific Flags**: `ALLOW_MOB_SPAWN`, `DENY_MOB_SPAWN`. (No-op pending entity-list storage).
 - **Material-Specific Flags**: `ALLOW_BLOCK_BREAK`, `DENY_BLOCK_BREAK`, `ALLOW_BLOCK_PLACE`, `DENY_BLOCK_PLACE`.
   - Use a space-separated list of block materials as the value.
 - **Gamerule Overrides**: Region flags take precedence over world gamerules. For example, if `MOB_GRIEFING` is set to `true` in a region, creepers will destroy blocks there even if the world's `mobGriefing` is `false`.
@@ -827,13 +856,26 @@ Flags control what non-members can do in a region. Rules can target specific gro
 ### Command UX & Tab Completion
 
 - **Usage Info**: If you run a protection command incorrectly, the plugin will display friendly usage information (filtered by your permissions).
-- **Tab Completion**: Region ID suggestions are filtered to only show regions you own. Admins with the `tweaks.protection.admin` permission see all regions (limited to the first 100 results).
+- **Tab Completion**: Fully implemented for the legacy command system.
+  - **Subcommands**: Filtered based on your permissions.
+  - **Region IDs**: Suggestions are ownership-aware. Owners and managers see their regions. Admins with the `tweaks.protection.admin` permission see all regions in their current world (limited to the first 100 results).
+  - **Players**: Online players are suggested for `addmember`/`addmanager`, while current members/managers are suggested for `removemember`/`removemanager`.
+  - **Flags & Targets**: Region flags, targets, block materials, and entity types are fully tab-completable.
+
+### Region GUI
+
+Type `/region gui` while standing in a region you own (or manage) to open a clickable Paper Dialog dashboard for that claim — no need to remember flag/target syntax. Pass an explicit name (`/region gui <name>`) to manage a region from elsewhere. Standing in overlapping sub-regions opens the innermost (leaf) one. Owners and managers can open their own regions; admins with `tweaks.protection.admin` can open any region.
+
+From the dialog you can:
+- Toggle boolean flags and per-role overrides (owner/manager/member/group).
+- Add or remove members and managers.
+- Edit material and entity lists for flags that support them.
 
 ### Resolution Priority
 
 When an action occurs, the system checks rules in this order:
 1.  **Material Lists**: If the block is in a `DENY` list, the action is blocked. If in an `ALLOW` list, it's permitted.
-2.  **Targeted Boolean Rules**: The most specific rule wins: `GROUP` > `OWNER` > `MEMBER` > `DEFAULT`.
+2.  **Targeted Boolean Rules**: The most specific rule wins: `GROUP` > `OWNER` > `MANAGER` > `MEMBER` > `DEFAULT`.
 3.  **Hierarchy**: If no rule is found in the current region, the system walks up to the **parent region** and repeats the check.
 4.  **Wilderness Default**: If no rule is found in the entire hierarchy, members are allowed and non-members are blocked.
 
@@ -858,7 +900,7 @@ When an action occurs, the system checks rules in this order:
 | `/back` | Return to your previous location. |
 | `/spawn` | Teleport to the server spawn. |
 | `/fly` | Toggle flight mode. |
-| `/nv` | Toggle night vision. |
+| `/nv` | Toggle permanent night vision. |
 | `/nick <nickname>` | Set your display name with color codes. |
 | `/nick off` | Remove your nickname. |
 | `/itemfilter [toggle\|mode\|add <item>...\|remove <item>...\|list\|clear [mode]]` | Manage pickup filter. Alias: `/if`. |
@@ -867,11 +909,12 @@ When an action occurs, the system checks rules in this order:
 | `/toolprotect durability <n>` | Set remaining-durability threshold for ToolProtect. |
 | `/afk` | Toggle AFK status. |
 | `/fullmoon` | Show estimate for next full moon. |
-| `/displaychest` | Toggle display chest setup mode. |
-| `/tprm [gui|group|user]` | Manage server-side permissions. |
-| `/help [section]` | Show comprehensive GUI help menu. |
+| `/displaychest [hand\|off]` | Toggle display chest setup mode. |
+| `/tprm [gui\|group\|user]` | Manage server-side permissions. Alias: `/perms`. |
+| `/help [section]` | Show comprehensive help menu. |
 | `/region <subcommand>` | Land protection management. Alias: `/rg`. |
 | `/reward claim` | Claim pending minigame rewards. |
+| `/resource` | Teleport to the resource world. |
 
 ### Admin Commands
 
@@ -885,19 +928,23 @@ When an action occurs, the system checks rules in this order:
 | `/homes <player>` | `tweaks.admin.homes` | List another player's homes. |
 | `/nick off <player>` | `tweaks.admin.nick` | Remove another player's nickname. |
 | `/tprm` | `tweaks.admin.permissions` | Open the Permissions GUI. |
-| `/tprm group <name> <create|delete|addperm|delperm|inherited-from>` | `tweaks.admin.permissions` | CLI group management. |
-| `/tprm user <player> <addperm|delperm|setgroup>` | `tweaks.admin.permissions` | CLI user management. |
+| `/tprm group <name> <create\|delete\|addperm\|delperm\|inherited-from>` | `tweaks.admin.permissions` | CLI group management. |
+| `/tprm user <player> <addperm\|delperm\|setgroup>` | `tweaks.admin.permissions` | CLI user management. |
 | `/region claim <name>` | `tweaks.protection.claim` | Claim territory using wand selection. |
-| `/region unclaim <name>` | `tweaks.protection.unclaim` | Remove a region claim. |
+| `/region unclaim <name>` | `tweaks.protection.unclaim` | Remove a region claim. Alias: `/rg unclaim`. |
 | `/region info [name]` | `tweaks.protection.info` | Show region details. Alias: `/rg i`. |
 | `/region select <name>` | `tweaks.protection.claim` | Restore wand selection to match a region. |
 | `/region clear` | `tweaks.protection.claim` | Drop the current wand selection. |
-| `/region addmember <r> <p>` | `tweaks.protection.member` | Add a member to a region. |
-| `/region removemember <r> <p>` | `tweaks.protection.member` | Remove a member from a region. |
-| `/region flag <r> <f> <v...>` | `tweaks.protection.flag` | Set a targeted boolean or material flag. |
+| `/region wand` | `tweaks.protection.claim` | Get the selection wand. |
+| `/region addmember <r> <p>` | `tweaks.protection.member` | Add a member to a region. Alias: `/rg am`. |
+| `/region removemember <r> <p>` | `tweaks.protection.member` | Remove a member from a region. Alias: `/rg rm`. |
+| `/region addmanager <r> <p>` | `tweaks.protection.member` | Add a manager to a region. Alias: `/rg aman`. |
+| `/region removemanager <r> <p>` | `tweaks.protection.member` | Remove a manager from a region. Alias: `/rg rman`. |
+| `/region flag [name] <f> <v...>` | `tweaks.protection.flag` | Set a targeted boolean or material flag. |
 | `/region unflag <r> <f> [t]` | `tweaks.protection.flag` | Remove a targeted flag rule or material list. |
 | `/region setparent <c> <p>` | `tweaks.protection.claim` | Nest a region inside another. |
 | `/region unsetparent <c>` | `tweaks.protection.claim` | Remove region parenting. |
+| `/region gui [name]` | `tweaks.protection.info` | Open the dialog dashboard for a region. |
 | `/tconfig <key> <value>` | `tweaks.admin.config` | Update a config value at runtime. Alias: `/tweaksconfig`. |
 | `/tconfig eggdrop <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable Egg Collector drops for a mob. |
 | `/tconfig spawneregg <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable spawn egg usage on spawners. |
@@ -907,7 +954,7 @@ When an action occurs, the system checks rules in this order:
 | `/bloodmoon` | `tweaks.admin.bloodmoon` | Force-activate the Blood Moon event. |
 | `/reward create <name>` | `tweaks.admin.reward` | Create a new reward template. |
 | `/reward edit <name>` | `tweaks.admin.reward` | Open the reward editor GUI. |
-| `/reward give <player> <reward> [count]` | `tweaks.admin.reward` | Queue a reward grant for an online or offline player. |
+| `/reward give <player> <reward> [count]` | `tweaks.admin.reward` | Queue a reward grant for a player. |
 | `/whack arena` | `tweaks.admin.whack` | Start Whack-an-Andrew arena setup. |
 | `/whack corner1` | `tweaks.admin.whack` | Set arena corner 1. |
 | `/whack corner2` | `tweaks.admin.whack` | Set arena corner 2. |
@@ -915,14 +962,14 @@ When an action occurs, the system checks rules in this order:
 | `/whack start` | `tweaks.admin.whack` | Start a Whack-an-Andrew game. |
 | `/whack stop` | `tweaks.admin.whack` | Stop the current game. |
 | `/whack setreward <1\|2\|3> <name>` | `tweaks.admin.whack` | Set the reward for 1st/2nd/3rd place. |
-| `/logs` | `tweaks.admin.logs` | Toggle chest-log inspector mode. Punch a chest to view its log. |
-| `/name <name>` | `tweaks.admin.itemedit` | Set the held item's display name (color codes + hex). |
-| `/name off` | `tweaks.admin.itemedit` | Clear the held item's custom name. |
+| `/logs` | `tweaks.admin.logs` | Toggle chest-log inspector mode. |
+| `/name <name>\|off\|blank` | `tweaks.admin.itemedit` | Set or clear the held item's display name. |
 | `/lore add <line#> <text>` | `tweaks.admin.itemedit` | Insert a lore line at the 1-indexed position. |
 | `/lore remove <line#>` | `tweaks.admin.itemedit` | Remove the lore line at the 1-indexed position. |
-| `/guicopy [name]` | `tweaks.admin.guicopy` | Save the targeted chest's contents to `plugins/Tweaks/guicopies/<name>.yml`. |
+| `/guicopy [name]` | `tweaks.admin.guicopy` | Save the targeted chest's contents to disk. |
 | `/survival` | `tweaks.admin.gamemode` | Switch your gamemode to Survival. |
 | `/creative` | `tweaks.admin.gamemode` | Switch your gamemode to Creative. |
+| `/displaychest [hand\|off]` | `tweaks.admin.displaychest` | Toggle display chest setup/removal mode. |
 
 ---
 

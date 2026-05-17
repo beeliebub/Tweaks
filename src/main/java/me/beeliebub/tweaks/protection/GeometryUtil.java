@@ -30,16 +30,6 @@ public final class GeometryUtil {
         return block >> CHUNK_SHIFT; // arithmetic shift handles negative blocks correctly
     }
 
-    // True iff (blockX, blockZ) is one of the four corner blocks of its
-    // chunk — the 2x2 set of blocks at xMod ∈ {0, 15} AND zMod ∈ {0, 15}.
-    // Used by the wand listener to restrict selection clicks to chunk
-    // corners, which gives the player a tactile "snap to grid" cue.
-    public static boolean isChunkCornerBlock(int blockX, int blockZ) {
-        int xMod = Math.floorMod(blockX, 16);
-        int zMod = Math.floorMod(blockZ, 16);
-        return (xMod == 0 || xMod == 15) && (zMod == 0 || zMod == 15);
-    }
-
     // Every chunk key intersected by the inclusive block-AABB (x1/z1, x2/z2).
     // Order is row-major in (chunkX, chunkZ). Endpoints may be supplied in
     // any order — the box is normalized internally.

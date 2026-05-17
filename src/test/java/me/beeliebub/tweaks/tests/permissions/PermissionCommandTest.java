@@ -47,12 +47,10 @@ class PermissionCommandTest {
         MessageAssert.assertMessageSent(player, "No permission.");
     }
 
-    @Test
-    void onCommandGuiOpensMenu() {
-        player.setOp(true);
-        command.onCommand(player, mock(Command.class), "tprm", new String[]{"gui"});
-        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof PermissionHolder);
-    }
+    // The /tprm gui main menu is now a Paper Dialog. MockBukkit does not load a
+    // DialogInstancesProvider service, so ActionButton.builder(...) throws
+    // NoSuchElementException under MockBukkit. Verification of the dialog open
+    // path lives outside this unit test (real-server smoke test).
 
     @Test
     void onCommandGroupCreate() {

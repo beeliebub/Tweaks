@@ -92,9 +92,11 @@ public final class RegionLoader {
             Region region = parse(path.toFile());
             if (region == null) continue;
 
-            Region clash = cache.putIfAbsent(region.id(), region);
+            String cacheKey = ProtectionManager.keyOf(region);
+            Region clash = cache.putIfAbsent(cacheKey, region);
             if (clash != null) {
-                logger.warning("Region id '" + region.id() + "' appears in multiple files; keeping the first load");
+                logger.warning("Region id '" + region.id()
+                        + "' (world '" + region.worldName() + "') appears in multiple files; keeping the first load");
             } else {
                 loaded++;
             }
@@ -134,8 +136,18 @@ public final class RegionLoader {
             }
         }
 
+        List<UUID> managers = new ArrayList<>();
+        for (String raw : yaml.getStringList("managers")) {
+            try {
+                managers.add(UUID.fromString(raw));
+            } catch (IllegalArgumentException e) {
+                logger.warning("Region '" + id + "': dropping invalid manager UUID '" + raw + "'");
+            }
+        }
+
         Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules = parseFlags(id, yaml);
         Map<RegionFlag, Set<Material>> materialFlags = parseMaterialFlags(id, yaml);
+        Map<RegionFlag, Set<org.bukkit.entity.EntityType>> entityFlags = parseEntityFlags(id, yaml);
 
         String parentRaw = yaml.getString("parent");
         String parent = (parentRaw == null || parentRaw.isBlank()) ? null : parentRaw;
@@ -148,7 +160,42 @@ public final class RegionLoader {
         String worldRaw = yaml.getString("world");
         String world = (worldRaw == null || worldRaw.isBlank()) ? null : worldRaw;
 
-        return new Region(id, owner, members, flagRules, materialFlags, parent, bounds, world);
+        return new Region(id, owner, members, flagRules, materialFlags, parent, bounds, world, managers, entityFlags);
+    }
+
+    // Parse the optional `entity_flags:` map. Schema mirrors material_flags:
+    //   entity_flags:
+    //     ALLOW_MOB_SPAWN:
+    //       - CREEPER
+    //       - ZOMBIE
+    //     DENY_MOB_SPAWN:
+    //       - PHANTOM
+    private Map<RegionFlag, Set<org.bukkit.entity.EntityType>> parseEntityFlags(String regionId, YamlConfiguration yaml) {
+        if (!yaml.contains("entity_flags")) return Map.of();
+        ConfigurationSection section = yaml.getConfigurationSection("entity_flags");
+        if (section == null) return Map.of();
+
+        Map<RegionFlag, Set<org.bukkit.entity.EntityType>> out = new EnumMap<>(RegionFlag.class);
+        for (String flagKey : section.getKeys(false)) {
+            RegionFlag flag = parseFlag(regionId, flagKey);
+            if (flag == null) continue;
+            if (!flag.isEntityFlag()) {
+                logger.warning("Region '" + regionId + "': '" + flagKey
+                        + "' is not an entity-list flag; ignoring under entity_flags");
+                continue;
+            }
+            EnumSet<org.bukkit.entity.EntityType> entities = EnumSet.noneOf(org.bukkit.entity.EntityType.class);
+            for (String raw : section.getStringList(flagKey)) {
+                try {
+                    entities.add(org.bukkit.entity.EntityType.valueOf(raw.toUpperCase(Locale.ROOT)));
+                } catch (IllegalArgumentException e) {
+                    logger.warning("Region '" + regionId + "': dropping unknown entity type '"
+                            + raw + "' from " + flagKey);
+                }
+            }
+            if (!entities.isEmpty()) out.put(flag, entities);
+        }
+        return out;
     }
 
     // Parse the optional `bounds:` section. Returns null when missing (legacy

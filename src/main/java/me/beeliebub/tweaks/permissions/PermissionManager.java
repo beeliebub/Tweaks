@@ -23,12 +23,6 @@ public class PermissionManager implements Listener {
     private final Map<String, PermissionGroup> groups;
     private final Map<UUID, UserPermissions> users;
     private final Map<UUID, PermissionAttachment> attachments = new ConcurrentHashMap<>();
-    private final Map<UUID, PromptType> activePrompts = new ConcurrentHashMap<>();
-
-    public enum PromptType {
-        CREATE_GROUP,
-        SEARCH_USER
-    }
 
     public PermissionManager(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -125,15 +119,6 @@ public class PermissionManager implements Listener {
 
     public JavaPlugin getPlugin() {
         return plugin;
-    }
-
-    public void setPrompt(UUID uuid, PromptType type) {
-        if (type == null) activePrompts.remove(uuid);
-        else activePrompts.put(uuid, type);
-    }
-
-    public PromptType getPrompt(UUID uuid) {
-        return activePrompts.get(uuid);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)

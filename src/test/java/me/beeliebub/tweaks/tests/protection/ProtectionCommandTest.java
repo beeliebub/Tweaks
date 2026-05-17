@@ -1,7 +1,5 @@
 package me.beeliebub.tweaks.tests.protection;
 
-import com.mojang.brigadier.context.CommandContext;
-import io.papermc.paper.command.brigadier.CommandSourceStack;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.permissions.PermissionManager;
 import me.beeliebub.tweaks.protection.FlagTarget;
@@ -32,14 +30,13 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockConstruction;
-import static org.mockito.Mockito.when;
 
 // Command-layer coverage for the unified /region flag and /region unflag entry
-// points. These reach into the private static executor methods via reflection
-// (the methods are bound to Paper's Brigadier dispatcher in production) and
-// drive them with mocked CommandContext + CommandSender so we can exercise
-// token parsing, material-vs-boolean routing, and target resolution without
-// spinning up a real CommandDispatcher.
+// points. The package-private static helpers (`runSetFlag`, `runRemoveFlag`)
+// are reached via reflection — they're the seam where the legacy
+// CommandExecutor onCommand dispatch calls into shared flag-mutation logic, so
+// driving them directly exercises token parsing, material-vs-boolean routing,
+// and target resolution without needing a real Bukkit command dispatch loop.
 //
 // MockBukkit is initialized once at the class level so Material.matchMaterial
 // resolves "stone"/"dirt" through the registry — the parseMaterials path in
@@ -58,11 +55,12 @@ class ProtectionCommandTest {
             ProtectionKeys.init(mock(Tweaks.class));
         }
         runSetFlag = ProtectionCommand.class.getDeclaredMethod(
-                "runSetFlag", CommandContext.class, ProtectionManager.class, PermissionManager.class);
+                "runSetFlag", CommandSender.class, ProtectionManager.class, PermissionManager.class,
+                String.class, String.class, String.class);
         runSetFlag.setAccessible(true);
         runRemoveFlag = ProtectionCommand.class.getDeclaredMethod(
-                "runRemoveFlag", CommandContext.class, ProtectionManager.class,
-                PermissionManager.class, String.class);
+                "runRemoveFlag", CommandSender.class, ProtectionManager.class, PermissionManager.class,
+                String.class, String.class, String.class);
         runRemoveFlag.setAccessible(true);
     }
 
@@ -80,33 +78,25 @@ class ProtectionCommandTest {
         protection = new ProtectionManager(mock(Tweaks.class));
         permissions = mock(PermissionManager.class);
         sender = mock(CommandSender.class);
+        // Console-style sender so isOwnerManagerOrAdmin short-circuits to true
+        // without having to mock PROTECTION_ADMIN. Mockito returns false by
+        // default for hasPermission(...), and the production code's
+        // `!(sender instanceof Player)` branch grants access to console here.
         protection.regions().put("home", new Region(
                 "home", OWNER, List.of(), EnumSet.noneOf(RegionFlag.class)));
     }
 
-    private CommandContext<CommandSourceStack> ctx(String name, String flag, String value) {
-        @SuppressWarnings("unchecked")
-        CommandContext<CommandSourceStack> ctx = mock(CommandContext.class);
-        CommandSourceStack source = mock(CommandSourceStack.class);
-        when(ctx.getSource()).thenReturn(source);
-        when(source.getSender()).thenReturn(sender);
-        if (name != null) when(ctx.getArgument("name", String.class)).thenReturn(name);
-        if (flag != null) when(ctx.getArgument("flag", String.class)).thenReturn(flag);
-        if (value != null) when(ctx.getArgument("value", String.class)).thenReturn(value);
-        return ctx;
+    private int invokeSetFlag(String name, String flag, String value) throws Exception {
+        return (int) runSetFlag.invoke(null, sender, protection, permissions, name, flag, value);
     }
 
-    private int invokeSetFlag(CommandContext<CommandSourceStack> ctx) throws Exception {
-        return (int) runSetFlag.invoke(null, ctx, protection, permissions);
-    }
-
-    private int invokeRemoveFlag(CommandContext<CommandSourceStack> ctx, String rawTarget) throws Exception {
-        return (int) runRemoveFlag.invoke(null, ctx, protection, permissions, rawTarget);
+    private int invokeRemoveFlag(String name, String flag, String rawTarget) throws Exception {
+        return (int) runRemoveFlag.invoke(null, sender, protection, permissions, name, flag, rawTarget);
     }
 
     @Test
     void setBooleanFlagWithoutTargetWritesDefaultRule() throws Exception {
-        int rc = invokeSetFlag(ctx("home", "PVP", "true"));
+        int rc = invokeSetFlag("home", "PVP", "true");
 
         assertEquals(1, rc, "successful boolean set must return SINGLE_SUCCESS");
         Map<FlagTarget, Boolean> rules = protection.regions().get("home").rulesFor(RegionFlag.PVP);
@@ -115,7 +105,7 @@ class ProtectionCommandTest {
 
     @Test
     void setBooleanFlagWithOwnerTargetWritesOwnerRuleOnly() throws Exception {
-        int rc = invokeSetFlag(ctx("home", "PVP", "true owner"));
+        int rc = invokeSetFlag("home", "PVP", "true owner");
 
         assertEquals(1, rc);
         Map<FlagTarget, Boolean> rules = protection.regions().get("home").rulesFor(RegionFlag.PVP);
@@ -126,7 +116,7 @@ class ProtectionCommandTest {
 
     @Test
     void setMaterialFlagReplacesMaterialList() throws Exception {
-        int rc = invokeSetFlag(ctx("home", "ALLOW_BLOCK_BREAK", "stone dirt"));
+        int rc = invokeSetFlag("home", "ALLOW_BLOCK_BREAK", "stone dirt");
 
         assertEquals(1, rc);
         Set<Material> materials = protection.regions().get("home")
@@ -136,7 +126,7 @@ class ProtectionCommandTest {
 
     @Test
     void materialFlagRejectsTrueAsMaterialName() throws Exception {
-        int rc = invokeSetFlag(ctx("home", "ALLOW_BLOCK_BREAK", "true"));
+        int rc = invokeSetFlag("home", "ALLOW_BLOCK_BREAK", "true");
 
         assertEquals(0, rc,
                 "'true' is not a Material, so the material-list flag set must fail");
@@ -147,7 +137,7 @@ class ProtectionCommandTest {
 
     @Test
     void booleanFlagRejectsNonBooleanValue() throws Exception {
-        int rc = invokeSetFlag(ctx("home", "PVP", "stone"));
+        int rc = invokeSetFlag("home", "PVP", "stone");
 
         assertEquals(0, rc,
                 "boolean flag set must reject a value that isn't 'true' or 'false'");
@@ -160,7 +150,7 @@ class ProtectionCommandTest {
         protection.setMaterials("home", RegionFlag.ALLOW_BLOCK_BREAK,
                 Set.of(Material.STONE, Material.DIRT));
 
-        int rc = invokeRemoveFlag(ctx("home", "ALLOW_BLOCK_BREAK", null), null);
+        int rc = invokeRemoveFlag("home", "ALLOW_BLOCK_BREAK", null);
 
         assertEquals(1, rc);
         assertTrue(protection.regions().get("home")
@@ -173,7 +163,7 @@ class ProtectionCommandTest {
         protection.setFlag("home", RegionFlag.PVP, FlagTarget.OWNER, true);
         protection.setFlag("home", RegionFlag.PVP, FlagTarget.DEFAULT, false);
 
-        int rc = invokeRemoveFlag(ctx("home", "PVP", null), "owner");
+        int rc = invokeRemoveFlag("home", "PVP", "owner");
 
         assertEquals(1, rc);
         Map<FlagTarget, Boolean> rules = protection.regions().get("home").rulesFor(RegionFlag.PVP);

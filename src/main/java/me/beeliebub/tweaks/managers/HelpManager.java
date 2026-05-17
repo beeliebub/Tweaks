@@ -21,8 +21,8 @@ import java.util.logging.Logger;
 // per-topic builder methods so the constructor stays readable. Cross-references
 // (relatedArticles) are validated once at construction; missing IDs log a warning.
 //
-// Each article and category carries an explicit menu slot (in a 54-slot chest)
-// and a MiniMessage gradient string used to render the icon's display name.
+// Each article and category carries an explicit menu slot (used to order entries
+// in the Paper Dialog) and a MiniMessage gradient string for the display name.
 //
 // Article content is intentionally terse: section headers (aqua) and bullet
 // rows (white) carry the structure, so blank-line separators are unnecessary.
@@ -413,10 +413,15 @@ public class HelpManager {
         ), Material.SHIELD, 30, ColorUtil.HELP_GRAD_TOOL_PROTECT, List.of("tiers")));
 
         articles.add(new HelpArticle("display_chest", "Display Chest", List.of(
-                gray("Renders the most-abundant item above a chest as an ItemDisplay."),
-                cmd("/displaychest", "Toggle setup mode; click chests to add."),
+                gray("Renders a floating preview of chest contents as an ItemDisplay."),
+                cmd("/displaychest [hand|side|hand side|off]", "Toggle setup/removal mode; click chests."),
                 white("Auto-centers over single and double chests."),
-                white("Picks the highest-quantity item type."),
+                white("Defaults to slot 0; use 'hand' to use your held item."),
+                white("Use 'side' to embed flush with the clicked face."),
+                white("- Block items: embedded (clicked face visible)."),
+                white("- Non-block: flat against face (item frame style)."),
+                white("Billboard: items rotate to always face the viewer."),
+                white("Removal: 'off' mode removes both top and side displays."),
                 white("State stored in the chunk PDC."),
                 green("Setup mode persists for batch placement.")
         ), Material.CHEST, 32, ColorUtil.HELP_GRAD_DISPLAY_CHEST, List.of("itemfilter", "blocklog")));
@@ -528,7 +533,7 @@ public class HelpManager {
                 cmd("/tprm", "Open GUI and click 'Groups'."),
                 aqua("Features:"),
                 white("- Dynamic listing of all server groups."),
-                white("- Create new groups via chat prompt."),
+                white("- Create new groups via a name-entry dialog."),
                 white("- Pagination support for many groups."),
                 white("- Click any group to open the Group Hub."),
                 red("Requires permission: tweaks.admin.permissions.")
@@ -554,7 +559,7 @@ public class HelpManager {
                 cmd("/tprm", "Open GUI and click 'Players'."),
                 aqua("Features:"),
                 white("- Lists online and offline players."),
-                white("- Search players by name via chat prompt."),
+                white("- Search players by name via a name-entry dialog."),
                 white("- Shows each player's current group."),
                 white("- Click any player to open the User Hub."),
                 red("Requires permission: tweaks.admin.permissions.")
@@ -575,15 +580,15 @@ public class HelpManager {
                 Permissions.ADMIN_PERMISSIONS));
 
         articles.add(new HelpArticle("permissions_gui", "Permissions GUI", List.of(
-                gray("Visual editor for groups, users, and permissions."),
+                gray("Dialog-based visual editor for groups, users, and permissions."),
                 cmd("/tprm", "Open the main GUI."),
                 aqua("Navigation:"),
                 white("Main → Groups → Group Hub → (Perms/Members/Inheritance)."),
                 white("Main → Players → User Hub → (Perms/Edit Groups/Reset)."),
+                white("Lists paginate at 12 entries; use Prev/Next Page buttons."),
                 aqua("Interactions:"),
-                white("Lime panel → granted (click revokes)."),
-                white("Red panel → denied (click grants)."),
-                white("Glinting head/chest → active member/parent."),
+                white("✓ prefix → currently granted/active (click to revoke)."),
+                white("✗ prefix → currently denied/inactive (click to grant)."),
                 white("Edit Groups: multi-select toggle of group membership."),
                 red("Requires permission: tweaks.admin.permissions.")
         ), Material.COMPASS, 33, ColorUtil.HELP_GRAD_PERMS_TPRM_USAGE,
@@ -599,13 +604,16 @@ public class HelpManager {
         articles.add(new HelpArticle("protection_claim", "Claim", List.of(
                 gray("Mark a rectangle of chunks as your protected territory."),
                 cmd("/region claim <name>", "Claim the current wand selection."),
+                cmd("/region wand", "Get the selection tool (Stone Axe)."),
                 aqua("Workflow:"),
-                white("- Use the selection wand (default: Gold Hoe) to pick corners."),
-                white("- Left-click corner 1, Right-click corner 2."),
+                white("- Use the selection wand (Stone Axe) to select chunks."),
+                white("- Left-click to set chunk 1, Right-click to set chunk 2."),
+                white("- Clicking any block in a chunk anchors that entire chunk."),
                 white("- Particle outlines show the current selection."),
                 white("- Use /region clear to drop the current selection."),
                 white("- Coverage is chunk-granular: entire chunks are claimed."),
                 white("- Claims <= 5 chunks stamp immediately; others stamp as chunks load."),
+                white("- Names are unique per world; 'home' can exist in multiple worlds."),
                 yellow("Alias: /rg claim"),
                 red("Requires permission: " + Permissions.PROTECTION_CLAIM + ".")
         ), Material.OAK_FENCE, 20, ColorUtil.HELP_GRAD_PROTECTION_CLAIM,
@@ -619,8 +627,10 @@ public class HelpManager {
                 cmd("/region select <name>", "Restore selection boundaries from a region."),
                 aqua("Displays:"),
                 white("- Region ID, Owner, Parent (if sub-region)."),
-                white("- Members list."),
+                white("- Members list: hover '(N entries)' for full names."),
                 white("- Active flag rules (including targeted rules)."),
+                white("- Mob-spawn entity lists (ALLOW/DENY_MOB_SPAWN)."),
+                yellow("Aliases: /rg i, /rg am, /rg rm"),
                 red("Requires permission: " + Permissions.PROTECTION_INFO + ".")
         ), Material.BOOK, 22, ColorUtil.HELP_GRAD_PROTECTION_CLAIM,
                 List.of("protection_claim", "protection_flags"),
@@ -630,12 +640,18 @@ public class HelpManager {
                 gray("Manage who can build and how sub-regions interact."),
                 cmd("/region addmember <name> <player>", "Add a member."),
                 cmd("/region removemember <name> <player>", "Remove a member."),
+                cmd("/region addmanager <name> <player>", "Add a manager."),
+                cmd("/region removemanager <name> <player>", "Remove a manager."),
                 cmd("/region setparent <child> <parent>", "Create a sub-region relationship."),
+                aqua("Roles:"),
+                white("- Owner: Full control, can unclaim or transfer."),
+                white("- Manager: Can edit flags and members/managers."),
+                white("- Member: Build access; lowest priority for flags."),
                 aqua("Hierarchy:"),
                 white("- Sub-region flags override their parent(s)."),
-                white("- Child must be fully contained within parent bounds."),
+                white("- Priority: GROUP > OWNER > MANAGER > MEMBER > DEFAULT."),
                 white("- Membership is independent at each level."),
-                yellow("Alias: /rg addmember, /rg removemember"),
+                yellow("Aliases: /rg am, /rg rm, /rg aman, /rg rman"),
                 red("Requires permission: " + Permissions.PROTECTION_MEMBER + ".")
         ), Material.PLAYER_HEAD, 24, ColorUtil.HELP_GRAD_PROTECTION_MEMBERS,
                 List.of("protection_claim", "protection_flags"),
@@ -645,16 +661,36 @@ public class HelpManager {
                 gray("Control actions within regions with targeted rules."),
                 cmd("/region flag <name> <flag> <value...> [target]", "Set a flag rule."),
                 aqua("Flag Types:"),
-                white("- Boolean (BLOCK_BREAK, PVP, etc.): use true|false."),
+                white("- Boolean (BLOCK_BREAK, PVP, MOB_SPAWNING, INVINCIBILITY)."),
                 white("- Material (ALLOW_BLOCK_BREAK, etc.): use block list."),
+                white("- EntityType (ALLOW_MOB_SPAWN, DENY_MOB_SPAWN): use entity list."),
                 aqua("Targeting (Boolean only):"),
-                white("- [target] can be: owner, member, or permission group (e.g. group:admin)."),
-                white("- Priority: GROUP > OWNER > MEMBER > DEFAULT."),
-                green("- Region flags override world gamerules (e.g. mobGriefing)."),
+                white("- [target] can be: owner, manager, member, or group (e.g. group:admin)."),
+                white("- Priority: GROUP > OWNER > MANAGER > MEMBER > DEFAULT."),
+                green("- Flags override world gamerules (e.g. mobGriefing)."),
+                white("- /region flag [flag] defaults to your current location."),
                 red("Requires permission: " + Permissions.PROTECTION_FLAG + ".")
         ), Material.OAK_SIGN, 30, ColorUtil.HELP_GRAD_PROTECTION_FLAGS,
                 List.of("protection_claim", "protection_info"),
                 Permissions.PROTECTION_FLAG));
+
+        articles.add(new HelpArticle("protection_gui", "Region GUI", List.of(
+                gray("Manage a region through a clickable Paper Dialog instead of typing flag CLI."),
+                cmd("/region gui", "Open the dialog for the region you're standing in."),
+                cmd("/region gui <name>", "Open the dialog for a specific region."),
+                aqua("Access:"),
+                white("- Owners and managers can open their own regions."),
+                white("- Admins with " + Permissions.PROTECTION_ADMIN + " can open any region."),
+                white("- Standing in overlapping claims picks the innermost (leaf) sub-region."),
+                aqua("In the dialog:"),
+                white("- Toggle boolean flags and per-role overrides without remembering syntax."),
+                white("- Add/remove members and managers."),
+                white("- Edit material and entity lists for flags that support them."),
+                yellow("Alias: /rg gui"),
+                red("Requires permission: " + Permissions.PROTECTION_INFO + ".")
+        ), Material.PAINTING, 32, ColorUtil.HELP_GRAD_PROTECTION_FLAGS,
+                List.of("protection_flags", "protection_members", "protection_info"),
+                Permissions.PROTECTION_INFO));
 
         articles.add(new HelpArticle("protection_unclaim", "Unclaim", List.of(
                 gray("Logically delete a region and its hierarchy links."),
