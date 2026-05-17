@@ -52,12 +52,14 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Spawn Egg Restrictions](#spawn-egg-restrictions)
 - [Admin Tools](#admin-tools)
   - [Block Log](#block-log)
+  - [Display Chests](#display-chests)
   - [Item Editing](#item-editing)
   - [Chest GUI Copy](#chest-gui-copy)
   - [Gamemode Shortcuts](#gamemode-shortcuts)
 - [World Events](#world-events)
   - [Blood Moon](#blood-moon)
 - [Minigames](#minigames)
+  - [Resource Rupee](#resource-rupee)
   - [Whack an Andrew](#whack-an-andrew)
   - [Resource Hunt](#resource-hunt)
   - [Rewards](#rewards)
@@ -656,6 +658,20 @@ A lightweight chest-audit system: every time a player adds or removes items from
 - Ender chests and shulker boxes are **not** tracked (per-player or portable; no useful audit value).
 - Logs persist as long as the chunk does — destroying a chest does not erase its prior history.
 
+### Display Chests
+
+Render a floating preview of chest contents as a non-solid `ItemDisplay` entity.
+
+| Command | Permission | What it does |
+|---|---|---|
+| `/displaychest [hand\|off]` | `tweaks.admin.displaychest` | Toggle setup mode. While on, **left-click** any chest to spawn or update its display. |
+
+**How it works**:
+- **Source Priority**: by default, the plugin clones the item in **Slot 0** (the top-left slot) of the chest. Use `/displaychest hand` to override this and use your **currently held item** as the source for the next chest you click.
+- **Centering**: the display is automatically centered over the container. For double chests, it calculates the midpoint of both halves to ensure perfect alignment.
+- **Persistence**: display state (including entity UUIDs) is stored in the chunk's Persistent Data Container (PDC). Old displays at the same location are automatically cleaned up when a new one is placed.
+- **Removal**: use `/displaychest off` to enter removal mode, then click a chest to remove its display.
+
 ### Item Editing
 
 Edit the display name and lore of the item in your main hand. Both commands support legacy `&`-prefixed color codes (e.g. `&c`, `&l`, `&r`) and `&#rrggbb` hex colors. Spaces in the input are preserved naturally, so quoting is not required. The default vanilla italic styling is suppressed automatically — what you type is what you see.
@@ -879,7 +895,7 @@ When an action occurs, the system checks rules in this order:
 | `/back` | Return to your previous location. |
 | `/spawn` | Teleport to the server spawn. |
 | `/fly` | Toggle flight mode. |
-| `/nv` | Toggle night vision. |
+| `/nv` | Toggle permanent night vision. |
 | `/nick <nickname>` | Set your display name with color codes. |
 | `/nick off` | Remove your nickname. |
 | `/itemfilter [toggle\|mode\|add <item>...\|remove <item>...\|list\|clear [mode]]` | Manage pickup filter. Alias: `/if`. |
@@ -888,11 +904,12 @@ When an action occurs, the system checks rules in this order:
 | `/toolprotect durability <n>` | Set remaining-durability threshold for ToolProtect. |
 | `/afk` | Toggle AFK status. |
 | `/fullmoon` | Show estimate for next full moon. |
-| `/displaychest` | Toggle display chest setup mode. |
-| `/tprm [gui|group|user]` | Manage server-side permissions. |
-| `/help [section]` | Show comprehensive GUI help menu. |
+| `/displaychest [hand\|off]` | Toggle display chest setup mode. |
+| `/tprm [gui\|group\|user]` | Manage server-side permissions. Alias: `/perms`. |
+| `/help [section]` | Show comprehensive help menu. |
 | `/region <subcommand>` | Land protection management. Alias: `/rg`. |
 | `/reward claim` | Claim pending minigame rewards. |
+| `/resource` | Teleport to the resource world. |
 
 ### Admin Commands
 
@@ -906,8 +923,8 @@ When an action occurs, the system checks rules in this order:
 | `/homes <player>` | `tweaks.admin.homes` | List another player's homes. |
 | `/nick off <player>` | `tweaks.admin.nick` | Remove another player's nickname. |
 | `/tprm` | `tweaks.admin.permissions` | Open the Permissions GUI. |
-| `/tprm group <name> <create|delete|addperm|delperm|inherited-from>` | `tweaks.admin.permissions` | CLI group management. |
-| `/tprm user <player> <addperm|delperm|setgroup>` | `tweaks.admin.permissions` | CLI user management. |
+| `/tprm group <name> <create\|delete\|addperm\|delperm\|inherited-from>` | `tweaks.admin.permissions` | CLI group management. |
+| `/tprm user <player> <addperm\|delperm\|setgroup>` | `tweaks.admin.permissions` | CLI user management. |
 | `/region claim <name>` | `tweaks.protection.claim` | Claim territory using wand selection. |
 | `/region unclaim <name>` | `tweaks.protection.unclaim` | Remove a region claim. Alias: `/rg unclaim`. |
 | `/region info [name]` | `tweaks.protection.info` | Show region details. Alias: `/rg i`. |
@@ -922,7 +939,7 @@ When an action occurs, the system checks rules in this order:
 | `/region unflag <r> <f> [t]` | `tweaks.protection.flag` | Remove a targeted flag rule or material list. |
 | `/region setparent <c> <p>` | `tweaks.protection.claim` | Nest a region inside another. |
 | `/region unsetparent <c>` | `tweaks.protection.claim` | Remove region parenting. |
-| `/region gui [name]` | `tweaks.protection.info` | Open the dialog dashboard for a region (owners, managers, admins). |
+| `/region gui [name]` | `tweaks.protection.info` | Open the dialog dashboard for a region. |
 | `/tconfig <key> <value>` | `tweaks.admin.config` | Update a config value at runtime. Alias: `/tweaksconfig`. |
 | `/tconfig eggdrop <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable Egg Collector drops for a mob. |
 | `/tconfig spawneregg <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable spawn egg usage on spawners. |
@@ -932,7 +949,7 @@ When an action occurs, the system checks rules in this order:
 | `/bloodmoon` | `tweaks.admin.bloodmoon` | Force-activate the Blood Moon event. |
 | `/reward create <name>` | `tweaks.admin.reward` | Create a new reward template. |
 | `/reward edit <name>` | `tweaks.admin.reward` | Open the reward editor GUI. |
-| `/reward give <player> <reward> [count]` | `tweaks.admin.reward` | Queue a reward grant for an online or offline player. |
+| `/reward give <player> <reward> [count]` | `tweaks.admin.reward` | Queue a reward grant for a player. |
 | `/whack arena` | `tweaks.admin.whack` | Start Whack-an-Andrew arena setup. |
 | `/whack corner1` | `tweaks.admin.whack` | Set arena corner 1. |
 | `/whack corner2` | `tweaks.admin.whack` | Set arena corner 2. |
@@ -940,14 +957,14 @@ When an action occurs, the system checks rules in this order:
 | `/whack start` | `tweaks.admin.whack` | Start a Whack-an-Andrew game. |
 | `/whack stop` | `tweaks.admin.whack` | Stop the current game. |
 | `/whack setreward <1\|2\|3> <name>` | `tweaks.admin.whack` | Set the reward for 1st/2nd/3rd place. |
-| `/logs` | `tweaks.admin.logs` | Toggle chest-log inspector mode. Punch a chest to view its log. |
-| `/name <name>` | `tweaks.admin.itemedit` | Set the held item's display name (color codes + hex). |
-| `/name off` | `tweaks.admin.itemedit` | Clear the held item's custom name. |
+| `/logs` | `tweaks.admin.logs` | Toggle chest-log inspector mode. |
+| `/name <name>\|off\|blank` | `tweaks.admin.itemedit` | Set or clear the held item's display name. |
 | `/lore add <line#> <text>` | `tweaks.admin.itemedit` | Insert a lore line at the 1-indexed position. |
 | `/lore remove <line#>` | `tweaks.admin.itemedit` | Remove the lore line at the 1-indexed position. |
-| `/guicopy [name]` | `tweaks.admin.guicopy` | Save the targeted chest's contents to `plugins/Tweaks/guicopies/<name>.yml`. |
+| `/guicopy [name]` | `tweaks.admin.guicopy` | Save the targeted chest's contents to disk. |
 | `/survival` | `tweaks.admin.gamemode` | Switch your gamemode to Survival. |
 | `/creative` | `tweaks.admin.gamemode` | Switch your gamemode to Creative. |
+| `/displaychest [hand\|off]` | `tweaks.admin.displaychest` | Toggle display chest setup/removal mode. |
 
 ---
 
