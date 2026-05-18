@@ -1,12 +1,32 @@
-package me.beeliebub.tweaks.managers;
+package me.beeliebub.tweaks.core;
 
+import io.papermc.paper.dialog.Dialog;
+import io.papermc.paper.registry.data.dialog.ActionButton;
+import io.papermc.paper.registry.data.dialog.DialogBase;
+import io.papermc.paper.registry.data.dialog.action.DialogAction;
+import io.papermc.paper.registry.data.dialog.body.DialogBody;
+import io.papermc.paper.registry.data.dialog.type.DialogType;
 import me.beeliebub.tweaks.ColorUtil;
 import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
+import org.bukkit.Sound;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -17,16 +37,13 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
-// Static content provider for the /help system. Categories are defined in
-// per-topic builder methods so the constructor stays readable. Cross-references
-// (relatedArticles) are validated once at construction; missing IDs log a warning.
-//
-// Each article and category carries an explicit menu slot (used to order entries
-// in the Paper Dialog) and a MiniMessage gradient string for the display name.
-//
-// Article content is intentionally terse: section headers (aqua) and bullet
-// rows (white) carry the structure, so blank-line separators are unnecessary.
-public class HelpManager {
+// Unified help system: data records, the static article content, the /help executor
+// (Paper Dialog rendering), and the join-tip listener — all in one cohesive module.
+public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
+
+    // ============================================================
+    // Data records
+    // ============================================================
 
     public record HelpArticle(
             String id,
@@ -43,7 +60,8 @@ public class HelpManager {
             relatedArticles = relatedArticles == null ? List.of() : List.copyOf(relatedArticles);
         }
 
-        public HelpArticle(String id, String title, List<Component> content, Material icon, int slot, String gradient, List<String> relatedArticles) {
+        public HelpArticle(String id, String title, List<Component> content, Material icon, int slot,
+                           String gradient, List<String> relatedArticles) {
             this(id, title, content, icon, slot, gradient, relatedArticles, null);
         }
     }
@@ -60,7 +78,7 @@ public class HelpManager {
             articles = List.copyOf(articles);
         }
 
-        public boolean hasVisibleArticles(org.bukkit.entity.Player player) {
+        public boolean hasVisibleArticles(Player player) {
             for (HelpArticle article : articles) {
                 if (article.permission() == null || player.hasPermission(article.permission())) {
                     return true;
@@ -70,15 +88,18 @@ public class HelpManager {
         }
     }
 
+    private static final MiniMessage MM = MiniMessage.miniMessage();
+    private static final int BUTTON_WIDTH = 250;
+
     private final Map<String, HelpCategory> categories = new LinkedHashMap<>();
     private final Map<String, HelpArticle> allArticles = new LinkedHashMap<>();
     private final Logger logger;
 
-    public HelpManager() {
+    public HelpSystem() {
         this(Logger.getLogger("Tweaks"));
     }
 
-    public HelpManager(Logger logger) {
+    public HelpSystem(Logger logger) {
         this.logger = logger;
         addCategory(buildTeleportation());
         addCategory(buildEnchantments());
@@ -102,7 +123,7 @@ public class HelpManager {
         return id == null ? null : allArticles.get(id);
     }
 
-    public HelpArticle getRandomArticle(org.bukkit.entity.Player player) {
+    public HelpArticle getRandomArticle(Player player) {
         List<HelpArticle> visible = allArticles.values().stream()
                 .filter(a -> a.permission() == null || player.hasPermission(a.permission()))
                 .toList();
@@ -130,39 +151,236 @@ public class HelpManager {
         }
     }
 
+    // ============================================================
+    // /help dispatch
+    // ============================================================
+
+    @Override
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
+                             @NotNull String label, @NotNull String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Component.text("Only players can use /help.", NamedTextColor.RED));
+            return true;
+        }
+
+        if (args.length == 0) {
+            openMainMenu(player);
+            return true;
+        }
+
+        String target = args[0].toLowerCase();
+        HelpCategory category = getCategory(target);
+        if (category != null) {
+            if (category.hasVisibleArticles(player)) {
+                openCategoryMenu(player, category);
+            } else {
+                player.sendMessage(Component.text("You don't have permission to view this category.", NamedTextColor.RED));
+            }
+            return true;
+        }
+
+        HelpArticle article = getArticle(target);
+        if (article != null) {
+            if (article.permission() == null || player.hasPermission(article.permission())) {
+                openArticle(player, article);
+            } else {
+                player.sendMessage(Component.text("You don't have permission to view this article.", NamedTextColor.RED));
+            }
+            return true;
+        }
+
+        player.sendMessage(Component.text("Unknown help section: " + target, NamedTextColor.RED));
+        return true;
+    }
+
+    public void openMainMenu(Player player) {
+        List<ActionButton> buttons = new ArrayList<>();
+        for (HelpCategory category : getCategories()) {
+            if (!category.hasVisibleArticles(player)) continue;
+            buttons.add(buildCategoryButton(category));
+        }
+        Component title = MM.deserialize("<gradient:#FF9A00:#9863E7:#5489FF><b>Help</b></gradient>")
+                .decoration(TextDecoration.ITALIC, false);
+        Dialog dialog = Dialog.create(b -> b.empty()
+                .base(DialogBase.builder(title).canCloseWithEscape(true).pause(false).build())
+                .type(DialogType.multiAction(buttons, null, 2)));
+        player.showDialog(dialog);
+        player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.7f, 1.0f);
+    }
+
+    public void openCategoryMenu(Player player, HelpCategory category) {
+        List<ActionButton> buttons = new ArrayList<>();
+        for (HelpArticle article : category.articles()) {
+            if (article.permission() != null && !player.hasPermission(article.permission())) continue;
+            buttons.add(buildArticleButton(article));
+        }
+        ActionButton back = ActionButton.builder(
+                        Component.text("Back", NamedTextColor.RED, TextDecoration.BOLD)
+                                .decoration(TextDecoration.ITALIC, false))
+                .tooltip(Component.text("Return to the main menu", NamedTextColor.GRAY))
+                .width(BUTTON_WIDTH)
+                .action(DialogAction.customClick(
+                        (view, audience) -> { if (audience instanceof Player p) openMainMenu(p); },
+                        ClickCallback.Options.builder().build()))
+                .build();
+        Component title = MM.deserialize("<gradient:" + category.gradient() + "><b>" + category.title() + "</b></gradient>")
+                .decoration(TextDecoration.ITALIC, false);
+        Dialog dialog = Dialog.create(b -> b.empty()
+                .base(DialogBase.builder(title).canCloseWithEscape(true).pause(false).build())
+                .type(DialogType.multiAction(buttons, back, 1)));
+        player.showDialog(dialog);
+        player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.7f, 1.1f);
+    }
+
+    private ActionButton buildCategoryButton(HelpCategory category) {
+        Component label = MM.deserialize("<gradient:" + category.gradient() + "><b>" + category.title() + "</b></gradient>")
+                .decoration(TextDecoration.ITALIC, false);
+        Component tooltip = Component.text("Click to view " + category.title().toLowerCase() + " articles", NamedTextColor.GRAY);
+        return ActionButton.builder(label).tooltip(tooltip).width(BUTTON_WIDTH)
+                .action(DialogAction.customClick(
+                        (view, audience) -> { if (audience instanceof Player p) openCategoryMenu(p, category); },
+                        ClickCallback.Options.builder().build()))
+                .build();
+    }
+
+    private ActionButton buildArticleButton(HelpArticle article) {
+        Component label = MM.deserialize("<gradient:" + article.gradient() + "><b>" + article.title() + "</b></gradient>")
+                .decoration(TextDecoration.ITALIC, false);
+        Component tooltip = Component.text("Click to read " + article.title().toLowerCase(), NamedTextColor.GRAY);
+        return ActionButton.builder(label).tooltip(tooltip).width(BUTTON_WIDTH)
+                .action(DialogAction.customClick(
+                        (view, audience) -> { if (audience instanceof Player p) openArticle(p, article); },
+                        ClickCallback.Options.builder().build()))
+                .build();
+    }
+
+    public void openArticle(Player player, HelpArticle article) {
+        HelpCategory owningCategory = findCategoryOf(article);
+        Component title = MM.deserialize("<gradient:" + article.gradient() + "><b>" + article.title() + "</b></gradient>")
+                .decoration(TextDecoration.ITALIC, false);
+
+        List<DialogBody> body = new ArrayList<>();
+        for (Component line : article.content()) {
+            body.add(DialogBody.plainMessage(line, BUTTON_WIDTH));
+        }
+
+        List<ActionButton> jumpButtons = new ArrayList<>();
+        for (String refId : article.relatedArticles()) {
+            HelpArticle ref = getArticle(refId);
+            if (ref == null) continue;
+            if (ref.permission() != null && !player.hasPermission(ref.permission())) continue;
+            jumpButtons.add(ActionButton.builder(
+                            MM.deserialize("<gradient:" + ref.gradient() + ">See also: " + ref.title() + "</gradient>")
+                                    .decoration(TextDecoration.ITALIC, false))
+                    .tooltip(Component.text("Open " + ref.title(), NamedTextColor.GRAY))
+                    .width(BUTTON_WIDTH)
+                    .action(DialogAction.customClick(
+                            (view, audience) -> { if (audience instanceof Player p) openArticle(p, ref); },
+                            ClickCallback.Options.builder().build()))
+                    .build());
+        }
+
+        ActionButton back = ActionButton.builder(
+                        Component.text("Back", NamedTextColor.RED, TextDecoration.BOLD)
+                                .decoration(TextDecoration.ITALIC, false))
+                .tooltip(Component.text(owningCategory != null
+                                ? "Return to " + owningCategory.title()
+                                : "Return to the help menu",
+                        NamedTextColor.GRAY))
+                .width(BUTTON_WIDTH)
+                .action(DialogAction.customClick(
+                        (view, audience) -> {
+                            if (!(audience instanceof Player p)) return;
+                            if (owningCategory != null) openCategoryMenu(p, owningCategory);
+                            else openMainMenu(p);
+                        },
+                        ClickCallback.Options.builder().build()))
+                .build();
+
+        Dialog dialog = Dialog.create(b -> b.empty()
+                .base(DialogBase.builder(title)
+                        .canCloseWithEscape(true).pause(false).body(body).build())
+                .type(DialogType.multiAction(jumpButtons, back, 1)));
+        player.showDialog(dialog);
+        player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.5f, 1.0f);
+    }
+
+    private HelpCategory findCategoryOf(HelpArticle article) {
+        for (HelpCategory category : getCategories()) {
+            for (HelpArticle a : category.articles()) {
+                if (a.id().equals(article.id())) return category;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
+                                                @NotNull String label, @NotNull String[] args) {
+        if (!(sender instanceof Player player)) return Collections.emptyList();
+        if (args.length != 1) return Collections.emptyList();
+        String partial = args[0].toLowerCase();
+        List<String> options = new ArrayList<>();
+        for (HelpCategory c : getCategories()) {
+            if (c.hasVisibleArticles(player)) {
+                options.add(c.id());
+                for (HelpArticle a : c.articles()) {
+                    if (a.permission() == null || player.hasPermission(a.permission())) {
+                        options.add(a.id());
+                    }
+                }
+            }
+        }
+        return options.stream().filter(o -> o.startsWith(partial)).toList();
+    }
+
+    // ============================================================
+    // Join-tip listener
+    // ============================================================
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        Component openHelp = Component.text("/help", NamedTextColor.AQUA, TextDecoration.BOLD)
+                .hoverEvent(HoverEvent.showText(Component.text("Open the help menu", NamedTextColor.GRAY)))
+                .clickEvent(ClickEvent.runCommand("/help"));
+
+        player.sendMessage(Component.empty());
+        player.sendMessage(Component.text("Need help? Type ", NamedTextColor.YELLOW).append(openHelp));
+
+        HelpArticle tip = getRandomArticle(player);
+        if (tip != null) {
+            Component readMore = Component.text(" [Read]", NamedTextColor.YELLOW)
+                    .hoverEvent(HoverEvent.showText(Component.text("Open: " + tip.title(), NamedTextColor.GRAY)))
+                    .clickEvent(ClickEvent.runCommand("/help " + tip.id()));
+            player.sendMessage(Component.text("Tip: ", NamedTextColor.GOLD, TextDecoration.BOLD)
+                    .append(Component.text(tip.title(), NamedTextColor.WHITE))
+                    .append(readMore));
+        }
+        player.sendMessage(Component.empty());
+    }
+
+    // ============================================================
+    // Helpers for building article content
+    // ============================================================
+
     private static Component cmd(String command, String description) {
         return Component.text(command, NamedTextColor.YELLOW)
                 .hoverEvent(HoverEvent.showText(Component.text(description, NamedTextColor.GRAY)))
                 .clickEvent(ClickEvent.suggestCommand(command));
     }
 
-    private static Component gray(String text) {
-        return Component.text(text, NamedTextColor.GRAY);
-    }
+    private static Component gray(String text)   { return Component.text(text, NamedTextColor.GRAY); }
+    private static Component white(String text)  { return Component.text(text, NamedTextColor.WHITE); }
+    private static Component aqua(String text)   { return Component.text(text, NamedTextColor.AQUA); }
+    private static Component yellow(String text) { return Component.text(text, NamedTextColor.YELLOW); }
+    private static Component red(String text)    { return Component.text(text, NamedTextColor.RED); }
+    private static Component green(String text)  { return Component.text(text, NamedTextColor.GREEN); }
+    private static Component gold(String text)   { return Component.text(text, NamedTextColor.GOLD); }
 
-    private static Component white(String text) {
-        return Component.text(text, NamedTextColor.WHITE);
-    }
-
-    private static Component aqua(String text) {
-        return Component.text(text, NamedTextColor.AQUA);
-    }
-
-    private static Component yellow(String text) {
-        return Component.text(text, NamedTextColor.YELLOW);
-    }
-
-    private static Component red(String text) {
-        return Component.text(text, NamedTextColor.RED);
-    }
-
-    private static Component green(String text) {
-        return Component.text(text, NamedTextColor.GREEN);
-    }
-
-    private static Component gold(String text) {
-        return Component.text(text, NamedTextColor.GOLD);
-    }
+    // ============================================================
+    // Article content
+    // ============================================================
 
     private HelpCategory buildTeleportation() {
         List<HelpArticle> articles = new ArrayList<>();

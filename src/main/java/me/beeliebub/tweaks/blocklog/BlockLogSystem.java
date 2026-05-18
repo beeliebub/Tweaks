@@ -1,5 +1,8 @@
 package me.beeliebub.tweaks.blocklog;
 
+import me.beeliebub.tweaks.blocklog.BlockLogData.ChestLogEntry;
+import me.beeliebub.tweaks.blocklog.BlockLogData.ChunkLogStore;
+import me.beeliebub.tweaks.blocklog.BlockLogData.LogAction;
 import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -8,51 +11,231 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
+import org.bukkit.block.Chest;
+import org.bukkit.block.DoubleChest;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.inventory.BlockInventoryHolder;
+import org.bukkit.inventory.DoubleChestInventory;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
-// /logs — toggles "inspector mode" for an admin. While inspector mode is on, the next left-click
-// on a loggable container (chest/trapped chest/barrel) is intercepted and the chest's log is
-// displayed in chat as a paginated list. Hover any item name to see its full ItemStack details.
-//
-// Pagination: stateless. The [Prev]/[Next] buttons re-run /logs view <world> <x> <y> <z> <page>,
-// which re-reads the chest's log each time. This keeps the system simple and avoids stale caches.
-public final class LogsCommand implements CommandExecutor, Listener {
+// All behavior for the block-log subsystem: the manager API, the open/close diff listener,
+// the chunk-load prune listener, and the /logs command + punch-to-view inspector.
+public final class BlockLogSystem implements CommandExecutor, Listener {
 
+    static final long RETENTION_MILLIS = TimeUnit.DAYS.toMillis(30);
     private static final int ENTRIES_PER_PAGE = 10;
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private final ChestLogManager manager;
+    private final ChunkLogStore store;
+    // (player UUID, anchor key) -> snapshot. See diff strategy notes in blocklog/CLAUDE.md.
+    private final Map<SnapshotKey, ItemStack[]> snapshots = new HashMap<>();
     private final Set<UUID> inspectors = new HashSet<>();
 
-    public LogsCommand(ChestLogManager manager) {
-        this.manager = manager;
+    public BlockLogSystem(Plugin plugin) {
+        this.store = new ChunkLogStore(plugin);
     }
 
+    // ============================================================
+    // Manager API (anchor / loggable / read / append / prune)
+    // ============================================================
+
+    public boolean isLoggable(Material material) {
+        return switch (material) {
+            case CHEST, TRAPPED_CHEST, BARREL -> true;
+            default -> false;
+        };
+    }
+
+    public boolean isLoggable(Block block) {
+        return block != null && isLoggable(block.getType());
+    }
+
+    public Block anchor(Block block) {
+        if (block == null) return null;
+        BlockState state = block.getState();
+        if (!(state instanceof Chest chest)) return block;
+
+        Inventory inv = chest.getInventory();
+        if (inv instanceof DoubleChestInventory doubleInv) {
+            DoubleChest doubleChest = (DoubleChest) doubleInv.getHolder();
+            if (doubleChest != null) {
+                InventoryHolder left = doubleChest.getLeftSide();
+                if (left instanceof Chest leftChest) {
+                    return leftChest.getBlock();
+                }
+            }
+        }
+        return block;
+    }
+
+    public @Nullable Block anchorOf(Inventory inv) {
+        if (inv == null) return null;
+        InventoryHolder holder = inv.getHolder();
+        if (holder == null) return null;
+
+        if (holder instanceof DoubleChest doubleChest) {
+            InventoryHolder left = doubleChest.getLeftSide();
+            if (left instanceof Chest leftChest) {
+                Block b = leftChest.getBlock();
+                return isLoggable(b) ? b : null;
+            }
+            return null;
+        }
+        if (holder instanceof BlockInventoryHolder blockHolder) {
+            Block b = blockHolder.getBlock();
+            return isLoggable(b) ? b : null;
+        }
+        return null;
+    }
+
+    public List<ChestLogEntry> read(Block anchor) {
+        return store.read(anchor);
+    }
+
+    public void appendAll(Block anchor, List<ChestLogEntry> entries) {
+        if (entries.isEmpty()) return;
+        store.appendAll(anchor, entries);
+    }
+
+    public int pruneChunk(org.bukkit.Chunk chunk, long cutoffMillis) {
+        return store.pruneChunk(chunk, cutoffMillis);
+    }
+
+    // ============================================================
+    // Open/close diff listener
+    // ============================================================
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onInventoryOpen(InventoryOpenEvent event) {
+        if (!(event.getPlayer() instanceof Player player)) return;
+        Inventory inv = event.getInventory();
+        Block anchor = anchorOf(inv);
+        if (anchor == null) return;
+        snapshots.put(SnapshotKey.of(player.getUniqueId(), anchor), copy(inv.getContents()));
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onInventoryClose(InventoryCloseEvent event) {
+        HumanEntity human = event.getPlayer();
+        if (!(human instanceof Player player)) return;
+        Inventory inv = event.getInventory();
+        Block anchor = anchorOf(inv);
+        if (anchor == null) return;
+
+        SnapshotKey key = SnapshotKey.of(player.getUniqueId(), anchor);
+        ItemStack[] before = snapshots.remove(key);
+        if (before == null) return;
+
+        ItemStack[] after = inv.getContents();
+        List<ChestLogEntry> entries = diff(before, after, player);
+        if (entries.isEmpty()) return;
+        appendAll(anchor, entries);
+    }
+
+    private List<ChestLogEntry> diff(ItemStack[] before, ItemStack[] after, Player player) {
+        long now = System.currentTimeMillis();
+        UUID uuid = player.getUniqueId();
+        String name = player.getName();
+        List<ChestLogEntry> out = new ArrayList<>();
+
+        int slots = Math.max(before.length, after.length);
+        for (int i = 0; i < slots; i++) {
+            ItemStack a = i < before.length ? before[i] : null;
+            ItemStack b = i < after.length ? after[i] : null;
+
+            if (isEmpty(a) && isEmpty(b)) continue;
+            if (!isEmpty(a) && !isEmpty(b) && a.equals(b)) continue;
+
+            if (!isEmpty(a) && !isEmpty(b) && a.isSimilar(b)) {
+                int delta = b.getAmount() - a.getAmount();
+                if (delta == 0) continue;
+                ItemStack template = a.clone();
+                template.setAmount(Math.abs(delta));
+                LogAction action = delta > 0 ? LogAction.ADD : LogAction.REMOVE;
+                out.add(new ChestLogEntry(now, action, uuid, name, template));
+            } else {
+                if (!isEmpty(a)) {
+                    out.add(new ChestLogEntry(now, LogAction.REMOVE, uuid, name, a.clone()));
+                }
+                if (!isEmpty(b)) {
+                    out.add(new ChestLogEntry(now, LogAction.ADD, uuid, name, b.clone()));
+                }
+            }
+        }
+        return out;
+    }
+
+    private static boolean isEmpty(ItemStack item) {
+        return item == null || item.getType().isAir() || item.getAmount() <= 0;
+    }
+
+    private static ItemStack[] copy(ItemStack[] src) {
+        ItemStack[] dst = new ItemStack[src.length];
+        for (int i = 0; i < src.length; i++) {
+            dst[i] = src[i] == null ? null : src[i].clone();
+        }
+        return dst;
+    }
+
+    private record SnapshotKey(UUID player, UUID world, int x, int y, int z) {
+        static SnapshotKey of(UUID player, Block anchor) {
+            return new SnapshotKey(player, anchor.getWorld().getUID(), anchor.getX(), anchor.getY(), anchor.getZ());
+        }
+    }
+
+    // ============================================================
+    // Chunk-load prune listener
+    // ============================================================
+
+    @EventHandler
+    public void onChunkLoad(ChunkLoadEvent event) {
+        long cutoff = System.currentTimeMillis() - RETENTION_MILLIS;
+        pruneChunk(event.getChunk(), cutoff);
+    }
+
+    // ============================================================
+    // /logs command + punch listener
+    // ============================================================
+
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
+                             @NotNull String label, @NotNull String[] args) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Component.text("Only players can use /logs.", NamedTextColor.RED));
             return true;
@@ -106,11 +289,11 @@ public final class LogsCommand implements CommandExecutor, Listener {
             return;
         }
         Block block = world.getBlockAt(x, y, z);
-        if (!manager.isLoggable(block)) {
+        if (!isLoggable(block)) {
             player.sendMessage(Component.text("That block no longer holds a chest log.", NamedTextColor.RED));
             return;
         }
-        sendLogPage(player, manager.anchor(block), page);
+        sendLogPage(player, anchor(block), page);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -120,14 +303,14 @@ public final class LogsCommand implements CommandExecutor, Listener {
         if (!inspectors.contains(player.getUniqueId())) return;
 
         Block clicked = event.getClickedBlock();
-        if (clicked == null || !manager.isLoggable(clicked)) return;
+        if (clicked == null || !isLoggable(clicked)) return;
         if (!player.hasPermission(Permissions.ADMIN_LOGS)) {
             inspectors.remove(player.getUniqueId());
             return;
         }
 
         event.setCancelled(true);
-        sendLogPage(player, manager.anchor(clicked), 1);
+        sendLogPage(player, anchor(clicked), 1);
     }
 
     @EventHandler
@@ -136,7 +319,7 @@ public final class LogsCommand implements CommandExecutor, Listener {
     }
 
     private void sendLogPage(Player player, Block anchor, int page) {
-        List<ChestLogEntry> entries = manager.read(anchor);
+        List<ChestLogEntry> entries = read(anchor);
         Location loc = anchor.getLocation();
         Component header = Component.text("─── ", NamedTextColor.DARK_GRAY)
                 .append(Component.text("BlockLog ", NamedTextColor.DARK_AQUA, TextDecoration.BOLD))
@@ -151,7 +334,6 @@ public final class LogsCommand implements CommandExecutor, Listener {
             return;
         }
 
-        // Newest first.
         int totalPages = (entries.size() + ENTRIES_PER_PAGE - 1) / ENTRIES_PER_PAGE;
         int clamped = Math.min(page, totalPages);
         int startIdxFromNewest = (clamped - 1) * ENTRIES_PER_PAGE;
