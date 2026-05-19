@@ -6,7 +6,7 @@ import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.action.DialogAction;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
-import me.beeliebub.tweaks.ColorUtil;
+import me.beeliebub.tweaks.utils.ColorUtil;
 import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
@@ -701,16 +701,16 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         List<HelpArticle> articles = new ArrayList<>();
 
         articles.add(new HelpArticle("resource_hunt", "Resource Hunt", List.of(
-                gray("Individual tiered gather hunt in the resource world."),
+                gray("Individual tiered gathering minigame in the resource worlds."),
                 cmd("/resource", "Travel to the resource world."),
-                white("Target resets each server restart."),
-                white("Progress only counts in resource worlds."),
+                white("The world (overworld/nether) is picked at startup,"),
+                white("but each player gets their own random target material."),
+                white("Targets are unique per-player where possible."),
                 aqua("Three cumulative tier thresholds:"),
-                white("T1 = amount, T2 = T1×multiplier, T3 = T2×multiplier."),
+                white("T1 = amount, T2 = round(T1 * multiplier), T3 = round(T1 * multiplier²)."),
                 gold("Each tier crossed grants one 'resource' reward."),
                 red("Ender chests are blocked in resource worlds.")
         ), Material.GRASS_BLOCK, 20, ColorUtil.HELP_GRAD_RESOURCE_HUNT, List.of("rewards", "gem_connoisseur")));
-
         articles.add(new HelpArticle("rewards", "Rewards", List.of(
                 gray("Pending-reward inbox for minigames."),
                 cmd("/reward claim", "Claim pending rewards."),

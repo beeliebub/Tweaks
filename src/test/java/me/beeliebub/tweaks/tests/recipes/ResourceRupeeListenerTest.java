@@ -1,7 +1,6 @@
 package me.beeliebub.tweaks.tests.recipes;
 
 import me.beeliebub.tweaks.recipes.ResourceRupee;
-import me.beeliebub.tweaks.recipes.ResourceRupeeListener;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -25,13 +24,13 @@ import static org.mockito.Mockito.*;
 class ResourceRupeeListenerTest {
 
     private ResourceRupee rupee;
-    private ResourceRupeeListener listener;
+    private ResourceRupee listener;
 
     @BeforeEach
     void setUp() {
         MockBukkit.mock();
         rupee = new ResourceRupee();
-        listener = new ResourceRupeeListener(rupee);
+        listener = rupee;
     }
 
     @AfterEach

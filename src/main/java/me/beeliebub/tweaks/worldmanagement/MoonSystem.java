@@ -1,6 +1,7 @@
-package me.beeliebub.tweaks.managers;
+package me.beeliebub.tweaks.worldmanagement;
 
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -10,6 +11,9 @@ import org.bukkit.Bukkit;
 import org.bukkit.Sound;
 import org.bukkit.SoundCategory;
 import org.bukkit.World;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -18,24 +22,24 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.TimeSkipEvent;
 import org.bukkit.scheduler.BukkitTask;
+import org.jetbrains.annotations.NotNull;
 
 import java.time.Duration;
+import java.util.Locale;
 import java.util.concurrent.ThreadLocalRandom;
 
-// Tracks the Blood Moon event. At the start of each full-moon night, rolls a 50% chance
-// to activate. While active, EnchantTableListener uses a boosted quality-roll chance.
-// Ends at dawn (the world day rolls over) or when the night is skipped by sleeping.
-public class BloodMoonManager implements Listener {
+// Consolidates the moon-event manager (BloodMoonManager) and its two commands
+// (/bloodmoon and /fullmoon). Single dispatcher routes commands by label.
+public class MoonSystem implements Listener, CommandExecutor {
 
     private static final long FULL_MOON_PHASE = 0L;
-    // Roll just before the vanilla sleep window opens (time 12542) so we can deny sleep
-    // attempts that happen before the announcement at NIGHT_START_TICK.
     private static final long ROLL_TICK = 12000L;
     private static final long NIGHT_START_TICK = 13000L;
-    private static final long NIGHT_DURATION_TICKS = 11000L; // 24000 - 13000
+    private static final long NIGHT_DURATION_TICKS = 11000L;
     private static final long DAY_LENGTH_TICKS = 24000L;
     private static final long POLL_INTERVAL_TICKS = 20L;
     private static final double ACTIVATION_CHANCE = 0.50;
+    private static final double TICKS_PER_MINUTE = 1200.0;
 
     private final Tweaks plugin;
 
@@ -46,7 +50,7 @@ public class BloodMoonManager implements Listener {
     private BukkitTask pollTask;
     private BossBar bossBar;
 
-    public BloodMoonManager(Tweaks plugin) {
+    public MoonSystem(Tweaks plugin) {
         this.plugin = plugin;
     }
 
@@ -56,9 +60,105 @@ public class BloodMoonManager implements Listener {
 
     public enum ForceResult { ACTIVATED, ALREADY_ACTIVE, NO_WORLD }
 
-    // Advance the reference world's time to the start of the next full-moon night and
-    // guarantee activation, bypassing the random roll. If a Blood Moon is already active,
-    // does nothing.
+    // ─── Lifecycle ────────────────────────────────────────────────────────────
+
+    public void start() {
+        if (pollTask != null) return;
+        pollTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick,
+                POLL_INTERVAL_TICKS, POLL_INTERVAL_TICKS);
+    }
+
+    public void stop() {
+        if (pollTask != null) {
+            pollTask.cancel();
+            pollTask = null;
+        }
+        if (active) {
+            deactivate();
+        }
+    }
+
+    // ─── Commands (/bloodmoon, /fullmoon) ─────────────────────────────────────
+
+    @Override
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
+                             @NotNull String label, @NotNull String[] args) {
+        return switch (label.toLowerCase(Locale.ROOT)) {
+            case "bloodmoon" -> handleBloodMoon(sender);
+            case "fullmoon" -> handleFullMoon(sender);
+            default -> false;
+        };
+    }
+
+    private boolean handleBloodMoon(CommandSender sender) {
+        if (!sender.hasPermission(Permissions.ADMIN_BLOODMOON)) {
+            sender.sendMessage(Component.text("You do not have permission to use this command.")
+                    .color(NamedTextColor.RED));
+            return true;
+        }
+        switch (forceNextFullMoon()) {
+            case ALREADY_ACTIVE -> sender.sendMessage(Component.text("A Blood Moon is already active.")
+                    .color(NamedTextColor.RED));
+            case NO_WORLD -> sender.sendMessage(Component.text("Could not find an overworld to advance.")
+                    .color(NamedTextColor.RED));
+            case ACTIVATED -> sender.sendMessage(Component.text("Blood Moon forced.")
+                    .color(NamedTextColor.GREEN));
+        }
+        return true;
+    }
+
+    private boolean handleFullMoon(CommandSender sender) {
+        World world = pickReferenceWorld(sender);
+        if (world == null) {
+            sender.sendMessage(Component.text("Could not find an overworld to check.")
+                    .color(NamedTextColor.RED));
+            return true;
+        }
+
+        long fullTime = world.getFullTime();
+        long currentDay = fullTime / DAY_LENGTH_TICKS;
+        long dayTime = world.getTime();
+        long currentPhase = currentDay % 8L;
+
+        if (currentPhase == FULL_MOON_PHASE && dayTime >= NIGHT_START_TICK) {
+            sender.sendMessage(Component.text("The full moon is up right now!")
+                    .color(NamedTextColor.LIGHT_PURPLE));
+            return true;
+        }
+
+        long daysAhead = (8L - currentPhase) % 8L;
+        long targetDay = currentDay + (daysAhead == 0 ? 0 : daysAhead);
+        long targetFullTime = targetDay * DAY_LENGTH_TICKS + NIGHT_START_TICK;
+        long ticksRemaining = targetFullTime - fullTime;
+
+        long minutes = Math.max(1L, Math.round(ticksRemaining / TICKS_PER_MINUTE));
+
+        sender.sendMessage(Component.text("Next full moon in roughly ", NamedTextColor.LIGHT_PURPLE)
+                .append(Component.text(minutes + (minutes == 1 ? " minute" : " minutes"),
+                        NamedTextColor.WHITE))
+                .append(Component.text(".", NamedTextColor.LIGHT_PURPLE)));
+        return true;
+    }
+
+    private World pickReferenceWorld(CommandSender sender) {
+        if (sender instanceof Player player
+                && player.getWorld().getEnvironment() == World.Environment.NORMAL) {
+            return player.getWorld();
+        }
+        return pickReferenceWorld();
+    }
+
+    private World pickReferenceWorld() {
+        for (World world : Bukkit.getWorlds()) {
+            if (world.getEnvironment() == World.Environment.NORMAL) {
+                return world;
+            }
+        }
+        return null;
+    }
+
+    // ─── Blood Moon engine ────────────────────────────────────────────────────
+
     @SuppressWarnings("deprecation")
     public ForceResult forceNextFullMoon() {
         if (active) return ForceResult.ALREADY_ACTIVE;
@@ -87,22 +187,6 @@ public class BloodMoonManager implements Listener {
         return ForceResult.ACTIVATED;
     }
 
-    public void start() {
-        if (pollTask != null) return;
-        pollTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick,
-                POLL_INTERVAL_TICKS, POLL_INTERVAL_TICKS);
-    }
-
-    public void stop() {
-        if (pollTask != null) {
-            pollTask.cancel();
-            pollTask = null;
-        }
-        if (active) {
-            deactivate();
-        }
-    }
-
     private void tick() {
         World world = pickReferenceWorld();
         if (world == null) return;
@@ -120,12 +204,10 @@ public class BloodMoonManager implements Listener {
             return;
         }
 
-        // Drop a schedule that never activated (e.g. /time set jumped past the night).
         if (scheduledDay >= 0 && currentDay != scheduledDay) {
             scheduledDay = -1L;
         }
 
-        // Roll once per full-moon evening, before vanilla allows sleep at tick 12542.
         if (moonPhase == FULL_MOON_PHASE && dayTime >= ROLL_TICK && dayTime < DAY_LENGTH_TICKS
                 && currentDay != lastRolledDay) {
             lastRolledDay = currentDay;
@@ -134,7 +216,6 @@ public class BloodMoonManager implements Listener {
             }
         }
 
-        // Announcement and visible activation are deferred to full nightfall.
         if (scheduledDay == currentDay && dayTime >= NIGHT_START_TICK) {
             activate(currentDay);
         }
@@ -144,17 +225,17 @@ public class BloodMoonManager implements Listener {
         active = true;
         activationDay = day;
         plugin.getLogger().info("Blood Moon has risen.");
-        
+
         bossBar = BossBar.bossBar(
                 Component.text("Blood Moon", NamedTextColor.RED, TextDecoration.BOLD),
                 1.0f,
                 BossBar.Color.RED,
                 BossBar.Overlay.PROGRESS);
-        
+
         for (Player player : Bukkit.getOnlinePlayers()) {
             player.showBossBar(bossBar);
         }
-        
+
         announceStart();
     }
 
@@ -162,21 +243,19 @@ public class BloodMoonManager implements Listener {
         active = false;
         scheduledDay = -1L;
         plugin.getLogger().info("Blood Moon has ended.");
-        
+
         if (bossBar != null) {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 player.hideBossBar(bossBar);
             }
             bossBar = null;
         }
-        
+
         announceEnd();
     }
 
     private void updateBossBar(long dayTime) {
         if (bossBar == null) return;
-        
-        // dayTime goes from 13000 to 23999 (approx)
         long ticksLeft = DAY_LENGTH_TICKS - dayTime;
         float progress = Math.max(0.0f, Math.min(1.0f, (float) ticksLeft / NIGHT_DURATION_TICKS));
         bossBar.progress(progress);
@@ -234,14 +313,5 @@ public class BloodMoonManager implements Listener {
         if (active && bossBar != null) {
             event.getPlayer().hideBossBar(bossBar);
         }
-    }
-
-    private World pickReferenceWorld() {
-        for (World world : Bukkit.getWorlds()) {
-            if (world.getEnvironment() == World.Environment.NORMAL) {
-                return world;
-            }
-        }
-        return null;
     }
 }

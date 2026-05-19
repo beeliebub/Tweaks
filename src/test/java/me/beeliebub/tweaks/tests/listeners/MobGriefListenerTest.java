@@ -1,8 +1,10 @@
 package me.beeliebub.tweaks.tests.listeners;
 
-import me.beeliebub.tweaks.listeners.MobGriefListener;
+import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.protection.ProtectionManager;
 import me.beeliebub.tweaks.protection.RegionFlag;
+import me.beeliebub.tweaks.worldmanagement.WorldRuleListener;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Creeper;
@@ -25,12 +27,16 @@ import static org.mockito.Mockito.*;
 class MobGriefListenerTest {
 
     private ProtectionManager protection;
-    private MobGriefListener listener;
+    private WorldRuleListener listener;
 
     @BeforeEach
     void setUp() {
         protection = mock(ProtectionManager.class);
-        listener = new MobGriefListener(protection);
+        Tweaks plugin = mock(Tweaks.class);
+        FileConfiguration cfg = mock(FileConfiguration.class);
+        when(plugin.getConfig()).thenReturn(cfg);
+        when(cfg.getStringList("disabled-end-portal-worlds")).thenReturn(List.of());
+        listener = new WorldRuleListener(plugin, protection);
     }
 
     private static Block blockAt(Location loc) {

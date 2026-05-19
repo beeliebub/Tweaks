@@ -1,7 +1,7 @@
 package me.beeliebub.tweaks.tests.protection;
 
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.protection.PDCUtil;
+import me.beeliebub.tweaks.utils.PDCUtil;
 import me.beeliebub.tweaks.protection.ProtectionManager;
 import me.beeliebub.tweaks.protection.Region;
 import me.beeliebub.tweaks.protection.RegionFlag;

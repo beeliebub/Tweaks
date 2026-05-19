@@ -1,4 +1,4 @@
-package me.beeliebub.tweaks.protection;
+package me.beeliebub.tweaks.utils;
 
 // Pure math helpers for going between block AABBs, chunk (x, z) pairs, and
 // the 64-bit chunk keys used as map keys throughout the protection system.

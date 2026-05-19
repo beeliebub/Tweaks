@@ -1,6 +1,6 @@
 package me.beeliebub.tweaks.managers;
 
-import me.beeliebub.tweaks.Point;
+import me.beeliebub.tweaks.utils.Point;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 

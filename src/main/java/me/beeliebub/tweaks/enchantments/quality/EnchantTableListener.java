@@ -1,6 +1,6 @@
 package me.beeliebub.tweaks.enchantments.quality;
 
-import me.beeliebub.tweaks.managers.BloodMoonManager;
+import me.beeliebub.tweaks.worldmanagement.MoonSystem;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -26,9 +26,9 @@ public class EnchantTableListener implements Listener {
     private static final double BLOOD_MOON_QUALITY_CHANCE = 0.50;
 
     private final QualityRegistry registry;
-    private final BloodMoonManager bloodMoon;
+    private final MoonSystem bloodMoon;
 
-    public EnchantTableListener(QualityRegistry registry, BloodMoonManager bloodMoon) {
+    public EnchantTableListener(QualityRegistry registry, MoonSystem bloodMoon) {
         this.registry = registry;
         this.bloodMoon = bloodMoon;
     }

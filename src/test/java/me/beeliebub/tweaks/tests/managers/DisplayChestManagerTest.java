@@ -1,7 +1,7 @@
 package me.beeliebub.tweaks.tests.managers;
 
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.managers.DisplayChestManager;
+import me.beeliebub.tweaks.itemadmin.DisplayChestSystem;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -25,13 +25,13 @@ class DisplayChestManagerTest {
 
     private ServerMock server;
     private Tweaks plugin;
-    private DisplayChestManager manager;
+    private DisplayChestSystem manager;
 
     @BeforeEach
     void setUp() {
         server = MockBukkit.mock();
         plugin = MockBukkit.load(Tweaks.class);
-        manager = new DisplayChestManager(plugin);
+        manager = new DisplayChestSystem(plugin);
     }
 
     @AfterEach

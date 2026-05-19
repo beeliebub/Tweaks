@@ -1,18 +1,31 @@
 package me.beeliebub.tweaks.tests.listeners;
 
-import me.beeliebub.tweaks.listeners.TrampleListener;
+import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.protection.ProtectionManager;
+import me.beeliebub.tweaks.worldmanagement.WorldRuleListener;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityInteractEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.mockito.Mockito.*;
 
 class TrampleListenerTest {
 
-    private final TrampleListener listener = new TrampleListener();
+    private final WorldRuleListener listener = newListener();
+
+    private static WorldRuleListener newListener() {
+        Tweaks plugin = mock(Tweaks.class);
+        FileConfiguration cfg = mock(FileConfiguration.class);
+        when(plugin.getConfig()).thenReturn(cfg);
+        when(cfg.getStringList("disabled-end-portal-worlds")).thenReturn(List.of());
+        return new WorldRuleListener(plugin, mock(ProtectionManager.class));
+    }
 
     @Test
     void cancelsPlayerPhysicalInteractionOnFarmland() {

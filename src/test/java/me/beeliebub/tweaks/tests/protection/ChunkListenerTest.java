@@ -1,9 +1,10 @@
 package me.beeliebub.tweaks.tests.protection;
 
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.protection.ChunkListener;
 import me.beeliebub.tweaks.protection.ProtectionKeys;
+import me.beeliebub.tweaks.protection.ProtectionListeners;
 import me.beeliebub.tweaks.protection.ProtectionManager;
+import me.beeliebub.tweaks.protection.RegionSelectionManager;
 import org.bukkit.Chunk;
 import org.bukkit.NamespacedKey;
 import org.bukkit.event.world.ChunkLoadEvent;
@@ -32,12 +33,13 @@ class ChunkListenerTest {
     }
 
     private ProtectionManager protection;
-    private ChunkListener listener;
+    private ProtectionListeners listener;
 
     @BeforeEach
     void setUp() {
-        protection = new ProtectionManager(mock(Tweaks.class));
-        listener = new ChunkListener(protection);
+        Tweaks plugin = mock(Tweaks.class);
+        protection = new ProtectionManager(plugin);
+        listener = new ProtectionListeners(plugin, protection, mock(RegionSelectionManager.class));
     }
 
     private static Chunk chunkAt(long key, List<String> existingPdc) {

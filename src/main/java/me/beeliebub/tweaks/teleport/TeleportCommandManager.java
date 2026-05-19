@@ -1,6 +1,6 @@
 package me.beeliebub.tweaks.teleport;
 
-import me.beeliebub.tweaks.Point;
+import me.beeliebub.tweaks.utils.Point;
 import me.beeliebub.tweaks.managers.StorageManager;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;

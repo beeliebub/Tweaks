@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.protection;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.permissions.PermissionManager;
 import me.beeliebub.tweaks.permissions.Permissions;
+import me.beeliebub.tweaks.utils.GeometryUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;

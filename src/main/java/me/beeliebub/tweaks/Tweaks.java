@@ -4,31 +4,30 @@ import me.beeliebub.tweaks.blocklog.BlockLogSystem;
 import me.beeliebub.tweaks.combos.*;
 import me.beeliebub.tweaks.commands.*;
 import me.beeliebub.tweaks.core.HelpSystem;
+import me.beeliebub.tweaks.itemadmin.DisplayChestSystem;
+import me.beeliebub.tweaks.itemadmin.ItemEditCommand;
+import me.beeliebub.tweaks.worldmanagement.MoonSystem;
+import me.beeliebub.tweaks.worldmanagement.WorldRuleListener;
 import me.beeliebub.tweaks.enchantments.*;
 import me.beeliebub.tweaks.enchantments.modes.EnchantMode;
-import me.beeliebub.tweaks.enchantments.modes.EnchantModeListener;
 import me.beeliebub.tweaks.enchantments.quality.*;
 import me.beeliebub.tweaks.listeners.*;
 import me.beeliebub.tweaks.managers.*;
 import me.beeliebub.tweaks.permissions.PermissionCommand;
-import me.beeliebub.tweaks.permissions.PermissionListener;
 import me.beeliebub.tweaks.permissions.PermissionManager;
-import me.beeliebub.tweaks.protection.ChunkListener;
 import me.beeliebub.tweaks.protection.PendingStampsStore;
 import me.beeliebub.tweaks.protection.ProtectionCommand;
 import me.beeliebub.tweaks.protection.ProtectionKeys;
-import me.beeliebub.tweaks.protection.ProtectionListener;
+import me.beeliebub.tweaks.protection.ProtectionListeners;
 import me.beeliebub.tweaks.protection.ProtectionManager;
 import me.beeliebub.tweaks.protection.RegionLoader;
 import me.beeliebub.tweaks.protection.RegionSelectionManager;
 import me.beeliebub.tweaks.protection.RegionWriter;
-import me.beeliebub.tweaks.protection.SelectionWandListener;
 import org.bukkit.Material;
 import me.beeliebub.tweaks.playeradmin.PlayerAdminCommand;
 import me.beeliebub.tweaks.playeradmin.PlayerAdminManager;
 import me.beeliebub.tweaks.teleport.TeleportCommandManager;
 import me.beeliebub.tweaks.recipes.ResourceRupee;
-import me.beeliebub.tweaks.recipes.ResourceRupeeListener;
 import me.beeliebub.tweaks.minigames.RewardCommand;
 import me.beeliebub.tweaks.minigames.RewardListener;
 import me.beeliebub.tweaks.minigames.RewardManager;
@@ -111,10 +110,9 @@ public class Tweaks extends JavaPlugin {
         pendingStampsStore.start(20L * 60 * 5); // snapshot every 5 minutes
         regionSelectionManager = new RegionSelectionManager(this);
         regionSelectionManager.start();
-        getServer().getPluginManager().registerEvents(new ChunkListener(protectionManager), this);
-        getServer().getPluginManager().registerEvents(new ProtectionListener(protectionManager), this);
         getServer().getPluginManager().registerEvents(regionSelectionManager, this);
-        getServer().getPluginManager().registerEvents(new SelectionWandListener(this, regionSelectionManager), this);
+        getServer().getPluginManager().registerEvents(
+                new ProtectionListeners(this, protectionManager, regionSelectionManager), this);
         ProtectionCommand protectionCommand = new ProtectionCommand(this, protectionManager, regionSelectionManager);
         getCommand("region").setExecutor(protectionCommand);
         getCommand("region").setTabCompleter(protectionCommand);
@@ -155,14 +153,12 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(teleportManager, this);
 
         // Commands - Misc
-        getCommand("more").setExecutor(new MoreCommand());
-        getCommand("fullmoon").setExecutor(new FullMoonCommand());
-        LoreCommand loreCommand = new LoreCommand();
-        getCommand("lore").setExecutor(loreCommand);
-        getCommand("lore").setTabCompleter(loreCommand);
-        NameCommand nameCommand = new NameCommand();
-        getCommand("name").setExecutor(nameCommand);
-        getCommand("name").setTabCompleter(nameCommand);
+        // /lore /name /more — admin item-edit commands, dispatched via one class.
+        ItemEditCommand itemEditCommand = new ItemEditCommand();
+        for (String label : new String[]{"lore", "name", "more"}) {
+            getCommand(label).setExecutor(itemEditCommand);
+            getCommand(label).setTabCompleter(itemEditCommand);
+        }
         GuiCopyCommand guiCopyCommand = new GuiCopyCommand(this);
         getCommand("guicopy").setExecutor(guiCopyCommand);
         getCommand("guicopy").setTabCompleter(guiCopyCommand);
@@ -181,14 +177,10 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(invSeeCommand, this);
         getServer().getPluginManager().registerEvents(helpSystem, this);
         getServer().getPluginManager().registerEvents(permissionManager, this);
-        getServer().getPluginManager().registerEvents(new PermissionListener(permissionManager), this);
-        getServer().getPluginManager().registerEvents(new PortalListener(this), this);
         getServer().getPluginManager().registerEvents(new ResourceWorldListener(this, storageManager), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(this, storageManager), this);
-        getServer().getPluginManager().registerEvents(new TrampleListener(), this);
-        getServer().getPluginManager().registerEvents(new MobGriefListener(protectionManager), this);
-        getServer().getPluginManager().registerEvents(new SpawnerEggListener(this), this);
-        getServer().getPluginManager().registerEvents(new VillagerTradeListener(), this);
+        // World rules: trample, portals, mob-grief, spawner eggs, villager trades.
+        getServer().getPluginManager().registerEvents(new WorldRuleListener(this, protectionManager), this);
 
         // Quality Enchantment System
         QualityRegistry qualityRegistry = new QualityRegistry(this);
@@ -199,10 +191,11 @@ public class Tweaks extends JavaPlugin {
         getCommand("toolprotect").setTabCompleter(toolProtectCommand);
         getServer().getPluginManager().registerEvents(toolProtectCommand, this);
 
-        BloodMoonManager bloodMoonManager = new BloodMoonManager(this);
-        bloodMoonManager.start();
-        getServer().getPluginManager().registerEvents(bloodMoonManager, this);
-        getCommand("bloodmoon").setExecutor(new BloodMoonCommand(bloodMoonManager));
+        // MoonSystem owns the blood moon engine and the /bloodmoon, /fullmoon commands.
+        MoonSystem moonSystem = new MoonSystem(this);
+        moonSystem.start();
+        getServer().getPluginManager().registerEvents(moonSystem, this);
+        getCommand("bloodmoon").setExecutor(moonSystem);
 
         // Reward + Resource Hunt are constructed early so Tunneller can credit its surrounding
         // (BlockDropItemEvent-bypassing) breaks via ResourceHunt#recordExternalDrops. Listener
@@ -234,13 +227,14 @@ public class Tweaks extends JavaPlugin {
         replant = new Replant(this, telekinesis, lumberjack);
         getServer().getPluginManager().registerEvents(replant, this);
         getServer().getPluginManager().registerEvents(efficacy, this);
-        getServer().getPluginManager().registerEvents(new EnchantModeListener(enchantMode, tunneller, efficacy), this);
+        enchantMode.wireEnchantments(tunneller, efficacy);
+        getServer().getPluginManager().registerEvents(enchantMode, this);
 
         // Disenchanting Bundle
         getServer().getPluginManager().registerEvents(new DisenchantingBundle(this, qualityRegistry, spawnerPickup, eggCollector), this);
 
         // Quality Enchantment Listeners
-        getServer().getPluginManager().registerEvents(new EnchantTableListener(qualityRegistry, bloodMoonManager), this);
+        getServer().getPluginManager().registerEvents(new EnchantTableListener(qualityRegistry, moonSystem), this);
         getServer().getPluginManager().registerEvents(fortuneQuality, this);
         getServer().getPluginManager().registerEvents(silkTouchQuality, this);
         getServer().getPluginManager().registerEvents(new LootingQualityListener(qualityRegistry), this);
@@ -254,7 +248,7 @@ public class Tweaks extends JavaPlugin {
 
         // Resource Rupee currency (renamed emerald + emerald block with crafting grid conversion)
         ResourceRupee resourceRupee = new ResourceRupee();
-        getServer().getPluginManager().registerEvents(new ResourceRupeeListener(resourceRupee), this);
+        getServer().getPluginManager().registerEvents(resourceRupee, this);
 
         getCommand("resource").setExecutor(new ResourceCommand(resourceHunt, resourceHuntItems));
 
@@ -292,11 +286,10 @@ public class Tweaks extends JavaPlugin {
         getServer().getPluginManager().registerEvents(blockLogSystem, this);
 
         // Display Chest
-        DisplayChestManager displayChestManager = new DisplayChestManager(this);
-        DisplayChestCommand displayChestCommand = new DisplayChestCommand(displayChestManager);
-        getCommand("displaychest").setExecutor(displayChestCommand);
-        getCommand("displaychest").setTabCompleter(displayChestCommand);
-        getServer().getPluginManager().registerEvents(new DisplayChestListener(displayChestManager), this);
+        DisplayChestSystem displayChestSystem = new DisplayChestSystem(this);
+        getCommand("displaychest").setExecutor(displayChestSystem);
+        getCommand("displaychest").setTabCompleter(displayChestSystem);
+        getServer().getPluginManager().registerEvents(displayChestSystem, this);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
         }

@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.tests.commands;
 
-import me.beeliebub.tweaks.commands.FullMoonCommand;
+import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.worldmanagement.MoonSystem;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.command.Command;
@@ -16,7 +17,7 @@ import static org.mockito.Mockito.*;
 
 class FullMoonCommandTest {
 
-    private final FullMoonCommand cmd = new FullMoonCommand();
+    private final MoonSystem cmd = new MoonSystem(mock(Tweaks.class));
     private final Command bukkitCmd = mock(Command.class);
 
     @Test

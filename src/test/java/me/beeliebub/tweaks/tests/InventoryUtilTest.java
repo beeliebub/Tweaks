@@ -1,6 +1,6 @@
 package me.beeliebub.tweaks.tests;
 
-import me.beeliebub.tweaks.InventoryUtil;
+import me.beeliebub.tweaks.utils.InventoryUtil;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;

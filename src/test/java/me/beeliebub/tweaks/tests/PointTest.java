@@ -1,6 +1,6 @@
 package me.beeliebub.tweaks.tests;
 
-import me.beeliebub.tweaks.Point;
+import me.beeliebub.tweaks.utils.Point;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;

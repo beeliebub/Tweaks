@@ -1,4 +1,4 @@
-package me.beeliebub.tweaks;
+package me.beeliebub.tweaks.utils;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;

@@ -1,7 +1,8 @@
 package me.beeliebub.tweaks.tests.listeners;
 
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.listeners.VillagerTradeListener;
+import me.beeliebub.tweaks.protection.ProtectionManager;
+import me.beeliebub.tweaks.worldmanagement.WorldRuleListener;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -33,13 +34,13 @@ class VillagerTradeListenerTest {
 
     private ServerMock server;
     private Tweaks plugin;
-    private VillagerTradeListener listener;
+    private WorldRuleListener listener;
 
     @BeforeEach
     void setUp() {
         server = MockBukkit.mock();
         plugin = MockBukkit.load(Tweaks.class);
-        listener = new VillagerTradeListener();
+        listener = new WorldRuleListener(plugin, mock(ProtectionManager.class));
     }
 
     @AfterEach

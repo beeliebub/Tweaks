@@ -1,4 +1,4 @@
-package me.beeliebub.tweaks.commands;
+package me.beeliebub.tweaks.utils;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;

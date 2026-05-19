@@ -1,6 +1,6 @@
 package me.beeliebub.tweaks.tests.commands;
 
-import me.beeliebub.tweaks.commands.NameCommand;
+import me.beeliebub.tweaks.itemadmin.ItemEditCommand;
 import me.beeliebub.tweaks.permissions.Permissions;
 import org.bukkit.Material;
 import org.bukkit.command.Command;
@@ -19,14 +19,14 @@ import static org.mockito.Mockito.mock;
 class NameCommandTest {
 
     private ServerMock server;
-    private NameCommand nameCommand;
+    private ItemEditCommand nameCommand;
     private final Command bukkitCmd = mock(Command.class);
 
     @BeforeEach
     void setUp() {
         server = MockBukkit.mock();
         MockBukkit.createMockPlugin("tweaks");
-        nameCommand = new NameCommand();
+        nameCommand = new ItemEditCommand();
     }
 
     @AfterEach

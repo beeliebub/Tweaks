@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.commands;
 
 import me.beeliebub.tweaks.permissions.Permissions;
+import me.beeliebub.tweaks.utils.GuiCopyJavaGenerator;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;

@@ -1,5 +1,6 @@
-package me.beeliebub.tweaks.protection;
+package me.beeliebub.tweaks.utils;
 
+import me.beeliebub.tweaks.protection.ProtectionKeys;
 import org.bukkit.Chunk;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;

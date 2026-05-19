@@ -1,8 +1,7 @@
 package me.beeliebub.tweaks.tests.commands;
 
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.commands.DisplayChestCommand;
-import me.beeliebub.tweaks.managers.DisplayChestManager;
+import me.beeliebub.tweaks.itemadmin.DisplayChestSystem;
 import me.beeliebub.tweaks.tests.MessageAssert;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.command.Command;
@@ -20,16 +19,16 @@ class DisplayChestCommandTest {
 
     private ServerMock server;
     private Tweaks plugin;
-    private DisplayChestManager displayChestManager;
-    private DisplayChestCommand displayChestCommand;
+    private DisplayChestSystem displayChestManager;
+    private DisplayChestSystem displayChestCommand;
     private final Command bukkitCmd = mock(Command.class);
 
     @BeforeEach
     void setUp() {
         server = MockBukkit.mock();
         plugin = MockBukkit.load(Tweaks.class);
-        displayChestManager = mock(DisplayChestManager.class);
-        displayChestCommand = new DisplayChestCommand(displayChestManager);
+        displayChestManager = mock(DisplayChestSystem.class);
+        displayChestCommand = displayChestManager;
     }
 
     @AfterEach
@@ -43,6 +42,7 @@ class DisplayChestCommandTest {
         player.nextComponentMessage(); // Clear join message
         when(displayChestManager.toggleSetupMode(player.getUniqueId())).thenReturn(true);
 
+        when(displayChestManager.onCommand(player, bukkitCmd, "displaychest", new String[0])).thenCallRealMethod();
         displayChestCommand.onCommand(player, bukkitCmd, "displaychest", new String[0]);
 
         verify(displayChestManager).toggleSetupMode(player.getUniqueId());
@@ -59,6 +59,7 @@ class DisplayChestCommandTest {
         player.nextComponentMessage(); // Clear join message
         when(displayChestManager.toggleRemovalMode(player.getUniqueId())).thenReturn(true);
 
+        when(displayChestManager.onCommand(player, bukkitCmd, "displaychest", new String[]{"off"})).thenCallRealMethod();
         displayChestCommand.onCommand(player, bukkitCmd, "displaychest", new String[]{"off"});
 
         verify(displayChestManager).toggleRemovalMode(player.getUniqueId());

@@ -1,6 +1,6 @@
 package me.beeliebub.tweaks.tests.commands;
 
-import me.beeliebub.tweaks.commands.GuiCopyJavaGenerator;
+import me.beeliebub.tweaks.utils.GuiCopyJavaGenerator;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;

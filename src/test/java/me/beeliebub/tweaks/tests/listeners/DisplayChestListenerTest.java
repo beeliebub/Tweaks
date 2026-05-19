@@ -1,7 +1,6 @@
 package me.beeliebub.tweaks.tests.listeners;
 
-import me.beeliebub.tweaks.listeners.DisplayChestListener;
-import me.beeliebub.tweaks.managers.DisplayChestManager;
+import me.beeliebub.tweaks.itemadmin.DisplayChestSystem;
 import me.beeliebub.tweaks.tests.MessageAssert;
 import org.bukkit.Material;
 import org.bukkit.block.Chest;
@@ -22,15 +21,15 @@ class DisplayChestListenerTest {
 
     private ServerMock server;
     private PluginMock plugin;
-    private DisplayChestManager manager;
-    private DisplayChestListener listener;
+    private DisplayChestSystem manager;
+    private DisplayChestSystem listener;
 
     @BeforeEach
     void setUp() {
         server = MockBukkit.mock();
         plugin = MockBukkit.createMockPlugin();
-        manager = new DisplayChestManager(plugin);
-        listener = new DisplayChestListener(manager);
+        manager = new DisplayChestSystem(plugin);
+        listener = manager;
         server.getPluginManager().registerEvents(listener, plugin);
     }
 

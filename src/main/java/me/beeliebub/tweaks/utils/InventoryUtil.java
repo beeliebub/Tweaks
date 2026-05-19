@@ -1,4 +1,4 @@
-package me.beeliebub.tweaks;
+package me.beeliebub.tweaks.utils;
 
 import org.bukkit.inventory.ItemStack;
 import java.util.Base64;

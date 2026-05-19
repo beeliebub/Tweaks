@@ -1,6 +1,6 @@
 package me.beeliebub.tweaks.listeners;
 
-import me.beeliebub.tweaks.Point;
+import me.beeliebub.tweaks.utils.Point;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.managers.StorageManager;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;

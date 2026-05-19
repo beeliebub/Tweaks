@@ -5,8 +5,13 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import io.papermc.paper.datacomponent.item.ResolvableProfile;
 import org.bukkit.Location;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
@@ -18,7 +23,23 @@ import java.util.concurrent.ThreadLocalRandom;
 
 // Core game logic for Whack-an-Andrew. Spawns mannequins on designated blocks,
 // tracks scores per player, adjusts difficulty over time, and awards rewards to top 3 finishers.
-public class WhackGame {
+public class WhackGame implements Listener {
+
+    // Hit detection — was WhackListener. Routes mannequin hits to onMannequinHit.
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onEntityHit(EntityDamageByEntityEvent event) {
+        if (event.getEntityType() != EntityType.MANNEQUIN) return;
+        if (!(event.getDamager() instanceof Player player)) return;
+        if (getState() != State.RUNNING) return;
+
+        Mannequin mannequin = (Mannequin) event.getEntity();
+        if (!isGameMannequin(mannequin.getUniqueId())) return;
+
+        // Cancel normal damage - onMannequinHit kills the mannequin directly via setHealth(0)
+        // so it plays the death animation. Only the first hit scores (tracked by aliveMannequins).
+        event.setCancelled(true);
+        onMannequinHit(player, mannequin);
+    }
 
     public enum State { IDLE, RUNNING, PAUSED }
     // PRIMARY = normal (+1 point), SECONDARY = bonus (+N points), TERNARY = penalty (-N points)
