@@ -5,6 +5,10 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Material;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.PrepareItemCraftEvent;
+import org.bukkit.inventory.CraftingInventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
@@ -26,11 +30,46 @@ import java.util.List;
 // Identification is by **name + lore text alone** (plain-text comparison via Adventure's
 // PlainTextComponentSerializer) so that Rupees originating outside this plugin (datapacks,
 // /give with components, third-party kits, command blocks) are still recognized.
-public final class ResourceRupee {
+public final class ResourceRupee implements Listener {
 
     public static final String RUPEE_NAME = "Resource Rupee";
     public static final String RUPEE_BLOCK_NAME = "Resource Rupee Block";
     public static final String LORE_LINE = "...the Wanderer's Path...";
+
+    // Intercepts vanilla emerald <-> emerald-block crafting when all ingredients carry the
+    // Resource Rupee marker, swapping the vanilla result for the currency variant so the marker
+    // is preserved across the crafting boundary. Previously lived in ResourceRupeeListener.
+    @EventHandler
+    public void onPrepareCraft(PrepareItemCraftEvent event) {
+        CraftingInventory inv = event.getInventory();
+        ItemStack[] matrix = inv.getMatrix();
+        if (matrix == null) return;
+
+        int rupees = 0;
+        int rupeeBlocks = 0;
+        int nonEmpty = 0;
+
+        for (ItemStack stack : matrix) {
+            if (stack == null || stack.getType().isAir()) continue;
+            nonEmpty++;
+            if (isRupee(stack)) {
+                rupees++;
+            } else if (isRupeeBlock(stack)) {
+                rupeeBlocks++;
+            }
+        }
+
+        // 9 Rupees -> 1 Rupee Block (vanilla emerald-block recipe shape).
+        if (nonEmpty == 9 && rupees == 9) {
+            inv.setResult(createRupeeBlock(1));
+            return;
+        }
+
+        // 1 Rupee Block -> 9 Rupees (vanilla emerald-block uncraft shape).
+        if (nonEmpty == 1 && rupeeBlocks == 1) {
+            inv.setResult(createRupee(9));
+        }
+    }
 
     public ItemStack createRupee(int amount) {
         return mint(Material.EMERALD, RUPEE_NAME, amount);

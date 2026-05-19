@@ -1,7 +1,8 @@
 package me.beeliebub.tweaks.tests.listeners;
 
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.listeners.PortalListener;
+import me.beeliebub.tweaks.protection.ProtectionManager;
+import me.beeliebub.tweaks.worldmanagement.WorldRuleListener;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
@@ -47,7 +48,7 @@ class PortalListenerTest {
 
     @Test
     void cancelsEndPortalFromConfiguredDisabledWorld() {
-        PortalListener listener = new PortalListener(plugin);
+        WorldRuleListener listener = new WorldRuleListener(plugin, mock(ProtectionManager.class));
         PlayerPortalEvent event = eventFromWorld("jass", "archive", TeleportCause.END_PORTAL);
         listener.onPortal(event);
         verify(event).setCancelled(true);
@@ -55,7 +56,7 @@ class PortalListenerTest {
 
     @Test
     void allowsEndPortalFromOtherWorlds() {
-        PortalListener listener = new PortalListener(plugin);
+        WorldRuleListener listener = new WorldRuleListener(plugin, mock(ProtectionManager.class));
         PlayerPortalEvent event = eventFromWorld("minecraft", "overworld", TeleportCause.END_PORTAL);
         listener.onPortal(event);
         verify(event, never()).setCancelled(true);
@@ -63,7 +64,7 @@ class PortalListenerTest {
 
     @Test
     void cancelsNetherPortalFromResourceWorld() {
-        PortalListener listener = new PortalListener(plugin);
+        WorldRuleListener listener = new WorldRuleListener(plugin, mock(ProtectionManager.class));
         PlayerPortalEvent event = eventFromWorld("jass", "resource", TeleportCause.NETHER_PORTAL);
         listener.onPortal(event);
         verify(event).setCancelled(true);
@@ -71,7 +72,7 @@ class PortalListenerTest {
 
     @Test
     void cancelsNetherPortalFromResourceNetherWorld() {
-        PortalListener listener = new PortalListener(plugin);
+        WorldRuleListener listener = new WorldRuleListener(plugin, mock(ProtectionManager.class));
         PlayerPortalEvent event = eventFromWorld("jass", "resource_nether", TeleportCause.NETHER_PORTAL);
         listener.onPortal(event);
         verify(event).setCancelled(true);
@@ -79,7 +80,7 @@ class PortalListenerTest {
 
     @Test
     void allowsNetherPortalFromRegularWorlds() {
-        PortalListener listener = new PortalListener(plugin);
+        WorldRuleListener listener = new WorldRuleListener(plugin, mock(ProtectionManager.class));
         PlayerPortalEvent event = eventFromWorld("minecraft", "overworld", TeleportCause.NETHER_PORTAL);
         listener.onPortal(event);
         verify(event, never()).setCancelled(true);
@@ -87,7 +88,7 @@ class PortalListenerTest {
 
     @Test
     void worldKeyMatchingIsCaseInsensitive() {
-        PortalListener listener = new PortalListener(plugin);
+        WorldRuleListener listener = new WorldRuleListener(plugin, mock(ProtectionManager.class));
         // The constructor lowercases entries; the listener also lowercases the world key.
         PlayerPortalEvent event = eventFromWorld("JASS", "ARCHIVE", TeleportCause.END_PORTAL);
         listener.onPortal(event);
@@ -96,7 +97,7 @@ class PortalListenerTest {
 
     @Test
     void unrelatedTeleportCausesAreUntouched() {
-        PortalListener listener = new PortalListener(plugin);
+        WorldRuleListener listener = new WorldRuleListener(plugin, mock(ProtectionManager.class));
         PlayerPortalEvent event = eventFromWorld("jass", "archive", TeleportCause.PLUGIN);
         listener.onPortal(event);
         verify(event, never()).setCancelled(true);
@@ -105,7 +106,7 @@ class PortalListenerTest {
     @Test
     void emptyDisabledListLeavesAllEndPortalsAlone() {
         when(config.getStringList("disabled-end-portal-worlds")).thenReturn(List.of());
-        PortalListener listener = new PortalListener(plugin);
+        WorldRuleListener listener = new WorldRuleListener(plugin, mock(ProtectionManager.class));
         PlayerPortalEvent event = eventFromWorld("jass", "archive", TeleportCause.END_PORTAL);
         listener.onPortal(event);
         verify(event, never()).setCancelled(true);

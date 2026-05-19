@@ -1,10 +1,11 @@
 package me.beeliebub.tweaks.tests.protection;
 
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.protection.GeometryUtil;
+import me.beeliebub.tweaks.utils.GeometryUtil;
 import me.beeliebub.tweaks.protection.RegionSelection;
 import me.beeliebub.tweaks.protection.RegionSelectionManager;
-import me.beeliebub.tweaks.protection.SelectionWandListener;
+import me.beeliebub.tweaks.protection.ProtectionListeners;
+import me.beeliebub.tweaks.protection.ProtectionManager;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -28,7 +29,7 @@ class SelectionWandListenerTest {
 
     private Tweaks plugin;
     private RegionSelectionManager selections;
-    private SelectionWandListener listener;
+    private ProtectionListeners listener;
     private World world;
 
     @BeforeEach
@@ -36,7 +37,7 @@ class SelectionWandListenerTest {
         plugin = mock(Tweaks.class);
         when(plugin.getProtectionSelectionTool()).thenReturn(Material.STONE_AXE);
         selections = new RegionSelectionManager(plugin);
-        listener = new SelectionWandListener(plugin, selections);
+        listener = new ProtectionListeners(plugin, mock(ProtectionManager.class), selections);
         world = mock(World.class);
     }
 
@@ -73,7 +74,7 @@ class SelectionWandListenerTest {
         Block corner = cornerBlock(0, 0);
         PlayerInteractEvent event = interactWith(p, Action.LEFT_CLICK_BLOCK, corner, wand);
 
-        listener.onInteract(event);
+        listener.onSelectionWandInteract(event);
 
         verify(event).setCancelled(true);
         RegionSelection sel = selections.get(PLAYER);
@@ -89,7 +90,7 @@ class SelectionWandListenerTest {
         Block corner = cornerBlock(31, 31); // chunk (1, 1)
         PlayerInteractEvent event = interactWith(p, Action.RIGHT_CLICK_BLOCK, corner, wand);
 
-        listener.onInteract(event);
+        listener.onSelectionWandInteract(event);
 
         verify(event).setCancelled(true);
         RegionSelection sel = selections.get(PLAYER);
@@ -104,7 +105,7 @@ class SelectionWandListenerTest {
         Block middle = cornerBlock(7, 8); // mid-chunk (0, 0)
         PlayerInteractEvent event = interactWith(p, Action.LEFT_CLICK_BLOCK, middle, wand);
 
-        listener.onInteract(event);
+        listener.onSelectionWandInteract(event);
 
         // Clicking anywhere inside a chunk anchors that whole chunk — no corner snap required.
         verify(event).setCancelled(true);
@@ -120,7 +121,7 @@ class SelectionWandListenerTest {
         Block corner = cornerBlock(0, 0);
         PlayerInteractEvent event = interactWith(p, Action.LEFT_CLICK_BLOCK, corner, notWand);
 
-        listener.onInteract(event);
+        listener.onSelectionWandInteract(event);
 
         verify(event, never()).setCancelled(anyBoolean());
         assertNull(selections.get(PLAYER));
@@ -131,7 +132,7 @@ class SelectionWandListenerTest {
         Player p = playerWith(null);
         PlayerInteractEvent event = interactWith(p, Action.LEFT_CLICK_BLOCK, cornerBlock(0, 0), null);
 
-        listener.onInteract(event);
+        listener.onSelectionWandInteract(event);
 
         verify(event, never()).setCancelled(anyBoolean());
     }
@@ -142,7 +143,7 @@ class SelectionWandListenerTest {
         Player p = playerWith(wand);
         PlayerInteractEvent event = interactWith(p, Action.LEFT_CLICK_BLOCK, null, wand);
 
-        listener.onInteract(event);
+        listener.onSelectionWandInteract(event);
 
         verify(event, never()).setCancelled(anyBoolean());
     }
@@ -153,7 +154,7 @@ class SelectionWandListenerTest {
         Player p = playerWith(wand);
         PlayerInteractEvent event = interactWith(p, Action.PHYSICAL, cornerBlock(0, 0), wand);
 
-        listener.onInteract(event);
+        listener.onSelectionWandInteract(event);
 
         verify(event, never()).setCancelled(anyBoolean());
     }
@@ -164,7 +165,7 @@ class SelectionWandListenerTest {
         BlockBreakEvent event = mock(BlockBreakEvent.class);
         when(event.getPlayer()).thenReturn(p);
 
-        listener.onBlockBreak(event);
+        listener.onSelectionWandBreak(event);
 
         verify(event).setCancelled(true);
     }
@@ -175,7 +176,7 @@ class SelectionWandListenerTest {
         BlockBreakEvent event = mock(BlockBreakEvent.class);
         when(event.getPlayer()).thenReturn(p);
 
-        listener.onBlockBreak(event);
+        listener.onSelectionWandBreak(event);
 
         verify(event, never()).setCancelled(anyBoolean());
     }
@@ -185,8 +186,8 @@ class SelectionWandListenerTest {
         ItemStack wand = new ItemStack(Material.STONE_AXE);
         Player p = playerWith(wand);
 
-        listener.onInteract(interactWith(p, Action.LEFT_CLICK_BLOCK, cornerBlock(0, 0), wand));
-        listener.onInteract(interactWith(p, Action.RIGHT_CLICK_BLOCK, cornerBlock(47, 47), wand));
+        listener.onSelectionWandInteract(interactWith(p, Action.LEFT_CLICK_BLOCK, cornerBlock(0, 0), wand));
+        listener.onSelectionWandInteract(interactWith(p, Action.RIGHT_CLICK_BLOCK, cornerBlock(47, 47), wand));
 
         RegionSelection sel = selections.get(PLAYER);
         assertTrue(sel.isComplete());

@@ -1,7 +1,8 @@
 package me.beeliebub.tweaks.tests.listeners;
 
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.listeners.SpawnerEggListener;
+import me.beeliebub.tweaks.protection.ProtectionManager;
+import me.beeliebub.tweaks.worldmanagement.WorldRuleListener;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -22,7 +23,7 @@ class SpawnerEggListenerTest {
 
     private Tweaks plugin;
     private FileConfiguration config;
-    private SpawnerEggListener listener;
+    private WorldRuleListener listener;
 
     @BeforeEach
     void setUp() {
@@ -31,7 +32,8 @@ class SpawnerEggListenerTest {
         plugin = mock(Tweaks.class);
         config = mock(FileConfiguration.class);
         when(plugin.getConfig()).thenReturn(config);
-        listener = new SpawnerEggListener(plugin);
+        when(config.getStringList("disabled-end-portal-worlds")).thenReturn(List.of());
+        listener = new WorldRuleListener(plugin, mock(ProtectionManager.class));
     }
 
     @AfterEach

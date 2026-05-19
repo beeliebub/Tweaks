@@ -744,9 +744,14 @@ This is entirely admin-managed — see the [admin commands](#admin-commands) sec
 
 ### Resource Hunt
 
-An individual tiered gathering minigame that runs in the **`jass:resource`** (Overworld) or **`jass:resource_nether`** (Nether) world. Each time the server restarts, the plugin picks one entry at random from `resource_hunt.yml` as the active target. Progress accumulates from block drops, mob kills, fishing, and smelting in the active resource world.
+A gathering minigame that runs in the **`jass:resource`** (Overworld) or **`jass:resource_nether`** (Nether) world. While the active world is chosen randomly at server startup, **each player receives their own unique target material** to gather.
 
-Each entry defines a **base amount** and a **multiplier** that produce three cumulative tier thresholds:
+**Target Assignment**:
+- **Unique Targets**: When you join, the plugin assigns you a random target material from the active world's pool.
+- **Fair Distribution**: The system prefers materials that no other player is currently hunting. If all materials are taken, duplicates are allowed.
+- **Persistence**: Your assigned target stays the same for the entire session.
+
+Each target defines a **base amount** and a **multiplier** that produce three cumulative tier thresholds:
 
 | Tier | Threshold |
 |---|---|
@@ -756,7 +761,7 @@ Each entry defines a **base amount** and a **multiplier** that produce three cum
 
 Crossing each threshold grants the **`resource`** reward **once**. A single large progress update may cross multiple tiers in one shot, and the rewards are simply queued in order. Rewards are claimable via `/reward claim`.
 
-While inside the active resource world, a **green boss bar** at the top of the screen shows your progress against the next unmet tier; the bar resets to the next tier once you clear the current one and disappears entirely after you clear Tier 3.
+While inside the active resource world, a **green boss bar** at the top of the screen shows your progress against your own unmet tier; the bar resets to the next tier once you clear the current one and disappears entirely after you clear Tier 3.
 
 **Protection**: To keep the hunt fair, players are restricted from bringing disallowed items into the resource world. Using `/resource`, `/back`, or `/tpa` to travel **into** a resource world from another world will fail if you have restricted items in your inventory.
 

@@ -1,34 +1,33 @@
 package me.beeliebub.tweaks;
 
-import me.beeliebub.tweaks.blocklog.BlockLogChunkListener;
-import me.beeliebub.tweaks.blocklog.BlockLogListener;
-import me.beeliebub.tweaks.blocklog.ChestLogManager;
-import me.beeliebub.tweaks.blocklog.LogsCommand;
+import me.beeliebub.tweaks.blocklog.BlockLogSystem;
 import me.beeliebub.tweaks.combos.*;
 import me.beeliebub.tweaks.commands.*;
-import me.beeliebub.tweaks.cosmetics.*;
+import me.beeliebub.tweaks.core.HelpSystem;
+import me.beeliebub.tweaks.itemadmin.DisplayChestSystem;
+import me.beeliebub.tweaks.itemadmin.ItemEditCommand;
+import me.beeliebub.tweaks.worldmanagement.MoonSystem;
+import me.beeliebub.tweaks.worldmanagement.WorldRuleListener;
 import me.beeliebub.tweaks.enchantments.*;
 import me.beeliebub.tweaks.enchantments.modes.EnchantMode;
-import me.beeliebub.tweaks.enchantments.modes.EnchantModeListener;
 import me.beeliebub.tweaks.enchantments.quality.*;
 import me.beeliebub.tweaks.listeners.*;
 import me.beeliebub.tweaks.managers.*;
 import me.beeliebub.tweaks.permissions.PermissionCommand;
-import me.beeliebub.tweaks.permissions.PermissionListener;
 import me.beeliebub.tweaks.permissions.PermissionManager;
-import me.beeliebub.tweaks.protection.ChunkListener;
 import me.beeliebub.tweaks.protection.PendingStampsStore;
 import me.beeliebub.tweaks.protection.ProtectionCommand;
 import me.beeliebub.tweaks.protection.ProtectionKeys;
-import me.beeliebub.tweaks.protection.ProtectionListener;
+import me.beeliebub.tweaks.protection.ProtectionListeners;
 import me.beeliebub.tweaks.protection.ProtectionManager;
 import me.beeliebub.tweaks.protection.RegionLoader;
 import me.beeliebub.tweaks.protection.RegionSelectionManager;
 import me.beeliebub.tweaks.protection.RegionWriter;
-import me.beeliebub.tweaks.protection.SelectionWandListener;
 import org.bukkit.Material;
+import me.beeliebub.tweaks.playeradmin.PlayerAdminCommand;
+import me.beeliebub.tweaks.playeradmin.PlayerAdminManager;
+import me.beeliebub.tweaks.teleport.TeleportCommandManager;
 import me.beeliebub.tweaks.recipes.ResourceRupee;
-import me.beeliebub.tweaks.recipes.ResourceRupeeListener;
 import me.beeliebub.tweaks.minigames.RewardCommand;
 import me.beeliebub.tweaks.minigames.RewardListener;
 import me.beeliebub.tweaks.minigames.RewardManager;
@@ -111,10 +110,9 @@ public class Tweaks extends JavaPlugin {
         pendingStampsStore.start(20L * 60 * 5); // snapshot every 5 minutes
         regionSelectionManager = new RegionSelectionManager(this);
         regionSelectionManager.start();
-        getServer().getPluginManager().registerEvents(new ChunkListener(protectionManager), this);
-        getServer().getPluginManager().registerEvents(new ProtectionListener(protectionManager), this);
         getServer().getPluginManager().registerEvents(regionSelectionManager, this);
-        getServer().getPluginManager().registerEvents(new SelectionWandListener(this, regionSelectionManager), this);
+        getServer().getPluginManager().registerEvents(
+                new ProtectionListeners(this, protectionManager, regionSelectionManager), this);
         ProtectionCommand protectionCommand = new ProtectionCommand(this, protectionManager, regionSelectionManager);
         getCommand("region").setExecutor(protectionCommand);
         getCommand("region").setTabCompleter(protectionCommand);
@@ -123,85 +121,50 @@ public class Tweaks extends JavaPlugin {
         ResourceHuntItems resourceHuntItems = new ResourceHuntItems(this);
 
         // Commands - Combos
-        TabManager tabManager = new TabManager();
-        AfkCommand afkCommand = new AfkCommand(this);
-        afkCommand.setTabManager(tabManager);
-        tabManager.setAfkPredicate(afkCommand::isAfk);
-        NickCommand nickCommand = new NickCommand(this);
-        TPACommand tpaCommand = new TPACommand(this, resourceHuntItems);
-        BackCommand backCommand = new BackCommand(this, resourceHuntItems);
-        FlyCommand flyCommand = new FlyCommand(this);
+        // Player administration: /survival /creative /nv /fly /afk /nick + tab list + boot trail.
+        PlayerAdminManager playerAdminManager = new PlayerAdminManager(this);
+        PlayerAdminCommand playerAdminCommand = new PlayerAdminCommand(playerAdminManager);
+        for (String label : new String[]{"survival", "creative", "nv", "fly", "afk", "nick"}) {
+            getCommand(label).setExecutor(playerAdminCommand);
+        }
+        getServer().getPluginManager().registerEvents(playerAdminManager, this);
+
         ItemFilterCommand itemFilterCommand = new ItemFilterCommand(this);
         InvSeeCommand invSeeCommand = new InvSeeCommand(this);
-        HelpManager helpManager = new HelpManager(getLogger());
-        HelpCommand helpCommand = new HelpCommand(helpManager);
-        HelpListener helpListener = new HelpListener(helpCommand, helpManager);
+        HelpSystem helpSystem = new HelpSystem(getLogger());
 
-        getCommand("nick").setExecutor(nickCommand);
-        getCommand("tpa").setExecutor(tpaCommand);
-        getCommand("tpa").setTabCompleter(tpaCommand);
-        getCommand("tpahere").setExecutor(tpaCommand);
-        getCommand("tpahere").setTabCompleter(tpaCommand);
-        getCommand("tpaccept").setExecutor(tpaCommand);
-        getCommand("tpaccept").setTabCompleter(tpaCommand);
-        getCommand("tpdeny").setExecutor(tpaCommand);
-        getCommand("tpdeny").setTabCompleter(tpaCommand);
-        getCommand("back").setExecutor(backCommand);
-        getCommand("fly").setExecutor(flyCommand);
         getCommand("itemfilter").setExecutor(itemFilterCommand);
         getCommand("itemfilter").setTabCompleter(itemFilterCommand);
-        getCommand("afk").setExecutor(afkCommand);
         getCommand("invsee").setExecutor(invSeeCommand);
         getCommand("invsee").setTabCompleter(invSeeCommand);
-        getCommand("help").setExecutor(helpCommand);
-        getCommand("help").setTabCompleter(helpCommand);
+        getCommand("help").setExecutor(helpSystem);
+        getCommand("help").setTabCompleter(helpSystem);
 
-        // Commands - Homes
-        HomeCommand homeCommand = new HomeCommand(storageManager);
-        getCommand("home").setExecutor(homeCommand);
-        getCommand("home").setTabCompleter(homeCommand);
-        SetHomeCommand setHomeCommand = new SetHomeCommand(storageManager, maxHomes);
-        getCommand("sethome").setExecutor(setHomeCommand);
-        getCommand("sethome").setTabCompleter(setHomeCommand);
-        DelHomeCommand delHomeCommand = new DelHomeCommand(storageManager);
-        getCommand("delhome").setExecutor(delHomeCommand);
-        getCommand("delhome").setTabCompleter(delHomeCommand);
-        HomesCommand homesCommand = new HomesCommand(storageManager);
-        getCommand("homes").setExecutor(homesCommand);
-        getCommand("homes").setTabCompleter(homesCommand);
-
-        // Commands - Warps
-        WarpCommand warpCommand = new WarpCommand(storageManager);
-        getCommand("warp").setExecutor(warpCommand);
-        getCommand("warp").setTabCompleter(warpCommand);
-        SetWarpCommand setWarpCommand = new SetWarpCommand(storageManager);
-        getCommand("setwarp").setExecutor(setWarpCommand);
-        getCommand("setwarp").setTabCompleter(setWarpCommand);
-        DelWarpCommand delWarpCommand = new DelWarpCommand(storageManager);
-        getCommand("delwarp").setExecutor(delWarpCommand);
-        getCommand("delwarp").setTabCompleter(delWarpCommand);
-        getCommand("warps").setExecutor(new WarpsCommand(storageManager));
+        // Teleportation: /home /sethome /delhome /homes /warp /setwarp /delwarp /warps
+        // /spawn /back /tpa /tpahere /tpaccept /tpdeny — all routed through one manager.
+        TeleportCommandManager teleportManager = new TeleportCommandManager(this, storageManager, resourceHuntItems, maxHomes);
+        for (String label : new String[]{"home", "sethome", "delhome", "homes",
+                                         "warp", "setwarp", "delwarp", "warps",
+                                         "spawn", "back",
+                                         "tpa", "tpahere", "tpaccept", "tpdeny"}) {
+            getCommand(label).setExecutor(teleportManager);
+            getCommand(label).setTabCompleter(teleportManager);
+        }
+        getServer().getPluginManager().registerEvents(teleportManager, this);
 
         // Commands - Misc
-        getCommand("spawn").setExecutor(new SpawnCommand(storageManager));
-        getCommand("nv").setExecutor(new NightVisionCommand());
-        getCommand("more").setExecutor(new MoreCommand());
-        getCommand("fullmoon").setExecutor(new FullMoonCommand());
-        LoreCommand loreCommand = new LoreCommand();
-        getCommand("lore").setExecutor(loreCommand);
-        getCommand("lore").setTabCompleter(loreCommand);
-        NameCommand nameCommand = new NameCommand();
-        getCommand("name").setExecutor(nameCommand);
-        getCommand("name").setTabCompleter(nameCommand);
+        // /lore /name /more — admin item-edit commands, dispatched via one class.
+        ItemEditCommand itemEditCommand = new ItemEditCommand();
+        for (String label : new String[]{"lore", "name", "more"}) {
+            getCommand(label).setExecutor(itemEditCommand);
+            getCommand(label).setTabCompleter(itemEditCommand);
+        }
         GuiCopyCommand guiCopyCommand = new GuiCopyCommand(this);
         getCommand("guicopy").setExecutor(guiCopyCommand);
         getCommand("guicopy").setTabCompleter(guiCopyCommand);
         ConfigCommand configCommand = new ConfigCommand(this, resourceHuntItems);
         getCommand("tconfig").setExecutor(configCommand);
         getCommand("tconfig").setTabCompleter(configCommand);
-        GameModeCommand gameModeCommand = new GameModeCommand();
-        getCommand("survival").setExecutor(gameModeCommand);
-        getCommand("creative").setExecutor(gameModeCommand);
 
         // Commands - Permissions
         PermissionCommand permissionCommand = new PermissionCommand(permissionManager);
@@ -209,24 +172,15 @@ public class Tweaks extends JavaPlugin {
         getCommand("tprm").setTabCompleter(permissionCommand);
 
         // Listeners - General
-        getServer().getPluginManager().registerEvents(tabManager, this);
-        getServer().getPluginManager().registerEvents(nickCommand, this);
-        getServer().getPluginManager().registerEvents(backCommand, this);
-        getServer().getPluginManager().registerEvents(flyCommand, this);
         getServer().getPluginManager().registerEvents(itemFilterCommand, this);
-        getServer().getPluginManager().registerEvents(afkCommand, this);
-        afkCommand.start();
+        playerAdminManager.start();
         getServer().getPluginManager().registerEvents(invSeeCommand, this);
-        getServer().getPluginManager().registerEvents(helpListener, this);
+        getServer().getPluginManager().registerEvents(helpSystem, this);
         getServer().getPluginManager().registerEvents(permissionManager, this);
-        getServer().getPluginManager().registerEvents(new PermissionListener(permissionManager), this);
-        getServer().getPluginManager().registerEvents(new PortalListener(this), this);
         getServer().getPluginManager().registerEvents(new ResourceWorldListener(this, storageManager), this);
         getServer().getPluginManager().registerEvents(new SeparatorListener(this, storageManager), this);
-        getServer().getPluginManager().registerEvents(new TrampleListener(), this);
-        getServer().getPluginManager().registerEvents(new MobGriefListener(protectionManager), this);
-        getServer().getPluginManager().registerEvents(new SpawnerEggListener(this), this);
-        getServer().getPluginManager().registerEvents(new VillagerTradeListener(), this);
+        // World rules: trample, portals, mob-grief, spawner eggs, villager trades.
+        getServer().getPluginManager().registerEvents(new WorldRuleListener(this, protectionManager), this);
 
         // Quality Enchantment System
         QualityRegistry qualityRegistry = new QualityRegistry(this);
@@ -237,10 +191,11 @@ public class Tweaks extends JavaPlugin {
         getCommand("toolprotect").setTabCompleter(toolProtectCommand);
         getServer().getPluginManager().registerEvents(toolProtectCommand, this);
 
-        BloodMoonManager bloodMoonManager = new BloodMoonManager(this);
-        bloodMoonManager.start();
-        getServer().getPluginManager().registerEvents(bloodMoonManager, this);
-        getCommand("bloodmoon").setExecutor(new BloodMoonCommand(bloodMoonManager));
+        // MoonSystem owns the blood moon engine and the /bloodmoon, /fullmoon commands.
+        MoonSystem moonSystem = new MoonSystem(this);
+        moonSystem.start();
+        getServer().getPluginManager().registerEvents(moonSystem, this);
+        getCommand("bloodmoon").setExecutor(moonSystem);
 
         // Reward + Resource Hunt are constructed early so Tunneller can credit its surrounding
         // (BlockDropItemEvent-bypassing) breaks via ResourceHunt#recordExternalDrops. Listener
@@ -272,21 +227,17 @@ public class Tweaks extends JavaPlugin {
         replant = new Replant(this, telekinesis, lumberjack);
         getServer().getPluginManager().registerEvents(replant, this);
         getServer().getPluginManager().registerEvents(efficacy, this);
-        getServer().getPluginManager().registerEvents(new EnchantModeListener(enchantMode, tunneller, efficacy), this);
+        enchantMode.wireEnchantments(tunneller, efficacy);
+        getServer().getPluginManager().registerEvents(enchantMode, this);
 
         // Disenchanting Bundle
         getServer().getPluginManager().registerEvents(new DisenchantingBundle(this, qualityRegistry, spawnerPickup, eggCollector), this);
 
         // Quality Enchantment Listeners
-        getServer().getPluginManager().registerEvents(new EnchantTableListener(qualityRegistry, bloodMoonManager), this);
+        getServer().getPluginManager().registerEvents(new EnchantTableListener(qualityRegistry, moonSystem), this);
         getServer().getPluginManager().registerEvents(fortuneQuality, this);
         getServer().getPluginManager().registerEvents(silkTouchQuality, this);
         getServer().getPluginManager().registerEvents(new LootingQualityListener(qualityRegistry), this);
-
-        // Cosmetics
-        BootTrail bootTrail = new BootTrail(this);
-        getServer().getPluginManager().registerEvents(bootTrail, this);
-        bootTrail.start();
 
         // XP storage bottles (custom brewing-stand recipe + drinkable bottles)
         getServer().getPluginManager().registerEvents(new XpBottleListener(this), this);
@@ -297,7 +248,7 @@ public class Tweaks extends JavaPlugin {
 
         // Resource Rupee currency (renamed emerald + emerald block with crafting grid conversion)
         ResourceRupee resourceRupee = new ResourceRupee();
-        getServer().getPluginManager().registerEvents(new ResourceRupeeListener(resourceRupee), this);
+        getServer().getPluginManager().registerEvents(resourceRupee, this);
 
         getCommand("resource").setExecutor(new ResourceCommand(resourceHunt, resourceHuntItems));
 
@@ -330,19 +281,15 @@ public class Tweaks extends JavaPlugin {
         getCommand("whack").setTabCompleter(whackCommand);
 
         // BlockLog - per-chunk PDC chest interaction logging
-        ChestLogManager chestLogManager = new ChestLogManager(this);
-        LogsCommand logsCommand = new LogsCommand(chestLogManager);
-        getCommand("logs").setExecutor(logsCommand);
-        getServer().getPluginManager().registerEvents(logsCommand, this);
-        getServer().getPluginManager().registerEvents(new BlockLogListener(chestLogManager), this);
-        getServer().getPluginManager().registerEvents(new BlockLogChunkListener(chestLogManager), this);
+        BlockLogSystem blockLogSystem = new BlockLogSystem(this);
+        getCommand("logs").setExecutor(blockLogSystem);
+        getServer().getPluginManager().registerEvents(blockLogSystem, this);
 
         // Display Chest
-        DisplayChestManager displayChestManager = new DisplayChestManager(this);
-        DisplayChestCommand displayChestCommand = new DisplayChestCommand(displayChestManager);
-        getCommand("displaychest").setExecutor(displayChestCommand);
-        getCommand("displaychest").setTabCompleter(displayChestCommand);
-        getServer().getPluginManager().registerEvents(new DisplayChestListener(displayChestManager), this);
+        DisplayChestSystem displayChestSystem = new DisplayChestSystem(this);
+        getCommand("displaychest").setExecutor(displayChestSystem);
+        getCommand("displaychest").setTabCompleter(displayChestSystem);
+        getServer().getPluginManager().registerEvents(displayChestSystem, this);
 
         getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
         }

@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.protection;
 
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.utils.GeometryUtil;
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Particle;

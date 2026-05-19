@@ -3,6 +3,8 @@ package me.beeliebub.tweaks.protection;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.permissions.PermissionManager;
 import me.beeliebub.tweaks.permissions.UserPermissions;
+import me.beeliebub.tweaks.utils.GeometryUtil;
+import me.beeliebub.tweaks.utils.PDCUtil;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;

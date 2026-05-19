@@ -1,6 +1,6 @@
 package me.beeliebub.tweaks.tests;
 
-import me.beeliebub.tweaks.ColorUtil;
+import me.beeliebub.tweaks.utils.ColorUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;

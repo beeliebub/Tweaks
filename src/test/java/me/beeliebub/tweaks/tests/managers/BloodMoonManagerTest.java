@@ -1,7 +1,7 @@
 package me.beeliebub.tweaks.tests.managers;
 
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.managers.BloodMoonManager;
+import me.beeliebub.tweaks.worldmanagement.MoonSystem;
 import org.bukkit.World;
 import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.event.world.TimeSkipEvent;
@@ -16,18 +16,18 @@ import org.mockbukkit.mockbukkit.world.WorldMock;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-class BloodMoonManagerTest {
+class MoonSystemTest {
 
     private ServerMock server;
     private Tweaks plugin;
-    private BloodMoonManager manager;
+    private MoonSystem manager;
     private WorldMock world;
 
     @BeforeEach
     void setUp() {
         server = MockBukkit.mock();
         plugin = MockBukkit.load(Tweaks.class);
-        manager = new BloodMoonManager(plugin);
+        manager = new MoonSystem(plugin);
         world = server.addSimpleWorld("world");
         // Ensure it's NORMAL environment as required by pickReferenceWorld
     }
@@ -39,8 +39,8 @@ class BloodMoonManagerTest {
 
     @Test
     void forceNextFullMoonActivates() {
-        BloodMoonManager.ForceResult result = manager.forceNextFullMoon();
-        assertEquals(BloodMoonManager.ForceResult.ACTIVATED, result);
+        MoonSystem.ForceResult result = manager.forceNextFullMoon();
+        assertEquals(MoonSystem.ForceResult.ACTIVATED, result);
         assertTrue(manager.isActive());
         
         // Full moon is phase 0. Day 0 % 8 = 0.
@@ -51,8 +51,8 @@ class BloodMoonManagerTest {
     @Test
     void forceNextFullMoonHandlesExistingActivation() {
         manager.forceNextFullMoon();
-        BloodMoonManager.ForceResult result = manager.forceNextFullMoon();
-        assertEquals(BloodMoonManager.ForceResult.ALREADY_ACTIVE, result);
+        MoonSystem.ForceResult result = manager.forceNextFullMoon();
+        assertEquals(MoonSystem.ForceResult.ALREADY_ACTIVE, result);
     }
 
     @Test
@@ -93,7 +93,7 @@ class BloodMoonManagerTest {
         // or just use reflection to call it for testing if we really want to.
         // Actually, let's just use reflection to call tick() to avoid dealing with scheduler in unit tests.
         try {
-            java.lang.reflect.Method tick = BloodMoonManager.class.getDeclaredMethod("tick");
+            java.lang.reflect.Method tick = MoonSystem.class.getDeclaredMethod("tick");
             tick.setAccessible(true);
             tick.invoke(manager);
         } catch (Exception e) {
@@ -153,19 +153,19 @@ class BloodMoonManagerTest {
     }
 
     private void setScheduledDay(long day) throws Exception {
-        java.lang.reflect.Field f = BloodMoonManager.class.getDeclaredField("scheduledDay");
+        java.lang.reflect.Field f = MoonSystem.class.getDeclaredField("scheduledDay");
         f.setAccessible(true);
         f.setLong(manager, day);
     }
 
     private long getScheduledDay() throws Exception {
-        java.lang.reflect.Field f = BloodMoonManager.class.getDeclaredField("scheduledDay");
+        java.lang.reflect.Field f = MoonSystem.class.getDeclaredField("scheduledDay");
         f.setAccessible(true);
         return f.getLong(manager);
     }
 
     private void invokeTick() throws Exception {
-        java.lang.reflect.Method m = BloodMoonManager.class.getDeclaredMethod("tick");
+        java.lang.reflect.Method m = MoonSystem.class.getDeclaredMethod("tick");
         m.setAccessible(true);
         m.invoke(manager);
     }

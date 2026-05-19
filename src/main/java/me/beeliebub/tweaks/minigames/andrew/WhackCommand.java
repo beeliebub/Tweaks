@@ -28,7 +28,7 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
 
     private WhackArena arena;
     private WhackGame game;
-    private WhackListener listener;
+    private WhackGame registeredGame;
     private List<Material> spawnBlockMaterials = new ArrayList<>();
 
     // Tracks which player is mid-arena-setup (waiting for corner2 after setting corner1)
@@ -127,7 +127,7 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
         arena = new WhackArena(corner1, target);
         spawnBlockMaterials.clear();
         game = null;
-        listener = null;
+        registeredGame = null;
 
         config.saveArena(arena, spawnBlockMaterials);
 
@@ -182,12 +182,12 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
 
         if (game == null || game.getState() == WhackGame.State.IDLE) {
             game = new WhackGame(plugin, config, arena, rewardManager);
-            // Register listener fresh each game
-            if (listener != null) {
-                EntityDamageByEntityEvent.getHandlerList().unregister(listener);
+            // Unregister the previous game's listener if any, then register the new game.
+            if (registeredGame != null) {
+                EntityDamageByEntityEvent.getHandlerList().unregister(registeredGame);
             }
-            listener = new WhackListener(game);
-            plugin.getServer().getPluginManager().registerEvents(listener, plugin);
+            registeredGame = game;
+            plugin.getServer().getPluginManager().registerEvents(registeredGame, plugin);
         }
 
         game.start();
@@ -208,9 +208,9 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
         }
         game.stop();
 
-        if (listener != null) {
-            EntityDamageByEntityEvent.getHandlerList().unregister(listener);
-            listener = null;
+        if (registeredGame != null) {
+            EntityDamageByEntityEvent.getHandlerList().unregister(registeredGame);
+            registeredGame = null;
         }
     }
 

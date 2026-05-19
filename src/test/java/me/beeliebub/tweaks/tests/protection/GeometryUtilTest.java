@@ -1,6 +1,6 @@
 package me.beeliebub.tweaks.tests.protection;
 
-import me.beeliebub.tweaks.protection.GeometryUtil;
+import me.beeliebub.tweaks.utils.GeometryUtil;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;

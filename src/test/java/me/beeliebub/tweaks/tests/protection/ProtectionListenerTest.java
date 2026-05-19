@@ -2,7 +2,8 @@ package me.beeliebub.tweaks.tests.protection;
 
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.protection.ProtectionKeys;
-import me.beeliebub.tweaks.protection.ProtectionListener;
+import me.beeliebub.tweaks.protection.ProtectionListeners;
+import me.beeliebub.tweaks.protection.RegionSelectionManager;
 import me.beeliebub.tweaks.protection.ProtectionManager;
 import me.beeliebub.tweaks.protection.Region;
 import me.beeliebub.tweaks.protection.RegionFlag;
@@ -54,12 +55,13 @@ class ProtectionListenerTest {
     }
 
     private ProtectionManager protection;
-    private ProtectionListener listener;
+    private ProtectionListeners listener;
 
     @BeforeEach
     void newManager() {
-        protection = new ProtectionManager(mock(Tweaks.class));
-        listener = new ProtectionListener(protection);
+        Tweaks plugin = mock(Tweaks.class);
+        protection = new ProtectionManager(plugin);
+        listener = new ProtectionListeners(plugin, protection, mock(RegionSelectionManager.class));
     }
 
     // ---- helpers ----

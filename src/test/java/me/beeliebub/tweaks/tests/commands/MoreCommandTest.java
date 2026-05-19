@@ -1,6 +1,6 @@
 package me.beeliebub.tweaks.tests.commands;
 
-import me.beeliebub.tweaks.commands.MoreCommand;
+import me.beeliebub.tweaks.itemadmin.ItemEditCommand;
 import me.beeliebub.tweaks.permissions.Permissions;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -15,7 +15,7 @@ import static org.mockito.Mockito.*;
 
 class MoreCommandTest {
 
-    private final MoreCommand cmd = new MoreCommand();
+    private final ItemEditCommand cmd = new ItemEditCommand();
     private final Command bukkitCmd = mock(Command.class);
 
     @Test

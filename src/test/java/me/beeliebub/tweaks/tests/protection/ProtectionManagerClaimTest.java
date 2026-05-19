@@ -1,7 +1,7 @@
 package me.beeliebub.tweaks.tests.protection;
 
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.protection.GeometryUtil;
+import me.beeliebub.tweaks.utils.GeometryUtil;
 import me.beeliebub.tweaks.protection.ProtectionKeys;
 import me.beeliebub.tweaks.protection.ProtectionManager;
 import me.beeliebub.tweaks.protection.Region;
