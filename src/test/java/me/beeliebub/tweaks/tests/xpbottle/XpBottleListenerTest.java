@@ -104,14 +104,14 @@ class XpBottleListenerTest {
         var world = server.addSimpleWorld("test1");
         when(mockBlock.getWorld()).thenReturn(world);
         when(mockBlock.getLocation()).thenReturn(new org.bukkit.Location(world, 0, 0, 0));
-        
+
         org.bukkit.persistence.PersistentDataContainer pdc = mock(org.bukkit.persistence.PersistentDataContainer.class);
         when(pdc.get(brewerKey, PersistentDataType.STRING)).thenReturn(player.getUniqueId().toString());
         when(mockStand.getPersistentDataContainer()).thenReturn(pdc);
-        
+
         BrewerInventory inv = mock(BrewerInventory.class);
         when(mockStand.getInventory()).thenReturn(inv);
-        
+
         ItemStack emerald = new ItemStack(Material.EMERALD);
         when(inv.getIngredient()).thenReturn(emerald);
         when(inv.getItem(0)).thenReturn(new ItemStack(Material.GLASS_BOTTLE));
@@ -124,22 +124,79 @@ class XpBottleListenerTest {
         assertTrue(event.isCancelled());
         server.getScheduler().performOneTick();
 
-        // Check XP consumed
+        // XP consumed for both bottles
         assertEquals(5000 - (2 * XpBottleListener.ORBS_PER_EMERALD), new ExperienceManager(player).getCurrentExp());
-        
-        // Check bottles created
-        verify(inv).setItem(eq(0), argThat(item -> item != null && listener.xpBottle().isXpBottle(item)));
-        verify(inv).setItem(eq(1), argThat(item -> item != null && listener.xpBottle().isXpBottle(item)));
-        
-        // Check PDC cleared
+
+        // Bottles created with the exact orb count
+        verify(inv).setItem(eq(0), argThat(item -> item != null
+                && listener.xpBottle().isXpBottle(item)
+                && listener.xpBottle().getStoredOrbs(item) == XpBottleListener.ORBS_PER_EMERALD));
+        verify(inv).setItem(eq(1), argThat(item -> item != null
+                && listener.xpBottle().isXpBottle(item)
+                && listener.xpBottle().getStoredOrbs(item) == XpBottleListener.ORBS_PER_EMERALD));
+
+        // Full brew consumes exactly 1 emerald: 1 in slot - 1 = empty slot
+        verify(inv).setIngredient(isNull());
+
+        // PDC cleared
         verify(pdc).remove(brewerKey);
+
+        // Nothing dropped on a full brew
+        assertEquals(0, world.getEntities().stream()
+                .filter(e -> e instanceof org.bukkit.entity.Item)
+                .count());
+    }
+
+    @Test
+    void onBrew_FullBrew_LargeStack_ConsumesOnlyOneEmerald() {
+        PlayerMock player = server.addPlayer();
+        new ExperienceManager(player).changeExp(10000);
+
+        Block mockBlock = mock(Block.class);
+        BrewingStand mockStand = mock(BrewingStand.class);
+        when(mockBlock.getState()).thenReturn(mockStand);
+        var world = server.addSimpleWorld("test_full_large");
+        when(mockBlock.getWorld()).thenReturn(world);
+        when(mockBlock.getLocation()).thenReturn(new org.bukkit.Location(world, 0, 0, 0));
+
+        org.bukkit.persistence.PersistentDataContainer pdc = mock(org.bukkit.persistence.PersistentDataContainer.class);
+        when(pdc.get(brewerKey, PersistentDataType.STRING)).thenReturn(player.getUniqueId().toString());
+        when(mockStand.getPersistentDataContainer()).thenReturn(pdc);
+
+        BrewerInventory inv = mock(BrewerInventory.class);
+        when(mockStand.getInventory()).thenReturn(inv);
+
+        // 5 emeralds in slot — vanilla parity says one brewing cycle consumes exactly 1.
+        ItemStack emeralds = new ItemStack(Material.EMERALD, 5);
+        when(inv.getIngredient()).thenReturn(emeralds);
+        when(inv.getItem(0)).thenReturn(new ItemStack(Material.GLASS_BOTTLE));
+        when(inv.getItem(1)).thenReturn(new ItemStack(Material.GLASS_BOTTLE));
+        when(inv.getItem(2)).thenReturn(new ItemStack(Material.GLASS_BOTTLE));
+
+        BrewEvent event = mockBrewEvent(mockBlock, inv);
+        server.getPluginManager().callEvent(event);
+        server.getScheduler().performOneTick();
+
+        // 3 bottles brewed -> 3 * ORBS_PER_EMERALD charged
+        assertEquals(10000 - (3 * XpBottleListener.ORBS_PER_EMERALD),
+                new ExperienceManager(player).getCurrentExp());
+
+        // Slot left with exactly 4 emeralds — one consumed, four kept.
+        verify(inv).setIngredient(argThat(stack -> stack != null
+                && stack.getType() == Material.EMERALD
+                && stack.getAmount() == 4));
+
+        // No drops on a full brew — ingredient stays in the slot.
+        assertEquals(0, world.getEntities().stream()
+                .filter(e -> e instanceof org.bukkit.entity.Item)
+                .count());
     }
 
     @Test
     void onBrew_PartialSuccess() {
         PlayerMock player = server.addPlayer();
         // Enough for 1 but not 2 (1395 * 2 = 2790)
-        new ExperienceManager(player).changeExp(2000); 
+        new ExperienceManager(player).changeExp(2000);
 
         Block mockBlock = mock(Block.class);
         BrewingStand mockStand = mock(BrewingStand.class);
@@ -147,14 +204,14 @@ class XpBottleListenerTest {
         var world = server.addSimpleWorld("test2");
         when(mockBlock.getWorld()).thenReturn(world);
         when(mockBlock.getLocation()).thenReturn(new org.bukkit.Location(world, 0, 0, 0));
-        
+
         org.bukkit.persistence.PersistentDataContainer pdc = mock(org.bukkit.persistence.PersistentDataContainer.class);
         when(pdc.get(brewerKey, PersistentDataType.STRING)).thenReturn(player.getUniqueId().toString());
         when(mockStand.getPersistentDataContainer()).thenReturn(pdc);
 
         BrewerInventory inv = mock(BrewerInventory.class);
         when(mockStand.getInventory()).thenReturn(inv);
-        
+
         ItemStack emeralds = new ItemStack(Material.EMERALD, 2);
         when(inv.getIngredient()).thenReturn(emeralds);
         when(inv.getItem(0)).thenReturn(new ItemStack(Material.GLASS_BOTTLE));
@@ -166,15 +223,116 @@ class XpBottleListenerTest {
 
         server.getScheduler().performOneTick();
 
-        // Check XP consumed for only 1 bottle
+        // XP consumed for only the brewed bottle
         assertEquals(2000 - XpBottleListener.ORBS_PER_EMERALD, new ExperienceManager(player).getCurrentExp());
-        
-        // One XP bottle, one glass bottle
-        verify(inv).setItem(eq(0), argThat(item -> item != null && listener.xpBottle().isXpBottle(item)));
+
+        // One XP bottle (with correct orbs), one glass bottle refund
+        verify(inv).setItem(eq(0), argThat(item -> item != null
+                && listener.xpBottle().isXpBottle(item)
+                && listener.xpBottle().getStoredOrbs(item) == XpBottleListener.ORBS_PER_EMERALD));
         verify(inv).setItem(eq(1), argThat(item -> item != null && item.getType() == Material.GLASS_BOTTLE));
-        
+
+        // Partial brew refunds ALL emeralds (no consumption), slot cleared.
+        verify(inv).setIngredient(isNull());
+        long emeraldsDropped = world.getEntities().stream()
+                .filter(e -> e instanceof org.bukkit.entity.Item)
+                .map(e -> ((org.bukkit.entity.Item) e).getItemStack())
+                .filter(s -> s.getType() == Material.EMERALD)
+                .mapToLong(ItemStack::getAmount)
+                .sum();
+        assertEquals(2, emeraldsDropped, "Partial brew must refund the entire emerald stack");
+
         // Message sent
         MessageAssert.assertMessageSent(player, "Not enough XP for all bottles");
+    }
+
+    @Test
+    void onBrew_PartialBrew_LargeStack_RefundsAllEmeralds() {
+        PlayerMock player = server.addPlayer();
+        // Enough for 1 bottle of 1395 orbs but not for the 3 requested.
+        new ExperienceManager(player).changeExp(2000);
+
+        Block mockBlock = mock(Block.class);
+        BrewingStand mockStand = mock(BrewingStand.class);
+        when(mockBlock.getState()).thenReturn(mockStand);
+        var world = server.addSimpleWorld("test_partial_large");
+        when(mockBlock.getWorld()).thenReturn(world);
+        when(mockBlock.getLocation()).thenReturn(new org.bukkit.Location(world, 0, 0, 0));
+
+        org.bukkit.persistence.PersistentDataContainer pdc = mock(org.bukkit.persistence.PersistentDataContainer.class);
+        when(pdc.get(brewerKey, PersistentDataType.STRING)).thenReturn(player.getUniqueId().toString());
+        when(mockStand.getPersistentDataContainer()).thenReturn(pdc);
+
+        BrewerInventory inv = mock(BrewerInventory.class);
+        when(mockStand.getInventory()).thenReturn(inv);
+
+        // 5 emeralds in slot. Partial brew must refund all 5 (no vanish, no dup).
+        ItemStack emeralds = new ItemStack(Material.EMERALD, 5);
+        when(inv.getIngredient()).thenReturn(emeralds);
+        when(inv.getItem(0)).thenReturn(new ItemStack(Material.GLASS_BOTTLE));
+        when(inv.getItem(1)).thenReturn(new ItemStack(Material.GLASS_BOTTLE));
+        when(inv.getItem(2)).thenReturn(new ItemStack(Material.GLASS_BOTTLE));
+
+        BrewEvent event = mockBrewEvent(mockBlock, inv);
+        server.getPluginManager().callEvent(event);
+        server.getScheduler().performOneTick();
+
+        // Exactly 1 bottle brewed -> 1395 XP charged
+        assertEquals(2000 - XpBottleListener.ORBS_PER_EMERALD,
+                new ExperienceManager(player).getCurrentExp());
+
+        // One XP bottle, two glass bottle refunds.
+        verify(inv).setItem(eq(0), argThat(item -> item != null && listener.xpBottle().isXpBottle(item)));
+        verify(inv).setItem(eq(1), argThat(item -> item != null && item.getType() == Material.GLASS_BOTTLE));
+        verify(inv).setItem(eq(2), argThat(item -> item != null && item.getType() == Material.GLASS_BOTTLE));
+
+        // Slot cleared and exactly 5 emeralds dropped — no vanishing, no duplication.
+        verify(inv).setIngredient(isNull());
+        long emeraldsDropped = world.getEntities().stream()
+                .filter(e -> e instanceof org.bukkit.entity.Item)
+                .map(e -> ((org.bukkit.entity.Item) e).getItemStack())
+                .filter(s -> s.getType() == Material.EMERALD)
+                .mapToLong(ItemStack::getAmount)
+                .sum();
+        assertEquals(5, emeraldsDropped);
+
+        MessageAssert.assertMessageSent(player, "Not enough XP for all bottles");
+    }
+
+    @Test
+    void onBrew_EmeraldBlock_StoresHigherOrbValue() {
+        PlayerMock player = server.addPlayer();
+        new ExperienceManager(player).changeExp(50000);
+
+        Block mockBlock = mock(Block.class);
+        BrewingStand mockStand = mock(BrewingStand.class);
+        when(mockBlock.getState()).thenReturn(mockStand);
+        var world = server.addSimpleWorld("test_block");
+        when(mockBlock.getWorld()).thenReturn(world);
+        when(mockBlock.getLocation()).thenReturn(new org.bukkit.Location(world, 0, 0, 0));
+
+        org.bukkit.persistence.PersistentDataContainer pdc = mock(org.bukkit.persistence.PersistentDataContainer.class);
+        when(pdc.get(brewerKey, PersistentDataType.STRING)).thenReturn(player.getUniqueId().toString());
+        when(mockStand.getPersistentDataContainer()).thenReturn(pdc);
+
+        BrewerInventory inv = mock(BrewerInventory.class);
+        when(mockStand.getInventory()).thenReturn(inv);
+
+        when(inv.getIngredient()).thenReturn(new ItemStack(Material.EMERALD_BLOCK));
+        when(inv.getItem(0)).thenReturn(new ItemStack(Material.GLASS_BOTTLE));
+        when(inv.getItem(1)).thenReturn(null);
+        when(inv.getItem(2)).thenReturn(null);
+
+        BrewEvent event = mockBrewEvent(mockBlock, inv);
+        server.getPluginManager().callEvent(event);
+        server.getScheduler().performOneTick();
+
+        // Bottle stores the emerald-block orb value, not the emerald value.
+        verify(inv).setItem(eq(0), argThat(item -> item != null
+                && listener.xpBottle().isXpBottle(item)
+                && listener.xpBottle().getStoredOrbs(item) == XpBottleListener.ORBS_PER_EMERALD_BLOCK));
+        assertEquals(50000 - XpBottleListener.ORBS_PER_EMERALD_BLOCK,
+                new ExperienceManager(player).getCurrentExp());
     }
 
     @Test

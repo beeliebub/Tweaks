@@ -257,13 +257,14 @@ public final class RegionGUI {
 
     private static void cycleBooleanRule(Player player, Region region, ProtectionManager pm,
                                          RegionFlag flag, FlagTarget target, Boolean current) {
+        World w = worldOf(region);
         boolean ok;
         if (current == null) {
-            ok = pm.setFlag(region.id(), flag, target, true);
+            ok = pm.setFlag(w, region.id(), flag, target, true);
         } else if (current) {
-            ok = pm.setFlag(region.id(), flag, target, false);
+            ok = pm.setFlag(w, region.id(), flag, target, false);
         } else {
-            ok = pm.removeFlag(region.id(), flag, target);
+            ok = pm.removeFlag(w, region.id(), flag, target);
         }
         if (!ok) {
             player.sendMessage(Component.text(
@@ -335,7 +336,7 @@ public final class RegionGUI {
             openMaterialListMenu(player, region, pm, flag, returnPage);
             return;
         }
-        pm.setMaterials(region.id(), flag, current);
+        pm.setMaterials(worldOf(region), region.id(), flag, current);
         player.sendMessage(Component.text(
                 "Removed " + material.name() + " from " + flag.name() + ".",
                 NamedTextColor.GREEN));
@@ -374,7 +375,7 @@ public final class RegionGUI {
             openMaterialListMenu(player, region, pm, flag, 0);
             return;
         }
-        pm.setMaterials(region.id(), flag, current);
+        pm.setMaterials(worldOf(region), region.id(), flag, current);
         player.sendMessage(Component.text(
                 "Added " + m.name() + " to " + flag.name() + ".", NamedTextColor.GREEN));
         openMaterialListMenu(player, region, pm, flag, 0);
@@ -443,7 +444,7 @@ public final class RegionGUI {
             openEntityListMenu(player, region, pm, flag, returnPage);
             return;
         }
-        pm.setEntities(region.id(), flag, current);
+        pm.setEntities(worldOf(region), region.id(), flag, current);
         player.sendMessage(Component.text(
                 "Removed " + type.name() + " from " + flag.name() + ".", NamedTextColor.GREEN));
         openEntityListMenu(player, region, pm, flag, returnPage);
@@ -482,7 +483,7 @@ public final class RegionGUI {
             openEntityListMenu(player, region, pm, flag, 0);
             return;
         }
-        pm.setEntities(region.id(), flag, current);
+        pm.setEntities(worldOf(region), region.id(), flag, current);
         player.sendMessage(Component.text(
                 "Added " + t.name() + " to " + flag.name() + ".", NamedTextColor.GREEN));
         openEntityListMenu(player, region, pm, flag, 0);
@@ -978,11 +979,26 @@ public final class RegionGUI {
         if (stale.worldName() != null) {
             World w = Bukkit.getWorld(stale.worldName());
             if (w != null) {
+                // Per-world globals are lazy-initialised; route through globalRegion(World)
+                // so the click handler finds the right per-world entry instead of falling
+                // through to byNameAnyWorld (which deliberately returns null for globals).
+                if (ProtectionManager.GLOBAL_REGION_ID.equals(stale.id())) {
+                    return pm.globalRegion(w);
+                }
                 Region fresh = pm.byName(w, stale.id());
                 if (fresh != null) return fresh;
             }
         }
         return pm.byNameAnyWorld(stale.id());
+    }
+
+    // World context for a region's mutator calls. Per-world regions (including
+    // the per-world globals) carry their worldName; passing it to the World-aware
+    // mutator overloads routes the write to the correct cache entry. Legacy
+    // null-world regions fall through to the byNameAnyWorld path via null.
+    private static World worldOf(Region region) {
+        if (region == null || region.worldName() == null) return null;
+        return Bukkit.getWorld(region.worldName());
     }
 
     @SuppressWarnings("deprecation") // Bukkit#getOfflinePlayer(UUID) is the supported sync path.

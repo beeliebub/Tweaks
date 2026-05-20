@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.tests.teleport;
 
+import io.papermc.paper.dialog.Dialog;
 import me.beeliebub.tweaks.utils.Point;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.managers.StorageManager;
@@ -467,14 +468,36 @@ class TeleportCommandManagerTest {
             verify(sender).sendMessage(argThat(componentContains("no warps")));
         }
 
-        @Test void warpsListsRegisteredWarps() {
+        // Console / non-player senders cannot render Paper Dialogs — they keep
+        // the legacy chat list.
+        @Test void warpsConsoleSenderGetsTextFallback() {
             Set<String> warps = new LinkedHashSet<>();
             warps.add("spawn"); warps.add("shop");
             when(storage.getWarps()).thenReturn(warps);
-            CommandSender sender = mock(CommandSender.class);
-            mgr.onCommand(sender, bukkit, "warps", new String[0]);
-            verify(sender).sendMessage(argThat(componentContains("spawn")));
-            verify(sender).sendMessage(argThat(componentContains("shop")));
+            ConsoleCommandSender console = mock(ConsoleCommandSender.class);
+            mgr.onCommand(console, bukkit, "warps", new String[0]);
+            verify(console).sendMessage(argThat(componentContains("spawn")));
+            verify(console).sendMessage(argThat(componentContains("shop")));
+        }
+
+        // Players receive the Paper Dialog instead of a chat list.
+        @Test void warpsPlayerSenderOpensDialog() {
+            Set<String> warps = new LinkedHashSet<>();
+            warps.add("spawn"); warps.add("shop");
+            when(storage.getWarps()).thenReturn(warps);
+            Player player = mock(Player.class);
+
+            Dialog dialog = mock(Dialog.class);
+            try (MockedStatic<Dialog> dialogStatic = mockStatic(Dialog.class)) {
+                dialogStatic.when(() -> Dialog.create(any())).thenReturn(dialog);
+
+                mgr.onCommand(player, bukkit, "warps", new String[0]);
+
+                dialogStatic.verify(() -> Dialog.create(any()));
+            }
+            verify(player).showDialog(dialog);
+            // Player must NOT receive the legacy chat list when the Dialog opens.
+            verify(player, never()).sendMessage(argThat(componentContains("Available Warps")));
         }
     }
 

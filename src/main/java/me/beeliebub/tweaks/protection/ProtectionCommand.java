@@ -11,6 +11,7 @@ import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -385,6 +386,12 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
     private void handleUnclaim(CommandSender sender, String[] args) {
         if (args.length < 1) { showUsage(sender, "/region unclaim <name>"); return; }
         String name = args[0];
+        if (ProtectionManager.GLOBAL_REGION_ID.equals(name)) {
+            sender.sendMessage(Component.text(
+                    "The wilderness/global region cannot be unclaimed.",
+                    NamedTextColor.RED));
+            return;
+        }
         Region region = resolveRegion(sender, name);
         if (region == null) {
             sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
@@ -714,6 +721,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         RegionFlag flag = parseFlagToken(sender, flagToken);
         if (flag == null) return 0;
 
+        World world = senderWorld(sender);
         if (flag.isMaterialFlag()) {
             if (rawTarget != null) {
                 sender.sendMessage(Component.text(
@@ -721,7 +729,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
                                 + "Use /region unflag " + name + " " + flag.name() + " to clear the list.",
                         NamedTextColor.YELLOW));
             }
-            if (!protection.clearMaterials(name, flag)) {
+            if (!protection.clearMaterials(world, name, flag)) {
                 sender.sendMessage(Component.text(
                         "No change — '" + flag.name() + "' list is already empty.",
                         NamedTextColor.YELLOW));
@@ -740,7 +748,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
                                 + "Use /region unflag " + name + " " + flag.name() + " to clear the list.",
                         NamedTextColor.YELLOW));
             }
-            if (!protection.clearEntities(name, flag)) {
+            if (!protection.clearEntities(world, name, flag)) {
                 sender.sendMessage(Component.text(
                         "No change — '" + flag.name() + "' list is already empty.",
                         NamedTextColor.YELLOW));
@@ -755,7 +763,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         FlagTarget target = resolveTarget(sender, permissions, rawTarget);
         if (target == null) return 0;
 
-        if (!protection.removeFlag(name, flag, target)) {
+        if (!protection.removeFlag(world, name, flag, target)) {
             sender.sendMessage(Component.text(
                     "No rule to remove for flag " + flag.name() + " [" + target.toKey() + "].",
                     NamedTextColor.RED));
@@ -777,7 +785,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
                     "Supply at least one block material name.", NamedTextColor.RED));
             return 0;
         }
-        if (!protection.setMaterials(name, flag, materials)) {
+        if (!protection.setMaterials(senderWorld(sender), name, flag, materials)) {
             sender.sendMessage(Component.text(
                     "No change — material list already matches the requested set.",
                     NamedTextColor.YELLOW));
@@ -800,7 +808,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
                     "Supply at least one entity type name.", NamedTextColor.RED));
             return 0;
         }
-        if (!protection.setEntities(name, flag, entities)) {
+        if (!protection.setEntities(senderWorld(sender), name, flag, entities)) {
             sender.sendMessage(Component.text(
                     "No change — entity list already matches the requested set.",
                     NamedTextColor.YELLOW));
@@ -840,9 +848,11 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         FlagTarget target = resolveTarget(sender, permissions, rawTarget);
         if (target == null) return 0;
 
-        if (!protection.setFlag(name, flag, target, value)) {
+        if (!protection.setFlag(senderWorld(sender), name, flag, target, value)) {
             sender.sendMessage(Component.text(
-                    "No change — rule already at requested value.",
+                    "No change — '" + name + "' " + flag.name() + " [" + target.toKey()
+                            + "] is already " + value + ". Run /region flag " + name
+                            + " " + flag.name() + " (no value) to view all current rules.",
                     NamedTextColor.YELLOW));
             return 0;
         }
@@ -1093,11 +1103,27 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
     }
 
     private static Region resolveRegionFor(CommandSender sender, ProtectionManager protection, String name) {
+        // Per-world globals are addressed via the caller's world. Lazy-init so an
+        // admin's first /region flag __global__ ... in a fresh world materialises
+        // the region instead of returning "no region named '__global__'".
+        if (ProtectionManager.GLOBAL_REGION_ID.equals(name)) {
+            if (sender instanceof Player p) {
+                return protection.globalRegion(p.getWorld());
+            }
+            return null;
+        }
         if (sender instanceof Player p) {
             Region scoped = protection.byName(p.getWorld(), name);
             if (scoped != null) return scoped;
         }
         return protection.byNameAnyWorld(name);
+    }
+
+    // World context for the mutator overloads. Returns the player's world for
+    // player senders so global-region writes land in the right per-world entry;
+    // null for console (which falls back to byNameAnyWorld for non-globals).
+    private static World senderWorld(CommandSender sender) {
+        return (sender instanceof Player p) ? p.getWorld() : null;
     }
 
     private static boolean isOwnerOrAdmin(CommandSender sender, Region region) {

@@ -47,6 +47,14 @@ import java.util.logging.Level;
 //   - On PlayerItemConsumeEvent: awards the bottle's stored orb count via ExperienceManager.
 //     Vanilla potion drinking handles the animation, stack decrement, and glass-bottle remainder.
 //
+// CRITICAL: do NOT touch the live inventory via a snapshot BlockState. In Paper, `block.getState()`
+// returns a snapshot whose `update()` loads its captured NBT back into the live tile entity —
+// including the inventory items. If we call `bs.update()` after mutating `bs.getInventory()` (which
+// is the LIVE BrewerInventory on a placed state), the update reverts our setItem/setIngredient
+// writes to whatever the snapshot recorded at getState() time. Operate on the BrewerInventory
+// captured from BrewEvent#getContents() (which is live and stable across ticks) and never call
+// BlockState.update() in the deferred task.
+//
 // Why the brewer tag is cleared after every brew: the tag is set only by *player* clicks/drags
 // on the brewing stand's ingredient slot. Clearing it after each brew means a hopper can't
 // silently auto-feed emeralds and ride the previously-tracked player's XP forever — the next
@@ -210,14 +218,19 @@ public class XpBottleListener implements Listener {
         Location standCenter = block.getLocation().toCenterLocation().add(0, 0.5, 0);
         World world = block.getWorld();
 
+        // Live BrewerInventory reference from the event — survives across the 1-tick deferral
+        // because Inventory wrappers point to the underlying tile entity. Using this avoids the
+        // snapshot/update revert bug entirely (see class-level comment).
+        final BrewerInventory liveInv = contents;
+
         if (affordable == 0) {
             ItemStack ingredientClone = ingredient.clone();
             Bukkit.getScheduler().runTask(plugin, () -> {
-                BlockState st = block.getState();
-                if (st instanceof BrewingStand bs) {
-                    bs.getInventory().setIngredient(null);
-                    bs.update();
-                }
+                // Verify the brewing stand still exists. Use getState() instanceof check so this
+                // works under both real Paper and MockBukkit; the inventory write goes through the
+                // captured live `liveInv`, NOT a snapshot's getInventory().
+                if (!(block.getState() instanceof BrewingStand)) return;
+                liveInv.setIngredient(null);
                 if (world != null) {
                     world.dropItemNaturally(standCenter, ingredientClone);
                 }
@@ -239,9 +252,11 @@ public class XpBottleListener implements Listener {
         final Material expectedIngredientType = ingredient.getType();
 
         Bukkit.getScheduler().runTask(plugin, () -> {
-            BlockState st = block.getState();
-            if (!(st instanceof BrewingStand bs)) return;
-            BrewerInventory inv = bs.getInventory();
+            // Verify the brewing stand still exists. Use getState() instanceof check so this
+            // works under both real Paper and MockBukkit; the inventory writes go through the
+            // captured live `liveInv`, NOT a snapshot's getInventory(), and we never call
+            // BlockState.update() (which would revert our setItem/setIngredient writes).
+            if (!(block.getState() instanceof BrewingStand)) return;
 
             new ExperienceManager(finalBrewer).changeExp(-(finalAffordable * finalCost));
             if (finalAffordable < finalTotalBottles) {
@@ -254,10 +269,10 @@ public class XpBottleListener implements Listener {
             for (int i = 0; i < 3; i++) {
                 if (!finalBrewedSlots[i]) continue;
                 if (kept < finalAffordable) {
-                    inv.setItem(i, stackableTemplate(finalCost));
+                    liveInv.setItem(i, stackableTemplate(finalCost));
                     kept++;
                 } else {
-                    inv.setItem(i, new ItemStack(Material.GLASS_BOTTLE));
+                    liveInv.setItem(i, new ItemStack(Material.GLASS_BOTTLE));
                 }
             }
 
@@ -266,7 +281,7 @@ public class XpBottleListener implements Listener {
             // brew, drop the entire remaining stack on top of the stand and clear the slot — that
             // breaks the auto-cycle that would otherwise attempt to brew the leftover glass-bottle
             // refunds with the still-present ingredient on the next tick.
-            ItemStack currentIng = inv.getIngredient();
+            ItemStack currentIng = liveInv.getIngredient();
             if (currentIng == null || currentIng.isEmpty() || currentIng.getType() != expectedIngredientType) {
                 // Player swapped the ingredient between event and task — leave whatever is there.
                 return;
@@ -274,22 +289,24 @@ public class XpBottleListener implements Listener {
             if (finalAffordable >= finalTotalBottles) {
                 int newAmount = currentIng.getAmount() - 1;
                 if (newAmount <= 0) {
-                    inv.setIngredient(null);
+                    liveInv.setIngredient(null);
                 } else {
                     ItemStack newIng = currentIng.clone();
                     newIng.setAmount(newAmount);
-                    inv.setIngredient(newIng);
+                    liveInv.setIngredient(newIng);
                 }
             } else {
-                int leftover = currentIng.getAmount() - 1;
-                inv.setIngredient(null);
-                if (leftover > 0 && world != null) {
-                    ItemStack drop = currentIng.clone();
-                    drop.setAmount(leftover);
+                // Partial brew: refund the entire ingredient stack and clear the slot. The
+                // previous (amount - 1) math vanished one emerald per partial cycle even though
+                // no full recipe completed. Refunding everything also breaks the auto-cycle that
+                // would otherwise pair the leftover glass-bottle refunds with another emerald
+                // for a fresh 400-tick attempt.
+                ItemStack drop = currentIng.clone();
+                liveInv.setIngredient(null);
+                if (world != null) {
                     world.dropItemNaturally(standCenter, drop);
                 }
             }
-            bs.update();
         });
     }
 

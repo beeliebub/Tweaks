@@ -398,7 +398,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         articles.add(new HelpArticle("warps", "Warps", List.of(
                 gray("Server-wide locations. Admin-managed."),
                 cmd("/warp <name>", "Teleport to a warp."),
-                cmd("/warps", "List all warps."),
+                cmd("/warps", "Open a clickable warps menu."),
                 aqua("Common: spawn, newspawn, crates.")
         ), Material.COMPASS, 22, ColorUtil.HELP_GRAD_WARPS, List.of("homes", "spawn")));
 

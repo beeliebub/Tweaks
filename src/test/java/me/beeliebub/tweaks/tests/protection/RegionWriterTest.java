@@ -7,6 +7,8 @@ import me.beeliebub.tweaks.protection.RegionFlag;
 import me.beeliebub.tweaks.protection.RegionLoader;
 import me.beeliebub.tweaks.protection.RegionWriter;
 import org.bukkit.Material;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,7 +22,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class RegionWriterTest {
 
@@ -96,6 +101,76 @@ class RegionWriterTest {
         File netherPath = new File(new File(tmp.toFile(), "world_nether"), "home.yml");
         assertTrue(overworldPath.exists(), "world/home.yml should exist");
         assertTrue(netherPath.exists(), "world_nether/home.yml should exist");
+    }
+
+    // RegionWriter is final, so we can't subclass to make queue() synchronous.
+    // Instead, build a Tweaks mock whose BukkitScheduler runs the submitted
+    // Runnable inline. This lets tests exercise the real setFlag→queue path
+    // without spinning up MockBukkit's full server / async infrastructure.
+    private static Tweaks pluginWithInlineScheduler() {
+        Tweaks plugin = mock(Tweaks.class, RETURNS_DEEP_STUBS);
+        when(plugin.getServer().getScheduler().runTaskAsynchronously(any(Plugin.class), any(Runnable.class)))
+                .thenAnswer(inv -> {
+                    Runnable r = inv.getArgument(1);
+                    r.run();
+                    return mock(BukkitTask.class);
+                });
+        return plugin;
+    }
+
+    private static RegionWriter syncWriter(Path tmp) {
+        return new RegionWriter(pluginWithInlineScheduler(), tmp.toFile());
+    }
+
+    // End-to-end roundtrip for the persistence fix: a flag mutation queued by
+    // ProtectionManager#setFlag must land on disk and reload identically.
+    @Test
+    void flagMutationRoundTripsThroughYaml(@TempDir Path tmp) throws Exception {
+        RegionWriter writer = syncWriter(tmp);
+        me.beeliebub.tweaks.protection.ProtectionManager mgr =
+                new me.beeliebub.tweaks.protection.ProtectionManager(mock(Tweaks.class));
+        mgr.setWriter(writer);
+
+        // Seed a real region under a world (would normally come from tryClaim).
+        Region claim = new Region("plot", OWNER, List.of(), Map.of(), Map.of(),
+                null, new Region.RegionBounds(0, 0, 1, 1), "world", List.of(), Map.of());
+        mgr.regions().put("world:plot", claim);
+        writer.writeNow(claim); // initial on-disk state
+
+        org.bukkit.World world = mock(org.bukkit.World.class);
+        org.mockito.Mockito.when(world.getName()).thenReturn("world");
+
+        // Mutate via the production path — syncWriter persists immediately.
+        assertTrue(mgr.setFlag(world, "plot", RegionFlag.PVP, FlagTarget.DEFAULT, false));
+        assertTrue(mgr.setMaterials(world, "plot", RegionFlag.ALLOW_BLOCK_BREAK,
+                Set.of(Material.STONE)));
+
+        ConcurrentHashMap<String, Region> reloaded = new ConcurrentHashMap<>();
+        new RegionLoader(Logger.getLogger("test")).load(tmp.toFile(), reloaded);
+        Region back = reloaded.get("world:plot");
+        assertNotNull(back);
+        assertEquals(Boolean.FALSE, back.rulesFor(RegionFlag.PVP).get(FlagTarget.DEFAULT));
+        assertEquals(Set.of(Material.STONE), back.materialsFor(RegionFlag.ALLOW_BLOCK_BREAK));
+    }
+
+    @Test
+    void perWorldGlobalFlagRoundTripsThroughYaml(@TempDir Path tmp) throws Exception {
+        RegionWriter writer = syncWriter(tmp);
+        me.beeliebub.tweaks.protection.ProtectionManager mgr =
+                new me.beeliebub.tweaks.protection.ProtectionManager(mock(Tweaks.class));
+        mgr.setWriter(writer);
+
+        org.bukkit.World world = mock(org.bukkit.World.class);
+        org.mockito.Mockito.when(world.getName()).thenReturn("alpha");
+
+        assertTrue(mgr.setFlag(world, me.beeliebub.tweaks.protection.ProtectionManager.GLOBAL_REGION_ID,
+                RegionFlag.BLOCK_BREAK, FlagTarget.DEFAULT, false));
+
+        ConcurrentHashMap<String, Region> reloaded = new ConcurrentHashMap<>();
+        new RegionLoader(Logger.getLogger("test")).load(tmp.toFile(), reloaded);
+        Region back = reloaded.get("alpha:" + me.beeliebub.tweaks.protection.ProtectionManager.GLOBAL_REGION_ID);
+        assertNotNull(back, "per-world global must persist under its composite key");
+        assertEquals(Boolean.FALSE, back.rulesFor(RegionFlag.BLOCK_BREAK).get(FlagTarget.DEFAULT));
     }
 
     @Test

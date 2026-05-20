@@ -1,11 +1,17 @@
 package me.beeliebub.tweaks.teleport;
 
+import io.papermc.paper.dialog.Dialog;
+import io.papermc.paper.registry.data.dialog.ActionButton;
+import io.papermc.paper.registry.data.dialog.DialogBase;
+import io.papermc.paper.registry.data.dialog.action.DialogAction;
+import io.papermc.paper.registry.data.dialog.type.DialogType;
 import me.beeliebub.tweaks.utils.Point;
 import me.beeliebub.tweaks.managers.StorageManager;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -362,10 +368,50 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
         Set<String> warps = storage.getWarps();
         if (warps.isEmpty()) {
             sender.sendMessage(Component.text("There are no warps available.").color(NamedTextColor.YELLOW));
-        } else {
-            sender.sendMessage(Component.text("Available Warps: " + String.join(", ", warps)).color(NamedTextColor.AQUA));
+            return true;
         }
+        // Players get the click-to-teleport Dialog; console and other non-player
+        // senders fall back to the legacy chat list because Paper's Dialog API
+        // only renders for in-game clients.
+        if (sender instanceof Player player) {
+            player.showDialog(buildWarpsDialog(warps));
+            return true;
+        }
+        sender.sendMessage(Component.text("Available Warps: " + String.join(", ", warps)).color(NamedTextColor.AQUA));
         return true;
+    }
+
+    // Constructs the warps Dialog. Button construction lives INSIDE the
+    // Dialog.create lambda on purpose: mockStatic(Dialog.class) in unit tests
+    // short-circuits before the lambda runs, which keeps ActionButton.builder /
+    // DialogBase.builder out of the call stack (those throw under plain Mockito
+    // because no DialogInstancesProvider service is registered).
+    private Dialog buildWarpsDialog(Set<String> warps) {
+        Component title = Component.text("Warps", NamedTextColor.AQUA)
+                .decorate(TextDecoration.BOLD)
+                .decoration(TextDecoration.ITALIC, false);
+        return Dialog.create(b -> {
+            List<ActionButton> buttons = new ArrayList<>();
+            for (String warp : warps) {
+                Component label = Component.text(warp, NamedTextColor.WHITE)
+                        .decoration(TextDecoration.ITALIC, false);
+                Component tooltip = Component.text("Teleport to " + warp, NamedTextColor.GRAY);
+                buttons.add(ActionButton.builder(label)
+                        .tooltip(tooltip)
+                        .width(200)
+                        .action(DialogAction.customClick(
+                                (view, audience) -> {
+                                    if (audience instanceof Player p) {
+                                        handleWarp(p, new String[]{warp});
+                                    }
+                                },
+                                ClickCallback.Options.builder().build()))
+                        .build());
+            }
+            b.empty()
+                    .base(DialogBase.builder(title).canCloseWithEscape(true).pause(false).build())
+                    .type(DialogType.multiAction(buttons, null, 2));
+        });
     }
 
     private boolean handleSpawn(CommandSender sender) {
