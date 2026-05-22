@@ -736,6 +736,16 @@ A rare server-wide event that turns the night crimson and supercharges enchantin
 
 ## Minigames
 
+### Resource Rupee
+
+A rare currency item that can be found while gathering in resource worlds or earned as rewards. Resource Rupees are special emeralds with a custom name and lore that the plugin recognizes as currency.
+
+- **Conversion**: You can convert between Rupees and Rupee Blocks in any crafting grid.
+  - 9 **Resource Rupees** → 1 **Resource Rupee Block**.
+  - 1 **Resource Rupee Block** → 9 **Resource Rupees**.
+- **Stackable**: Both Rupees and Rupee Blocks stack normally and can be stored in any container.
+- **Visuals**: They feature a distinct green name and a `"...the Wanderer's Path..."` lore line to distinguish them from regular emeralds.
+
 ### Whack an Andrew
 
 A "Whack-a-Mole" style minigame where armor stands pop up on designated blocks in an arena. Players compete to hit as many as possible, and the top 3 scorers receive rewards.
@@ -744,14 +754,26 @@ This is entirely admin-managed — see the [admin commands](#admin-commands) sec
 
 ### Resource Hunt
 
-A gathering minigame that runs in the **`jass:resource`** (Overworld) or **`jass:resource_nether`** (Nether) world. While the active world is chosen randomly at server startup, **each player receives their own unique target material** to gather.
+A gathering minigame that runs in the **`jass:resource`** (Overworld) or **`jass:resource_nether`** (Nether) world. While the active world is chosen randomly at server startup, **each player receives their own unique task** to complete.
 
 **Target Assignment**:
-- **Unique Targets**: When you join, the plugin assigns you a random target material from the active world's pool.
-- **Fair Distribution**: The system prefers materials that no other player is currently hunting. If all materials are taken, duplicates are allowed.
-- **Persistence**: Your assigned target stays the same for the entire session.
+- **Unique Tasks**: When you join, the plugin assigns you a random task from the active world's pool.
+- **Fair Distribution**: The system prefers tasks that no other player is currently working on. If all tasks are taken, duplicates are allowed.
+- **Persistence**: Your assigned task stays the same for the entire session.
 
-Each target defines a **base amount** and a **multiplier** that produce three cumulative tier thresholds:
+**Task Categories**:
+Tasks are categorized by how you must obtain or interact with the target:
+- **Collect**: Any supported way of obtaining the item (drops, chests, etc.).
+- **Kill**: Kill the targeted entity.
+- **Smelt**: Smelt the target item (e.g., smelting raw iron or iron ore for an Iron Ingot task). Supports the **Smelter** enchantment.
+- **Enchant**: Enchant the target item (Overworld only).
+- **Shear**: Shear the targeted entity (Overworld only).
+- **Breed**: Breed the targeted entity.
+- **Craft**: Craft the targeted item.
+- **Barter**: Receive the target item from a Piglin barter (Nether only).
+
+**Progress & Tiers**:
+Each task defines a **base amount** and a **multiplier** that produce three cumulative tier thresholds:
 
 | Tier | Threshold |
 |---|---|
@@ -759,26 +781,33 @@ Each target defines a **base amount** and a **multiplier** that produce three cu
 | Tier 2 | `round(amount × multiplier)` |
 | Tier 3 | `round(amount × multiplier²)` |
 
-Crossing each threshold grants the **`resource`** reward **once**. A single large progress update may cross multiple tiers in one shot, and the rewards are simply queued in order. Rewards are claimable via `/reward claim`.
+Crossing each threshold grants the **`resource`** reward **once**. Rewards are claimable via `/reward claim`.
 
-While inside the active resource world, a **green boss bar** at the top of the screen shows your progress against your own unmet tier; the bar resets to the next tier once you clear the current one and disappears entirely after you clear Tier 3.
+While inside the active resource world, a **green boss bar** shows your progress: **"Category # <Name>"** (e.g., "Kill 20 Sheep"). The bar resets to the next tier once you clear the current one and disappears after Tier 3.
 
-**Protection**: To keep the hunt fair, players are restricted from bringing disallowed items into the resource world. Using `/resource`, `/back`, or `/tpa` to travel **into** a resource world from another world will fail if you have restricted items in your inventory.
+**Protection & Anti-Exploit**:
+- **Disallowed Items**: Traveling **into** a resource world via `/resource`, `/back`, or `/tpa` fails if you carry restricted items (managed in `resource_hunt_items.yml`).
+- **Anti-recount**: Items counted toward progress (for collect, smelt, enchant, and craft) carry an invisible PDC tag and won't be counted again. This tag is removed when you bring items out of the resource world.
+- **Nether Safety**: The plugin generates a **5x5 bedrock platform** at Y=64 if no safe landing is found in the Nether resource world.
 
-**Nether Safety**: If no safe 2-block air gap can be found when teleporting to the Nether resource world, or if a teleport would land a player on the Nether roof (above Y=127), the plugin will automatically generate a **5x5 bedrock platform** at Y=64.
-
-**Anti-recount**: Once an item has been counted toward someone's progress, it carries an invisible PDC tag and won't be counted again. This tag is also applied to items **crafted** inside resource worlds to prevent exploit loops. Crops, sugar cane, bamboo, and amethyst buds are exempt.
-
-**Configuration** (`plugins/Tweaks/resource_hunt.yml`): separate lists for overworld and nether targets. Each entry is either a bare amount (multiplier defaults to `2.0`) or an explicit `"<amount>:<multiplier>"` string.
+**Configuration** (`plugins/Tweaks/resource_hunt.yml`):
+Tasks are grouped by world and category. Each entry is either a bare amount (multiplier defaults to `2.0`) or `"<amount>:<multiplier>"`.
 
 ```yaml
 overworld:
-  iron_ore: "7:2.0"      # tiers: 7, 14, 28
-  raw_copper: "32:1.75"  # tiers: 32, 56, 98
-  diamond: 4             # bare form; tiers: 4, 8, 16
+  collect:
+    iron_ore: "7:2.0"
+  kill:
+    sheep: "20:2.0"
+  smelt:
+    iron_ingot: "20:1.75"
+  enchant:
+    diamond_pickaxe: 5
+  breed:
+    cow: 2
 nether:
-  ancient_debris: "2:2.0"
-  ghast_tear: 5
+  barter:
+    water_bottle: "10:2.5"
 ```
 
 **Allowed Items** (`plugins/Tweaks/resource_hunt_items.yml`): a list of materials allowed to be carried into the resource world. Manage at runtime via `/tconfig resourceitems <add|remove> <item>`.
