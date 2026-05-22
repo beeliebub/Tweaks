@@ -13,7 +13,9 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.Ageable;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
@@ -22,12 +24,16 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.enchantment.EnchantItemEvent;
+import org.bukkit.event.entity.EntityBreedEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.PiglinBarterEvent;
 import org.bukkit.event.inventory.FurnaceExtractEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerShearEntityEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
@@ -36,6 +42,7 @@ import org.bukkit.persistence.PersistentDataType;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -51,10 +58,15 @@ import java.util.concurrent.ThreadLocalRandom;
 // resource world for the whole session; every other player target is also drawn from that same
 // world's pool.
 //
-// Targets are now per-player: the first player to join receives the initial target. Each
-// subsequent join is assigned a random target from the active world's pool, preferring
-// materials no other player already has. If every material in the pool is taken, duplicates
-// are allowed (best-effort uniqueness, not strict).
+// Targets are grouped under categories (collect, kill, smelt, enchant, shear, breed, craft,
+// barter). Each category dictates how progress is earned and whether the target identifier names
+// a Material or an EntityType. World restrictions: enchant/shear are overworld-only, barter is
+// nether-only; entries placed in the wrong world section are skipped with a warning.
+//
+// Targets are per-player: the first player to join receives the initial target. Each subsequent
+// join is assigned a random target from the active world's pool, preferring identifiers no other
+// player already has. If every identifier in the pool is taken, duplicates are allowed
+// (best-effort uniqueness, not strict).
 //
 // Each player builds toward three cumulative tier thresholds individually, computed from their
 // own assigned amount and multiplier:
@@ -79,6 +91,23 @@ public class ResourceHunt implements Listener {
     private static final int NUM_TIERS = 3;
     private static final double DEFAULT_MULTIPLIER = 2.0;
 
+    public enum Category {
+        COLLECT, KILL, SMELT, ENCHANT, SHEAR, BREED, CRAFT, BARTER
+    }
+
+    // Categories whose target identifier names an EntityType. The rest name a Material.
+    private static final Set<Category> ENTITY_CATEGORIES =
+            EnumSet.of(Category.KILL, Category.SHEAR, Category.BREED);
+
+    // World-section restrictions enforced at load time.
+    private static final Set<Category> OVERWORLD_ONLY =
+            EnumSet.of(Category.ENCHANT, Category.SHEAR);
+    private static final Set<Category> NETHER_ONLY =
+            EnumSet.of(Category.BARTER);
+
+    private static final String OVERWORLD_SECTION = "overworld";
+    private static final String NETHER_SECTION = "nether";
+
     private final Tweaks plugin;
     private final RewardManager rewardManager;
 
@@ -87,7 +116,8 @@ public class ResourceHunt implements Listener {
     private final Target initialTarget;
 
     private final Map<UUID, PlayerTarget> playerTargets = new ConcurrentHashMap<>();
-    private final Set<Material> assignedMaterials = new HashSet<>(); // guarded by `this`
+    // Identity keys (Material or EntityType) already assigned, guarded by `this`.
+    private final Set<Object> assignedKeys = new HashSet<>();
 
     private final Map<UUID, Integer> progress = new ConcurrentHashMap<>();
     private final Map<UUID, BossBar> playerBars = new ConcurrentHashMap<>();
@@ -120,7 +150,7 @@ public class ResourceHunt implements Listener {
             }
             this.worldTargets = List.copyOf(pool);
             plugin.getLogger().info("Resource Hunt active world this session: " + activeWorldKey
-                    + " (initial target " + picked.material.getKey()
+                    + " (initial target " + picked.category + ":" + targetIdName(picked)
                     + ", " + worldTargets.size() + " candidate target(s) in pool)");
         }
 
@@ -148,29 +178,44 @@ public class ResourceHunt implements Listener {
     }
 
     private static class Target {
-        final Material material;
+        final Category category;
+        final Material material;     // non-null iff !ENTITY_CATEGORIES.contains(category)
+        final EntityType entityType; // non-null iff ENTITY_CATEGORIES.contains(category)
         final int amount;
         final double multiplier;
         final String worldKey;
 
-        Target(Material material, int amount, double multiplier, String worldKey) {
+        Target(Category category, Material material, EntityType entityType,
+               int amount, double multiplier, String worldKey) {
+            this.category = category;
             this.material = material;
+            this.entityType = entityType;
             this.amount = amount;
             this.multiplier = multiplier;
             this.worldKey = worldKey;
+        }
+
+        // Identity key used to track uniqueness during assignment. Material and EntityType are
+        // disjoint enum types, so collisions across categories aren't possible.
+        Object identityKey() {
+            return material != null ? material : entityType;
         }
     }
 
     // Per-player resolved target. Built from a Target via assignment; carries precomputed tier
     // thresholds so the hot counting path doesn't recompute them on every drop.
     private static final class PlayerTarget {
+        final Category category;
         final Material material;
+        final EntityType entityType;
         final int amount;
         final double multiplier;
         final int[] tierThresholds;
 
         PlayerTarget(Target target) {
+            this.category = target.category;
             this.material = target.material;
+            this.entityType = target.entityType;
             this.amount = target.amount;
             this.multiplier = target.multiplier;
             this.tierThresholds = computeTierThresholds(target.amount, target.multiplier);
@@ -186,54 +231,110 @@ public class ResourceHunt implements Listener {
         YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
         List<Target> entries = new ArrayList<>();
 
-        loadTargets(config, "overworld", TARGET_WORLD_KEY, entries);
-        loadTargets(config, "nether", TARGET_WORLD_NETHER_KEY, entries);
+        loadTargets(config, OVERWORLD_SECTION, TARGET_WORLD_KEY, entries);
+        loadTargets(config, NETHER_SECTION, TARGET_WORLD_NETHER_KEY, entries);
         return entries;
     }
 
-    // Accepts each entry as either a bare integer (legacy: amount only, multiplier defaults to
-    // DEFAULT_MULTIPLIER) or as the string "<amount>:<multiplier>" (tiered form).
+    // Reads one world section ("overworld" or "nether"). Each section contains a map of
+    // categories; each category contains a map of identifier -> "amount[:multiplier]". Identifiers
+    // are interpreted as Materials for item-based categories and as EntityTypes for entity-based
+    // categories. World-restricted categories (enchant/shear: overworld only, barter: nether only)
+    // are skipped with a warning if they appear in the wrong section.
     private void loadTargets(YamlConfiguration config, String section, String worldKey, List<Target> entries) {
-        if (!config.isConfigurationSection(section)) return;
-        Map<String, Object> values = config.getConfigurationSection(section).getValues(false);
-        for (Map.Entry<String, Object> entry : values.entrySet()) {
-            Material mat = Material.matchMaterial(entry.getKey());
-            if (mat == null) {
-                plugin.getLogger().warning("resource_hunt.yml (" + section + "): unknown material '" + entry.getKey() + "', skipped.");
+        ConfigurationSection sectionConfig = config.getConfigurationSection(section);
+        if (sectionConfig == null) return;
+
+        for (String categoryKey : sectionConfig.getKeys(false)) {
+            Category category;
+            try {
+                category = Category.valueOf(categoryKey.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                plugin.getLogger().warning("resource_hunt.yml (" + section + "): unknown category '"
+                        + categoryKey + "', skipped.");
                 continue;
             }
 
-            int amount;
-            double multiplier;
-            Object raw = entry.getValue();
-            if (raw instanceof Number num) {
-                amount = num.intValue();
-                multiplier = DEFAULT_MULTIPLIER;
-            } else if (raw instanceof String str) {
-                String[] parts = str.split(":", 2);
-                try {
-                    amount = Integer.parseInt(parts[0].trim());
-                    multiplier = parts.length >= 2 ? Double.parseDouble(parts[1].trim()) : DEFAULT_MULTIPLIER;
-                } catch (NumberFormatException e) {
-                    plugin.getLogger().warning("resource_hunt.yml (" + section + "): '" + entry.getKey() + "' has invalid value '" + str + "', skipped.");
-                    continue;
-                }
-            } else {
-                plugin.getLogger().warning("resource_hunt.yml (" + section + "): '" + entry.getKey() + "' has invalid amount, skipped.");
+            if (!isCategoryAllowedIn(category, section)) {
+                plugin.getLogger().warning("resource_hunt.yml: category '" + categoryKey
+                        + "' is not allowed in section '" + section + "', skipped.");
                 continue;
             }
 
-            if (amount <= 0) {
-                plugin.getLogger().warning("resource_hunt.yml (" + section + "): '" + entry.getKey() + "' has non-positive amount, skipped.");
-                continue;
-            }
-            if (multiplier < 1.0) {
-                plugin.getLogger().warning("resource_hunt.yml (" + section + "): '" + entry.getKey() + "' has multiplier < 1.0; clamping to 1.0.");
-                multiplier = 1.0;
-            }
+            ConfigurationSection categorySection = sectionConfig.getConfigurationSection(categoryKey);
+            if (categorySection == null) continue; // empty category block
 
-            entries.add(new Target(mat, amount, multiplier, worldKey));
+            for (Map.Entry<String, Object> entry : categorySection.getValues(false).entrySet()) {
+                parseAndAddTarget(entry, category, section, categoryKey, worldKey, entries);
+            }
         }
+    }
+
+    private void parseAndAddTarget(Map.Entry<String, Object> entry, Category category,
+                                   String section, String categoryKey, String worldKey,
+                                   List<Target> entries) {
+        String targetKey = entry.getKey();
+        String location = section + "/" + categoryKey;
+
+        int amount;
+        double multiplier;
+        Object raw = entry.getValue();
+        if (raw instanceof Number num) {
+            amount = num.intValue();
+            multiplier = DEFAULT_MULTIPLIER;
+        } else if (raw instanceof String str) {
+            String[] parts = str.split(":", 2);
+            try {
+                amount = Integer.parseInt(parts[0].trim());
+                multiplier = parts.length >= 2 ? Double.parseDouble(parts[1].trim()) : DEFAULT_MULTIPLIER;
+            } catch (NumberFormatException e) {
+                plugin.getLogger().warning("resource_hunt.yml (" + location + "): '" + targetKey
+                        + "' has invalid value '" + str + "', skipped.");
+                return;
+            }
+        } else {
+            plugin.getLogger().warning("resource_hunt.yml (" + location + "): '" + targetKey
+                    + "' has invalid amount, skipped.");
+            return;
+        }
+
+        if (amount <= 0) {
+            plugin.getLogger().warning("resource_hunt.yml (" + location + "): '" + targetKey
+                    + "' has non-positive amount, skipped.");
+            return;
+        }
+        if (multiplier < 1.0) {
+            plugin.getLogger().warning("resource_hunt.yml (" + location + "): '" + targetKey
+                    + "' has multiplier < 1.0; clamping to 1.0.");
+            multiplier = 1.0;
+        }
+
+        Material material = null;
+        EntityType entityType = null;
+        if (ENTITY_CATEGORIES.contains(category)) {
+            try {
+                entityType = EntityType.valueOf(targetKey.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                plugin.getLogger().warning("resource_hunt.yml (" + location + "): unknown entity '"
+                        + targetKey + "', skipped.");
+                return;
+            }
+        } else {
+            material = Material.matchMaterial(targetKey);
+            if (material == null) {
+                plugin.getLogger().warning("resource_hunt.yml (" + location + "): unknown material '"
+                        + targetKey + "', skipped.");
+                return;
+            }
+        }
+
+        entries.add(new Target(category, material, entityType, amount, multiplier, worldKey));
+    }
+
+    private static boolean isCategoryAllowedIn(Category category, String section) {
+        if (OVERWORLD_ONLY.contains(category)) return OVERWORLD_SECTION.equals(section);
+        if (NETHER_ONLY.contains(category)) return NETHER_SECTION.equals(section);
+        return true;
     }
 
     public boolean isActive() {
@@ -249,20 +350,20 @@ public class ResourceHunt implements Listener {
     }
 
     // Atomically resolves the player's session target, assigning one on first call. First caller
-    // ever receives `initialTarget`; later callers prefer materials nobody else has been assigned
-    // yet, falling back to a random draw from the full world pool if all materials are taken.
+    // ever receives `initialTarget`; later callers prefer identifiers nobody else has been assigned
+    // yet, falling back to a random draw from the full world pool if all identifiers are taken.
     private synchronized PlayerTarget assignTargetIfAbsent(UUID uuid) {
         PlayerTarget existing = playerTargets.get(uuid);
         if (existing != null) return existing;
         if (worldTargets.isEmpty()) return null;
 
         Target pick;
-        if (assignedMaterials.isEmpty()) {
+        if (assignedKeys.isEmpty()) {
             pick = initialTarget;
         } else {
             List<Target> available = new ArrayList<>();
             for (Target t : worldTargets) {
-                if (!assignedMaterials.contains(t.material)) available.add(t);
+                if (!assignedKeys.contains(t.identityKey())) available.add(t);
             }
             List<Target> pool = available.isEmpty() ? worldTargets : available;
             pick = pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
@@ -270,8 +371,8 @@ public class ResourceHunt implements Listener {
 
         PlayerTarget pt = new PlayerTarget(pick);
         playerTargets.put(uuid, pt);
-        assignedMaterials.add(pick.material);
-        plugin.getLogger().info("Resource Hunt: assigned " + pick.material.getKey()
+        assignedKeys.add(pick.identityKey());
+        plugin.getLogger().info("Resource Hunt: assigned " + pick.category + ":" + targetIdName(pick)
                 + " (tiers " + pt.tierThresholds[0] + "/" + pt.tierThresholds[1] + "/" + pt.tierThresholds[2]
                 + ", x" + pick.multiplier + ") to " + uuid);
         return pt;
@@ -302,6 +403,10 @@ public class ResourceHunt implements Listener {
         UUID uuid = event.getPlayer().getUniqueId();
         PlayerTarget target = targetFor(uuid);
         if (target == null) return;
+        if (target.material == null) return;
+        // Block drops only credit COLLECT targets. Mining is one way of obtaining; smelt/enchant/
+        // craft/etc. have their own dedicated paths.
+        if (target.category != Category.COLLECT) return;
         boolean canCount = worldKey.contains(activeWorldKey) && !isFullyComplete(uuid);
 
         int gained = 0;
@@ -317,13 +422,31 @@ public class ResourceHunt implements Listener {
         recordProgress(event.getPlayer(), target, gained);
     }
 
+    // COLLECT acts as a wildcard: any supported obtain method credits a COLLECT target. Other
+    // categories only credit when the action matches exactly.
+    private static boolean categoryAllowsAction(Category target, Category action) {
+        return target == Category.COLLECT || target == action;
+    }
+
+    /**
+     * Backward-compatible entry point. Treats the drops as a COLLECT action (mining-style obtain).
+     * Callers that perform a more specific action (e.g. Smelter) should use the overload that
+     * takes a {@link Category} so SMELT/etc. targets can be credited too.
+     */
+    public void recordExternalDrops(Player player, Block block, Collection<ItemStack> drops) {
+        recordExternalDrops(player, block, drops, Category.COLLECT);
+    }
+
     /**
      * Hook for enchant code paths that route drops manually and therefore bypass
      * BlockDropItemEvent (Tunneller's surrounding block breaks, Smelter's setDropItems(false)
      * path, etc.). Call this once per broken block, BEFORE the block is set to AIR, with the
      * drops the player will actually receive (i.e. after smelter/fortune/silk processing).
+     *
+     * @param action the action category that produced these drops. Smelter passes {@link
+     *               Category#SMELT}; vanilla-style block breaks pass {@link Category#COLLECT}.
      */
-    public void recordExternalDrops(Player player, Block block, Collection<ItemStack> drops) {
+    public void recordExternalDrops(Player player, Block block, Collection<ItemStack> drops, Category action) {
         String worldKey = block.getWorld().getKey().asString();
         if (!isResourceWorld(worldKey)) return;
 
@@ -338,6 +461,8 @@ public class ResourceHunt implements Listener {
         UUID uuid = player.getUniqueId();
         PlayerTarget target = targetFor(uuid);
         if (target == null) return;
+        if (target.material == null) return;
+        if (!categoryAllowsAction(target.category, action)) return;
         boolean canCount = worldKey.contains(activeWorldKey) && !isFullyComplete(uuid);
 
         int gained = 0;
@@ -352,9 +477,9 @@ public class ResourceHunt implements Listener {
         recordProgress(player, target, gained);
     }
 
-    // Counts mob-loot drops toward Resource Hunt. HIGH priority so we read drops AFTER quality
-    // looting (LOW), Egg Collector (NORMAL), and any other plugin that mutates event.getDrops().
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    // Credits one tally per matching mob kill. KILL targets track the action itself (entity type
+    // killed), not the drops, so we don't tag any items here.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntityDeath(EntityDeathEvent event) {
         if (!isActive()) return;
         LivingEntity entity = event.getEntity();
@@ -367,18 +492,84 @@ public class ResourceHunt implements Listener {
         UUID uuid = killer.getUniqueId();
         PlayerTarget target = targetFor(uuid);
         if (target == null) return;
-        boolean canCount = worldKey.contains(activeWorldKey) && !isFullyComplete(uuid);
+        if (target.category != Category.KILL) return;
+        if (target.entityType == null || entity.getType() != target.entityType) return;
+        if (!worldKey.equals(activeWorldKey) || isFullyComplete(uuid)) return;
+        recordProgress(killer, target, 1);
+    }
+
+    // SHEAR target: each shear action of the matching entity type credits one tally.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerShearEntity(PlayerShearEntityEvent event) {
+        if (!isActive()) return;
+        Player player = event.getPlayer();
+        String worldKey = event.getEntity().getWorld().getKey().asString();
+        if (!isResourceWorld(worldKey)) return;
+        PlayerTarget target = targetFor(player.getUniqueId());
+        if (target == null) return;
+        if (target.category != Category.SHEAR) return;
+        if (target.entityType == null || event.getEntity().getType() != target.entityType) return;
+        if (!worldKey.equals(activeWorldKey) || isFullyComplete(player.getUniqueId())) return;
+        recordProgress(player, target, 1);
+    }
+
+    // BREED target: each successful breed event whose breeder is the player credits one tally.
+    // Natural breeding (e.g. villager-villager with no player feeder) has a null breeder and is
+    // skipped.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onEntityBreed(EntityBreedEvent event) {
+        if (!isActive()) return;
+        if (!(event.getBreeder() instanceof Player player)) return;
+        String worldKey = event.getEntity().getWorld().getKey().asString();
+        if (!isResourceWorld(worldKey)) return;
+        PlayerTarget target = targetFor(player.getUniqueId());
+        if (target == null) return;
+        if (target.category != Category.BREED) return;
+        if (target.entityType == null || event.getEntity().getType() != target.entityType) return;
+        if (!worldKey.equals(activeWorldKey) || isFullyComplete(player.getUniqueId())) return;
+        recordProgress(player, target, 1);
+    }
+
+    // BARTER target: piglin barter outcome items count toward the player who triggered the trade.
+    // PiglinBarterEvent doesn't expose the bartering player, so we attribute to the nearest
+    // player in the active resource world within an 8-block radius — the same range piglins use
+    // to consider gold-throwers as trade partners.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPiglinBarter(PiglinBarterEvent event) {
+        if (!isActive()) return;
+        LivingEntity piglin = event.getEntity();
+        String worldKey = piglin.getWorld().getKey().asString();
+        if (!isResourceWorld(worldKey)) return;
+
+        Player player = nearestPlayer(piglin, 8 * 8);
+        if (player == null) return;
+
+        PlayerTarget target = targetFor(player.getUniqueId());
+        if (target == null) return;
+        if (target.category != Category.BARTER) return;
+        if (target.material == null) return;
+        if (!worldKey.equals(activeWorldKey) || isFullyComplete(player.getUniqueId())) return;
 
         int gained = 0;
-        for (ItemStack stack : event.getDrops()) {
+        for (ItemStack stack : event.getOutcome()) {
             if (stack == null || stack.getType() != target.material) continue;
-            if (isCounted(stack)) continue;
-            if (canCount) gained += stack.getAmount();
-            markCounted(stack);
+            gained += stack.getAmount();
         }
+        if (gained > 0) recordProgress(player, target, gained);
+    }
 
-        if (gained <= 0) return;
-        recordProgress(killer, target, gained);
+    private Player nearestPlayer(LivingEntity origin, double maxDistanceSquared) {
+        Player best = null;
+        double bestDist2 = maxDistanceSquared;
+        Location loc = origin.getLocation();
+        for (Player p : origin.getWorld().getPlayers()) {
+            double d2 = p.getLocation().distanceSquared(loc);
+            if (d2 < bestDist2) {
+                bestDist2 = d2;
+                best = p;
+            }
+        }
+        return best;
     }
 
     // Counts items pulled from a furnace, blast furnace, or smoker — FurnaceExtractEvent fires
@@ -394,7 +585,10 @@ public class ResourceHunt implements Listener {
         if (!isResourceWorld(worldKey)) return;
         PlayerTarget target = targetFor(player.getUniqueId());
         if (target == null) return;
+        if (target.material == null) return;
         if (event.getItemType() != target.material) return;
+        // Furnace extraction credits both COLLECT (any obtain method) and SMELT (action-specific).
+        if (!categoryAllowsAction(target.category, Category.SMELT)) return;
 
         int amount = event.getItemAmount();
 
@@ -418,6 +612,9 @@ public class ResourceHunt implements Listener {
 
         PlayerTarget target = targetFor(event.getPlayer().getUniqueId());
         if (target == null) return;
+        if (target.material == null) return;
+        // Fishing is a COLLECT-only obtain path.
+        if (target.category != Category.COLLECT) return;
 
         ItemStack stack = caughtItem.getItemStack();
         if (stack.getType() != target.material) return;
@@ -427,6 +624,49 @@ public class ResourceHunt implements Listener {
 
         if (!worldKey.equals(activeWorldKey) || isFullyComplete(event.getPlayer().getUniqueId())) return;
         recordProgress(event.getPlayer(), target, stack.getAmount());
+    }
+
+    // Credits an ENCHANT target when the player enchants a matching item in the active resource
+    // world. The item itself is tagged so it can't be funneled back through other counting paths.
+    // Enchanted books are not handled here because the input material at event time is BOOK rather
+    // than ENCHANTED_BOOK; configuring ENCHANT enchanted_book would never match by design.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onEnchantItem(EnchantItemEvent event) {
+        Player player = event.getEnchanter();
+        String worldKey = event.getEnchantBlock().getWorld().getKey().asString();
+        if (!isResourceWorld(worldKey)) return;
+
+        ItemStack stack = event.getItem();
+        Material material = stack.getType();
+        markCounted(stack);
+
+        if (!isActive()) return;
+        PlayerTarget target = targetFor(player.getUniqueId());
+        if (target == null) return;
+        if (target.material == null) return;
+        if (target.material != material) return;
+        if (!categoryAllowsAction(target.category, Category.ENCHANT)) return;
+        if (!worldKey.equals(activeWorldKey) || isFullyComplete(player.getUniqueId())) return;
+        recordProgress(player, target, 1);
+    }
+
+    /**
+     * Records a CRAFT action toward the player's target. Called by {@link ResourceCraftListener}
+     * from a deferred (next-tick) runnable so it can observe items that landed in the inventory
+     * after the originating CraftItemEvent.
+     */
+    public void recordCraftProgress(Player player, Material material, int amount) {
+        if (!isActive()) return;
+        if (amount <= 0) return;
+        UUID uuid = player.getUniqueId();
+        PlayerTarget target = targetFor(uuid);
+        if (target == null) return;
+        if (target.material == null) return;
+        if (target.material != material) return;
+        if (!categoryAllowsAction(target.category, Category.CRAFT)) return;
+        String worldKey = player.getWorld().getKey().asString();
+        if (!worldKey.equals(activeWorldKey) || isFullyComplete(uuid)) return;
+        recordProgress(player, target, amount);
     }
 
     // When a counted item is placed as a block in the resource world, mark its position on the
@@ -539,6 +779,8 @@ public class ResourceHunt implements Listener {
 
     private void announceTierCompletion(Player player, PlayerTarget target, int tier) {
         boolean isFinal = (tier >= NUM_TIERS);
+        String verb = categoryVerb(target.category);
+        String name = readableName(target);
 
         Component announcement;
         if (isFinal) {
@@ -555,7 +797,7 @@ public class ResourceHunt implements Listener {
                     .append(Component.text("[Resource Hunt] ", NamedTextColor.GOLD, TextDecoration.BOLD))
                     .append(Component.text(player.getName(), NamedTextColor.AQUA))
                     .append(Component.text(" reached Tier " + tier + " (", NamedTextColor.YELLOW))
-                    .append(Component.text(target.tierThresholds[tier - 1] + "x " + readableName(target.material), NamedTextColor.WHITE))
+                    .append(Component.text(verb + " " + target.tierThresholds[tier - 1] + "x " + name, NamedTextColor.WHITE))
                     .append(Component.text("). Next tier: ", NamedTextColor.YELLOW))
                     .append(Component.text(nextThreshold + "x", NamedTextColor.GOLD))
                     .append(Component.text(".", NamedTextColor.YELLOW))
@@ -599,10 +841,11 @@ public class ResourceHunt implements Listener {
                     .append(Component.text("you've already completed all tiers this session.", NamedTextColor.YELLOW))
                     .build();
         } else {
+            String verb = categoryVerb(target.category);
             msg = Component.text()
                     .append(Component.text("Resource Hunt: ", NamedTextColor.GOLD, TextDecoration.BOLD))
-                    .append(Component.text("gather ", NamedTextColor.YELLOW))
-                    .append(Component.text(readableName(target.material), NamedTextColor.WHITE))
+                    .append(Component.text(verb + " ", NamedTextColor.YELLOW))
+                    .append(Component.text(readableName(target), NamedTextColor.WHITE))
                     .append(Component.text(" in the resource world to clear tiers ", NamedTextColor.YELLOW))
                     .append(Component.text(target.tierThresholds[0] + "/" + target.tierThresholds[1] + "/" + target.tierThresholds[2], NamedTextColor.GOLD))
                     .append(Component.text(". Each tier grants a reward.", NamedTextColor.YELLOW))
@@ -727,11 +970,37 @@ public class ResourceHunt implements Listener {
         float prog = Math.max(0.0f, Math.min(1.0f, (float) current / threshold));
         bar.progress(prog);
         bar.name(Component.text(
-                "Resource Hunt Tier " + (tierIdx + 1) + ": " + current + "/" + threshold + " " + readableName(target.material),
+                "Resource Hunt Tier " + (tierIdx + 1) + " - " + categoryVerb(target.category)
+                        + " " + current + "/" + threshold + " " + readableName(target),
                 NamedTextColor.GREEN, TextDecoration.BOLD));
     }
 
-    private static String readableName(Material material) {
-        return material.name().toLowerCase().replace('_', ' ');
+    private static String categoryVerb(Category category) {
+        return switch (category) {
+            case COLLECT -> "Collect";
+            case KILL -> "Kill";
+            case SMELT -> "Smelt";
+            case ENCHANT -> "Enchant";
+            case SHEAR -> "Shear";
+            case BREED -> "Breed";
+            case CRAFT -> "Craft";
+            case BARTER -> "Barter";
+        };
+    }
+
+    private static String readableName(PlayerTarget target) {
+        if (target.material != null) return prettify(target.material.name());
+        if (target.entityType != null) return prettify(target.entityType.name());
+        return "?";
+    }
+
+    private static String targetIdName(Target target) {
+        if (target.material != null) return target.material.getKey().toString();
+        if (target.entityType != null) return target.entityType.getKey().toString();
+        return "?";
+    }
+
+    private static String prettify(String enumName) {
+        return enumName.toLowerCase().replace('_', ' ');
     }
 }

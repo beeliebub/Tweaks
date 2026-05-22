@@ -76,9 +76,10 @@ public class Smelter implements Listener {
         // Credit smelted drops toward the active Resource Hunt. setDropItems(false) above
         // suppresses BlockDropItemEvent, which would otherwise be the path that ResourceHunt
         // observes; we have to call the external-drops hook directly so smelted ingots count
-        // toward the goal in jass:resource.
+        // toward the goal in jass:resource. Tagged as SMELT so dedicated smelt targets progress;
+        // COLLECT targets also progress because COLLECT acts as a wildcard obtain method.
         if (resourceHunt != null) {
-            resourceHunt.recordExternalDrops(player, block, smelted);
+            resourceHunt.recordExternalDrops(player, block, smelted, ResourceHunt.Category.SMELT);
         }
 
         boolean routeToInventory = telekinesis != null && telekinesis.hasEnchant(tool);

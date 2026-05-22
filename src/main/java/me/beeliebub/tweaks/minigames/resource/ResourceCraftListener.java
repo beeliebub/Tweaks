@@ -32,7 +32,31 @@ public class ResourceCraftListener implements Listener {
         Material resultMaterial = event.getRecipe().getResult().getType();
         if (resultMaterial.isAir()) return;
 
-        Bukkit.getScheduler().runTask(plugin, () -> tagCraftedItems(player, resultMaterial));
+        // Snapshot untagged stacks of the result material BEFORE the recipe completes; the
+        // post-tick delta is the amount actually crafted (covers shift-click multi-crafts where
+        // CraftItemEvent fires once but many results are produced).
+        int beforeCount = countUntaggedMaterial(player, resultMaterial);
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            int crafted = Math.max(0, countUntaggedMaterial(player, resultMaterial) - beforeCount);
+            tagCraftedItems(player, resultMaterial);
+            if (crafted > 0) {
+                resourceHunt.recordCraftProgress(player, resultMaterial, crafted);
+            }
+        });
+    }
+
+    private int countUntaggedMaterial(Player player, Material material) {
+        int count = 0;
+        for (ItemStack stack : player.getInventory().getContents()) {
+            if (stack == null || stack.getType() != material) continue;
+            if (resourceHunt.isItemCounted(stack)) continue;
+            count += stack.getAmount();
+        }
+        ItemStack cursor = player.getOpenInventory().getCursor();
+        if (cursor != null && cursor.getType() == material && !resourceHunt.isItemCounted(cursor)) {
+            count += cursor.getAmount();
+        }
+        return count;
     }
 
     // Visible for tests and other resource-package callers that already hold a player ref.

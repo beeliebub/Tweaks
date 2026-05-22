@@ -1,36 +1,56 @@
 # Resource Hunt targets. On every server start the plugin picks one entry at
 # random as the active hunt for the session.
 #
-# Each entry is either:
-#   <material>: <amount>                  # bare amount; multiplier defaults to 2.0
-#   <material>: "<amount>:<multiplier>"   # explicit amount and tier multiplier (>= 1.0)
+# Tasks are grouped by world (overworld/nether) and category:
+#   collect: Any way of obtaining the item (drops, chests, etc.)
+#   kill: Kill the targeted entity
+#   smelt: Smelt the target item (supports Smelter enchantment)
+#   enchant: Enchant the target item (Overworld only)
+#   shear: Shear the targeted entity (Overworld only)
+#   breed: Breed the targeted entity
+#   craft: Craft the targeted item
+#   barter: Receive the target item from a Piglin barter (Nether only)
+#
+# Each entry within a category is either:
+#   <target>: <amount>                  # bare amount; multiplier defaults to 2.0
+#   <target>: "<amount>:<multiplier>"   # explicit amount and tier multiplier (>= 1.0)
 #
 # Each player works through three cumulative tier thresholds:
 #   Tier 1 = amount
 #   Tier 2 = round(amount * multiplier)
-#   Tier 3 = round(amount * multiplier * multiplier)
+#   Tier 3 = round(amount * multiplier^2)
 # Crossing each threshold grants the "resource" reward (claimable with /reward
-# claim). Drops, mob kills, fishing, and smelter extracts only count in the
-# active resource world.
+# claim). Actions only count while inside the active resource world.
 #
-# Material names follow Bukkit Material constants (case-insensitive).
-# Amount must be > 0; multiplier is clamped to >= 1.0.
+# Targets are Bukkit Material constants or EntityType names (case-insensitive).
 
 overworld:
-  iron_ore: "7:2.0"
-  raw_copper: "32:1.75"
-  raw_gold: "12:2.0"
-  diamond: "4:2.0"
-  emerald: "3:2.0"
-  coal: "32:2.0"
-  amethyst_shard: "24:2.0"
+  collect:
+    iron_ore: "7:2.0"
+    raw_copper: "32:1.75"
+  kill:
+    creeper: "10:2.0"
+    dolphin: "5:1.5"
+  smelt:
+    iron_ingot: "20:1.75"
+    cracked_stone_bricks: "30:2.0"
+  enchant:
+    diamond_hoe: "5:2.0"
+    netherite_axe: "2:2.5"
+  shear:
+    sheep: "20:2.0"
+  breed:
+    cow: "2:1.5"
+    axolotl: "1:2.0"
+  craft:
+    crafting_table: "12:3.0"
+    brewing_stand: "10:2.5"
 
 nether:
-  ancient_debris: "2:2.0"
-  ghast_tear: "5:2.0"
-  blaze_rod: "10:2.0"
-  nether_gold_ore: "32:2.0"
-  gold_nugget: "64:2.0"
-  quartz: "64:2.0"
-  crimson_fungus: "16:2.0"
-  warped_fungus: "16:2.0"
+  collect:
+  kill:
+  smelt:
+  barter:
+    water_bottle: "10:2.5"
+  breed:
+  craft:
