@@ -105,6 +105,7 @@ public class PlayerAdminManager implements Listener {
     private final NamespacedKey flyAdvancementKey; // nullable when config string is invalid
     private final NamespacedKey flyKey;
     private final Set<String> defaultFlyWorlds = new HashSet<>();
+    private final java.util.Map<java.util.UUID, Boolean> flyingStates = new java.util.concurrent.ConcurrentHashMap<>();
 
     // ------------------------------------------------------------
     // Nick
@@ -485,6 +486,10 @@ public class PlayerAdminManager implements Listener {
         Player player = event.getPlayer();
         lastMovementMs.put(player.getUniqueId(), System.currentTimeMillis());
 
+        if (event.getFrom().getWorld() != event.getTo().getWorld()) {
+            flyingStates.put(player.getUniqueId(), player.isFlying());
+        }
+
         Location origin = afkLocations.get(player.getUniqueId());
         if (origin == null) return;
         Location to = event.getTo();
@@ -515,13 +520,24 @@ public class PlayerAdminManager implements Listener {
         assignTeam(player);
         refreshTabName(player);
 
-        // Fly: revoke if the destination world does not grant access.
-        if (!player.getAllowFlight()) return;
-        String toWorldKey = player.getWorld().getKey().asString();
-        if (isDefaultFlyWorld(toWorldKey)) return;
-        if (hasFlyAdvancement(player)) return;
-        disableFlight(player);
-        player.sendMessage(Component.text("Flight disabled — you don't have access in this world.")
-                .color(NamedTextColor.RED));
+        // Fly: restore or revoke based on PDC preference and eligibility.
+        Boolean wasFlying = flyingStates.remove(player.getUniqueId());
+        Boolean stored = player.getPersistentDataContainer().get(flyKey, PersistentDataType.BOOLEAN);
+        boolean wantsFlight = stored != null && stored;
+
+        if (!wantsFlight) {
+            disableFlight(player);
+            return;
+        }
+        if (canFly(player)) {
+            player.setAllowFlight(true);
+            if (wasFlying != null && wasFlying) {
+                player.setFlying(true);
+            }
+        } else {
+            disableFlight(player);
+            player.sendMessage(Component.text("Flight disabled — you don't have access in this world.")
+                    .color(NamedTextColor.RED));
+        }
     }
 }

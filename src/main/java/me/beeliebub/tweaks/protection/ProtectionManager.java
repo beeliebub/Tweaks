@@ -289,7 +289,7 @@ public final class ProtectionManager {
         if (keys.length <= ASYNC_STAMP_THRESHOLD) {
             done = claimAsync(world, keys, stamped.id());
         } else {
-            claimLazy(keys, stamped.id());
+            claimLazy(world, keys, stamped.id());
             done = CompletableFuture.completedFuture(null);
         }
         if (pendingChunks != null) pendingChunks.set(done);
@@ -319,7 +319,7 @@ public final class ProtectionManager {
         if (keys.length <= ASYNC_STAMP_THRESHOLD) {
             return claimAsync(world, keys, stamped.id());
         }
-        claimLazy(keys, stamped.id());
+        claimLazy(world, keys, stamped.id());
         return CompletableFuture.completedFuture(null);
     }
 
@@ -358,11 +358,24 @@ public final class ProtectionManager {
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
     }
 
-    private void claimLazy(long[] keys, String regionId) {
+    private void claimLazy(World world, long[] keys, String regionId) {
         for (long key : keys) {
             pendingStamps
                     .computeIfAbsent(key, k -> ConcurrentHashMap.newKeySet())
                     .add(regionId);
+        }
+        // Chunks already loaded at claim time will not fire a ChunkLoadEvent,
+        // so stamp them directly here; otherwise only the chunk the player
+        // interacted with would ever get the pointer until an unload/reload.
+        for (long key : keys) {
+            int cx = GeometryUtil.chunkX(key);
+            int cz = GeometryUtil.chunkZ(key);
+            if (world.isChunkLoaded(cx, cz)) {
+                Chunk chunk = world.getChunkAt(cx, cz);
+                PDCUtil.append(chunk, regionId);
+                Set<String> pending = pendingStamps.get(key);
+                if (pending != null) pending.remove(regionId);
+            }
         }
     }
 

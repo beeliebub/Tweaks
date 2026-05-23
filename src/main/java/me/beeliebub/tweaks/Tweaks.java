@@ -196,6 +196,7 @@ public class Tweaks extends JavaPlugin {
         moonSystem.start();
         getServer().getPluginManager().registerEvents(moonSystem, this);
         getCommand("bloodmoon").setExecutor(moonSystem);
+        getCommand("fullmoon").setExecutor(moonSystem);
 
         // Reward + Resource Hunt are constructed early so Tunneller can credit its surrounding
         // (BlockDropItemEvent-bypassing) breaks via ResourceHunt#recordExternalDrops. Listener
