@@ -762,7 +762,7 @@ A gathering minigame that runs in the **`jass:resource`** (Overworld) or **`jass
 - **Persistence**: Your assigned task stays the same for the entire session.
 
 **Task Categories**:
-Tasks are categorized by how you must obtain or interact with the target:
+Tasks are categorized by how you must obtain or interact with the target. Depending on the category, targets are either Minecraft **Materials** (for items/blocks) or **Entity Types** (for mobs).
 - **Collect**: Any supported way of obtaining the item (drops, chests, etc.).
 - **Kill**: Kill the targeted entity.
 - **Smelt**: Smelt the target item (e.g., smelting raw iron or iron ore for an Iron Ingot task). Supports the **Smelter** enchantment.
