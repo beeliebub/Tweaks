@@ -1038,6 +1038,21 @@ public class ResourceHunt implements Listener {
     }
 
     private static String prettify(String enumName) {
-        return enumName.toLowerCase().replace('_', ' ');
+        String spaced = enumName.toLowerCase().replace('_', ' ');
+        StringBuilder out = new StringBuilder(spaced.length());
+        boolean capitalizeNext = true;
+        for (int i = 0; i < spaced.length(); i++) {
+            char c = spaced.charAt(i);
+            if (c == ' ') {
+                capitalizeNext = true;
+                out.append(c);
+            } else if (capitalizeNext) {
+                out.append(Character.toUpperCase(c));
+                capitalizeNext = false;
+            } else {
+                out.append(c);
+            }
+        }
+        return out.toString();
     }
 }
