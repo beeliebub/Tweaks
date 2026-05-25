@@ -6,7 +6,7 @@
 #   kill: Kill the targeted entity
 #   smelt: Smelt the target item (supports Smelter enchantment)
 #   enchant: Enchant the target item (Overworld only)
-#   shear: Shear the targeted entity (Overworld only)
+#   shear: Shear the targeted entity (Overworld only). Supports colored sheep (e.g. red_sheep).
 #   breed: Breed the targeted entity
 #   craft: Craft the targeted item
 #   barter: Receive the target item from a Piglin barter (Nether only)
@@ -39,6 +39,7 @@ overworld:
     netherite_axe: "2:2.5"
   shear:
     sheep: "20:2.0"
+    red_sheep: "2:2.0"
   breed:
     cow: "2:1.5"
     axolotl: "1:2.0"

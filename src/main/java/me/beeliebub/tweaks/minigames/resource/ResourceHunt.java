@@ -184,20 +184,24 @@ public class ResourceHunt implements Listener {
         final int amount;
         final double multiplier;
         final String worldKey;
+        final org.bukkit.DyeColor sheepColor;
 
         Target(Category category, Material material, EntityType entityType,
-               int amount, double multiplier, String worldKey) {
+               int amount, double multiplier, String worldKey, org.bukkit.DyeColor sheepColor) {
             this.category = category;
             this.material = material;
             this.entityType = entityType;
             this.amount = amount;
             this.multiplier = multiplier;
             this.worldKey = worldKey;
+            this.sheepColor = sheepColor;
         }
 
         // Identity key used to track uniqueness during assignment. Material and EntityType are
         // disjoint enum types, so collisions across categories aren't possible.
+        // For color-restricted SHEAR targets, sheepColor is included in the composite key.
         Object identityKey() {
+            if (sheepColor != null) return java.util.Objects.hash(entityType, sheepColor);
             return material != null ? material : entityType;
         }
     }
@@ -211,6 +215,7 @@ public class ResourceHunt implements Listener {
         final int amount;
         final double multiplier;
         final int[] tierThresholds;
+        final org.bukkit.DyeColor sheepColor;
 
         PlayerTarget(Target target) {
             this.category = target.category;
@@ -219,6 +224,7 @@ public class ResourceHunt implements Listener {
             this.amount = target.amount;
             this.multiplier = target.multiplier;
             this.tierThresholds = computeTierThresholds(target.amount, target.multiplier);
+            this.sheepColor = target.sheepColor;
         }
     }
 
@@ -311,13 +317,28 @@ public class ResourceHunt implements Listener {
 
         Material material = null;
         EntityType entityType = null;
+        org.bukkit.DyeColor sheepColor = null;
         if (ENTITY_CATEGORIES.contains(category)) {
-            try {
-                entityType = EntityType.valueOf(targetKey.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                plugin.getLogger().warning("resource_hunt.yml (" + location + "): unknown entity '"
-                        + targetKey + "', skipped.");
-                return;
+            boolean resolved = false;
+            if (category == Category.SHEAR && targetKey.toLowerCase().endsWith("_sheep")) {
+                String prefix = targetKey.substring(0, targetKey.length() - 6);
+                try {
+                    sheepColor = org.bukkit.DyeColor.valueOf(prefix.toUpperCase());
+                    entityType = EntityType.SHEEP;
+                    resolved = true;
+                } catch (IllegalArgumentException ignored) {
+                    // Unknown color prefix — fall through to the normal EntityType.valueOf path so
+                    // the existing "unknown entity" warning fires naturally.
+                }
+            }
+            if (!resolved) {
+                try {
+                    entityType = EntityType.valueOf(targetKey.toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    plugin.getLogger().warning("resource_hunt.yml (" + location + "): unknown entity '"
+                            + targetKey + "', skipped.");
+                    return;
+                }
             }
         } else {
             material = Material.matchMaterial(targetKey);
@@ -328,7 +349,7 @@ public class ResourceHunt implements Listener {
             }
         }
 
-        entries.add(new Target(category, material, entityType, amount, multiplier, worldKey));
+        entries.add(new Target(category, material, entityType, amount, multiplier, worldKey, sheepColor));
     }
 
     private static boolean isCategoryAllowedIn(Category category, String section) {
@@ -380,6 +401,10 @@ public class ResourceHunt implements Listener {
 
     private PlayerTarget targetFor(UUID uuid) {
         return playerTargets.get(uuid);
+    }
+
+    int getProgress(java.util.UUID uuid) {
+        return progress.getOrDefault(uuid, 0);
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
@@ -509,6 +534,10 @@ public class ResourceHunt implements Listener {
         if (target == null) return;
         if (target.category != Category.SHEAR) return;
         if (target.entityType == null || event.getEntity().getType() != target.entityType) return;
+        if (target.sheepColor != null) {
+            if (!(event.getEntity() instanceof org.bukkit.entity.Sheep sheep)) return;
+            if (sheep.getColor() != target.sheepColor) return;
+        }
         if (!worldKey.equals(activeWorldKey) || isFullyComplete(player.getUniqueId())) return;
         recordProgress(player, target, 1);
     }
@@ -990,13 +1019,21 @@ public class ResourceHunt implements Listener {
 
     private static String readableName(PlayerTarget target) {
         if (target.material != null) return prettify(target.material.name());
-        if (target.entityType != null) return prettify(target.entityType.name());
+        if (target.entityType != null) {
+            if (target.sheepColor != null)
+                return prettify(target.sheepColor.name()) + " " + prettify(target.entityType.name());
+            return prettify(target.entityType.name());
+        }
         return "?";
     }
 
     private static String targetIdName(Target target) {
         if (target.material != null) return target.material.getKey().toString();
-        if (target.entityType != null) return target.entityType.getKey().toString();
+        if (target.entityType != null) {
+            if (target.sheepColor != null)
+                return target.sheepColor.name().toLowerCase() + "_" + target.entityType.getKey().getKey();
+            return target.entityType.getKey().toString();
+        }
         return "?";
     }
 

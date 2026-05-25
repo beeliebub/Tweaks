@@ -767,7 +767,7 @@ Tasks are categorized by how you must obtain or interact with the target. Depend
 - **Kill**: Kill the targeted entity.
 - **Smelt**: Smelt the target item (e.g., smelting raw iron or iron ore for an Iron Ingot task). Supports the **Smelter** enchantment.
 - **Enchant**: Enchant the target item (Overworld only).
-- **Shear**: Shear the targeted entity (Overworld only).
+- **Shear**: Shear the targeted entity (Overworld only). Supports specific sheep colors (e.g., `red_sheep`).
 - **Breed**: Breed the targeted entity.
 - **Craft**: Craft the targeted item.
 - **Barter**: Receive the target item from a Piglin barter (Nether only).
@@ -803,6 +803,9 @@ overworld:
     iron_ingot: "20:1.75"
   enchant:
     diamond_pickaxe: 5
+  shear:
+    sheep: "20:2.0"
+    red_sheep: "2:2.0"
   breed:
     cow: 2
 nether:

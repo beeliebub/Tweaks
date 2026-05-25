@@ -706,6 +706,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("The world (overworld/nether) is picked at startup,"),
                 white("but each player gets their own random target material."),
                 white("Targets are unique per-player where possible."),
+                green("Shear targets support specific colors (e.g. red_sheep)."),
                 aqua("Three cumulative tier thresholds:"),
                 white("T1 = amount, T2 = round(T1 * multiplier), T3 = round(T1 * multiplier²)."),
                 gold("Each tier crossed grants one 'resource' reward."),

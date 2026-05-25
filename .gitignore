@@ -25,6 +25,7 @@ Desktop.ini
 .beads/
 .mux/
 .gemini/
+/org/mockbukkit/
 
 # Beads / Dolt files (added by bd init)
 .dolt/
