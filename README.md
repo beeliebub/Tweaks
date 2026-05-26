@@ -1022,6 +1022,7 @@ When an action occurs, the system checks rules in this order:
 | `tweaks.protection.info` | View region details via `/region info`. |
 | `tweaks.protection.member` | Add/remove members from regions. |
 | `tweaks.protection.flag` | Configure region flags and material rules. |
+| `tweaks.protection.admin` | Grants full administrative access over all regions, bypassing limits and ownership checks. |
 | `tweaks.admin.home` | Teleport to other players' homes. |
 | `tweaks.admin.sethome` | Set homes for other players. |
 | `tweaks.admin.delhome` | Delete other players' homes. |
