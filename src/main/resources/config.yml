@@ -8,6 +8,9 @@ max-homes: 15
 protection:
   selection-tool: STONE_AXE
 
+# Maximum number of chunks a single player may own through the purchase system.
+max_chunks: 200
+
 # Drop chance percentage for Egg Collector enchantment (0.0 - 100.0).
 egg-collector-drop-chance: 0.5
 

@@ -30,6 +30,7 @@ commands:
     description: Update plugin config options.
     usage: |
       /tconfig max_homes <int>
+      /tconfig max_chunks <int>
       /tconfig egg_collector_drop_chance <0.0-100.0>
       /tconfig eggdrop <disable|enable> <mob>
       /tconfig spawneregg <disable|enable> <mob>
@@ -125,3 +126,26 @@ commands:
       /region setparent <child> <parent> | unsetparent <child>
       /region gui [name]
     aliases: [rg]
+
+permissions:
+  tweaks.protection.claim:
+    description: Allows a player to claim land regions.
+    default: true
+  tweaks.protection.claim.purchasable:
+    description: Allows a player to purchase chunk claims.
+    default: true
+  tweaks.protection.unclaim:
+    description: Allows a player to unclaim land regions.
+    default: true
+  tweaks.protection.member:
+    description: Allows a player to manage region members.
+    default: true
+  tweaks.protection.flag:
+    description: Allows a player to set region flags.
+    default: true
+  tweaks.protection.info:
+    description: Allows a player to view region info.
+    default: true
+  tweaks.protection.admin:
+    description: Grants administrative access over all regions.
+    default: op

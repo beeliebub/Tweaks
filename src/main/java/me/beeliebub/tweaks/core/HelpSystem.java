@@ -680,6 +680,18 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 red("Permissions: tweaks.admin.itemedit, tweaks.admin.guicopy.")
         ), Material.WRITABLE_BOOK, 37, ColorUtil.HELP_GRAD_ITEM_TOOLS, List.of("blocklog"), Permissions.ADMIN_ITEM_EDIT));
 
+        articles.add(new HelpArticle("config_admin", "Config Tools (Admin)", List.of(
+                gray("Manage plugin configuration at runtime."),
+                cmd("/tconfig max_homes <int>", "Set global max homes per player."),
+                cmd("/tconfig max_chunks <int>", "Set global max chunk claims per player."),
+                cmd("/tconfig egg_collector_drop_chance <%>", "Set base egg drop chance."),
+                cmd("/tconfig eggdrop <disable|enable> <mob>", "Toggle drops for specific mobs."),
+                cmd("/tconfig spawneregg <disable|enable> <mob>", "Toggle spawner-egg usage for mobs."),
+                cmd("/tconfig resourceitems <add|remove> <item>", "Manage resource world allowed items."),
+                red("Permission: tweaks.admin.config.")
+        ), Material.COMMAND_BLOCK, 41, ColorUtil.HELP_GRAD_ITEM_TOOLS,
+                List.of("blocklog", "item_admin"), Permissions.ADMIN_CONFIG));
+
         articles.add(new HelpArticle("blocklog", "Block Log (Admin)", List.of(
                 gray("Per-chunk audit log for chest, trapped chest, and barrel changes."),
                 cmd("/logs", "Toggle inspector mode; punch a chest to view."),

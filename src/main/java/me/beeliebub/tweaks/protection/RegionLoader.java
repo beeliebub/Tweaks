@@ -160,7 +160,13 @@ public final class RegionLoader {
         String worldRaw = yaml.getString("world");
         String world = (worldRaw == null || worldRaw.isBlank()) ? null : worldRaw;
 
-        return new Region(id, owner, members, flagRules, materialFlags, parent, bounds, world, managers, entityFlags);
+        // Resource Rupee cost recorded at claim time. Legacy regions (claimed
+        // before the cost field was introduced) load with 0, which means
+        // /region unclaim will issue no refund — matching the "free" claim
+        // they originally received.
+        int cost = Math.max(0, yaml.getInt("cost", 0));
+
+        return new Region(id, owner, members, flagRules, materialFlags, parent, bounds, world, managers, entityFlags, cost);
     }
 
     // Parse the optional `entity_flags:` map. Schema mirrors material_flags:

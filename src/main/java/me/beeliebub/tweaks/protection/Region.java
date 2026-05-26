@@ -65,7 +65,8 @@ public record Region(
         RegionBounds bounds,
         String worldName,
         List<UUID> managers,
-        Map<RegionFlag, Set<org.bukkit.entity.EntityType>> entityFlags
+        Map<RegionFlag, Set<org.bukkit.entity.EntityType>> entityFlags,
+        int cost
 ) {
 
     // Inclusive chunk-coordinate AABB. Stored as four ints rather than two
@@ -97,7 +98,7 @@ public record Region(
                   Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules,
                   Map<RegionFlag, Set<Material>> materialFlags,
                   String parentId) {
-        this(id, owner, members, flagRules, materialFlags, parentId, null, null, List.of(), Map.of());
+        this(id, owner, members, flagRules, materialFlags, parentId, null, null, List.of(), Map.of(), 0);
     }
 
     // Bounds-aware constructor without world (legacy bounds-only call sites).
@@ -106,7 +107,7 @@ public record Region(
                   Map<RegionFlag, Set<Material>> materialFlags,
                   String parentId,
                   RegionBounds bounds) {
-        this(id, owner, members, flagRules, materialFlags, parentId, bounds, null, List.of(), Map.of());
+        this(id, owner, members, flagRules, materialFlags, parentId, bounds, null, List.of(), Map.of(), 0);
     }
 
     // World + bounds constructor without managers/entityFlags — legacy 8-arg
@@ -117,7 +118,21 @@ public record Region(
                   String parentId,
                   RegionBounds bounds,
                   String worldName) {
-        this(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, List.of(), Map.of());
+        this(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, List.of(), Map.of(), 0);
+    }
+
+    // Full constructor without cost — every pre-cost call site (loader, mutators,
+    // tests) lands here and gets a default cost of 0. New claim sites that need
+    // to record a cost use the canonical 11-arg constructor or withCost().
+    public Region(String id, UUID owner, List<UUID> members,
+                  Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules,
+                  Map<RegionFlag, Set<Material>> materialFlags,
+                  String parentId,
+                  RegionBounds bounds,
+                  String worldName,
+                  List<UUID> managers,
+                  Map<RegionFlag, Set<org.bukkit.entity.EntityType>> entityFlags) {
+        this(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, managers, entityFlags, 0);
     }
 
     private static Map<RegionFlag, Map<FlagTarget, Boolean>> deepCopyFlagRules(
@@ -162,7 +177,7 @@ public record Region(
     // call sites that only care about boolean rules.
     public Region(String id, UUID owner, List<UUID> members,
                   Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules) {
-        this(id, owner, members, flagRules, Map.of(), null, null, null, List.of(), Map.of());
+        this(id, owner, members, flagRules, Map.of(), null, null, null, List.of(), Map.of(), 0);
     }
 
     // Convenience constructor without material flags but WITH parent — for
@@ -170,7 +185,7 @@ public record Region(
     public Region(String id, UUID owner, List<UUID> members,
                   Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules,
                   String parentId) {
-        this(id, owner, members, flagRules, Map.of(), parentId, null, null, List.of(), Map.of());
+        this(id, owner, members, flagRules, Map.of(), parentId, null, null, List.of(), Map.of(), 0);
     }
 
     // Legacy constructor preserved so call sites (and tests) that still pass an
@@ -178,7 +193,7 @@ public record Region(
     // listed flag is translated to a DEFAULT-target rule with value=true,
     // matching the pre-refactor "flag in set = non-members may act" semantic.
     public Region(String id, UUID owner, List<UUID> members, EnumSet<RegionFlag> legacyFlags) {
-        this(id, owner, members, legacyToTargeted(legacyFlags), Map.of(), null, null, null, List.of(), Map.of());
+        this(id, owner, members, legacyToTargeted(legacyFlags), Map.of(), null, null, null, List.of(), Map.of(), 0);
     }
 
     private static Map<RegionFlag, Map<FlagTarget, Boolean>> legacyToTargeted(EnumSet<RegionFlag> legacyFlags) {
@@ -354,7 +369,7 @@ public record Region(
         } else {
             newRules.put(flag, updated);
         }
-        return new Region(id, owner, members, newRules, materialFlags, parentId, bounds, worldName, managers, entityFlags);
+        return new Region(id, owner, members, newRules, materialFlags, parentId, bounds, worldName, managers, entityFlags, cost);
     }
 
     // Return a new Region with the material set for `flag` replaced wholesale.
@@ -370,7 +385,7 @@ public record Region(
         } else {
             newMaterials.put(flag, Set.copyOf(EnumSet.copyOf(materials)));
         }
-        return new Region(id, owner, members, flagRules, newMaterials, parentId, bounds, worldName, managers, entityFlags);
+        return new Region(id, owner, members, flagRules, newMaterials, parentId, bounds, worldName, managers, entityFlags, cost);
     }
 
     // Return a new Region with the entity-type set for `flag` replaced wholesale.
@@ -385,31 +400,40 @@ public record Region(
         } else {
             newEntities.put(flag, Set.copyOf(EnumSet.copyOf(entities)));
         }
-        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, managers, newEntities);
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, managers, newEntities, cost);
     }
 
     // Returns a copy of this region with the parent pointer rewritten. Passing
     // null clears the parent (promotes the region back to top-level).
     public Region withParent(String newParentId) {
         String normalized = (newParentId == null || newParentId.isBlank()) ? null : newParentId;
-        return new Region(id, owner, members, flagRules, materialFlags, normalized, bounds, worldName, managers, entityFlags);
+        return new Region(id, owner, members, flagRules, materialFlags, normalized, bounds, worldName, managers, entityFlags, cost);
     }
 
     public Region withBounds(RegionBounds newBounds) {
-        return new Region(id, owner, members, flagRules, materialFlags, parentId, newBounds, worldName, managers, entityFlags);
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, newBounds, worldName, managers, entityFlags, cost);
     }
 
     public Region withWorld(String newWorldName) {
-        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, newWorldName, managers, entityFlags);
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, newWorldName, managers, entityFlags, cost);
     }
 
     public Region withMembers(List<UUID> newMembers) {
-        return new Region(id, owner, members(newMembers), flagRules, materialFlags, parentId, bounds, worldName, managers, entityFlags);
+        return new Region(id, owner, members(newMembers), flagRules, materialFlags, parentId, bounds, worldName, managers, entityFlags, cost);
     }
 
     public Region withManagers(List<UUID> newManagers) {
         return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName,
-                newManagers == null ? List.of() : newManagers, entityFlags);
+                newManagers == null ? List.of() : newManagers, entityFlags, cost);
+    }
+
+    // Returns a copy of this region with the `cost` field replaced. Used by the
+    // claim flow to stamp the calculated chunk-purchase price onto the new
+    // Region so it round-trips through RegionWriter and is available for refund
+    // at unclaim time. The full price paid (no depreciation) is refunded on
+    // unclaim, so the field stays unchanged for the lifetime of the region.
+    public Region withCost(int newCost) {
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, managers, entityFlags, newCost);
     }
 
     public Region addManager(UUID uuid) {

@@ -35,6 +35,7 @@ public final class Permissions {
     public static final String ADMIN_PERMISSIONS = "tweaks.admin.permissions";
 
     public static final String PROTECTION_CLAIM = "tweaks.protection.claim";
+    public static final String PROTECTION_CLAIM_PURCHASABLE = "tweaks.protection.claim.purchasable";
     public static final String PROTECTION_UNCLAIM = "tweaks.protection.unclaim";
     public static final String PROTECTION_MEMBER = "tweaks.protection.member";
     public static final String PROTECTION_FLAG = "tweaks.protection.flag";

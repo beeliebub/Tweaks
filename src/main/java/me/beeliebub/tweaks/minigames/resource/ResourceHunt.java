@@ -44,6 +44,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -134,23 +135,22 @@ public class ResourceHunt implements Listener {
         this.rewardManager = rewardManager;
         this.countedKey = new NamespacedKey(plugin, "resource_hunt_counted");
 
-        List<Target> allEntries = loadAllEntries();
-        if (allEntries.isEmpty()) {
+        Map<String, List<Target>> entriesByWorld = loadAllEntries();
+        if (entriesByWorld.isEmpty()) {
             plugin.getLogger().warning("Resource Hunt has no valid targets in resource_hunt.yml; minigame disabled this session.");
             this.initialTarget = null;
             this.activeWorldKey = TARGET_WORLD_KEY;
             this.worldTargets = List.of();
         } else {
-            Target picked = allEntries.get(ThreadLocalRandom.current().nextInt(allEntries.size()));
+            List<String> worldKeys = new ArrayList<>(entriesByWorld.keySet());
+            String pickedKey = worldKeys.get(ThreadLocalRandom.current().nextInt(worldKeys.size()));
+            this.activeWorldKey = pickedKey;
+            this.worldTargets = List.copyOf(entriesByWorld.get(pickedKey));
+            Target picked = worldTargets.get(ThreadLocalRandom.current().nextInt(worldTargets.size()));
             this.initialTarget = picked;
-            this.activeWorldKey = picked.worldKey;
-            List<Target> pool = new ArrayList<>();
-            for (Target t : allEntries) {
-                if (t.worldKey.equals(activeWorldKey)) pool.add(t);
-            }
-            this.worldTargets = List.copyOf(pool);
             plugin.getLogger().info("Resource Hunt active world this session: " + activeWorldKey
-                    + " (initial target " + picked.category + ":" + targetIdName(picked)
+                    + " (chosen from " + entriesByWorld.size() + " populated world(s); "
+                    + "initial target " + picked.category + ":" + targetIdName(picked)
                     + ", " + worldTargets.size() + " candidate target(s) in pool)");
         }
 
@@ -228,18 +228,24 @@ public class ResourceHunt implements Listener {
         }
     }
 
-    private List<Target> loadAllEntries() {
+    private Map<String, List<Target>> loadAllEntries() {
         File file = new File(plugin.getDataFolder(), "resource_hunt.yml");
         if (!file.exists()) {
             plugin.saveResource("resource_hunt.yml", false);
         }
 
         YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
-        List<Target> entries = new ArrayList<>();
 
-        loadTargets(config, OVERWORLD_SECTION, TARGET_WORLD_KEY, entries);
-        loadTargets(config, NETHER_SECTION, TARGET_WORLD_NETHER_KEY, entries);
-        return entries;
+        List<Target> overworldEntries = new ArrayList<>();
+        loadTargets(config, OVERWORLD_SECTION, TARGET_WORLD_KEY, overworldEntries);
+
+        List<Target> netherEntries = new ArrayList<>();
+        loadTargets(config, NETHER_SECTION, TARGET_WORLD_NETHER_KEY, netherEntries);
+
+        Map<String, List<Target>> result = new LinkedHashMap<>();
+        if (!overworldEntries.isEmpty()) result.put(TARGET_WORLD_KEY, overworldEntries);
+        if (!netherEntries.isEmpty()) result.put(TARGET_WORLD_NETHER_KEY, netherEntries);
+        return result;
     }
 
     // Reads one world section ("overworld" or "nether"). Each section contains a map of

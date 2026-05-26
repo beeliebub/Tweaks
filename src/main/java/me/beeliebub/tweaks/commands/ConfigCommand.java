@@ -28,7 +28,7 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
     private static final String SPAWN_EGG_SUFFIX = "_spawn_egg";
 
     private static final List<String> TOP_LEVEL_KEYS = List.of(
-            "max_homes", "egg_collector_drop_chance", "eggdrop", "spawneregg", "resourceitems"
+            "max_homes", "max_chunks", "egg_collector_drop_chance", "eggdrop", "spawneregg", "resourceitems"
     );
     private static final List<String> TOGGLE_ACTIONS = List.of("disable", "enable");
     private static final List<String> LIST_ACTIONS = List.of("add", "remove");
@@ -58,6 +58,7 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
 
         switch (key) {
             case "max_homes" -> handleMaxHomes(sender, label, args);
+            case "max_chunks" -> handleMaxChunks(sender, label, args);
             case "egg_collector_drop_chance" -> handleEggDropChance(sender, label, args);
             case "eggdrop" -> handleMobToggle(sender, label, args,
                     "eggdrop", EGG_DROP_DISABLED_KEY, "Egg Collector drops");
@@ -73,6 +74,7 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
     private void sendUsage(CommandSender sender, String label) {
         sender.sendMessage(Component.text("Usage:").color(NamedTextColor.RED));
         sender.sendMessage(Component.text("  /" + label + " max_homes <int>").color(NamedTextColor.RED));
+        sender.sendMessage(Component.text("  /" + label + " max_chunks <int>").color(NamedTextColor.RED));
         sender.sendMessage(Component.text("  /" + label + " egg_collector_drop_chance <0.0-100.0>").color(NamedTextColor.RED));
         sender.sendMessage(Component.text("  /" + label + " eggdrop <disable|enable> <mob>").color(NamedTextColor.RED));
         sender.sendMessage(Component.text("  /" + label + " spawneregg <disable|enable> <mob>").color(NamedTextColor.RED));
@@ -93,6 +95,25 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
             plugin.getConfig().set("max-homes", newMax);
             plugin.saveConfig();
             sender.sendMessage(Component.text("Max homes has been updated live to " + newMax + "!").color(NamedTextColor.GREEN));
+        } catch (NumberFormatException e) {
+            sender.sendMessage(Component.text("Invalid number format. Please provide a valid integer.").color(NamedTextColor.RED));
+        }
+    }
+
+    private void handleMaxChunks(CommandSender sender, String label, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(Component.text("Usage: /" + label + " max_chunks <int>").color(NamedTextColor.RED));
+            return;
+        }
+        try {
+            int newMax = Integer.parseInt(args[1]);
+            if (newMax < 1) {
+                sender.sendMessage(Component.text("Max chunks must be a positive integer.").color(NamedTextColor.RED));
+                return;
+            }
+            plugin.getConfig().set("max_chunks", newMax);
+            plugin.saveConfig();
+            sender.sendMessage(Component.text("Max chunks has been updated live to " + newMax + "!").color(NamedTextColor.GREEN));
         } catch (NumberFormatException e) {
             sender.sendMessage(Component.text("Invalid number format. Please provide a valid integer.").color(NamedTextColor.RED));
         }

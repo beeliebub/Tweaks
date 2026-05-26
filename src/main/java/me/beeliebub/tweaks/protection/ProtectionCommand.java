@@ -4,10 +4,12 @@ import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.permissions.PermissionManager;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.utils.GeometryUtil;
+import me.beeliebub.tweaks.utils.InventoryUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
@@ -168,7 +170,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
 
     private static final List<UsageEntry> USAGE_ENTRIES = List.of(
             new UsageEntry("/region claim <name>",
-                    "Claim your wand selection as a named region.", Permissions.PROTECTION_CLAIM),
+                    "Claim your wand selection as a named region (costs Resource Rupees per chunk).", Permissions.PROTECTION_CLAIM),
             new UsageEntry("/region clear",
                     "Drop your active wand selection.", Permissions.PROTECTION_CLAIM),
             new UsageEntry("/region wand",
@@ -176,7 +178,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
             new UsageEntry("/region select <name>",
                     "Restore a region's outline onto your selection.", Permissions.PROTECTION_INFO),
             new UsageEntry("/region unclaim <name>",
-                    "Delete a region.", Permissions.PROTECTION_UNCLAIM),
+                    "Delete a region (full Resource Rupee refund to the owner).", Permissions.PROTECTION_UNCLAIM),
             new UsageEntry("/region addmember <name> <player>",
                     "Add a member to a region.", Permissions.PROTECTION_MEMBER),
             new UsageEntry("/region removemember <name> <player>",
@@ -235,6 +237,24 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
     // ------------------------------------------------------------------
 
     // /region claim <name>  — reads the wand-driven Pos1/Pos2 selection.
+    //
+    // Pricing & enforcement flow (see Permissions.PROTECTION_CLAIM_PURCHASABLE
+    // and Permissions.PROTECTION_ADMIN):
+    //   1. Resolve chunk count from the wand selection.
+    //   2. Admins (PROTECTION_ADMIN) bypass the limit, the purchasable gate, and
+    //      pay nothing. Their region is stored with cost = 0 so no refund is
+    //      issued on unclaim either.
+    //   3. Non-admins must (a) own < `max_chunks` (config) - chunks already, and
+    //      (b) hold PROTECTION_CLAIM_PURCHASABLE. Both checks run before payment.
+    //   4. Cost = Σ N=1..chunks of max(1, floor(10 / pow(1.1, N - 1))). The
+    //      max(1, ...) floor guarantees every chunk costs at least 1 Resource
+    //      Rupee even at extreme scale. Canonical verification: 5x5 = 25
+    //      chunks -> cost = 89.
+    //   5. InventoryUtil.deductResourceRupees handles payment atomically;
+    //      failure aborts the claim before tryClaim runs.
+    //   6. On success, the calculated cost is stamped onto the new Region via
+    //      withCost() so it round-trips through RegionWriter for refund at
+    //      /region unclaim time.
     private void handleClaim(CommandSender sender, String[] args) {
         if (args.length < 1) { showUsage(sender, "/region claim <name>"); return; }
         if (!(sender instanceof Player player)) {
@@ -270,17 +290,56 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         int x2 = (cx2 << 4) + 15;
         int z2 = (cz2 << 4) + 15;
 
+        int chunks = (Math.abs(cx1 - cx2) + 1) * (Math.abs(cz1 - cz2) + 1);
+
+        // Admin shortcut: skip limit + purchasable + payment. cost = 0 means
+        // unclaim issues no refund (matches the "free" intent).
+        boolean adminBypass = player.hasPermission(Permissions.PROTECTION_ADMIN);
+
+        int cost = 0;
+        MiniMessage mm = MiniMessage.miniMessage();
+        if (!adminBypass) {
+            int maxChunks = plugin.getConfig().getInt("max_chunks", 200);
+            int alreadyOwned = protection.getTotalChunksOwned(player.getUniqueId());
+            if (alreadyOwned + chunks > maxChunks) {
+                player.sendMessage(mm.deserialize(
+                        "<red>You cannot claim that many chunks. You currently own <yellow>"
+                                + alreadyOwned + "</yellow> of <yellow>" + maxChunks
+                                + "</yellow>; this claim would add <yellow>" + chunks
+                                + "</yellow> more.</red>"));
+                return;
+            }
+            if (!player.hasPermission(Permissions.PROTECTION_CLAIM_PURCHASABLE)) {
+                player.sendMessage(mm.deserialize(
+                        "<red>You don't have permission to purchase land claims.</red>"));
+                return;
+            }
+            cost = computeClaimCost(chunks);
+            if (!InventoryUtil.deductResourceRupees(player, cost)) {
+                int balance = InventoryUtil.getResourceRupeeBalance(player);
+                player.sendMessage(mm.deserialize(
+                        "<red>You can't afford this claim. Cost: <yellow>" + cost
+                                + "</yellow> Resource Rupees; you have <yellow>" + balance
+                                + "</yellow>.</red>"));
+                return;
+            }
+        }
+
         Region region = new Region(name, player.getUniqueId(), List.of(),
-                EnumSet.noneOf(RegionFlag.class));
+                EnumSet.noneOf(RegionFlag.class)).withCost(cost);
         ProtectionManager.ClaimResult result = protection.tryClaim(
                 region, player.getWorld(), x1, z1, x2, z2, null);
         switch (result) {
             case ID_TAKEN -> {
+                // Refund the rupees we just deducted so the player isn't charged
+                // for a claim that never took effect.
+                if (cost > 0) InventoryUtil.addResourceRupees(player, cost);
                 sender.sendMessage(Component.text(
                         "Region '" + name + "' already exists.", NamedTextColor.RED));
                 return;
             }
             case OVERLAPS_FOREIGN_REGION -> {
+                if (cost > 0) InventoryUtil.addResourceRupees(player, cost);
                 sender.sendMessage(Component.text(
                         "Your selection overlaps a region you don't own. "
                                 + "Adjust pos1/pos2 or ask the owner to add you.",
@@ -291,10 +350,35 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         }
         selections.clear(player.getUniqueId());
 
-        int chunks = (Math.abs(cx1 - cx2) + 1) * (Math.abs(cz1 - cz2) + 1);
-        sender.sendMessage(Component.text(
-                "Claimed region '" + name + "' (" + chunks + " chunk" + (chunks == 1 ? "" : "s") + ").",
-                NamedTextColor.GREEN));
+        if (adminBypass) {
+            player.sendMessage(mm.deserialize(
+                    "<green>Claimed region <yellow>'" + name + "'</yellow> (<yellow>"
+                            + chunks + "</yellow> chunk" + (chunks == 1 ? "" : "s")
+                            + ", free admin claim).</green>"));
+        } else {
+            player.sendMessage(mm.deserialize(
+                    "<green>Claimed region <yellow>'" + name + "'</yellow> (<yellow>"
+                            + chunks + "</yellow> chunk" + (chunks == 1 ? "" : "s")
+                            + ") for <yellow>" + cost + "</yellow> Resource Rupee"
+                            + (cost == 1 ? "" : "s") + ".</green>"));
+        }
+    }
+
+    // Compute the Resource Rupee price of an N-chunk claim. Per-chunk cost
+    // tapers geometrically: the first chunk costs 10, each subsequent chunk
+    // costs floor(10 / 1.1^(N - 1)) but never less than 1. The floor on 1 is
+    // deliberate — it keeps "tax" non-zero at extreme scale so megaclaims still
+    // cost something, and it's the property the canonical 5x5 = 89 test pins
+    // down.
+    static int computeClaimCost(int chunks) {
+        if (chunks <= 0) return 0;
+        int total = 0;
+        for (int n = 1; n <= chunks; n++) {
+            int perChunk = (int) Math.floor(10.0 / Math.pow(1.1, n - 1));
+            if (perChunk < 1) perChunk = 1;
+            total += perChunk;
+        }
+        return total;
     }
 
     // /region clear  — drop the player's Pos1/Pos2 selection.
@@ -383,6 +467,20 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
     }
 
     // /region unclaim <name>  — owner/admin-only. Managers cannot unclaim.
+    //
+    // Refund flow: regions claimed under the pricing system carry the full
+    // purchase price in Region#cost. On unclaim we refund the entire amount
+    // (no depreciation) to the owner via InventoryUtil#addResourceRupees.
+    //
+    // Recipient resolution:
+    //   * If the unclaim caller IS the owner, refund them directly.
+    //   * If the caller is an admin and the owner is online, refund the owner.
+    //   * If the owner is offline, the refund is skipped silently — we never
+    //     drop currency items at arbitrary coordinates because that opens an
+    //     economy-exploit door (admin unclaims someone's region while they're
+    //     offline -> a chest somewhere fills with their rupees).
+    //   * Admin-claimed regions store cost = 0, so admins reclaiming their own
+    //     free claims correctly refund nothing.
     private void handleUnclaim(CommandSender sender, String[] args) {
         if (args.length < 1) { showUsage(sender, "/region unclaim <name>"); return; }
         String name = args[0];
@@ -403,13 +501,43 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
                     NamedTextColor.RED));
             return;
         }
+
+        int refund = region.cost();
+        Player refundRecipient = resolveRefundRecipient(sender, region);
+
         if (!protection.unclaim(name)) {
             sender.sendMessage(Component.text("No region named '" + name + "'.", NamedTextColor.RED));
             return;
         }
-        sender.sendMessage(Component.text(
-                "Unclaimed region '" + name + "'. Pointer cleanup will run lazily.",
-                NamedTextColor.GREEN));
+
+        boolean refunded = false;
+        if (refund > 0 && refundRecipient != null) {
+            InventoryUtil.addResourceRupees(refundRecipient, refund);
+            refunded = true;
+        }
+
+        MiniMessage mm = MiniMessage.miniMessage();
+        if (refunded) {
+            sender.sendMessage(mm.deserialize(
+                    "<green>Unclaimed region <yellow>'" + name + "'</yellow>. Refunded <yellow>"
+                            + refund + "</yellow> Resource Rupee" + (refund == 1 ? "" : "s")
+                            + " to <yellow>" + refundRecipient.getName() + "</yellow>.</green>"));
+        } else {
+            sender.sendMessage(mm.deserialize(
+                    "<green>Unclaimed region <yellow>'" + name + "'</yellow>. Pointer cleanup will run lazily.</green>"));
+        }
+    }
+
+    // Determine who receives the unclaim refund. Returns null when the owner is
+    // offline and the caller is not the owner — refunds are dropped silently in
+    // that case rather than materialised at arbitrary coordinates.
+    private static Player resolveRefundRecipient(CommandSender sender, Region region) {
+        UUID ownerId = region.owner();
+        if (ownerId == null) return null;
+        if (sender instanceof Player p && ownerId.equals(p.getUniqueId())) {
+            return p;
+        }
+        return Bukkit.getPlayer(ownerId);
     }
 
     // /region addmember|removemember <name> <player>

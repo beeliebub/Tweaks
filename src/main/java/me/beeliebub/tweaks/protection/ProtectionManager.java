@@ -131,6 +131,32 @@ public final class ProtectionManager {
         return regions;
     }
 
+    // Sum the chunk count of every region in the in-memory cache owned by the
+    // given player UUID. Used by the claim-limit enforcement in the command
+    // layer to gate further claims when a player has reached their cap.
+    //
+    // Reads exclusively from the `regions` cache (no PDC / disk I/O) so the
+    // call is safe on the main thread and consistent with the rest of
+    // ProtectionManager's lock-free read paths. Regions without bounds
+    // (legacy, pre-bounds claims and the per-world wilderness/global region)
+    // contribute 0 chunks — they cannot have been "claimed" through the
+    // chunk-counting claim engine, so they correctly do not count against
+    // a player's allowance. The nil-UUID sentinel that owns globals never
+    // matches a real player owner, so globals naturally drop out via the
+    // isOwner check as well.
+    public int getTotalChunksOwned(UUID owner) {
+        if (owner == null) return 0;
+        int total = 0;
+        for (Region r : regions.values()) {
+            if (!r.isOwner(owner)) continue;
+            Region.RegionBounds b = r.bounds();
+            if (b == null) continue;
+            total += (b.maxChunkX() - b.minChunkX() + 1)
+                    * (b.maxChunkZ() - b.minChunkZ() + 1);
+        }
+        return total;
+    }
+
     // ------------------------------------------------------------------
     // Per-world cache addressing
     //

@@ -156,6 +156,13 @@ public final class RegionWriter {
             b.set("max_chunk_z", region.bounds().maxChunkZ());
         }
 
+        // Persist the Resource Rupee price paid at claim time. Omit the key
+        // entirely for free (admin or legacy) regions so YAML stays compact and
+        // RegionLoader's default-to-zero path remains the canonical sentinel.
+        if (region.cost() > 0) {
+            yaml.set("cost", region.cost());
+        }
+
         if (!region.flagRules().isEmpty()) {
             ConfigurationSection flags = yaml.createSection("flags");
             for (Map.Entry<RegionFlag, Map<FlagTarget, Boolean>> e : region.flagRules().entrySet()) {

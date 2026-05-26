@@ -754,7 +754,7 @@ This is entirely admin-managed — see the [admin commands](#admin-commands) sec
 
 ### Resource Hunt
 
-A gathering minigame that runs in the **`jass:resource`** (Overworld) or **`jass:resource_nether`** (Nether) world. While the active world is chosen randomly at server startup, **each player receives their own unique task** to complete.
+A gathering minigame that runs in the **`jass:resource`** (Overworld) or **`jass:resource_nether`** (Nether) world. The active world is picked uniformly at random at server startup (each world that has at least one configured target has an equal chance, regardless of how many entries are in each section), and then **each player receives their own unique task** from that world's pool when they join.
 
 **Target Assignment**:
 - **Unique Tasks**: When you join, the plugin assigns you a random task from the active world's pool.
@@ -982,7 +982,8 @@ When an action occurs, the system checks rules in this order:
 | `/region setparent <c> <p>` | `tweaks.protection.claim` | Nest a region inside another. |
 | `/region unsetparent <c>` | `tweaks.protection.claim` | Remove region parenting. |
 | `/region gui [name]` | `tweaks.protection.info` | Open the dialog dashboard for a region. |
-| `/tconfig <key> <value>` | `tweaks.admin.config` | Update a config value at runtime. Alias: `/tweaksconfig`. |
+| `/tconfig max_homes <int>` | `tweaks.admin.config` | Set global max homes per player. |
+| `/tconfig max_chunks <int>` | `tweaks.admin.config` | Set global max chunk claims per player. |
 | `/tconfig eggdrop <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable Egg Collector drops for a mob. |
 | `/tconfig spawneregg <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable spawn egg usage on spawners. |
 | `/tconfig resourceitems <add\|remove> <item>` | `tweaks.admin.config` | Manage resource world item whitelist. |
@@ -1016,6 +1017,7 @@ When an action occurs, the system checks rules in this order:
 |---|---|
 | `tweaks.bypass.homes` | Bypass the max homes limit. |
 | `tweaks.protection.claim` | Create/delete regions and set parenting. |
+| `tweaks.protection.claim.purchasable` | Allows a player to purchase additional chunk claims beyond the global max. |
 | `tweaks.protection.unclaim` | Delete any region claim. |
 | `tweaks.protection.info` | View region details via `/region info`. |
 | `tweaks.protection.member` | Add/remove members from regions. |
@@ -1048,6 +1050,9 @@ The plugin generates a `config.yml` on first startup. Custom enchantments requir
 ```yaml
 # Maximum number of homes per player.
 max-homes: 15
+
+# Maximum number of chunks per player claim.
+max_chunks: 200
 
 # Drop chance percentage for Egg Collector (0.0 - 100.0).
 egg-collector-drop-chance: 0.5
