@@ -108,4 +108,16 @@ class PluginYmlValidationTest {
         assertTrue(commands instanceof LinkedHashMap || commands instanceof Map,
                 "commands must be a YAML mapping, was " + commands.getClass());
     }
+
+    @Test
+    void pluginYmlDeclaresNoPermissions() {
+        // Deny-by-default architectural enforcement: every permission node lives in
+        // Permissions.java and is granted exclusively through the in-plugin
+        // PermissionManager (or an external permissions plugin). plugin.yml must not
+        // declare a `permissions:` block, since any node it lists with `default: true`
+        // would silently override the deny-by-default contract.
+        assertNull(root.get("permissions"),
+                "plugin.yml must NOT declare a permissions block — all permission "
+                        + "infrastructure must go through Permissions.java");
+    }
 }

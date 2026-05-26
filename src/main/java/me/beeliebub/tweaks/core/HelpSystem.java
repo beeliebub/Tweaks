@@ -668,16 +668,16 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 List.of("item_admin", "blocklog"), Permissions.ADMIN_GAMEMODE));
 
         articles.add(new HelpArticle("item_admin", "Item Tools (Admin)", List.of(
-                gray("Admin tools for editing held items and copying chest GUIs."),
+                gray("Admin tools for editing held items, viewing inventories, and copying chest GUIs."),
                 cmd("/name <name>", "Set held item display name."),
-                cmd("/name off", "Clear held item display name."),
                 cmd("/lore add <line#> <text>", "Insert lore at 1-indexed line."),
-                cmd("/lore remove <line#>", "Remove lore at 1-indexed line."),
-                cmd("/guicopy [name]", "Save targeted chest to plugins/Tweaks/guicopies/<name>.yml."),
+                cmd("/more", "Maximize held item stack size."),
+                cmd("/invsee <player>", "View/modify online player's inventory."),
+                cmd("/guicopy [name]", "Save targeted chest to guicopies/<name>.yml."),
                 white("Color: legacy '&' codes and '&#rrggbb' hex."),
                 white("/guicopy ray-traces 8 blocks; supports double chests."),
                 white("Output YAML includes a paste-ready Java snippet."),
-                red("Permissions: tweaks.admin.itemedit, tweaks.admin.guicopy.")
+                red("Permissions: itemedit, invsee, more, guicopy.")
         ), Material.WRITABLE_BOOK, 37, ColorUtil.HELP_GRAD_ITEM_TOOLS, List.of("blocklog"), Permissions.ADMIN_ITEM_EDIT));
 
         articles.add(new HelpArticle("config_admin", "Config Tools (Admin)", List.of(
@@ -727,7 +727,11 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         articles.add(new HelpArticle("rewards", "Rewards", List.of(
                 gray("Pending-reward inbox for minigames."),
                 cmd("/reward claim", "Claim pending rewards."),
-                white("Items go to your inventory; overflow drops at your feet.")
+                white("Items go to your inventory; overflow drops at your feet."),
+                red("Admin:"),
+                cmd("/reward create <name>", "Create reward template."),
+                cmd("/reward edit <name>", "Open reward editor GUI."),
+                cmd("/reward give <p> <r> [c]", "Queue reward grant.")
         ), Material.ENDER_CHEST, 24, ColorUtil.HELP_GRAD_REWARDS, List.of("resource_hunt", "whack")));
 
         articles.add(new HelpArticle("whack", "Whack-an-Andrew", List.of(
@@ -832,7 +836,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
     private HelpCategory buildProtection() {
         List<HelpArticle> articles = new ArrayList<>();
 
-        articles.add(new HelpArticle("protection_claim", "Claim", List.of(
+        articles.add(new HelpArticle("protection_purchaseable", "Claim", List.of(
                 gray("Mark a rectangle of chunks as your protected territory."),
                 cmd("/region claim <name>", "Claim the current wand selection."),
                 cmd("/region wand", "Get the selection tool (Stone Axe)."),
@@ -846,10 +850,10 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("- Claims <= 5 chunks stamp immediately; others stamp as chunks load."),
                 white("- Names are unique per world; 'home' can exist in multiple worlds."),
                 yellow("Alias: /rg claim"),
-                red("Requires permission: " + Permissions.PROTECTION_CLAIM + ".")
-        ), Material.OAK_FENCE, 20, ColorUtil.HELP_GRAD_PROTECTION_CLAIM,
+                red("Requires permission: " + Permissions.PROTECTION_PURCHASEABLE + ".")
+        ), Material.OAK_FENCE, 20, ColorUtil.HELP_GRAD_PROTECTION_PURCHASEABLE,
                 List.of("protection_info", "protection_members", "protection_flags"),
-                Permissions.PROTECTION_CLAIM));
+                Permissions.PROTECTION_PURCHASEABLE));
 
         articles.add(new HelpArticle("protection_info", "Region Info", List.of(
                 gray("View details about regions at your location or by name."),
@@ -863,8 +867,8 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("- Mob-spawn entity lists (ALLOW/DENY_MOB_SPAWN)."),
                 yellow("Aliases: /rg i, /rg am, /rg rm"),
                 red("Requires permission: " + Permissions.PROTECTION_INFO + ".")
-        ), Material.BOOK, 22, ColorUtil.HELP_GRAD_PROTECTION_CLAIM,
-                List.of("protection_claim", "protection_flags"),
+        ), Material.BOOK, 22, ColorUtil.HELP_GRAD_PROTECTION_PURCHASEABLE,
+                List.of("protection_purchaseable", "protection_flags"),
                 Permissions.PROTECTION_INFO));
 
         articles.add(new HelpArticle("protection_members", "Members & Hierarchy", List.of(
@@ -885,7 +889,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 yellow("Aliases: /rg am, /rg rm, /rg aman, /rg rman"),
                 red("Requires permission: " + Permissions.PROTECTION_MEMBER + ".")
         ), Material.PLAYER_HEAD, 24, ColorUtil.HELP_GRAD_PROTECTION_MEMBERS,
-                List.of("protection_claim", "protection_flags"),
+                List.of("protection_purchaseable", "protection_flags"),
                 Permissions.PROTECTION_MEMBER));
 
         articles.add(new HelpArticle("protection_flags", "Precision Flags", List.of(
@@ -902,7 +906,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("- /region flag [flag] defaults to your current location."),
                 red("Requires permission: " + Permissions.PROTECTION_FLAG + ".")
         ), Material.OAK_SIGN, 30, ColorUtil.HELP_GRAD_PROTECTION_FLAGS,
-                List.of("protection_claim", "protection_info"),
+                List.of("protection_purchaseable", "protection_info"),
                 Permissions.PROTECTION_FLAG));
 
         articles.add(new HelpArticle("protection_gui", "Region GUI", List.of(
@@ -932,7 +936,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 yellow("Alias: /rg unclaim"),
                 red("Requires permission: " + Permissions.PROTECTION_UNCLAIM + ".")
         ), Material.BARRIER, 34, ColorUtil.HELP_GRAD_PROTECTION_UNCLAIM,
-                List.of("protection_claim", "protection_info"),
+                List.of("protection_purchaseable", "protection_info"),
                 Permissions.PROTECTION_UNCLAIM));
 
         return new HelpCategory("protection", "Land Protection", articles, Material.OAK_FENCE, 36, ColorUtil.HELP_GRAD_PROTECTION);

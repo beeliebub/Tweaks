@@ -109,14 +109,11 @@ public final class Permissions {
     public static final String ADMIN_PERMISSIONS = "tweaks.admin.permissions";
 
     /**
-     * Allows claiming new land regions.
+     * Permission gate for paid/purchasable protection actions: claim, setparent, and unsetparent.
+     * Players with this permission can perform region operations that may incur Resource Rupee
+     * costs and counted against the per-player chunk-claim limit.
      */
-    public static final String PROTECTION_CLAIM = "tweaks.protection.claim";
-
-    /**
-     * Allows players to purchase chunk claims, assuming they are under the limit.
-     */
-    public static final String PROTECTION_CLAIM_PURCHASABLE = "tweaks.protection.claim.purchasable";
+    public static final String PROTECTION_PURCHASEABLE = "tweaks.protection.purchaseable";
 
     /**
      * Allows unclaiming owned land regions.

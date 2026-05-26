@@ -967,20 +967,20 @@ When an action occurs, the system checks rules in this order:
 | `/tprm` | `tweaks.admin.permissions` | Open the Permissions GUI. |
 | `/tprm group <name> <create\|delete\|addperm\|delperm\|inherited-from>` | `tweaks.admin.permissions` | CLI group management. |
 | `/tprm user <player> <addperm\|delperm\|setgroup>` | `tweaks.admin.permissions` | CLI user management. |
-| `/region claim <name>` | `tweaks.protection.claim` | Claim territory using wand selection. |
+| `/region claim <name>` | `tweaks.protection.purchaseable` | Claim territory using wand selection. |
 | `/region unclaim <name>` | `tweaks.protection.unclaim` | Remove a region claim. Alias: `/rg unclaim`. |
 | `/region info [name]` | `tweaks.protection.info` | Show region details. Alias: `/rg i`. |
-| `/region select <name>` | `tweaks.protection.claim` | Restore wand selection to match a region. |
-| `/region clear` | `tweaks.protection.claim` | Drop the current wand selection. |
-| `/region wand` | `tweaks.protection.claim` | Get the selection wand. |
+| `/region select <name>` | `tweaks.protection.info` | Restore wand selection to match a region. |
+| `/region clear` | — | Drop the current wand selection. |
+| `/region wand` | — | Get the selection wand. |
 | `/region addmember <r> <p>` | `tweaks.protection.member` | Add a member to a region. Alias: `/rg am`. |
 | `/region removemember <r> <p>` | `tweaks.protection.member` | Remove a member from a region. Alias: `/rg rm`. |
 | `/region addmanager <r> <p>` | `tweaks.protection.member` | Add a manager to a region. Alias: `/rg aman`. |
 | `/region removemanager <r> <p>` | `tweaks.protection.member` | Remove a manager from a region. Alias: `/rg rman`. |
 | `/region flag [name] <f> <v...>` | `tweaks.protection.flag` | Set a targeted boolean or material flag. |
 | `/region unflag <r> <f> [t]` | `tweaks.protection.flag` | Remove a targeted flag rule or material list. |
-| `/region setparent <c> <p>` | `tweaks.protection.claim` | Nest a region inside another. |
-| `/region unsetparent <c>` | `tweaks.protection.claim` | Remove region parenting. |
+| `/region setparent <c> <p>` | `tweaks.protection.purchaseable` | Nest a region inside another. |
+| `/region unsetparent <c>` | `tweaks.protection.purchaseable` | Remove region parenting. |
 | `/region gui [name]` | `tweaks.protection.info` | Open the dialog dashboard for a region. |
 | `/tconfig max_homes <int>` | `tweaks.admin.config` | Set global max homes per player. |
 | `/tconfig max_chunks <int>` | `tweaks.admin.config` | Set global max chunk claims per player. |
@@ -1015,32 +1015,31 @@ When an action occurs, the system checks rules in this order:
 
 | Permission | What it grants |
 |---|---|
-| `tweaks.bypass.homes` | Bypass the max homes limit. |
-| `tweaks.protection.claim` | Create/delete regions and set parenting. |
-| `tweaks.protection.claim.purchasable` | Allows a player to purchase additional chunk claims beyond the global max. |
-| `tweaks.protection.unclaim` | Delete any region claim. |
-| `tweaks.protection.info` | View region details via `/region info`. |
-| `tweaks.protection.member` | Add/remove members from regions. |
-| `tweaks.protection.flag` | Configure region flags and material rules. |
+| `tweaks.bypass.homes` | Allows bypassing the maximum home count limit. |
+| `tweaks.protection.purchaseable` | Permission gate for paid/purchasable protection actions: claim, setparent, and unsetparent. (Incurs Resource Rupee costs and counts against chunk-claim limit). |
+| `tweaks.protection.unclaim` | Allows unclaiming owned land regions. |
+| `tweaks.protection.info` | Allows selecting regions and viewing region information/flags. |
+| `tweaks.protection.member` | Allows managing (adding/removing) members and managers of a region. |
+| `tweaks.protection.flag` | Allows setting and unsetting region protection flags. |
 | `tweaks.protection.admin` | Grants full administrative access over all regions, bypassing limits and ownership checks. |
-| `tweaks.admin.home` | Teleport to other players' homes. |
-| `tweaks.admin.sethome` | Set homes for other players. |
-| `tweaks.admin.delhome` | Delete other players' homes. |
-| `tweaks.admin.homes` | View other players' home lists. |
-| `tweaks.admin.setwarp` | Create server warps. |
-| `tweaks.admin.delwarp` | Delete server warps. |
-| `tweaks.admin.nick` | Remove other players' nicknames. |
-| `tweaks.admin.config` | Use the `/tconfig` command. |
-| `tweaks.admin.more` | Use the `/more` command. |
-| `tweaks.admin.invsee` | Use the `/invsee` command. |
-| `tweaks.admin.bloodmoon` | Force-activate Blood Moons. |
-| `tweaks.admin.reward` | Create and edit rewards. |
-| `tweaks.admin.whack` | Full access to Whack-an-Andrew commands. |
-| `tweaks.admin.logs` | Use `/logs` and inspect chest logs by punching containers. |
-| `tweaks.admin.itemedit` | Use `/name` and `/lore` to edit the held item. |
-| `tweaks.admin.guicopy` | Use `/guicopy` to snapshot chest contents to disk. |
-| `tweaks.admin.gamemode` | Use `/survival` and `/creative` to switch your own gamemode. |
-| `tweaks.admin.permissions` | Access the `/tprm` GUI and CLI commands. |
+| `tweaks.admin.home` | Allows teleporting to any player's home. |
+| `tweaks.admin.sethome` | Allows setting a home for any player. |
+| `tweaks.admin.delhome` | Allows deleting the home of any player. |
+| `tweaks.admin.homes` | Allows listing the homes of any player. |
+| `tweaks.admin.setwarp` | Allows setting server warps. |
+| `tweaks.admin.delwarp` | Allows deleting server warps. |
+| `tweaks.admin.nick` | Allows setting/removing nicknames. |
+| `tweaks.admin.config` | Allows modifying plugin configurations via commands and GUI. |
+| `tweaks.admin.more` | Allows a player to maximize the stack size of their currently held item. |
+| `tweaks.admin.invsee` | Allows viewing and modifying another online player's inventory. |
+| `tweaks.admin.bloodmoon` | Allows forcing the next full moon to be a Blood Moon. |
+| `tweaks.admin.reward` | Allows managing and claiming minigame rewards. |
+| `tweaks.admin.whack` | Allows access to Whack-an-Andrew minigame admin commands. |
+| `tweaks.admin.logs` | Allows toggling inspector mode to view chest interaction logs. |
+| `tweaks.admin.itemedit` | Allows editing item properties, such as display name and lore. |
+| `tweaks.admin.guicopy` | Allows saving a targeted chest's contents to a YAML file for GUI layouts. |
+| `tweaks.admin.gamemode` | Allows switching gamemodes via command. |
+| `tweaks.admin.permissions` | Grants full access to the custom permission management system, including groups, users, and GUI editor. |
 
 ---
 

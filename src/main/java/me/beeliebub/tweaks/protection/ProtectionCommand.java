@@ -81,27 +81,27 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
     private record Subcommand(String name, String permission, boolean visibleInUsage) {}
 
     private static final List<Subcommand> SUBCOMMANDS = List.of(
-            new Subcommand("claim",         Permissions.PROTECTION_CLAIM,   true),
-            new Subcommand("clear",         Permissions.PROTECTION_CLAIM,   true),
-            new Subcommand("wand",          Permissions.PROTECTION_CLAIM,   true),
-            new Subcommand("select",        Permissions.PROTECTION_INFO,    true),
-            new Subcommand("unclaim",       Permissions.PROTECTION_UNCLAIM, true),
-            new Subcommand("addmember",     Permissions.PROTECTION_MEMBER,  true),
-            new Subcommand("removemember",  Permissions.PROTECTION_MEMBER,  true),
-            new Subcommand("am",            Permissions.PROTECTION_MEMBER,  false),
-            new Subcommand("rm",            Permissions.PROTECTION_MEMBER,  false),
-            new Subcommand("addmanager",    Permissions.PROTECTION_MEMBER,  true),
-            new Subcommand("removemanager", Permissions.PROTECTION_MEMBER,  true),
-            new Subcommand("aman",          Permissions.PROTECTION_MEMBER,  false),
-            new Subcommand("rman",          Permissions.PROTECTION_MEMBER,  false),
-            new Subcommand("flag",          Permissions.PROTECTION_FLAG,    true),
-            new Subcommand("unflag",        Permissions.PROTECTION_FLAG,    true),
-            new Subcommand("flags",         Permissions.PROTECTION_FLAG,    true),
-            new Subcommand("info",          Permissions.PROTECTION_INFO,    true),
-            new Subcommand("i",             Permissions.PROTECTION_INFO,    false),
-            new Subcommand("setparent",     Permissions.PROTECTION_CLAIM,   true),
-            new Subcommand("unsetparent",   Permissions.PROTECTION_CLAIM,   true),
-            new Subcommand("gui",           Permissions.PROTECTION_INFO,    true)
+            new Subcommand("claim",         Permissions.PROTECTION_PURCHASEABLE, true),
+            new Subcommand("clear",         null,                                true),
+            new Subcommand("wand",          null,                                true),
+            new Subcommand("select",        Permissions.PROTECTION_INFO,         true),
+            new Subcommand("unclaim",       Permissions.PROTECTION_UNCLAIM,      true),
+            new Subcommand("addmember",     Permissions.PROTECTION_MEMBER,       true),
+            new Subcommand("removemember",  Permissions.PROTECTION_MEMBER,       true),
+            new Subcommand("am",            Permissions.PROTECTION_MEMBER,       false),
+            new Subcommand("rm",            Permissions.PROTECTION_MEMBER,       false),
+            new Subcommand("addmanager",    Permissions.PROTECTION_MEMBER,       true),
+            new Subcommand("removemanager", Permissions.PROTECTION_MEMBER,       true),
+            new Subcommand("aman",          Permissions.PROTECTION_MEMBER,       false),
+            new Subcommand("rman",          Permissions.PROTECTION_MEMBER,       false),
+            new Subcommand("flag",          Permissions.PROTECTION_FLAG,         true),
+            new Subcommand("unflag",        Permissions.PROTECTION_FLAG,         true),
+            new Subcommand("flags",         Permissions.PROTECTION_FLAG,         true),
+            new Subcommand("info",          Permissions.PROTECTION_INFO,         true),
+            new Subcommand("i",             Permissions.PROTECTION_INFO,         false),
+            new Subcommand("setparent",     Permissions.PROTECTION_PURCHASEABLE, true),
+            new Subcommand("unsetparent",   Permissions.PROTECTION_PURCHASEABLE, true),
+            new Subcommand("gui",           Permissions.PROTECTION_INFO,         true)
     );
 
     private static Subcommand findSubcommand(String name) {
@@ -126,7 +126,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
             showRootUsage(sender);
             return true;
         }
-        if (!sender.hasPermission(sc.permission())) {
+        if (sc.permission() != null && !sender.hasPermission(sc.permission())) {
             sender.sendMessage(Component.text(
                     "You don't have permission for /region " + sc.name() + ".",
                     NamedTextColor.RED));
@@ -170,11 +170,11 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
 
     private static final List<UsageEntry> USAGE_ENTRIES = List.of(
             new UsageEntry("/region claim <name>",
-                    "Claim your wand selection as a named region (costs Resource Rupees per chunk).", Permissions.PROTECTION_CLAIM),
+                    "Claim your wand selection as a named region (costs Resource Rupees per chunk).", Permissions.PROTECTION_PURCHASEABLE),
             new UsageEntry("/region clear",
-                    "Drop your active wand selection.", Permissions.PROTECTION_CLAIM),
+                    "Drop your active wand selection.", null),
             new UsageEntry("/region wand",
-                    "Receive a region selection wand.", Permissions.PROTECTION_CLAIM),
+                    "Receive a region selection wand.", null),
             new UsageEntry("/region select <name>",
                     "Restore a region's outline onto your selection.", Permissions.PROTECTION_INFO),
             new UsageEntry("/region unclaim <name>",
@@ -196,9 +196,9 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
             new UsageEntry("/region info [name]",
                     "Show region info here, or by name.", Permissions.PROTECTION_INFO),
             new UsageEntry("/region setparent <child> <parent>",
-                    "Nest one region as a sub-region of another.", Permissions.PROTECTION_CLAIM),
+                    "Nest one region as a sub-region of another.", Permissions.PROTECTION_PURCHASEABLE),
             new UsageEntry("/region unsetparent <child>",
-                    "Promote a sub-region back to top-level.", Permissions.PROTECTION_CLAIM),
+                    "Promote a sub-region back to top-level.", Permissions.PROTECTION_PURCHASEABLE),
             new UsageEntry("/region gui [name]",
                     "Open the management dialog for a region.", Permissions.PROTECTION_INFO)
     );
@@ -207,7 +207,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text("Region commands:", NamedTextColor.YELLOW));
         int shown = 0;
         for (UsageEntry entry : USAGE_ENTRIES) {
-            if (!sender.hasPermission(entry.permission())) continue;
+            if (entry.permission() != null && !sender.hasPermission(entry.permission())) continue;
             sender.sendMessage(Component.text("  " + entry.syntax(), NamedTextColor.GRAY)
                     .append(Component.text(" — " + entry.description(), NamedTextColor.DARK_GRAY)));
             shown++;
@@ -222,7 +222,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
     private static void showUsage(CommandSender sender, String literalPrefix) {
         for (UsageEntry entry : USAGE_ENTRIES) {
             if (entry.syntax().equals(literalPrefix) || entry.syntax().startsWith(literalPrefix + " ")) {
-                if (!sender.hasPermission(entry.permission())) continue;
+                if (entry.permission() != null && !sender.hasPermission(entry.permission())) continue;
                 sender.sendMessage(Component.text("Usage:", NamedTextColor.YELLOW));
                 sender.sendMessage(Component.text("  " + entry.syntax(), NamedTextColor.GRAY)
                         .append(Component.text(" — " + entry.description(), NamedTextColor.DARK_GRAY)));
@@ -238,14 +238,14 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
 
     // /region claim <name>  — reads the wand-driven Pos1/Pos2 selection.
     //
-    // Pricing & enforcement flow (see Permissions.PROTECTION_CLAIM_PURCHASABLE
+    // Pricing & enforcement flow (see Permissions.PROTECTION_PURCHASEABLE
     // and Permissions.PROTECTION_ADMIN):
     //   1. Resolve chunk count from the wand selection.
     //   2. Admins (PROTECTION_ADMIN) bypass the limit, the purchasable gate, and
     //      pay nothing. Their region is stored with cost = 0 so no refund is
     //      issued on unclaim either.
     //   3. Non-admins must (a) own < `max_chunks` (config) - chunks already, and
-    //      (b) hold PROTECTION_CLAIM_PURCHASABLE. Both checks run before payment.
+    //      (b) hold PROTECTION_PURCHASEABLE. Both checks run before payment.
     //   4. Cost = Σ N=1..chunks of max(1, floor(10 / pow(1.1, N - 1))). The
     //      max(1, ...) floor guarantees every chunk costs at least 1 Resource
     //      Rupee even at extreme scale. Canonical verification: 5x5 = 25
@@ -309,7 +309,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
                                 + "</yellow> more.</red>"));
                 return;
             }
-            if (!player.hasPermission(Permissions.PROTECTION_CLAIM_PURCHASABLE)) {
+            if (!player.hasPermission(Permissions.PROTECTION_PURCHASEABLE)) {
                 player.sendMessage(mm.deserialize(
                         "<red>You don't have permission to purchase land claims.</red>"));
                 return;
@@ -1353,7 +1353,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
 
         Subcommand sc = findSubcommand(args[0]);
         if (sc == null) return Collections.emptyList();
-        if (!sender.hasPermission(sc.permission())) return Collections.emptyList();
+        if (sc.permission() != null && !sender.hasPermission(sc.permission())) return Collections.emptyList();
 
         return switch (sc.name()) {
             case "claim" -> Collections.emptyList(); // <name> is freeform
@@ -1390,7 +1390,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         for (Subcommand sc : SUBCOMMANDS) {
             if (!sc.visibleInUsage()) continue; // Hide aliases from the primary suggestion list.
-            if (sender.hasPermission(sc.permission())) out.add(sc.name());
+            if (sc.permission() == null || sender.hasPermission(sc.permission())) out.add(sc.name());
         }
         return out;
     }
