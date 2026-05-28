@@ -361,6 +361,8 @@ Quality variants of Silk Touch allow players to pick up blocks that are normally
 - **Reinforced Deepslate**: Picking this up requires at least an **Epic** Silk Touch tool. This also works with **Tunneller** — an Epic+ Silk Touch Tunneller tool can carve out 3x3 areas of Reinforced Deepslate (which is normally unbreakable).
 - Tiers are cumulative: a Legendary tool can pick up everything from the lower tiers.
 
+Quality Silk Touch is **deterministic**: using a quality silk shovel on gravel will reliably drop gravel, suppressing the random flint roll.
+
 ---
 
 ## Player Features
@@ -410,6 +412,8 @@ Control which items your character actually picks up. Two modes:
 - **Blacklist** — every item *except* those on your list are picked up.
 
 The filter is **off by default**. Whether it's enabled, which mode is active, and the contents of each list are all saved on your player profile and persist across logins. The whitelist and blacklist are tracked independently — you can curate one for each mode and swap between them without losing either.
+
+The filter is intelligent and **automatically bypasses crafting and trading**. Items you shift-click or take from a crafting table or villager GUI result slot are never blocked, even if they aren't on your whitelist.
 
 | Command | What it does |
 |---|---|
@@ -760,10 +764,11 @@ A gathering minigame that runs in the **`jass:resource`** (Overworld) or **`jass
 - **Unique Tasks**: When you join, the plugin assigns you a random task from the active world's pool.
 - **Fair Distribution**: The system prefers tasks that no other player is currently working on. If all tasks are taken, duplicates are allowed.
 - **Persistence**: Your assigned task stays the same for the entire session.
+- **Re-rolls**: If you don't like your assigned task, use `/reroll` to get a new one. Your first re-roll each session is **free**; subsequent re-rolls cost **1 Resource Rupee** each.
 
 **Task Categories**:
 Tasks are categorized by how you must obtain or interact with the target. Depending on the category, targets are either Minecraft **Materials** (for items/blocks) or **Entity Types** (for mobs).
-- **Collect**: Any supported way of obtaining the item (drops, chests, etc.).
+- **Collect**: Any supported way of obtaining the item (drops, chests, mob loot like ghast tears, etc.).
 - **Kill**: Kill the targeted entity.
 - **Smelt**: Smelt the target item (e.g., smelting raw iron or iron ore for an Iron Ingot task). Supports the **Smelter** enchantment.
 - **Enchant**: Enchant the target item (Overworld only).
@@ -816,6 +821,8 @@ nether:
 **Allowed Items** (`plugins/Tweaks/resource_hunt_items.yml`): a list of materials allowed to be carried into the resource world. Manage at runtime via `/tconfig resourceitems <add|remove> <item>`.
 
 **Admin setup**: the `resource` reward shell is auto-created on first plugin load; populate it with `/reward edit resource`.
+
+**Admin Overrides**: Admins can manually set a player's target using `/resource settarget [player] <target_key>`. The target key corresponds to the identity keys in `resource_hunt.yml` (e.g., `iron_ore`, `sheep`, `water_bottle`). This command supports tab completion for both online players and all available target keys.
 
 **World restrictions**: `jass:resource` and `jass:resource_nether` are single-purpose for gathering:
 
@@ -951,6 +958,7 @@ When an action occurs, the system checks rules in this order:
 | `/help [section]` | Show comprehensive help menu. |
 | `/region <subcommand>` | Land protection management. Alias: `/rg`. |
 | `/reward claim` | Claim pending minigame rewards. |
+| `/reroll` | Re-roll your current Resource Hunt target. |
 | `/resource` | Teleport to the resource world. |
 
 ### Admin Commands
@@ -1007,6 +1015,7 @@ When an action occurs, the system checks rules in this order:
 | `/guicopy [name]` | `tweaks.admin.guicopy` | Save the targeted chest's contents to disk. |
 | `/survival` | `tweaks.admin.gamemode` | Switch your gamemode to Survival. |
 | `/creative` | `tweaks.admin.gamemode` | Switch your gamemode to Creative. |
+| `/resource settarget [p] <t>` | `tweaks.admin.resource.settarget.self/other` | Override a player's Resource Hunt target. |
 | `/displaychest [hand\|off]` | `tweaks.admin.displaychest` | Toggle display chest setup/removal mode. |
 
 ---
@@ -1035,6 +1044,8 @@ When an action occurs, the system checks rules in this order:
 | `tweaks.admin.bloodmoon` | Allows forcing the next full moon to be a Blood Moon. |
 | `tweaks.admin.reward` | Allows managing and claiming minigame rewards. |
 | `tweaks.admin.whack` | Allows access to Whack-an-Andrew minigame admin commands. |
+| `tweaks.admin.resource.settarget.self` | Allows setting your own Resource Hunt target. |
+| `tweaks.admin.resource.settarget.other` | Allows setting another player's Resource Hunt target. |
 | `tweaks.admin.logs` | Allows toggling inspector mode to view chest interaction logs. |
 | `tweaks.admin.itemedit` | Allows editing item properties, such as display name and lore. |
 | `tweaks.admin.guicopy` | Allows saving a targeted chest's contents to a YAML file for GUI layouts. |

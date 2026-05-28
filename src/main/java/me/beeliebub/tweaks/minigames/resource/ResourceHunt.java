@@ -119,6 +119,8 @@ public class ResourceHunt implements Listener {
     private final Map<UUID, PlayerTarget> playerTargets = new ConcurrentHashMap<>();
     // Identity keys (Material or EntityType) already assigned, guarded by `this`.
     private final Set<Object> assignedKeys = new HashSet<>();
+    // Players who have consumed their one free reroll this session.
+    private final Set<UUID> usedFreeReroll = ConcurrentHashMap.newKeySet();
 
     private final Map<UUID, Integer> progress = new ConcurrentHashMap<>();
     private final Map<UUID, BossBar> playerBars = new ConcurrentHashMap<>();
@@ -508,8 +510,9 @@ public class ResourceHunt implements Listener {
         recordProgress(player, target, gained);
     }
 
-    // Credits one tally per matching mob kill. KILL targets track the action itself (entity type
-    // killed), not the drops, so we don't tag any items here.
+    // Credits one tally per matching mob kill (KILL category) and credits matching item drops from
+    // mob deaths toward COLLECT targets. The two paths are independent: a KILL target never
+    // reaches the drop-counting block, and a COLLECT target never triggers the kill-count block.
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntityDeath(EntityDeathEvent event) {
         if (!isActive()) return;
@@ -523,10 +526,28 @@ public class ResourceHunt implements Listener {
         UUID uuid = killer.getUniqueId();
         PlayerTarget target = targetFor(uuid);
         if (target == null) return;
-        if (target.category != Category.KILL) return;
-        if (target.entityType == null || entity.getType() != target.entityType) return;
-        if (!worldKey.equals(activeWorldKey) || isFullyComplete(uuid)) return;
-        recordProgress(killer, target, 1);
+
+        if (target.category == Category.KILL) {
+            if (target.entityType == null || entity.getType() != target.entityType) return;
+            if (!worldKey.equals(activeWorldKey) || isFullyComplete(uuid)) return;
+            recordProgress(killer, target, 1);
+            return;
+        }
+
+        // COLLECT path: tally any drops that match the player's target material, then mark each
+        // counted drop so a later pickup doesn't double-credit. O(drops) — no entity-type gate,
+        // so future config additions (any mob -> any material) work automatically.
+        if (target.category == Category.COLLECT && target.material != null) {
+            if (!worldKey.equals(activeWorldKey) || isFullyComplete(uuid)) return;
+            int gained = 0;
+            for (ItemStack drop : event.getDrops()) {
+                if (drop == null || drop.getType() != target.material) continue;
+                if (isCounted(drop)) continue;
+                gained += drop.getAmount();
+                markCounted(drop);
+            }
+            if (gained > 0) recordProgress(killer, target, gained);
+        }
     }
 
     // SHEAR target: each shear action of the matching entity type credits one tally.
@@ -936,6 +957,126 @@ public class ResourceHunt implements Listener {
             pdc.remove(countedKey);
             stack.setItemMeta(meta);
         }
+    }
+
+    /**
+     * Returns the set of target identity key strings available in the current session's world pool.
+     * Keys match the YAML format: lowercase material names (e.g. "iron_ore"), entity type keys
+     * (e.g. "minecraft:creeper"), or color-prefixed sheep keys (e.g. "red_sheep").
+     * Returns an empty set when the hunt is inactive.
+     */
+    public Set<String> getAvailableTargetKeys() {
+        Set<String> keys = new java.util.LinkedHashSet<>();
+        for (Target t : worldTargets) {
+            keys.add(targetIdName(t));
+        }
+        return java.util.Collections.unmodifiableSet(keys);
+    }
+
+    /**
+     * Overrides the given player's current Resource Hunt target with the target identified by
+     * {@code targetKey}. The key must match one of those returned by {@link #getAvailableTargetKeys()}.
+     * Resets the player's progress and tiers to zero so they start fresh on the new target.
+     *
+     * @param playerUuid the UUID of the player whose target should be overridden
+     * @param targetKey  the identity key string (as returned by {@link #getAvailableTargetKeys()})
+     * @return {@code true} if the target was found and applied; {@code false} if the key is unknown
+     */
+    public synchronized boolean forceTarget(UUID playerUuid, String targetKey) {
+        Target match = null;
+        for (Target t : worldTargets) {
+            if (targetIdName(t).equalsIgnoreCase(targetKey)) {
+                match = t;
+                break;
+            }
+        }
+        if (match == null) return false;
+
+        PlayerTarget pt = new PlayerTarget(match);
+        playerTargets.put(playerUuid, pt);
+        progress.remove(playerUuid);
+        tiersCompleted.remove(playerUuid);
+
+        // Update the boss bar if the player is currently online and in the resource world.
+        Player online = Bukkit.getPlayer(playerUuid);
+        if (online != null) {
+            hideBossBar(online);
+            if (activeWorldKey.equals(online.getWorld().getKey().asString())) {
+                showBossBar(online);
+            }
+        }
+
+        plugin.getLogger().info("Resource Hunt: admin forced target " + match.category + ":" + targetIdName(match)
+                + " (tiers " + pt.tierThresholds[0] + "/" + pt.tierThresholds[1] + "/" + pt.tierThresholds[2]
+                + ") onto " + playerUuid);
+        return true;
+    }
+
+    /**
+     * Returns true if the player has already consumed their free reroll this session.
+     */
+    public boolean hasUsedFreeReroll(UUID uuid) {
+        return usedFreeReroll.contains(uuid);
+    }
+
+    /**
+     * Marks that the player has used their free reroll this session.
+     */
+    public void markFreeRerollUsed(UUID uuid) {
+        usedFreeReroll.add(uuid);
+    }
+
+    /**
+     * Assigns a new random target to the player, preferring one distinct from their current
+     * target (if possible). Resets progress and tiers. Updates the boss bar if the player is
+     * online in the resource world. Returns {@code true} on success, {@code false} if the hunt
+     * is not active.
+     */
+    public synchronized boolean rerollTarget(Player player) {
+        if (!isActive()) return false;
+        UUID uuid = player.getUniqueId();
+
+        // Collect the pool excluding the player's current target key (best-effort uniqueness).
+        Object currentKey = null;
+        PlayerTarget current = playerTargets.get(uuid);
+        if (current != null) {
+            // Reconstruct the identity key from the current PlayerTarget.
+            if (current.sheepColor != null) {
+                currentKey = java.util.Objects.hash(current.entityType, current.sheepColor);
+            } else if (current.material != null) {
+                currentKey = current.material;
+            } else {
+                currentKey = current.entityType;
+            }
+        }
+
+        List<Target> available = new ArrayList<>();
+        for (Target t : worldTargets) {
+            if (!t.identityKey().equals(currentKey)) available.add(t);
+        }
+        List<Target> pool = available.isEmpty() ? worldTargets : available;
+        Target pick = pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
+
+        // Remove old assignment key before adding the new one.
+        if (currentKey != null) assignedKeys.remove(currentKey);
+        assignedKeys.add(pick.identityKey());
+
+        PlayerTarget pt = new PlayerTarget(pick);
+        playerTargets.put(uuid, pt);
+        progress.remove(uuid);
+        tiersCompleted.remove(uuid);
+
+        // Refresh the boss bar.
+        hideBossBar(player);
+        if (activeWorldKey.equals(player.getWorld().getKey().asString())) {
+            showBossBar(player);
+        }
+
+        plugin.getLogger().info("Resource Hunt: rerolled target for " + uuid
+                + " -> " + pick.category + ":" + targetIdName(pick)
+                + " (tiers " + pt.tierThresholds[0] + "/" + pt.tierThresholds[1]
+                + "/" + pt.tierThresholds[2] + ")");
+        return true;
     }
 
     public static boolean isResourceWorld(String worldKey) {

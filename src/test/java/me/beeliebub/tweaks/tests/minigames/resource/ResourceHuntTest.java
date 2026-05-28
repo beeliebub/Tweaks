@@ -7,8 +7,11 @@ import org.bukkit.DyeColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.WorldCreator;
+import org.bukkit.damage.DamageSource;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Sheep;
+import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.player.PlayerShearEntityEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -23,6 +26,7 @@ import org.mockbukkit.mockbukkit.world.WorldMock;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -208,6 +212,107 @@ class ResourceHuntTest {
     }
 
     // -------------------------------------------------------------------------
+    // COLLECT-via-entity-drop tests.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void collectTargetGhastTearCreditsDropsFromGhastKill() throws IOException {
+        bootstrap("""
+                overworld:
+                  collect:
+                    ghast_tear: "5:2.0"
+                nether:
+                """);
+        player = server.addPlayer();
+        // Player joins and gets the ghast_tear COLLECT target.
+
+        LivingEntity ghast = buildKilledEntity(EntityType.GHAST, resourceWorld, player);
+        ItemStack tearDrop = new ItemStack(Material.GHAST_TEAR, 2);
+        List<ItemStack> drops = new ArrayList<>(List.of(tearDrop));
+
+        DamageSource damageSource = mock(DamageSource.class);
+        EntityDeathEvent event = new EntityDeathEvent(ghast, damageSource, drops);
+        server.getPluginManager().callEvent(event);
+
+        assertEquals(2, getProgress(player.getUniqueId()),
+                "Killing a ghast that drops 2 ghast_tear must credit 2 progress for a COLLECT:ghast_tear target");
+        assertTrue(resourceHunt.isItemCounted(tearDrop),
+                "The dropped ghast_tear stack must be marked counted so a later pickup cannot double-credit");
+    }
+
+    @Test
+    void collectTargetBlazeRodCreditsDropsFromBlazeKill() throws IOException {
+        bootstrap("""
+                overworld:
+                  collect:
+                    blaze_rod: "10:2.0"
+                nether:
+                """);
+        player = server.addPlayer();
+
+        LivingEntity blaze = buildKilledEntity(EntityType.BLAZE, resourceWorld, player);
+        ItemStack blazeRodDrop = new ItemStack(Material.BLAZE_ROD, 3);
+        List<ItemStack> drops = new ArrayList<>(List.of(blazeRodDrop));
+
+        DamageSource damageSource = mock(DamageSource.class);
+        EntityDeathEvent event = new EntityDeathEvent(blaze, damageSource, drops);
+        server.getPluginManager().callEvent(event);
+
+        assertEquals(3, getProgress(player.getUniqueId()),
+                "Killing a blaze that drops 3 blaze_rods must credit 3 progress for a COLLECT:blaze_rod target");
+        assertTrue(resourceHunt.isItemCounted(blazeRodDrop),
+                "The dropped blaze_rod stack must be marked counted");
+    }
+
+    @Test
+    void noProgressWhenKillerHasNoMatchingCollectTarget() throws IOException {
+        // Player has a COLLECT:iron_ingot target — killing a ghast dropping ghast_tear must not credit.
+        bootstrap("""
+                overworld:
+                  collect:
+                    iron_ingot: "10:2.0"
+                nether:
+                """);
+        player = server.addPlayer();
+
+        LivingEntity ghast = buildKilledEntity(EntityType.GHAST, resourceWorld, player);
+        ItemStack tearDrop = new ItemStack(Material.GHAST_TEAR, 2);
+        List<ItemStack> drops = new ArrayList<>(List.of(tearDrop));
+
+        DamageSource damageSource = mock(DamageSource.class);
+        EntityDeathEvent event = new EntityDeathEvent(ghast, damageSource, drops);
+        server.getPluginManager().callEvent(event);
+
+        assertEquals(0, getProgress(player.getUniqueId()),
+                "Drops of a non-matching material must not credit progress");
+    }
+
+    @Test
+    void collectTargetMaterialDrivenNotEntityTypeDriven() throws IOException {
+        // Player has COLLECT:iron_ingot — a zombie that drops iron_ingot should credit (any mob, any material).
+        bootstrap("""
+                overworld:
+                  collect:
+                    iron_ingot: "10:2.0"
+                nether:
+                """);
+        player = server.addPlayer();
+
+        LivingEntity zombie = buildKilledEntity(EntityType.ZOMBIE, resourceWorld, player);
+        ItemStack ironDrop = new ItemStack(Material.IRON_INGOT, 1);
+        List<ItemStack> drops = new ArrayList<>(List.of(ironDrop));
+
+        DamageSource damageSource = mock(DamageSource.class);
+        EntityDeathEvent event = new EntityDeathEvent(zombie, damageSource, drops);
+        server.getPluginManager().callEvent(event);
+
+        assertEquals(1, getProgress(player.getUniqueId()),
+                "A zombie dropping iron_ingot must credit progress for a COLLECT:iron_ingot target — mechanic is material-driven, not entity-type-driven");
+        assertTrue(resourceHunt.isItemCounted(ironDrop),
+                "The dropped iron_ingot must be marked counted");
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
@@ -234,5 +339,18 @@ class ResourceHuntTest {
         } catch (Exception e) {
             throw new RuntimeException("Failed to invoke ResourceHunt.getProgress via reflection", e);
         }
+    }
+
+    /**
+     * Creates a Mockito-stubbed LivingEntity of the given type in the given world, with the
+     * specified player as its killer. getWorld() must return a world whose key passes
+     * ResourceHunt.isResourceWorld() and matches the activeWorldKey equality check.
+     */
+    private LivingEntity buildKilledEntity(EntityType entityType, WorldMock world, PlayerMock killer) {
+        LivingEntity entity = mock(LivingEntity.class);
+        when(entity.getType()).thenReturn(entityType);
+        when(entity.getWorld()).thenReturn(world);
+        when(entity.getKiller()).thenReturn(killer);
+        return entity;
     }
 }

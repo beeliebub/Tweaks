@@ -251,7 +251,12 @@ public class Tweaks extends JavaPlugin {
         ResourceRupee resourceRupee = new ResourceRupee();
         getServer().getPluginManager().registerEvents(resourceRupee, this);
 
-        getCommand("resource").setExecutor(new ResourceCommand(resourceHunt, resourceHuntItems));
+        ResourceCommand resourceCommand = new ResourceCommand(resourceHunt, resourceHuntItems);
+        getCommand("resource").setExecutor(resourceCommand);
+        getCommand("resource").setTabCompleter(resourceCommand);
+
+        RerollCommand rerollCommand = new RerollCommand(resourceHunt);
+        getCommand("reroll").setExecutor(rerollCommand);
 
         // Minigames - Mannequin AI
         MannequinAI mannequinAI = new MannequinAI(this);

@@ -74,6 +74,16 @@ public final class Permissions {
     public static final String ADMIN_WHACK = "tweaks.admin.whack";
 
     /**
+     * Allows using /resource settarget to override your own Resource Hunt target.
+     */
+    public static final String ADMIN_RESOURCE_SETTARGET_SELF = "tweaks.admin.resource.settarget.self";
+
+    /**
+     * Allows using /resource settarget [player] to override another player's Resource Hunt target.
+     */
+    public static final String ADMIN_RESOURCE_SETTARGET_OTHER = "tweaks.admin.resource.settarget.other";
+
+    /**
      * Allows viewing and modifying another online player's inventory.
      */
     public static final String ADMIN_INVSEE = "tweaks.admin.invsee";

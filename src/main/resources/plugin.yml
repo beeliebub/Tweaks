@@ -79,6 +79,9 @@ commands:
     usage: /invsee <player>
   resource:
     description: Safely teleport to the resource world
+  reroll:
+    description: Reroll your Resource Hunt target. First reroll is free; subsequent rerolls cost 1 Resource Rupee.
+    usage: /reroll
   help:
     description: Comprehensive GUI help menu.
     usage: /help [section]

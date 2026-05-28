@@ -13,6 +13,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
@@ -20,8 +22,12 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 // Per-player item pickup filter. Whitelist mode picks up only listed items;
 // blacklist mode picks up everything except listed items. State lives on the
@@ -30,6 +36,17 @@ public class ItemFilterCommand implements CommandExecutor, TabCompleter, Listene
 
     private static final String MODE_WHITELIST = "whitelist";
     private static final String MODE_BLACKLIST = "blacklist";
+
+    // Inventory types whose RESULT slots should never be intercepted by the filter.
+    // When a player clicks a result slot in one of these inventories, any subsequent
+    // EntityPickupItemEvent caused by overflow items is exempt for that single tick.
+    private static final Set<InventoryType> GUI_EXEMPT_TYPES = Collections.unmodifiableSet(
+            Set.of(InventoryType.MERCHANT, InventoryType.CRAFTING, InventoryType.WORKBENCH)
+    );
+
+    // Transient per-UUID flag: if present, the next pickup event for that player is
+    // exempt from the filter (consumed on first use). Not persisted — safe to lose on restart.
+    private final Set<UUID> guiExempt = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     private final NamespacedKey enabledKey;
     private final NamespacedKey modeKey;
@@ -215,9 +232,26 @@ public class ItemFilterCommand implements CommandExecutor, TabCompleter, Listene
         }
     }
 
+    // When a player takes an item from a GUI result slot (trade, crafting table, etc.),
+    // Minecraft may subsequently fire an EntityPickupItemEvent if overflow items land on the
+    // ground and auto-collect. Mark the player as exempt for that single following pickup so
+    // the filter does not block items that were legitimately earned through crafting or trading.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        InventoryType type = event.getInventory().getType();
+        if (!GUI_EXEMPT_TYPES.contains(type)) return;
+        if (event.getSlotType() != org.bukkit.event.inventory.InventoryType.SlotType.RESULT) return;
+        // Mark exempt — consumed by the next onPickup call for this player.
+        guiExempt.add(player.getUniqueId());
+    }
+
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onPickup(EntityPickupItemEvent event) {
         if (!(event.getEntity() instanceof Player player)) return;
+        // If this pickup was triggered by a GUI result-slot interaction, allow it through
+        // and clear the flag so subsequent ground pickups are still filtered normally.
+        if (guiExempt.remove(player.getUniqueId())) return;
         if (!allowsPickup(player, event.getItem().getItemStack())) {
             event.setCancelled(true);
         }

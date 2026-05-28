@@ -550,7 +550,8 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("Uncommon: Dirt Path."),
                 white("Rare: Farmland."),
                 white("Epic: Reinforced Deepslate."),
-                white("Legendary: Budding Amethyst.")
+                white("Legendary: Budding Amethyst."),
+                green("Deterministic: quality silk shovels always drop gravel (no flint).")
         ), Material.DIAMOND_ORE, 31, ColorUtil.HELP_GRAD_SILK_QUALITY, List.of("tiers", "tunneller")));
 
         return new HelpCategory("quality", "Enchantment Quality", articles, Material.NETHER_STAR, 24, ColorUtil.HELP_GRAD_QUALITY_ENCHANTS);
@@ -582,7 +583,8 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/if add <item>...", "Add item(s) to the active list."),
                 cmd("/if remove <item>...", "Remove item(s)."),
                 cmd("/if list", "Show the active list."),
-                cmd("/if clear [mode]", "Clear list(s).")
+                cmd("/if clear [mode]", "Clear list(s)."),
+                green("Bypasses crafting and trading result slots automatically.")
         ), Material.BARRIER, 14, ColorUtil.HELP_GRAD_ITEM_FILTER, List.of("telekinesis", "profiles")));
 
         articles.add(new HelpArticle("afk", "AFK", List.of(
@@ -718,12 +720,26 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("The world (overworld/nether) is picked at startup,"),
                 white("but each player gets their own random target material."),
                 white("Targets are unique per-player where possible."),
+                green("Collect category includes mob drops (e.g. ghast tears)."),
                 green("Shear targets support specific colors (e.g. red_sheep)."),
                 aqua("Three cumulative tier thresholds:"),
                 white("T1 = amount, T2 = round(T1 * multiplier), T3 = round(T1 * multiplier²)."),
                 gold("Each tier crossed grants one 'resource' reward."),
-                red("Ender chests are blocked in resource worlds.")
-        ), Material.GRASS_BLOCK, 20, ColorUtil.HELP_GRAD_RESOURCE_HUNT, List.of("rewards", "gem_connoisseur")));
+                red("Ender chests are blocked in resource worlds."),
+                gold("Admin:"),
+                cmd("/resource settarget [p] <t>", "Override a player's target."),
+                aqua("Self: tweaks.admin.resource.settarget.self"),
+                aqua("Other: tweaks.admin.resource.settarget.other")
+        ), Material.GRASS_BLOCK, 20, ColorUtil.HELP_GRAD_RESOURCE_HUNT, List.of("reroll", "rewards")));
+
+        articles.add(new HelpArticle("reroll", "Target Re-roll", List.of(
+                gray("Get a new Resource Hunt target."),
+                cmd("/reroll", "Re-roll your current target."),
+                white("First re-roll per session is FREE."),
+                white("Subsequent re-rolls cost 1 Resource Rupee each."),
+                yellow("Wait until you are in the resource world to see your bar update.")
+        ), Material.EMERALD, 22, ColorUtil.HELP_GRAD_RESOURCE_HUNT, List.of("resource_hunt", "resource_rupee")));
+
         articles.add(new HelpArticle("rewards", "Rewards", List.of(
                 gray("Pending-reward inbox for minigames."),
                 cmd("/reward claim", "Claim pending rewards."),
