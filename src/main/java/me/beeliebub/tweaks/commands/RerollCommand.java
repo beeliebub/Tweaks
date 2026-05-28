@@ -39,6 +39,13 @@ public class RerollCommand implements CommandExecutor {
             return true;
         }
 
+        if (resourceHunt.hasCompletedFirstTier(player.getUniqueId())) {
+            player.sendMessage(Component.text(
+                    "You have already completed a tier in your current hunt. You cannot reroll until the next session.",
+                    NamedTextColor.RED));
+            return true;
+        }
+
         boolean freeRerollAvailable = !resourceHunt.hasUsedFreeReroll(player.getUniqueId());
 
         if (freeRerollAvailable) {

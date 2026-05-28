@@ -80,7 +80,7 @@ commands:
   resource:
     description: Safely teleport to the resource world
   reroll:
-    description: Reroll your Resource Hunt target. First reroll is free; subsequent rerolls cost 1 Resource Rupee.
+    description: Reroll your Resource Hunt target. First reroll is free; subsequent rerolls cost 1 Resource Rupee. Cannot be used once you have completed the first tier of your current target.
     usage: /reroll
   help:
     description: Comprehensive GUI help menu.

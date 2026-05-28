@@ -1020,6 +1020,14 @@ public class ResourceHunt implements Listener {
     }
 
     /**
+     * Returns true if the player has crossed at least the first tier threshold of their current
+     * target. Used by /reroll to lock players into a target once they've made meaningful progress.
+     */
+    public boolean hasCompletedFirstTier(UUID uuid) {
+        return tiersCompleted.getOrDefault(uuid, 0) >= 1;
+    }
+
+    /**
      * Marks that the player has used their free reroll this session.
      */
     public void markFreeRerollUsed(UUID uuid) {

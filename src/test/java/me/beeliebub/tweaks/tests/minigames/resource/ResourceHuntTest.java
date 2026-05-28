@@ -313,6 +313,83 @@ class ResourceHuntTest {
     }
 
     // -------------------------------------------------------------------------
+    // hasCompletedFirstTier tests.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void hasCompletedFirstTierIsFalseForFreshTarget() throws IOException {
+        bootstrap("""
+                overworld:
+                  collect:
+                    ghast_tear: "5:2.0"
+                nether:
+                """);
+        player = server.addPlayer();
+
+        assertFalse(resourceHunt.hasCompletedFirstTier(player.getUniqueId()),
+                "A freshly-assigned target must not report first tier complete");
+    }
+
+    @Test
+    void hasCompletedFirstTierIsFalseForUnknownPlayer() throws IOException {
+        bootstrap("""
+                overworld:
+                  collect:
+                    ghast_tear: "5:2.0"
+                nether:
+                """);
+        // No addPlayer call — UUID has never been assigned a target.
+        assertFalse(resourceHunt.hasCompletedFirstTier(UUID.randomUUID()),
+                "An unknown UUID must report false");
+    }
+
+    @Test
+    void hasCompletedFirstTierIsTrueAfterCrossingFirstThreshold() throws IOException {
+        // Tier 1 threshold is the base amount (5). Drop 5 ghast_tear and the player crosses T1.
+        bootstrap("""
+                overworld:
+                  collect:
+                    ghast_tear: "5:2.0"
+                nether:
+                """);
+        player = server.addPlayer();
+
+        LivingEntity ghast = buildKilledEntity(EntityType.GHAST, resourceWorld, player);
+        ItemStack tearDrop = new ItemStack(Material.GHAST_TEAR, 5);
+        List<ItemStack> drops = new ArrayList<>(List.of(tearDrop));
+
+        DamageSource damageSource = mock(DamageSource.class);
+        EntityDeathEvent event = new EntityDeathEvent(ghast, damageSource, drops);
+        server.getPluginManager().callEvent(event);
+
+        assertTrue(resourceHunt.hasCompletedFirstTier(player.getUniqueId()),
+                "Crossing the tier-1 threshold (5) must flip hasCompletedFirstTier to true");
+    }
+
+    @Test
+    void hasCompletedFirstTierIsFalseBelowFirstThreshold() throws IOException {
+        // Drop only 4 of the required 5 — progress accrues but T1 is not crossed.
+        bootstrap("""
+                overworld:
+                  collect:
+                    ghast_tear: "5:2.0"
+                nether:
+                """);
+        player = server.addPlayer();
+
+        LivingEntity ghast = buildKilledEntity(EntityType.GHAST, resourceWorld, player);
+        ItemStack tearDrop = new ItemStack(Material.GHAST_TEAR, 4);
+        List<ItemStack> drops = new ArrayList<>(List.of(tearDrop));
+
+        DamageSource damageSource = mock(DamageSource.class);
+        EntityDeathEvent event = new EntityDeathEvent(ghast, damageSource, drops);
+        server.getPluginManager().callEvent(event);
+
+        assertFalse(resourceHunt.hasCompletedFirstTier(player.getUniqueId()),
+                "Progress short of the tier-1 threshold must keep hasCompletedFirstTier false");
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 

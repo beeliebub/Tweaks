@@ -178,4 +178,27 @@ class RerollCommandTest {
 
         verify(resourceHunt, never()).markFreeRerollUsed(any(UUID.class));
     }
+
+    // -------------------------------------------------------------------------
+    // First-tier lock: once a player has crossed T1, rerolls are refused with
+    // the canonical message and rerollTarget is never invoked (even if the free
+    // token would otherwise have been available).
+    // -------------------------------------------------------------------------
+
+    @Test
+    void rerollRejectedAfterFirstTierCompleted() {
+        when(resourceHunt.hasCompletedFirstTier(any(UUID.class))).thenReturn(true);
+        when(resourceHunt.hasUsedFreeReroll(any(UUID.class))).thenReturn(false);
+
+        try (MockedStatic<ResourceHunt> staticHunt = mockStatic(ResourceHunt.class)) {
+            staticHunt.when(() -> ResourceHunt.isResourceWorld(anyString())).thenReturn(true);
+
+            cmd.onCommand(player, bukkitCmd, "reroll", new String[0]);
+        }
+
+        verify(resourceHunt, never()).rerollTarget(any());
+        verify(resourceHunt, never()).markFreeRerollUsed(any(UUID.class));
+        MessageAssert.assertMessageSent(player,
+                "You have already completed a tier in your current hunt. You cannot reroll until the next session.");
+    }
 }
