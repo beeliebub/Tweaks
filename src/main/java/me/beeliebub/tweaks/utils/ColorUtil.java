@@ -64,6 +64,10 @@ public final class ColorUtil {
     public static final String HELP_GRAD_RESOURCE_HUNT = "#FF4B4B:#FF6B3C:#FF8B2D:#FFD031:#EEE835:#DCFF39:#A5FF3F:#6DFF45:#3BFFC7:#58D0FF:#56ADFF:#5489FF";
     public static final String HELP_GRAD_REWARDS = "#FF4B4B:#FF8B2D:#FFD031:#DCFF39:#3BFFC7:#58D0FF:#5489FF";
     public static final String HELP_GRAD_WHACK = "#FF4B4B:#FF6B3C:#FF8B2D:#FFAE2F:#FFD031:#EEE835:#DCFF39:#A5FF3F:#6DFF45:#54FF86:#3BFFC7:#4AE8E3:#58D0FF:#56ADFF:#5489FF";
+    public static final String HELP_GRAD_BLACKJACK = "#006622:#008833:#22AA44:#44CC55:#FFEE00:#FFCC00:#FF9900";
+
+    public static final String HELP_GRAD_ECONOMY = "#00FF00:#40FF00:#80FF00:#C0FF00:#FFFF00:#FFD700";
+    public static final String HELP_GRAD_RANKS = "#FFD700:#E6BE00:#CCA500:#B38C00:#997300:#805A00";
 
     // Permissions help category + /perms GUI titles. Gold→amber palette is distinct
     // from the other help categories and visually reads as an admin domain.

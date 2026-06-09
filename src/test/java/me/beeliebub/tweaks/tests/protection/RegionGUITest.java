@@ -28,6 +28,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.mockStatic;
@@ -120,7 +121,7 @@ class RegionGUITest {
 
         Region resolved = protection.regions().get(REGION);
         regionGuiStatic.verify(
-                () -> RegionGUI.openRegionHub(eq(owner), eq(resolved), eq(protection)),
+                () -> RegionGUI.openRegionHub(eq(owner), eq(resolved), eq(protection), isNull()),
                 times(1));
     }
 
@@ -132,7 +133,7 @@ class RegionGUITest {
 
         Region resolved = protection.regions().get(REGION);
         regionGuiStatic.verify(
-                () -> RegionGUI.openRegionHub(eq(manager), eq(resolved), eq(protection)),
+                () -> RegionGUI.openRegionHub(eq(manager), eq(resolved), eq(protection), isNull()),
                 times(1));
     }
 
@@ -145,7 +146,7 @@ class RegionGUITest {
 
         Region resolved = protection.regions().get(REGION);
         regionGuiStatic.verify(
-                () -> RegionGUI.openRegionHub(eq(admin), eq(resolved), eq(protection)),
+                () -> RegionGUI.openRegionHub(eq(admin), eq(resolved), eq(protection), isNull()),
                 times(1));
     }
 
@@ -156,7 +157,7 @@ class RegionGUITest {
         invokeGui(stranger, REGION);
 
         regionGuiStatic.verify(
-                () -> RegionGUI.openRegionHub(any(), any(), any()),
+                () -> RegionGUI.openRegionHub(any(), any(), any(), any()),
                 never());
     }
 
@@ -167,7 +168,7 @@ class RegionGUITest {
         invokeGui(owner, "ghost_region");
 
         regionGuiStatic.verify(
-                () -> RegionGUI.openRegionHub(any(), any(), any()),
+                () -> RegionGUI.openRegionHub(any(), any(), any(), any()),
                 never());
     }
 
@@ -181,7 +182,7 @@ class RegionGUITest {
         invokeGui(console /* no args */);
 
         regionGuiStatic.verify(
-                () -> RegionGUI.openRegionHub(any(), any(), any()),
+                () -> RegionGUI.openRegionHub(any(), any(), any(), any()),
                 never());
     }
 }

@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.protection;
 
+import me.beeliebub.tweaks.permissions.PermissionManager;
 import me.beeliebub.tweaks.permissions.Permissions;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.ActionButton;
@@ -55,23 +56,23 @@ public final class RegionGUI {
     // Open the region management dashboard for `region`. The caller is
     // responsible for the authorization check (isOwnerManagerOrAdmin); this
     // method assumes the player is allowed to see the hub.
-    public static void openRegionHub(Player player, Region region, ProtectionManager pm) {
+    public static void openRegionHub(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
         List<ActionButton> buttons = new ArrayList<>();
 
         buttons.add(dialogButton(
                 Component.text("Edit Flags", NamedTextColor.GREEN, TextDecoration.BOLD),
                 Component.text("Manage boolean, material, and entity flags.", NamedTextColor.GRAY),
-                p -> openFlagsMenu(p, region, pm)));
+                p -> openFlagsMenu(p, region, pm, permissionManager)));
 
         buttons.add(dialogButton(
                 Component.text("Edit Members", NamedTextColor.AQUA, TextDecoration.BOLD),
                 Component.text("Add or remove region members.", NamedTextColor.GRAY),
-                p -> openMembersMenu(p, region, pm)));
+                p -> openMembersMenu(p, region, pm, permissionManager)));
 
         buttons.add(dialogButton(
                 Component.text("Edit Managers", NamedTextColor.AQUA, TextDecoration.BOLD),
                 Component.text("Promote or demote managers (owner only).", NamedTextColor.GRAY),
-                p -> openManagersMenu(p, region, pm)));
+                p -> openManagersMenu(p, region, pm, permissionManager)));
 
         // Sub-region nesting and unclaim are owner-only on purpose: delegating a
         // manager the ability to unclaim or reparent would let a promoted role
@@ -81,12 +82,12 @@ public final class RegionGUI {
             buttons.add(dialogButton(
                     Component.text("Manage Sub-regions", NamedTextColor.YELLOW, TextDecoration.BOLD),
                     Component.text("Set or clear this region's parent.", NamedTextColor.GRAY),
-                    p -> openSubRegionsMenu(p, region, pm)));
+                    p -> openSubRegionsMenu(p, region, pm, permissionManager)));
 
             buttons.add(dialogButton(
                     Component.text("Unclaim", NamedTextColor.RED, TextDecoration.BOLD),
                     Component.text("Delete this region. Cannot be undone.", NamedTextColor.RED),
-                    p -> openUnclaimConfirmation(p, region, pm)));
+                    p -> openUnclaimConfirmation(p, region, pm, permissionManager)));
         }
 
         DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Region: " + region.id()))
@@ -110,11 +111,11 @@ public final class RegionGUI {
 
     // ------------------------------------------------------------ Flags menu
 
-    static void openFlagsMenu(Player player, Region region, ProtectionManager pm) {
-        openFlagsMenu(player, region, pm, 0);
+    static void openFlagsMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
+        openFlagsMenu(player, region, pm, permissionManager, 0);
     }
 
-    private static void openFlagsMenu(Player player, Region region, ProtectionManager pm, int page) {
+    private static void openFlagsMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, int page) {
         Region fresh = refreshRegion(pm, region);
         if (fresh == null) {
             player.sendMessage(Component.text("Region no longer exists.", NamedTextColor.RED));
@@ -129,17 +130,17 @@ public final class RegionGUI {
         List<ActionButton> buttons = new ArrayList<>();
         for (int i = start; i < end; i++) {
             RegionFlag flag = all[i];
-            buttons.add(flagListEntryButton(fresh, pm, flag));
+            buttons.add(flagListEntryButton(fresh, pm, permissionManager, flag));
         }
 
         addPageNavButtons(buttons, currentPage, totalPages,
-                p -> openFlagsMenu(p, fresh, pm, currentPage - 1),
-                p -> openFlagsMenu(p, fresh, pm, currentPage + 1));
+                p -> openFlagsMenu(p, fresh, pm, permissionManager, currentPage - 1),
+                p -> openFlagsMenu(p, fresh, pm, permissionManager, currentPage + 1));
 
         ActionButton back = dialogButton(
                 Component.text("← Back to Region", NamedTextColor.RED, TextDecoration.BOLD),
                 Component.text("Return to the region dashboard.", NamedTextColor.GRAY),
-                p -> openRegionHub(p, fresh, pm));
+                p -> openRegionHub(p, fresh, pm, permissionManager));
 
         DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Flags: " + fresh.id()))
                 .body(List.of(DialogBody.plainMessage(pageSummary(all.length, "flag", currentPage, totalPages))))
@@ -158,7 +159,7 @@ public final class RegionGUI {
     // rule/list size so the player can see at a glance which flags are
     // configured. Click routes to the appropriate detail screen based on
     // whether the flag is boolean / material-list / entity-list.
-    private static ActionButton flagListEntryButton(Region region, ProtectionManager pm, RegionFlag flag) {
+    private static ActionButton flagListEntryButton(Region region, ProtectionManager pm, PermissionManager permissionManager, RegionFlag flag) {
         String summary;
         NamedTextColor color;
         if (flag.isMaterialFlag()) {
@@ -176,23 +177,23 @@ public final class RegionGUI {
         }
         Component label = Component.text(flag.name(), color, TextDecoration.BOLD);
         Component tip = Component.text(summary + " — click to edit.", NamedTextColor.GRAY);
-        return dialogButton(label, tip, p -> openFlagDetail(p, region, pm, flag));
+        return dialogButton(label, tip, p -> openFlagDetail(p, region, pm, permissionManager, flag));
     }
 
     // Route by flag type to the appropriate detail screen.
-    private static void openFlagDetail(Player player, Region region, ProtectionManager pm, RegionFlag flag) {
+    private static void openFlagDetail(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, RegionFlag flag) {
         if (flag.isMaterialFlag()) {
-            openMaterialListMenu(player, region, pm, flag, 0);
+            openMaterialListMenu(player, region, pm, permissionManager, flag, 0);
         } else if (flag.isEntityFlag()) {
-            openEntityListMenu(player, region, pm, flag, 0);
+            openEntityListMenu(player, region, pm, permissionManager, flag, 0);
         } else {
-            openBooleanTargetsMenu(player, region, pm, flag);
+            openBooleanTargetsMenu(player, region, pm, permissionManager, flag);
         }
     }
 
     // --- Boolean flag: target-by-target tri-state (Unset / True / False) ---
 
-    private static void openBooleanTargetsMenu(Player player, Region region, ProtectionManager pm, RegionFlag flag) {
+    private static void openBooleanTargetsMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, RegionFlag flag) {
         Region fresh = refreshRegion(pm, region);
         if (fresh == null) {
             player.sendMessage(Component.text("Region no longer exists.", NamedTextColor.RED));
@@ -202,18 +203,31 @@ public final class RegionGUI {
 
         List<ActionButton> buttons = new ArrayList<>();
         for (FlagTarget t : List.of(FlagTarget.OWNER, FlagTarget.MANAGER, FlagTarget.MEMBER, FlagTarget.DEFAULT)) {
-            buttons.add(booleanTargetButton(fresh, pm, flag, t, rules.get(t)));
+            buttons.add(booleanTargetButton(fresh, pm, permissionManager, flag, t, rules.get(t)));
         }
-        for (Map.Entry<FlagTarget, Boolean> e : rules.entrySet()) {
-            if (e.getKey().type() == FlagTarget.Type.GROUP) {
-                buttons.add(booleanTargetButton(fresh, pm, flag, e.getKey(), e.getValue()));
+        // Emit one button per registered permission group, preserving the current
+        // rule value (allowed/denied/unset) for groups that already have a rule.
+        // Using a Set to guard against duplicates is defensive but harmless.
+        if (permissionManager != null) {
+            java.util.Set<String> seen = new java.util.LinkedHashSet<>(permissionManager.getGroups().keySet());
+            for (String groupName : seen) {
+                FlagTarget groupTarget = FlagTarget.group(groupName);
+                buttons.add(booleanTargetButton(fresh, pm, permissionManager, flag, groupTarget, rules.get(groupTarget)));
+            }
+        } else {
+            // Fallback: no PermissionManager available — show only groups that already
+            // have a configured rule, preserving the previous behaviour.
+            for (Map.Entry<FlagTarget, Boolean> e : rules.entrySet()) {
+                if (e.getKey().type() == FlagTarget.Type.GROUP) {
+                    buttons.add(booleanTargetButton(fresh, pm, permissionManager, flag, e.getKey(), e.getValue()));
+                }
             }
         }
 
         ActionButton back = dialogButton(
                 Component.text("← Back to Flags", NamedTextColor.RED, TextDecoration.BOLD),
                 Component.text("Return to the flag list.", NamedTextColor.GRAY),
-                p -> openFlagsMenu(p, fresh, pm));
+                p -> openFlagsMenu(p, fresh, pm, permissionManager));
 
         DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>" + flag.name() + ": " + fresh.id()))
                 .body(List.of(DialogBody.plainMessage(
@@ -232,7 +246,7 @@ public final class RegionGUI {
 
     // Tri-state cycle button. Each click advances Unset -> True -> False -> Unset.
     // Persists via setFlag (true/false) or removeFlag (cycling back to Unset).
-    private static ActionButton booleanTargetButton(Region region, ProtectionManager pm,
+    private static ActionButton booleanTargetButton(Region region, ProtectionManager pm, PermissionManager permissionManager,
                                                     RegionFlag flag, FlagTarget target, Boolean current) {
         NamedTextColor color;
         String glyph;
@@ -252,10 +266,10 @@ public final class RegionGUI {
         }
         Component label = Component.text(glyph + " " + target.toKey() + " — " + state, color, TextDecoration.BOLD);
         Component tip = Component.text("Click to cycle Unset → True → False → Unset.", NamedTextColor.GRAY);
-        return dialogButton(label, tip, p -> cycleBooleanRule(p, region, pm, flag, target, current));
+        return dialogButton(label, tip, p -> cycleBooleanRule(p, region, pm, permissionManager, flag, target, current));
     }
 
-    private static void cycleBooleanRule(Player player, Region region, ProtectionManager pm,
+    private static void cycleBooleanRule(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager,
                                          RegionFlag flag, FlagTarget target, Boolean current) {
         World w = worldOf(region);
         boolean ok;
@@ -270,13 +284,13 @@ public final class RegionGUI {
             player.sendMessage(Component.text(
                     "No change — rule already at requested value.", NamedTextColor.YELLOW));
         }
-        openBooleanTargetsMenu(player, region, pm, flag);
+        openBooleanTargetsMenu(player, region, pm, permissionManager, flag);
     }
 
     // --- Material list flag (ALLOW_BLOCK_BREAK etc.) ---
 
     private static void openMaterialListMenu(Player player, Region region, ProtectionManager pm,
-                                             RegionFlag flag, int page) {
+                                             PermissionManager permissionManager, RegionFlag flag, int page) {
         Region fresh = refreshRegion(pm, region);
         if (fresh == null) {
             player.sendMessage(Component.text("Region no longer exists.", NamedTextColor.RED));
@@ -296,22 +310,22 @@ public final class RegionGUI {
             buttons.add(dialogButton(
                     Component.text("✗ " + m.name(), NamedTextColor.RED, TextDecoration.BOLD),
                     Component.text("Click to remove from the list.", NamedTextColor.GRAY),
-                    p -> handleRemoveMaterial(p, fresh, pm, flag, m, currentPage)));
+                    p -> handleRemoveMaterial(p, fresh, pm, permissionManager, flag, m, currentPage)));
         }
 
         addPageNavButtons(buttons, currentPage, totalPages,
-                p -> openMaterialListMenu(p, fresh, pm, flag, currentPage - 1),
-                p -> openMaterialListMenu(p, fresh, pm, flag, currentPage + 1));
+                p -> openMaterialListMenu(p, fresh, pm, permissionManager, flag, currentPage - 1),
+                p -> openMaterialListMenu(p, fresh, pm, permissionManager, flag, currentPage + 1));
 
         buttons.add(dialogButton(
                 Component.text("+ Add Material", NamedTextColor.YELLOW, TextDecoration.BOLD),
                 Component.text("Enter a block material name.", NamedTextColor.GRAY),
-                p -> openAddMaterialDialog(p, fresh, pm, flag)));
+                p -> openAddMaterialDialog(p, fresh, pm, permissionManager, flag)));
 
         ActionButton back = dialogButton(
                 Component.text("← Back to Flags", NamedTextColor.RED, TextDecoration.BOLD),
                 Component.text("Return to the flag list.", NamedTextColor.GRAY),
-                p -> openFlagsMenu(p, fresh, pm));
+                p -> openFlagsMenu(p, fresh, pm, permissionManager));
 
         DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>" + flag.name() + ": " + fresh.id()))
                 .body(List.of(DialogBody.plainMessage(pageSummary(materials.size(), "material", currentPage, totalPages))))
@@ -327,44 +341,44 @@ public final class RegionGUI {
     }
 
     private static void handleRemoveMaterial(Player player, Region region, ProtectionManager pm,
-                                             RegionFlag flag, Material material, int returnPage) {
+                                             PermissionManager permissionManager, RegionFlag flag, Material material, int returnPage) {
         EnumSet<Material> current = EnumSet.noneOf(Material.class);
         current.addAll(region.materialsFor(flag));
         if (!current.remove(material)) {
             player.sendMessage(Component.text(
                     "No change — material not in list.", NamedTextColor.YELLOW));
-            openMaterialListMenu(player, region, pm, flag, returnPage);
+            openMaterialListMenu(player, region, pm, permissionManager, flag, returnPage);
             return;
         }
         pm.setMaterials(worldOf(region), region.id(), flag, current);
         player.sendMessage(Component.text(
                 "Removed " + material.name() + " from " + flag.name() + ".",
                 NamedTextColor.GREEN));
-        openMaterialListMenu(player, region, pm, flag, returnPage);
+        openMaterialListMenu(player, region, pm, permissionManager, flag, returnPage);
     }
 
-    private static void openAddMaterialDialog(Player player, Region region, ProtectionManager pm, RegionFlag flag) {
+    private static void openAddMaterialDialog(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, RegionFlag flag) {
         openSingleTokenDialog(player,
                 "Add Material",
                 "Enter a block material name (e.g. STONE, OAK_LOG).",
                 "material_name", 32,
-                (p, raw) -> handleAddMaterialSubmission(p, region, pm, flag, raw),
-                p -> openMaterialListMenu(p, region, pm, flag, 0));
+                (p, raw) -> handleAddMaterialSubmission(p, region, pm, permissionManager, flag, raw),
+                p -> openMaterialListMenu(p, region, pm, permissionManager, flag, 0));
     }
 
     private static void handleAddMaterialSubmission(Player player, Region region, ProtectionManager pm,
-                                                    RegionFlag flag, String rawValue) {
+                                                    PermissionManager permissionManager, RegionFlag flag, String rawValue) {
         String trimmed = rawValue == null ? "" : rawValue.trim();
         if (trimmed.isEmpty()) {
             player.sendMessage(Component.text("Invalid material name.", NamedTextColor.RED));
-            openMaterialListMenu(player, region, pm, flag, 0);
+            openMaterialListMenu(player, region, pm, permissionManager, flag, 0);
             return;
         }
         Material m = Material.matchMaterial(trimmed);
         if (m == null || !m.isBlock()) {
             player.sendMessage(Component.text(
                     "Unknown or non-block material '" + trimmed + "'.", NamedTextColor.RED));
-            openMaterialListMenu(player, region, pm, flag, 0);
+            openMaterialListMenu(player, region, pm, permissionManager, flag, 0);
             return;
         }
         EnumSet<Material> current = EnumSet.noneOf(Material.class);
@@ -372,19 +386,19 @@ public final class RegionGUI {
         if (!current.add(m)) {
             player.sendMessage(Component.text(
                     "Material already in list.", NamedTextColor.YELLOW));
-            openMaterialListMenu(player, region, pm, flag, 0);
+            openMaterialListMenu(player, region, pm, permissionManager, flag, 0);
             return;
         }
         pm.setMaterials(worldOf(region), region.id(), flag, current);
         player.sendMessage(Component.text(
                 "Added " + m.name() + " to " + flag.name() + ".", NamedTextColor.GREEN));
-        openMaterialListMenu(player, region, pm, flag, 0);
+        openMaterialListMenu(player, region, pm, permissionManager, flag, 0);
     }
 
     // --- Entity list flag (ALLOW_MOB_SPAWN / DENY_MOB_SPAWN) ---
 
     private static void openEntityListMenu(Player player, Region region, ProtectionManager pm,
-                                           RegionFlag flag, int page) {
+                                           PermissionManager permissionManager, RegionFlag flag, int page) {
         Region fresh = refreshRegion(pm, region);
         if (fresh == null) {
             player.sendMessage(Component.text("Region no longer exists.", NamedTextColor.RED));
@@ -404,22 +418,22 @@ public final class RegionGUI {
             buttons.add(dialogButton(
                     Component.text("✗ " + t.name(), NamedTextColor.RED, TextDecoration.BOLD),
                     Component.text("Click to remove from the list.", NamedTextColor.GRAY),
-                    p -> handleRemoveEntity(p, fresh, pm, flag, t, currentPage)));
+                    p -> handleRemoveEntity(p, fresh, pm, permissionManager, flag, t, currentPage)));
         }
 
         addPageNavButtons(buttons, currentPage, totalPages,
-                p -> openEntityListMenu(p, fresh, pm, flag, currentPage - 1),
-                p -> openEntityListMenu(p, fresh, pm, flag, currentPage + 1));
+                p -> openEntityListMenu(p, fresh, pm, permissionManager, flag, currentPage - 1),
+                p -> openEntityListMenu(p, fresh, pm, permissionManager, flag, currentPage + 1));
 
         buttons.add(dialogButton(
                 Component.text("+ Add Entity", NamedTextColor.YELLOW, TextDecoration.BOLD),
                 Component.text("Enter an entity type name.", NamedTextColor.GRAY),
-                p -> openAddEntityDialog(p, fresh, pm, flag)));
+                p -> openAddEntityDialog(p, fresh, pm, permissionManager, flag)));
 
         ActionButton back = dialogButton(
                 Component.text("← Back to Flags", NamedTextColor.RED, TextDecoration.BOLD),
                 Component.text("Return to the flag list.", NamedTextColor.GRAY),
-                p -> openFlagsMenu(p, fresh, pm));
+                p -> openFlagsMenu(p, fresh, pm, permissionManager));
 
         DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>" + flag.name() + ": " + fresh.id()))
                 .body(List.of(DialogBody.plainMessage(pageSummary(entities.size(), "entity type", currentPage, totalPages))))
@@ -435,36 +449,36 @@ public final class RegionGUI {
     }
 
     private static void handleRemoveEntity(Player player, Region region, ProtectionManager pm,
-                                           RegionFlag flag, EntityType type, int returnPage) {
+                                           PermissionManager permissionManager, RegionFlag flag, EntityType type, int returnPage) {
         EnumSet<EntityType> current = EnumSet.noneOf(EntityType.class);
         current.addAll(region.entitiesFor(flag));
         if (!current.remove(type)) {
             player.sendMessage(Component.text(
                     "No change — entity not in list.", NamedTextColor.YELLOW));
-            openEntityListMenu(player, region, pm, flag, returnPage);
+            openEntityListMenu(player, region, pm, permissionManager, flag, returnPage);
             return;
         }
         pm.setEntities(worldOf(region), region.id(), flag, current);
         player.sendMessage(Component.text(
                 "Removed " + type.name() + " from " + flag.name() + ".", NamedTextColor.GREEN));
-        openEntityListMenu(player, region, pm, flag, returnPage);
+        openEntityListMenu(player, region, pm, permissionManager, flag, returnPage);
     }
 
-    private static void openAddEntityDialog(Player player, Region region, ProtectionManager pm, RegionFlag flag) {
+    private static void openAddEntityDialog(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, RegionFlag flag) {
         openSingleTokenDialog(player,
                 "Add Entity",
                 "Enter an entity type name (e.g. ZOMBIE, ENDERMAN).",
                 "entity_name", 48,
-                (p, raw) -> handleAddEntitySubmission(p, region, pm, flag, raw),
-                p -> openEntityListMenu(p, region, pm, flag, 0));
+                (p, raw) -> handleAddEntitySubmission(p, region, pm, permissionManager, flag, raw),
+                p -> openEntityListMenu(p, region, pm, permissionManager, flag, 0));
     }
 
     private static void handleAddEntitySubmission(Player player, Region region, ProtectionManager pm,
-                                                  RegionFlag flag, String rawValue) {
+                                                  PermissionManager permissionManager, RegionFlag flag, String rawValue) {
         String trimmed = rawValue == null ? "" : rawValue.trim();
         if (trimmed.isEmpty()) {
             player.sendMessage(Component.text("Invalid entity type.", NamedTextColor.RED));
-            openEntityListMenu(player, region, pm, flag, 0);
+            openEntityListMenu(player, region, pm, permissionManager, flag, 0);
             return;
         }
         EntityType t;
@@ -473,20 +487,20 @@ public final class RegionGUI {
         } catch (IllegalArgumentException e) {
             player.sendMessage(Component.text(
                     "Unknown entity type '" + trimmed + "'.", NamedTextColor.RED));
-            openEntityListMenu(player, region, pm, flag, 0);
+            openEntityListMenu(player, region, pm, permissionManager, flag, 0);
             return;
         }
         EnumSet<EntityType> current = EnumSet.noneOf(EntityType.class);
         current.addAll(region.entitiesFor(flag));
         if (!current.add(t)) {
             player.sendMessage(Component.text("Entity already in list.", NamedTextColor.YELLOW));
-            openEntityListMenu(player, region, pm, flag, 0);
+            openEntityListMenu(player, region, pm, permissionManager, flag, 0);
             return;
         }
         pm.setEntities(worldOf(region), region.id(), flag, current);
         player.sendMessage(Component.text(
                 "Added " + t.name() + " to " + flag.name() + ".", NamedTextColor.GREEN));
-        openEntityListMenu(player, region, pm, flag, 0);
+        openEntityListMenu(player, region, pm, permissionManager, flag, 0);
     }
 
     // Single-input confirmation dialog: one text field, Add submits, Cancel
@@ -535,11 +549,11 @@ public final class RegionGUI {
 
     // ---------------------------------------------------------- Members menu
 
-    static void openMembersMenu(Player player, Region region, ProtectionManager pm) {
-        openMembersMenu(player, region, pm, 0);
+    static void openMembersMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
+        openMembersMenu(player, region, pm, permissionManager, 0);
     }
 
-    private static void openMembersMenu(Player player, Region region, ProtectionManager pm, int page) {
+    private static void openMembersMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, int page) {
         Region fresh = refreshRegion(pm, region);
         if (fresh == null) {
             player.sendMessage(Component.text("Region no longer exists.", NamedTextColor.RED));
@@ -547,38 +561,49 @@ public final class RegionGUI {
         }
         List<UUID> members = new ArrayList<>(fresh.members());
         members.sort(java.util.Comparator.comparing(RegionGUI::lookupName, String.CASE_INSENSITIVE_ORDER));
+        List<String> memberGroups = new ArrayList<>(fresh.memberGroups());
 
-        int totalPages = Math.max(1, (members.size() + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE);
+        // Combined roster: UUID members first, then groups. Total drives pagination.
+        int total = members.size() + memberGroups.size();
+        int totalPages = Math.max(1, (total + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE);
         int currentPage = Math.max(0, Math.min(page, totalPages - 1));
         int start = currentPage * LIST_PAGE_SIZE;
-        int end = Math.min(start + LIST_PAGE_SIZE, members.size());
+        int end = Math.min(start + LIST_PAGE_SIZE, total);
 
         List<ActionButton> buttons = new ArrayList<>();
         for (int i = start; i < end; i++) {
-            UUID uuid = members.get(i);
-            String name = lookupName(uuid);
-            buttons.add(dialogButton(
-                    Component.text("✗ " + name, NamedTextColor.RED, TextDecoration.BOLD),
-                    Component.text("Click to remove from this region.", NamedTextColor.GRAY),
-                    p -> handleRemoveMember(p, fresh, pm, uuid, currentPage)));
+            if (i < members.size()) {
+                UUID uuid = members.get(i);
+                String name = lookupName(uuid);
+                buttons.add(dialogButton(
+                        Component.text("✗ " + name, NamedTextColor.RED, TextDecoration.BOLD),
+                        Component.text("Click to remove from this region.", NamedTextColor.GRAY),
+                        p -> handleRemoveMember(p, fresh, pm, permissionManager, uuid, currentPage)));
+            } else {
+                String groupName = memberGroups.get(i - members.size());
+                buttons.add(dialogButton(
+                        Component.text("✗ group:" + groupName, NamedTextColor.RED, TextDecoration.BOLD),
+                        Component.text("Click to remove this group from this region.", NamedTextColor.GRAY),
+                        p -> handleRemoveMemberGroup(p, fresh, pm, permissionManager, groupName, currentPage)));
+            }
         }
 
         addPageNavButtons(buttons, currentPage, totalPages,
-                p -> openMembersMenu(p, fresh, pm, currentPage - 1),
-                p -> openMembersMenu(p, fresh, pm, currentPage + 1));
+                p -> openMembersMenu(p, fresh, pm, permissionManager, currentPage - 1),
+                p -> openMembersMenu(p, fresh, pm, permissionManager, currentPage + 1));
 
         buttons.add(dialogButton(
                 Component.text("+ Add Member", NamedTextColor.YELLOW, TextDecoration.BOLD),
-                Component.text("Open the player-name entry dialog.", NamedTextColor.GRAY),
-                p -> openAddMemberDialog(p, fresh, pm)));
+                Component.text("Open the player-name or group entry dialog.", NamedTextColor.GRAY),
+                p -> openAddMemberDialog(p, fresh, pm, permissionManager)));
 
         ActionButton back = dialogButton(
                 Component.text("← Back to Region", NamedTextColor.RED, TextDecoration.BOLD),
                 Component.text("Return to the region dashboard.", NamedTextColor.GRAY),
-                p -> openRegionHub(p, fresh, pm));
+                p -> openRegionHub(p, fresh, pm, permissionManager));
 
         DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Members: " + fresh.id()))
-                .body(List.of(DialogBody.plainMessage(pageSummary(members.size(), "member", currentPage, totalPages))))
+                .body(List.of(DialogBody.plainMessage(pageSummary(total, "member", currentPage, totalPages))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -590,7 +615,7 @@ public final class RegionGUI {
         player.showDialog(dialog);
     }
 
-    private static void handleRemoveMember(Player player, Region region, ProtectionManager pm, UUID target, int returnPage) {
+    private static void handleRemoveMember(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, UUID target, int returnPage) {
         if (!pm.removeMember(region.id(), target)) {
             player.sendMessage(Component.text(
                     "Could not remove — player is no longer a member.", NamedTextColor.YELLOW));
@@ -599,27 +624,95 @@ public final class RegionGUI {
                     "Removed " + lookupName(target) + " from '" + region.id() + "'.",
                     NamedTextColor.GREEN));
         }
-        openMembersMenu(player, region, pm, returnPage);
+        openMembersMenu(player, region, pm, permissionManager, returnPage);
     }
 
-    private static void openAddMemberDialog(Player player, Region region, ProtectionManager pm) {
+    private static void handleRemoveMemberGroup(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, String groupName, int returnPage) {
+        if (!pm.removeMemberGroup(region.id(), groupName)) {
+            player.sendMessage(Component.text(
+                    "Could not remove — group '" + groupName + "' is no longer a member.", NamedTextColor.YELLOW));
+        } else {
+            player.sendMessage(Component.text(
+                    "Removed group '" + groupName + "' from '" + region.id() + "'.",
+                    NamedTextColor.GREEN));
+        }
+        openMembersMenu(player, region, pm, permissionManager, returnPage);
+    }
+
+    private static void openAddMemberDialog(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
         openAddPlayerDialog(player, region, pm,
                 "Add Member",
-                "Enter a player name to add to '" + region.id() + "'. The player must have joined before.",
-                (p, name) -> handleAddMemberSubmission(p, region, pm, name),
-                p -> openMembersMenu(p, region, pm));
+                "Enter a player name or group:<name> to add to '" + region.id() + "'.",
+                (p, name) -> handleAddMemberSubmission(p, region, pm, permissionManager, name),
+                p -> openMembersMenu(p, region, pm, permissionManager));
     }
 
-    private static void handleAddMemberSubmission(Player player, Region region, ProtectionManager pm, String rawName) {
+    // Public for testing: routes a raw add-member input to the correct
+    // ProtectionManager mutator. Returns true on success, false on no-op
+    // (already present) or invalid input. Keeps group-prefix detection in one
+    // testable place that unit tests can exercise without a Paper Dialog.
+    public static boolean routeAddMemberInput(Player player, Region region, ProtectionManager pm, String rawName) {
+        String trimmed = rawName == null ? "" : rawName.trim();
+        if (trimmed.toLowerCase(Locale.ROOT).startsWith("group:")) {
+            String groupName = trimmed.substring("group:".length()).trim();
+            if (groupName.isEmpty()) {
+                player.sendMessage(Component.text(
+                        "Group name cannot be empty. Use group:<name>.", NamedTextColor.RED));
+                return false;
+            }
+            if (!pm.addMemberGroup(region.id(), groupName)) {
+                player.sendMessage(Component.text(
+                        "Could not add — group '" + groupName + "' is already a member.", NamedTextColor.YELLOW));
+                return false;
+            }
+            player.sendMessage(Component.text(
+                    "Added group '" + groupName + "' to '" + region.id() + "'.",
+                    NamedTextColor.GREEN));
+            return true;
+        }
+        return false; // not a group: prefix — caller handles player path
+    }
+
+    // Public for testing: same routing for the add-manager dialog.
+    public static boolean routeAddManagerInput(Player player, Region region, ProtectionManager pm, String rawName) {
+        String trimmed = rawName == null ? "" : rawName.trim();
+        if (trimmed.toLowerCase(Locale.ROOT).startsWith("group:")) {
+            String groupName = trimmed.substring("group:".length()).trim();
+            if (groupName.isEmpty()) {
+                player.sendMessage(Component.text(
+                        "Group name cannot be empty. Use group:<name>.", NamedTextColor.RED));
+                return false;
+            }
+            if (!pm.addManagerGroup(region.id(), groupName)) {
+                player.sendMessage(Component.text(
+                        "Could not promote — group '" + groupName + "' is already a manager.", NamedTextColor.YELLOW));
+                return false;
+            }
+            player.sendMessage(Component.text(
+                    "Added group '" + groupName + "' as a manager of '" + region.id() + "'.",
+                    NamedTextColor.GREEN));
+            return true;
+        }
+        return false; // not a group: prefix — caller handles player path
+    }
+
+    private static void handleAddMemberSubmission(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, String rawName) {
+        String trimmed = rawName == null ? "" : rawName.trim();
+        // Route group: prefix before the player-lookup path.
+        if (trimmed.toLowerCase(Locale.ROOT).startsWith("group:")) {
+            routeAddMemberInput(player, region, pm, trimmed);
+            openMembersMenu(player, region, pm, permissionManager);
+            return;
+        }
         OfflinePlayer target = validatePlayerName(player, rawName);
         if (target == null) {
-            openMembersMenu(player, region, pm);
+            openMembersMenu(player, region, pm, permissionManager);
             return;
         }
         if (region.owner().equals(target.getUniqueId())) {
             player.sendMessage(Component.text(
                     "The owner is implicitly a member.", NamedTextColor.YELLOW));
-            openMembersMenu(player, region, pm);
+            openMembersMenu(player, region, pm, permissionManager);
             return;
         }
         if (!pm.addMember(region.id(), target.getUniqueId())) {
@@ -630,16 +723,16 @@ public final class RegionGUI {
                     "Added " + target.getName() + " to '" + region.id() + "'.",
                     NamedTextColor.GREEN));
         }
-        openMembersMenu(player, region, pm);
+        openMembersMenu(player, region, pm, permissionManager);
     }
 
     // ---------------------------------------------------------- Managers menu
 
-    static void openManagersMenu(Player player, Region region, ProtectionManager pm) {
-        openManagersMenu(player, region, pm, 0);
+    static void openManagersMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
+        openManagersMenu(player, region, pm, permissionManager, 0);
     }
 
-    private static void openManagersMenu(Player player, Region region, ProtectionManager pm, int page) {
+    private static void openManagersMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, int page) {
         Region fresh = refreshRegion(pm, region);
         if (fresh == null) {
             player.sendMessage(Component.text("Region no longer exists.", NamedTextColor.RED));
@@ -647,38 +740,49 @@ public final class RegionGUI {
         }
         List<UUID> managers = new ArrayList<>(fresh.managers());
         managers.sort(java.util.Comparator.comparing(RegionGUI::lookupName, String.CASE_INSENSITIVE_ORDER));
+        List<String> managerGroups = new ArrayList<>(fresh.managerGroups());
 
-        int totalPages = Math.max(1, (managers.size() + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE);
+        // Combined roster: UUID managers first, then groups. Total drives pagination.
+        int total = managers.size() + managerGroups.size();
+        int totalPages = Math.max(1, (total + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE);
         int currentPage = Math.max(0, Math.min(page, totalPages - 1));
         int start = currentPage * LIST_PAGE_SIZE;
-        int end = Math.min(start + LIST_PAGE_SIZE, managers.size());
+        int end = Math.min(start + LIST_PAGE_SIZE, total);
 
         List<ActionButton> buttons = new ArrayList<>();
         for (int i = start; i < end; i++) {
-            UUID uuid = managers.get(i);
-            String name = lookupName(uuid);
-            buttons.add(dialogButton(
-                    Component.text("✗ " + name, NamedTextColor.RED, TextDecoration.BOLD),
-                    Component.text("Click to demote from manager.", NamedTextColor.GRAY),
-                    p -> handleRemoveManager(p, fresh, pm, uuid, currentPage)));
+            if (i < managers.size()) {
+                UUID uuid = managers.get(i);
+                String name = lookupName(uuid);
+                buttons.add(dialogButton(
+                        Component.text("✗ " + name, NamedTextColor.RED, TextDecoration.BOLD),
+                        Component.text("Click to demote from manager.", NamedTextColor.GRAY),
+                        p -> handleRemoveManager(p, fresh, pm, permissionManager, uuid, currentPage)));
+            } else {
+                String groupName = managerGroups.get(i - managers.size());
+                buttons.add(dialogButton(
+                        Component.text("✗ group:" + groupName, NamedTextColor.RED, TextDecoration.BOLD),
+                        Component.text("Click to remove this group from managers.", NamedTextColor.GRAY),
+                        p -> handleRemoveManagerGroup(p, fresh, pm, permissionManager, groupName, currentPage)));
+            }
         }
 
         addPageNavButtons(buttons, currentPage, totalPages,
-                p -> openManagersMenu(p, fresh, pm, currentPage - 1),
-                p -> openManagersMenu(p, fresh, pm, currentPage + 1));
+                p -> openManagersMenu(p, fresh, pm, permissionManager, currentPage - 1),
+                p -> openManagersMenu(p, fresh, pm, permissionManager, currentPage + 1));
 
         buttons.add(dialogButton(
                 Component.text("+ Add Manager", NamedTextColor.YELLOW, TextDecoration.BOLD),
-                Component.text("Open the player-name entry dialog.", NamedTextColor.GRAY),
-                p -> openAddManagerDialog(p, fresh, pm)));
+                Component.text("Open the player-name or group entry dialog.", NamedTextColor.GRAY),
+                p -> openAddManagerDialog(p, fresh, pm, permissionManager)));
 
         ActionButton back = dialogButton(
                 Component.text("← Back to Region", NamedTextColor.RED, TextDecoration.BOLD),
                 Component.text("Return to the region dashboard.", NamedTextColor.GRAY),
-                p -> openRegionHub(p, fresh, pm));
+                p -> openRegionHub(p, fresh, pm, permissionManager));
 
         DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Managers: " + fresh.id()))
-                .body(List.of(DialogBody.plainMessage(pageSummary(managers.size(), "manager", currentPage, totalPages))))
+                .body(List.of(DialogBody.plainMessage(pageSummary(total, "manager", currentPage, totalPages))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -690,7 +794,7 @@ public final class RegionGUI {
         player.showDialog(dialog);
     }
 
-    private static void handleRemoveManager(Player player, Region region, ProtectionManager pm, UUID target, int returnPage) {
+    private static void handleRemoveManager(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, UUID target, int returnPage) {
         if (!pm.removeManager(region.id(), target)) {
             player.sendMessage(Component.text(
                     "Could not demote — player is no longer a manager.", NamedTextColor.YELLOW));
@@ -699,28 +803,47 @@ public final class RegionGUI {
                     "Demoted " + lookupName(target) + " on '" + region.id() + "'.",
                     NamedTextColor.GREEN));
         }
-        openManagersMenu(player, region, pm, returnPage);
+        openManagersMenu(player, region, pm, permissionManager, returnPage);
     }
 
-    private static void openAddManagerDialog(Player player, Region region, ProtectionManager pm) {
+    private static void handleRemoveManagerGroup(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, String groupName, int returnPage) {
+        if (!pm.removeManagerGroup(region.id(), groupName)) {
+            player.sendMessage(Component.text(
+                    "Could not demote — group '" + groupName + "' is no longer a manager.", NamedTextColor.YELLOW));
+        } else {
+            player.sendMessage(Component.text(
+                    "Removed group '" + groupName + "' from managers of '" + region.id() + "'.",
+                    NamedTextColor.GREEN));
+        }
+        openManagersMenu(player, region, pm, permissionManager, returnPage);
+    }
+
+    private static void openAddManagerDialog(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
         openAddPlayerDialog(player, region, pm,
                 "Add Manager",
-                "Enter a player name to promote to manager on '" + region.id() + "'.",
-                (p, name) -> handleAddManagerSubmission(p, region, pm, name),
-                p -> openManagersMenu(p, region, pm));
+                "Enter a player name or group:<name> to promote to manager on '" + region.id() + "'.",
+                (p, name) -> handleAddManagerSubmission(p, region, pm, permissionManager, name),
+                p -> openManagersMenu(p, region, pm, permissionManager));
     }
 
-    private static void handleAddManagerSubmission(Player player, Region region, ProtectionManager pm, String rawName) {
+    private static void handleAddManagerSubmission(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, String rawName) {
+        String trimmed = rawName == null ? "" : rawName.trim();
+        // Route group: prefix before the player-lookup path.
+        if (trimmed.toLowerCase(Locale.ROOT).startsWith("group:")) {
+            routeAddManagerInput(player, region, pm, trimmed);
+            openManagersMenu(player, region, pm, permissionManager);
+            return;
+        }
         OfflinePlayer target = validatePlayerName(player, rawName);
         if (target == null) {
-            openManagersMenu(player, region, pm);
+            openManagersMenu(player, region, pm, permissionManager);
             return;
         }
         if (region.owner().equals(target.getUniqueId())) {
             player.sendMessage(Component.text(
                     "The owner is implicitly a manager — promotion is unnecessary.",
                     NamedTextColor.YELLOW));
-            openManagersMenu(player, region, pm);
+            openManagersMenu(player, region, pm, permissionManager);
             return;
         }
         if (!pm.addManager(region.id(), target.getUniqueId())) {
@@ -731,7 +854,7 @@ public final class RegionGUI {
                     "Promoted " + target.getName() + " to manager on '" + region.id() + "'.",
                     NamedTextColor.GREEN));
         }
-        openManagersMenu(player, region, pm);
+        openManagersMenu(player, region, pm, permissionManager);
     }
 
     // ----------------------------------------------------------- Add dialog
@@ -801,7 +924,7 @@ public final class RegionGUI {
 
     // -------------------------------------------------------- Sub-regions menu
 
-    static void openSubRegionsMenu(Player player, Region region, ProtectionManager pm) {
+    static void openSubRegionsMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
         if (!isOwnerOrAdmin(player, region)) {
             player.sendMessage(Component.text(
                     "Only the region owner can manage sub-region hierarchy.", NamedTextColor.RED));
@@ -818,18 +941,18 @@ public final class RegionGUI {
             buttons.add(dialogButton(
                     Component.text("✗ Unset Parent", NamedTextColor.RED, TextDecoration.BOLD),
                     Component.text("Promote '" + fresh.id() + "' back to a top-level region.", NamedTextColor.GRAY),
-                    p -> handleUnsetParent(p, fresh, pm)));
+                    p -> handleUnsetParent(p, fresh, pm, permissionManager)));
         }
         buttons.add(dialogButton(
                 Component.text(fresh.hasParent() ? "Change Parent" : "Set Parent",
                         NamedTextColor.YELLOW, TextDecoration.BOLD),
                 Component.text("Enter the id of the parent region.", NamedTextColor.GRAY),
-                p -> openSetParentDialog(p, fresh, pm)));
+                p -> openSetParentDialog(p, fresh, pm, permissionManager)));
 
         ActionButton back = dialogButton(
                 Component.text("← Back to Region", NamedTextColor.RED, TextDecoration.BOLD),
                 Component.text("Return to the region dashboard.", NamedTextColor.GRAY),
-                p -> openRegionHub(p, fresh, pm));
+                p -> openRegionHub(p, fresh, pm, permissionManager));
 
         String parentLabel = fresh.hasParent() ? fresh.parentId() : "(none)";
         DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Sub-regions: " + fresh.id()))
@@ -847,30 +970,30 @@ public final class RegionGUI {
         player.showDialog(dialog);
     }
 
-    private static void handleUnsetParent(Player player, Region region, ProtectionManager pm) {
-        reportSetParentResult(player, region, pm, null, pm.setParent(region.id(), null));
+    private static void handleUnsetParent(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
+        reportSetParentResult(player, region, pm, permissionManager, null, pm.setParent(region.id(), null));
     }
 
-    private static void openSetParentDialog(Player player, Region region, ProtectionManager pm) {
+    private static void openSetParentDialog(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
         openSingleTokenDialog(player,
                 "Set Parent",
                 "Enter the id of the region to nest '" + region.id() + "' under.",
                 "parent_id", 32,
-                (p, raw) -> handleSetParentSubmission(p, region, pm, raw),
-                p -> openSubRegionsMenu(p, region, pm));
+                (p, raw) -> handleSetParentSubmission(p, region, pm, permissionManager, raw),
+                p -> openSubRegionsMenu(p, region, pm, permissionManager));
     }
 
-    private static void handleSetParentSubmission(Player player, Region region, ProtectionManager pm, String rawValue) {
+    private static void handleSetParentSubmission(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, String rawValue) {
         String trimmed = rawValue == null ? "" : rawValue.trim();
         if (trimmed.isEmpty()) {
             player.sendMessage(Component.text("Parent id cannot be empty.", NamedTextColor.RED));
-            openSubRegionsMenu(player, region, pm);
+            openSubRegionsMenu(player, region, pm, permissionManager);
             return;
         }
-        reportSetParentResult(player, region, pm, trimmed, pm.setParent(region.id(), trimmed));
+        reportSetParentResult(player, region, pm, permissionManager, trimmed, pm.setParent(region.id(), trimmed));
     }
 
-    private static void reportSetParentResult(Player player, Region region, ProtectionManager pm,
+    private static void reportSetParentResult(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager,
                                               String parentId, ProtectionManager.SetParentResult result) {
         switch (result) {
             case OK -> {
@@ -902,12 +1025,12 @@ public final class RegionGUI {
                     "Refused — child would overlap another sub-region of the same parent.",
                     NamedTextColor.RED));
         }
-        openSubRegionsMenu(player, region, pm);
+        openSubRegionsMenu(player, region, pm, permissionManager);
     }
 
     // ----------------------------------------------------- Unclaim confirmation
 
-    static void openUnclaimConfirmation(Player player, Region region, ProtectionManager pm) {
+    static void openUnclaimConfirmation(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
         if (!isOwnerOrAdmin(player, region)) {
             player.sendMessage(Component.text(
                     "Only the region owner can unclaim this region.", NamedTextColor.RED));
@@ -927,7 +1050,7 @@ public final class RegionGUI {
         ActionButton no = dialogButton(
                 Component.text("No, Keep", NamedTextColor.GREEN, TextDecoration.BOLD),
                 Component.text("Return without changes.", NamedTextColor.GRAY),
-                p -> openRegionHub(p, fresh, pm));
+                p -> openRegionHub(p, fresh, pm, permissionManager));
 
         DialogBase base = DialogBase.builder(MM.deserialize("<!italic><red><bold>Unclaim '" + fresh.id() + "'?"))
                 .body(List.of(DialogBody.plainMessage(

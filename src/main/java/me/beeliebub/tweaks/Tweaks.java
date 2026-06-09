@@ -4,6 +4,13 @@ import me.beeliebub.tweaks.blocklog.BlockLogSystem;
 import me.beeliebub.tweaks.combos.*;
 import me.beeliebub.tweaks.commands.*;
 import me.beeliebub.tweaks.core.HelpSystem;
+import me.beeliebub.tweaks.economy.BalanceCommand;
+import me.beeliebub.tweaks.economy.EconomyListener;
+import me.beeliebub.tweaks.economy.EconomyManager;
+import me.beeliebub.tweaks.ranks.RankCommand;
+import me.beeliebub.tweaks.ranks.RankManager;
+import me.beeliebub.tweaks.ranks.RankSetCommand;
+import me.beeliebub.tweaks.ranks.RankupCommand;
 import me.beeliebub.tweaks.itemadmin.DisplayChestSystem;
 import me.beeliebub.tweaks.itemadmin.ItemEditCommand;
 import me.beeliebub.tweaks.worldmanagement.MoonSystem;
@@ -26,12 +33,15 @@ import me.beeliebub.tweaks.protection.RegionWriter;
 import org.bukkit.Material;
 import me.beeliebub.tweaks.playeradmin.PlayerAdminCommand;
 import me.beeliebub.tweaks.playeradmin.PlayerAdminManager;
+import me.beeliebub.tweaks.tab.TabManager;
 import me.beeliebub.tweaks.teleport.TeleportCommandManager;
 import me.beeliebub.tweaks.recipes.ResourceRupee;
 import me.beeliebub.tweaks.minigames.RewardCommand;
 import me.beeliebub.tweaks.minigames.RewardListener;
 import me.beeliebub.tweaks.minigames.RewardManager;
 import me.beeliebub.tweaks.minigames.andrew.MannequinAI;
+import me.beeliebub.tweaks.minigames.blackjack.BlackjackCommand;
+import me.beeliebub.tweaks.minigames.blackjack.BlackjackListener;
 import me.beeliebub.tweaks.minigames.andrew.WhackCommand;
 import me.beeliebub.tweaks.minigames.andrew.WhackConfig;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
@@ -43,6 +53,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 public class Tweaks extends JavaPlugin {
 
     private StorageManager storageManager;
+    private EconomyManager economyManager;
+    private RankManager rankManager;
     private PermissionManager permissionManager;
     private ProtectionManager protectionManager;
     private PendingStampsStore pendingStampsStore;
@@ -51,9 +63,18 @@ public class Tweaks extends JavaPlugin {
     private int maxHomes;
     private Telekinesis telekinesis;
     private Replant replant;
+    private BlackjackListener blackjackListener;
 
     public ProtectionManager getProtectionManager() {
         return protectionManager;
+    }
+
+    public EconomyManager getEconomyManager() {
+        return economyManager;
+    }
+
+    public RankManager getRankManager() {
+        return rankManager;
     }
 
     public PermissionManager getPermissionManager() {
@@ -76,6 +97,10 @@ public class Tweaks extends JavaPlugin {
         return replant;
     }
 
+    public BlackjackListener getBlackjackListener() {
+        return blackjackListener;
+    }
+
     @Override
     public void onEnable() {
 
@@ -83,6 +108,19 @@ public class Tweaks extends JavaPlugin {
         saveDefaultConfig();
         maxHomes = getConfig().getInt("max-homes", 3);
         storageManager = new StorageManager(this);
+        economyManager = new EconomyManager(this);
+        rankManager = new RankManager(this, economyManager);
+        getServer().getPluginManager().registerEvents(new EconomyListener(this, economyManager, rankManager), this);
+        BalanceCommand balanceCommand = new BalanceCommand(economyManager);
+        getCommand("balance").setExecutor(balanceCommand);
+        getCommand("balance").setTabCompleter(balanceCommand);
+        RankCommand rankCommand = new RankCommand(economyManager, rankManager);
+        getCommand("ranks").setExecutor(rankCommand);
+        getCommand("ranks").setTabCompleter(rankCommand);
+        getCommand("rankup").setExecutor(new RankupCommand(economyManager, rankManager));
+        RankSetCommand rankSetCommand = new RankSetCommand(economyManager, rankManager);
+        getCommand("rank").setExecutor(rankSetCommand);
+        getCommand("rank").setTabCompleter(rankSetCommand);
         permissionManager = new PermissionManager(this);
         protectionManager = new ProtectionManager(this);
         ProtectionKeys.init(this);
@@ -170,6 +208,14 @@ public class Tweaks extends JavaPlugin {
         PermissionCommand permissionCommand = new PermissionCommand(permissionManager);
         getCommand("tprm").setExecutor(permissionCommand);
         getCommand("tprm").setTabCompleter(permissionCommand);
+
+        // Tab list: unified renderer. Constructed after PlayerAdminManager so it can
+        // take a reference to it, and after economyManager/rankManager are ready.
+        TabManager tabManager = new TabManager(this, economyManager, rankManager, playerAdminManager);
+        getServer().getPluginManager().registerEvents(tabManager, this);
+        playerAdminManager.setTabManager(tabManager);
+        economyManager.setTabManager(tabManager);
+        rankManager.setTabManager(tabManager);
 
         // Listeners - General
         getServer().getPluginManager().registerEvents(itemFilterCommand, this);
@@ -286,6 +332,13 @@ public class Tweaks extends JavaPlugin {
         getCommand("whack").setExecutor(whackCommand);
         getCommand("whack").setTabCompleter(whackCommand);
 
+        // Minigames - Blackjack (in-world ItemDisplay card grid vs the dealer)
+        blackjackListener = new BlackjackListener(this, economyManager, rankManager);
+        BlackjackCommand blackjackCommand = new BlackjackCommand(economyManager, blackjackListener);
+        getCommand("blackjack").setExecutor(blackjackCommand);
+        getCommand("blackjack").setTabCompleter(blackjackCommand);
+        getServer().getPluginManager().registerEvents(blackjackListener, this);
+
         // BlockLog - per-chunk PDC chest interaction logging
         BlockLogSystem blockLogSystem = new BlockLogSystem(this);
         getCommand("logs").setExecutor(blockLogSystem);
@@ -315,6 +368,10 @@ public class Tweaks extends JavaPlugin {
         }
         if (regionSelectionManager != null) {
             regionSelectionManager.stop();
+        }
+        if (blackjackListener != null) {
+            // Guarantee no card ItemDisplays survive a server stop.
+            blackjackListener.shutdown();
         }
     }
 

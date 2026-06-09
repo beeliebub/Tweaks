@@ -19,7 +19,9 @@ import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -33,10 +35,10 @@ import java.util.function.Consumer;
 // replaced the previous AsyncChatEvent-based prompts.
 //
 // Hierarchy:
-//   MAIN ──┬─ GROUPS_LIST ──── GROUP_HUB ──┬─ GROUP_PERMS
+//   MAIN ──┬─ GROUPS_LIST ──── GROUP_HUB ──┬─ GROUP_PERM_CATEGORIES ── GROUP_PERMS (paginated per category)
 //          │       │                       ├─ GROUP_MEMBERS_TOGGLE
 //          │       └─ CREATE_GROUP         └─ GROUP_INHERITANCE_PICKER
-//          └─ USERS_LIST ──┬─ USER_HUB ──┬─ USER_PERMS
+//          └─ USERS_LIST ──┬─ USER_HUB ──┬─ USER_PERM_CATEGORIES ── USER_PERMS (paginated per category)
 //                          │             └─ USER_GROUP_PICKER
 //                          └─ SEARCH_USER → USER_HUB
 @SuppressWarnings("UnstableApiUsage") // Paper's Dialog API is @ApiStatus.Experimental in 26.1.2.
@@ -215,7 +217,7 @@ public final class PermissionGUI {
         buttons.add(dialogButton(
                 Component.text("Edit Permissions", NamedTextColor.GREEN, TextDecoration.BOLD),
                 Component.text(group.getPermissions().size() + " direct permission(s).", NamedTextColor.GRAY),
-                p -> openGroupPerms(p, manager, name, 0)));
+                p -> openGroupPermCategories(p, manager, name)));
 
         buttons.add(dialogButton(
                 Component.text("Manage Members", NamedTextColor.AQUA, TextDecoration.BOLD),
@@ -272,43 +274,38 @@ public final class PermissionGUI {
         openGroupsMenu(player, manager, 0);
     }
 
-    public static void openGroupPerms(Player player, PermissionManager manager, String groupName, int page) {
+    public static void openGroupPermCategories(Player player, PermissionManager manager, String groupName) {
         PermissionGroup group = manager.getGroups().get(groupName.toLowerCase());
         if (group == null) {
             openGroupsMenu(player, manager, 0);
             return;
         }
         String name = group.getName();
-        List<String> allPerms = Permissions.getAllPermissions();
-
-        int totalPages = Math.max(1, (allPerms.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * DIALOG_PAGE_SIZE;
-        int end = Math.min(start + DIALOG_PAGE_SIZE, allPerms.size());
+        LinkedHashMap<String, String> categories = Permissions.getCategories();
 
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            String perm = allPerms.get(i);
-            boolean has = group.hasDirectPermission(perm);
-            Component label = Component.text((has ? "✓ " : "✗ ") + perm,
-                    has ? NamedTextColor.GREEN : NamedTextColor.RED, TextDecoration.BOLD);
-            Component tip = Component.text(has ? "Click to revoke." : "Click to grant.",
-                    NamedTextColor.GRAY);
+        for (Map.Entry<String, String> entry : categories.entrySet()) {
+            String catKey = entry.getKey();
+            String catDisplay = entry.getValue();
+            List<String> catPerms = Permissions.getPermissionsByCategory(catKey);
+            long grantedCount = catPerms.stream().filter(group::hasDirectPermission).count();
+            Component label = Component.text(catDisplay, NamedTextColor.YELLOW, TextDecoration.BOLD);
+            Component tip = joinLines(
+                    Component.text(catPerms.size() + " permission(s) — " + grantedCount + " granted.", NamedTextColor.GRAY),
+                    Component.text("Click to view and toggle.", NamedTextColor.GRAY));
             buttons.add(dialogButton(label, tip,
-                    p -> toggleGroupPermission(p, manager, name, perm, currentPage)));
+                    p -> openGroupPerms(p, manager, name, catKey, 0)));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                target -> openGroupPerms(target, manager, name, currentPage - 1),
-                target -> openGroupPerms(target, manager, name, currentPage + 1));
 
         ActionButton back = dialogButton(
                 Component.text("← Back to Group", NamedTextColor.RED, TextDecoration.BOLD),
                 Component.text("Return to the group menu.", NamedTextColor.GRAY),
                 p -> openGroupHub(p, manager, name));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Group Perms: " + name))
-                .body(List.of(DialogBody.plainMessage(pageSummary(allPerms.size(), "permission", currentPage, totalPages))))
+        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Permissions: " + name))
+                .body(List.of(DialogBody.plainMessage(
+                        Component.text("Select a category to edit.", NamedTextColor.GRAY)
+                                .decoration(TextDecoration.ITALIC, false))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -321,7 +318,57 @@ public final class PermissionGUI {
         player.showDialog(dialog);
     }
 
-    private static void toggleGroupPermission(Player player, PermissionManager manager, String groupName, String permission, int returnPage) {
+    public static void openGroupPerms(Player player, PermissionManager manager, String groupName, String category, int page) {
+        PermissionGroup group = manager.getGroups().get(groupName.toLowerCase());
+        if (group == null) {
+            openGroupsMenu(player, manager, 0);
+            return;
+        }
+        String name = group.getName();
+        List<String> catPerms = Permissions.getPermissionsByCategory(category);
+        String catDisplay = Permissions.getCategories().getOrDefault(category, category);
+
+        int totalPages = Math.max(1, (catPerms.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
+        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
+        int start = currentPage * DIALOG_PAGE_SIZE;
+        int end = Math.min(start + DIALOG_PAGE_SIZE, catPerms.size());
+
+        List<ActionButton> buttons = new ArrayList<>();
+        for (int i = start; i < end; i++) {
+            String perm = catPerms.get(i);
+            boolean has = group.hasDirectPermission(perm);
+            Component label = Component.text((has ? "✓ " : "✗ ") + perm,
+                    has ? NamedTextColor.GREEN : NamedTextColor.RED, TextDecoration.BOLD);
+            Component tip = Component.text(has ? "Click to revoke." : "Click to grant.",
+                    NamedTextColor.GRAY);
+            buttons.add(dialogButton(label, tip,
+                    p -> toggleGroupPermission(p, manager, name, perm, category, currentPage)));
+        }
+
+        addPageNavButtons(buttons, currentPage, totalPages,
+                target -> openGroupPerms(target, manager, name, category, currentPage - 1),
+                target -> openGroupPerms(target, manager, name, category, currentPage + 1));
+
+        ActionButton back = dialogButton(
+                Component.text("← Back to Categories", NamedTextColor.RED, TextDecoration.BOLD),
+                Component.text("Return to the category list.", NamedTextColor.GRAY),
+                p -> openGroupPermCategories(p, manager, name));
+
+        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>" + catDisplay + ": " + name))
+                .body(List.of(DialogBody.plainMessage(pageSummary(catPerms.size(), "permission", currentPage, totalPages))))
+                .build();
+
+        Dialog dialog = Dialog.create(b -> b.empty()
+                .base(base)
+                .type(DialogType.multiAction(buttons)
+                        .columns(DIALOG_COLUMNS)
+                        .exitAction(back)
+                        .build()));
+
+        player.showDialog(dialog);
+    }
+
+    private static void toggleGroupPermission(Player player, PermissionManager manager, String groupName, String permission, String category, int returnPage) {
         PermissionGroup group = manager.getGroups().get(groupName.toLowerCase());
         if (group == null) {
             openGroupsMenu(player, manager, 0);
@@ -331,7 +378,7 @@ public final class PermissionGUI {
         else group.addPermission(permission);
         manager.saveGroups();
         refreshAllInGroupForPlayers(manager, group.getName());
-        openGroupPerms(player, manager, group.getName(), returnPage);
+        openGroupPerms(player, manager, group.getName(), category, returnPage);
     }
 
     public static void openGroupMembersToggle(Player player, PermissionManager manager, String groupName, int page) {
@@ -613,7 +660,7 @@ public final class PermissionGUI {
         buttons.add(dialogButton(
                 Component.text("Edit Permissions", NamedTextColor.GREEN, TextDecoration.BOLD),
                 Component.text(user.getPermissions().size() + " direct permission(s).", NamedTextColor.GRAY),
-                p -> openUserPerms(p, manager, targetUuid, 0)));
+                p -> openUserPermCategories(p, manager, targetUuid)));
 
         buttons.add(dialogButton(
                 Component.text("Edit Groups", NamedTextColor.AQUA, TextDecoration.BOLD),
@@ -661,40 +708,35 @@ public final class PermissionGUI {
         openUserHub(player, manager, targetUuid);
     }
 
-    public static void openUserPerms(Player player, PermissionManager manager, UUID targetUuid, int page) {
+    public static void openUserPermCategories(Player player, PermissionManager manager, UUID targetUuid) {
         OfflinePlayer target = Bukkit.getOfflinePlayer(targetUuid);
         UserPermissions user = manager.getUserPermissions(targetUuid);
         String name = target.getName() == null ? targetUuid.toString() : target.getName();
-        List<String> allPerms = Permissions.getAllPermissions();
-
-        int totalPages = Math.max(1, (allPerms.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * DIALOG_PAGE_SIZE;
-        int end = Math.min(start + DIALOG_PAGE_SIZE, allPerms.size());
+        LinkedHashMap<String, String> categories = Permissions.getCategories();
 
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            String perm = allPerms.get(i);
-            boolean has = user.hasDirectPermission(perm);
-            Component label = Component.text((has ? "✓ " : "✗ ") + perm,
-                    has ? NamedTextColor.GREEN : NamedTextColor.RED, TextDecoration.BOLD);
-            Component tip = Component.text(has ? "Click to revoke." : "Click to grant.",
-                    NamedTextColor.GRAY);
+        for (Map.Entry<String, String> entry : categories.entrySet()) {
+            String catKey = entry.getKey();
+            String catDisplay = entry.getValue();
+            List<String> catPerms = Permissions.getPermissionsByCategory(catKey);
+            long grantedCount = catPerms.stream().filter(user::hasDirectPermission).count();
+            Component label = Component.text(catDisplay, NamedTextColor.YELLOW, TextDecoration.BOLD);
+            Component tip = joinLines(
+                    Component.text(catPerms.size() + " permission(s) — " + grantedCount + " granted.", NamedTextColor.GRAY),
+                    Component.text("Click to view and toggle.", NamedTextColor.GRAY));
             buttons.add(dialogButton(label, tip,
-                    p -> toggleUserPermission(p, manager, targetUuid, perm, currentPage)));
+                    p -> openUserPerms(p, manager, targetUuid, catKey, 0)));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                target2 -> openUserPerms(target2, manager, targetUuid, currentPage - 1),
-                target2 -> openUserPerms(target2, manager, targetUuid, currentPage + 1));
 
         ActionButton back = dialogButton(
                 Component.text("← Back to User", NamedTextColor.RED, TextDecoration.BOLD),
                 Component.text("Return to the user menu.", NamedTextColor.GRAY),
                 p -> openUserHub(p, manager, targetUuid));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>User Perms: " + name))
-                .body(List.of(DialogBody.plainMessage(pageSummary(allPerms.size(), "permission", currentPage, totalPages))))
+        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Permissions: " + name))
+                .body(List.of(DialogBody.plainMessage(
+                        Component.text("Select a category to edit.", NamedTextColor.GRAY)
+                                .decoration(TextDecoration.ITALIC, false))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -707,13 +749,60 @@ public final class PermissionGUI {
         player.showDialog(dialog);
     }
 
-    private static void toggleUserPermission(Player player, PermissionManager manager, UUID targetUuid, String permission, int returnPage) {
+    public static void openUserPerms(Player player, PermissionManager manager, UUID targetUuid, String category, int page) {
+        OfflinePlayer target = Bukkit.getOfflinePlayer(targetUuid);
+        UserPermissions user = manager.getUserPermissions(targetUuid);
+        String name = target.getName() == null ? targetUuid.toString() : target.getName();
+        List<String> catPerms = Permissions.getPermissionsByCategory(category);
+        String catDisplay = Permissions.getCategories().getOrDefault(category, category);
+
+        int totalPages = Math.max(1, (catPerms.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
+        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
+        int start = currentPage * DIALOG_PAGE_SIZE;
+        int end = Math.min(start + DIALOG_PAGE_SIZE, catPerms.size());
+
+        List<ActionButton> buttons = new ArrayList<>();
+        for (int i = start; i < end; i++) {
+            String perm = catPerms.get(i);
+            boolean has = user.hasDirectPermission(perm);
+            Component label = Component.text((has ? "✓ " : "✗ ") + perm,
+                    has ? NamedTextColor.GREEN : NamedTextColor.RED, TextDecoration.BOLD);
+            Component tip = Component.text(has ? "Click to revoke." : "Click to grant.",
+                    NamedTextColor.GRAY);
+            buttons.add(dialogButton(label, tip,
+                    p -> toggleUserPermission(p, manager, targetUuid, perm, category, currentPage)));
+        }
+
+        addPageNavButtons(buttons, currentPage, totalPages,
+                target2 -> openUserPerms(target2, manager, targetUuid, category, currentPage - 1),
+                target2 -> openUserPerms(target2, manager, targetUuid, category, currentPage + 1));
+
+        ActionButton back = dialogButton(
+                Component.text("← Back to Categories", NamedTextColor.RED, TextDecoration.BOLD),
+                Component.text("Return to the category list.", NamedTextColor.GRAY),
+                p -> openUserPermCategories(p, manager, targetUuid));
+
+        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>" + catDisplay + ": " + name))
+                .body(List.of(DialogBody.plainMessage(pageSummary(catPerms.size(), "permission", currentPage, totalPages))))
+                .build();
+
+        Dialog dialog = Dialog.create(b -> b.empty()
+                .base(base)
+                .type(DialogType.multiAction(buttons)
+                        .columns(DIALOG_COLUMNS)
+                        .exitAction(back)
+                        .build()));
+
+        player.showDialog(dialog);
+    }
+
+    private static void toggleUserPermission(Player player, PermissionManager manager, UUID targetUuid, String permission, String category, int returnPage) {
         UserPermissions u = manager.getUserPermissions(targetUuid);
         if (u.hasDirectPermission(permission)) u.removePermission(permission);
         else u.addPermission(permission);
         manager.saveUsers();
         refreshOnlinePlayer(manager, targetUuid);
-        openUserPerms(player, manager, targetUuid, returnPage);
+        openUserPerms(player, manager, targetUuid, category, returnPage);
     }
 
     public static void openUserGroupPicker(Player player, PermissionManager manager, UUID targetUuid, int page) {

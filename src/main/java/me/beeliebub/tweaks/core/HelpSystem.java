@@ -108,6 +108,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         addCategory(buildMinigames());
         addCategory(buildPermissions());
         addCategory(buildProtection());
+        addCategory(buildEconomy());
         validateCrossReferences();
     }
 
@@ -596,12 +597,15 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         ), Material.TOTEM_OF_UNDYING, 16, ColorUtil.HELP_GRAD_AFK, List.of("tablist", "profiles")));
 
         articles.add(new HelpArticle("tablist", "Tab List", List.of(
-                gray("Tab list groups players by world profile."),
-                aqua("World tags:"),
-                white("[Lobby], [Survival], [Nether], [End], [Resource]."),
-                red("AFK players show an [AFK] suffix."),
-                white("Tags update on world change.")
-        ), Material.PAPER, 20, ColorUtil.HELP_GRAD_TAB_MENU, List.of("profiles", "afk")));
+                gray("The tab list uses a unified display format:"),
+                yellow("[World][Rank] Name [$Balance] [AFK]"),
+                aqua("World Tags:"),
+                white("[Lobby], [Survival], [Nether], [End], [Resource], [Archive], [Pi]."),
+                white("Rank names show your current rank in gold brackets."),
+                white("Balance hides if you've toggled it off via /bal hide."),
+                red("AFK players show a red [AFK] suffix."),
+                white("Sorting is based on your world profile.")
+        ), Material.PAPER, 20, ColorUtil.HELP_GRAD_TAB_MENU, List.of("profiles", "afk", "balance")));
 
         articles.add(new HelpArticle("profiles", "World Profiles", List.of(
                 gray("Per-profile inventory, ender chest, and XP."),
@@ -759,6 +763,45 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 red("Admin: /whack arena begins setup.")
         ), Material.PLAYER_HEAD, 31, ColorUtil.HELP_GRAD_WHACK, List.of("rewards", "profiles")));
 
+        articles.add(new HelpArticle("blackjack", "Blackjack (PvD)", List.of(
+                gray("Play against the dealer at admin-placed physical tables."),
+                white("Middle button starts the game or clears a finished one."),
+                aqua("Rules:"),
+                white("- Dealer stands on all 17s; Blackjack pays 3:2."),
+                white("- Hole Card: dealer's 2nd card is hidden until you stand."),
+                white("- Face cards (J/Q/K) feature custom player portraits."),
+                aqua("Controls:"),
+                white("- Left: Hit, Middle: Start/Clear, Right: Stand."),
+                green("Dealer Mannequin: celebrates or mourns at game end."),
+                red("Requirement: 'dqc.cards' resource pack.")
+        ), Material.GREEN_WOOL, 33, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack_pvp", "blackjack_mechanics")));
+
+        articles.add(new HelpArticle("blackjack_pvp", "Blackjack (PvP)", List.of(
+                gray("Head-to-head Blackjack for two human players."),
+                white("Each player takes one side of a dedicated PvP table."),
+                aqua("Workflow:"),
+                white("1. Claim: click MIDDLE button on an empty side."),
+                white("2. Wager: click money button for a dialog prompt,"),
+                white("   and/or place items on your side's barrel."),
+                red("   (Shelves lock to opponents on claim; to all on start)"),
+                white("3. Ready: both players click MIDDLE to ready up,"),
+                white("   then click again to confirm final stakes."),
+                white("4. Play: only your own cards are visible face-up."),
+                gold("Winner takes both stakes; cards revealed at end.")
+        ), Material.PLAYER_HEAD, 34, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack", "blackjack_mechanics")));
+
+        articles.add(new HelpArticle("blackjack_mechanics", "Blackjack Mechanics", List.of(
+                gray("Technical details for all Blackjack tables."),
+                aqua("General:"),
+                red("Inactivity: 10 min idle evicts and forfeits bets."),
+                white("Rendering: cards lie flat on the table surface."),
+                white("Deck: standard 52-card, reshuffled every game."),
+                gold("Admin Setup:"),
+                white("- Footprint: solid 2×3 area (no carpet required)."),
+                white("- Registration: /blackjack <createtable|createpvptable>"),
+                white("- Card Backs: optional [hexColor] for custom tints.")
+        ), Material.KNOWLEDGE_BOOK, 35, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack", "blackjack_pvp")));
+
         return new HelpCategory("minigames", "Minigames", articles, Material.TARGET, 32, ColorUtil.HELP_GRAD_MINIGAMES);
     }
 
@@ -834,12 +877,13 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 gray("Dialog-based visual editor for groups, users, and permissions."),
                 cmd("/tprm", "Open the main GUI."),
                 aqua("Navigation:"),
-                white("Main → Groups → Group Hub → (Perms/Members/Inheritance)."),
-                white("Main → Players → User Hub → (Perms/Edit Groups/Reset)."),
+                white("Main → Groups → Group Hub → Categories → perms."),
+                white("Main → Players → User Hub → Categories → perms."),
                 white("Lists paginate at 12 entries; use Prev/Next Page buttons."),
                 aqua("Interactions:"),
                 white("✓ prefix → currently granted/active (click to revoke)."),
                 white("✗ prefix → currently denied/inactive (click to grant)."),
+                white("Categories: perms are organized by system (Protection, Minigames, etc.)."),
                 white("Edit Groups: multi-select toggle of group membership."),
                 red("Requires permission: tweaks.admin.permissions.")
         ), Material.COMPASS, 33, ColorUtil.HELP_GRAD_PERMS_TPRM_USAGE,
@@ -889,10 +933,10 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
 
         articles.add(new HelpArticle("protection_members", "Members & Hierarchy", List.of(
                 gray("Manage who can build and how sub-regions interact."),
-                cmd("/region addmember <name> <player>", "Add a member."),
-                cmd("/region removemember <name> <player>", "Remove a member."),
-                cmd("/region addmanager <name> <player>", "Add a manager."),
-                cmd("/region removemanager <name> <player>", "Remove a manager."),
+                cmd("/region addmember <name> <player|group:name>", "Add a member (player or group)."),
+                cmd("/region removemember <name> <player|group:name>", "Remove a member."),
+                cmd("/region addmanager <name> <player|group:name>", "Add a manager."),
+                cmd("/region removemanager <name> <player|group:name>", "Remove a manager."),
                 cmd("/region setparent <child> <parent>", "Create a sub-region relationship."),
                 aqua("Roles:"),
                 white("- Owner: Full control, can unclaim or transfer."),
@@ -956,5 +1000,46 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 Permissions.PROTECTION_UNCLAIM));
 
         return new HelpCategory("protection", "Land Protection", articles, Material.OAK_FENCE, 36, ColorUtil.HELP_GRAD_PROTECTION);
+    }
+
+    private HelpCategory buildEconomy() {
+        List<HelpArticle> articles = new ArrayList<>();
+
+        articles.add(new HelpArticle("daily_rewards", "Daily Rewards", List.of(
+                gray("Earn money just for logging in!"),
+                aqua("Login Streak:"),
+                white("The more days in a row you log in, the higher your reward."),
+                white("Maximum streak: 7 days."),
+                aqua("Multipliers:"),
+                white("Day 1: 1.0x (Base $100)"),
+                white("Day 7: 2.5x (Up to $250 base)"),
+                yellow("Rank bonuses apply on top of the streak reward."),
+                green("Verified: Daily reward message uses '+$100' formatting.")
+        ), Material.GOLD_INGOT, 20, ColorUtil.HELP_GRAD_ECONOMY, List.of("balance", "ranks")));
+
+        articles.add(new HelpArticle("balance", "Economy & Balance", List.of(
+                gray("Server-wide dollar-based economy."),
+                cmd("/balance", "View your current funds. Alias: /bal."),
+                cmd("/balance hide", "Toggle balance visibility in the tab list."),
+                red("Admin:"),
+                cmd("/balance set <player> <amount>", "Set a player's balance."),
+                cmd("/balance add <player> <amount>", "Grant funds."),
+                cmd("/balance remove <player> <amount>", "Deduct funds."),
+                red("Permission: tweaks.admin.balance.")
+        ), Material.EMERALD, 22, ColorUtil.HELP_GRAD_ECONOMY, List.of("daily_rewards", "ranks")));
+
+        articles.add(new HelpArticle("ranks", "Ranks & Progression", List.of(
+                gray("Purchase ranks to unlock better rewards and bonuses."),
+                cmd("/ranks", "List all ranks, costs, and benefits."),
+                cmd("/rankup", "Purchase the next rank in the hierarchy."),
+                aqua("Benefits:"),
+                white("- Daily Bonus: Increases your daily login rewards."),
+                white("- Rakeback: Grants a percentage of losses back in the casino."),
+                red("Admin:"),
+                cmd("/ranks edit", "Open the visual rank editor (Paper Dialog)."),
+                red("Permission: tweaks.admin.ranks.")
+        ), Material.GOLD_BLOCK, 24, ColorUtil.HELP_GRAD_RANKS, List.of("balance", "daily_rewards")));
+
+        return new HelpCategory("economy", "Economy & Ranks", articles, Material.GOLD_INGOT, 38, ColorUtil.HELP_GRAD_ECONOMY);
     }
 }

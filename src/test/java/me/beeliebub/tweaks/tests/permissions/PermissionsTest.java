@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
 
@@ -75,5 +77,95 @@ class PermissionsTest {
         assertEquals("tweaks.admin.logs", Permissions.ADMIN_LOGS);
         assertEquals("tweaks.admin.permissions", Permissions.ADMIN_PERMISSIONS);
         assertEquals("tweaks.bypass.homes", Permissions.BYPASS_HOMES);
+    }
+
+    // =========================================================================
+    // Category API tests (bead i07y)
+    // =========================================================================
+
+    private static final Set<String> EXPECTED_CATEGORY_KEYS = Set.of(
+            "tools", "teleport", "minigames", "protection", "ranks", "bypass"
+    );
+
+    /**
+     * getCategories() must contain exactly the 6 known category keys.
+     */
+    @Test
+    void getCategoriesContainsExactlyTheSixExpectedKeys() {
+        LinkedHashMap<String, String> categories = Permissions.getCategories();
+        assertEquals(6, categories.size(),
+                "getCategories() must have exactly 6 entries");
+        for (String expected : EXPECTED_CATEGORY_KEYS) {
+            assertTrue(categories.containsKey(expected),
+                    "getCategories() must contain key: " + expected);
+        }
+    }
+
+    /**
+     * Every permission from getAllPermissions() must return a non-null category via
+     * getCategory(), and that category key must exist in getCategories().
+     */
+    @Test
+    void everPermissionHasAValidCategory() {
+        LinkedHashMap<String, String> categories = Permissions.getCategories();
+        for (String perm : Permissions.getAllPermissions()) {
+            String cat = Permissions.getCategory(perm);
+            assertNotNull(cat, "getCategory() must not return null for: " + perm);
+            assertTrue(categories.containsKey(cat),
+                    "Category '" + cat + "' returned for '" + perm + "' is not a valid category key");
+        }
+    }
+
+    /**
+     * The union of getPermissionsByCategory() over ALL categories must equal
+     * getAllPermissions() with no duplicates and no omissions (full partition).
+     */
+    @Test
+    void permissionsByCategoryFormAFullPartition() {
+        List<String> all = Permissions.getAllPermissions();
+        Set<String> allSet = new HashSet<>(all);
+
+        List<String> fromCategories = new ArrayList<>();
+        for (String category : Permissions.getCategories().keySet()) {
+            List<String> byCategory = Permissions.getPermissionsByCategory(category);
+            // No permission should appear twice in the same category list.
+            Set<String> catSet = new HashSet<>(byCategory);
+            assertEquals(byCategory.size(), catSet.size(),
+                    "Duplicate permission found within category '" + category + "': " + byCategory);
+            fromCategories.addAll(byCategory);
+        }
+
+        // No permission should appear in more than one category.
+        Set<String> union = new HashSet<>(fromCategories);
+        assertEquals(fromCategories.size(), union.size(),
+                "A permission appears in more than one category (cross-category duplicate)");
+
+        // Union must equal the full set of all permissions.
+        assertEquals(allSet, union,
+                "The union of getPermissionsByCategory over all categories must equal getAllPermissions()");
+    }
+
+    /**
+     * getCategory() must fall back to "tools" for an unknown permission string.
+     */
+    @Test
+    void getCategoryFallsBackToToolsForUnknownPermission() {
+        String unknown = "tweaks.nonexistent.permission.xyz";
+        String category = Permissions.getCategory(unknown);
+        assertEquals("tools", category,
+                "getCategory() must return 'tools' as fallback for unknown permissions");
+    }
+
+    /**
+     * Every category key in getCategories() has a non-null, non-empty display name.
+     */
+    @Test
+    void everyCategoryHasANonEmptyDisplayName() {
+        Permissions.getCategories().forEach((key, displayName) -> {
+            assertNotNull(displayName,
+                    "Display name for category '" + key + "' must not be null");
+            assertFalse(displayName.isBlank(),
+                    "Display name for category '" + key + "' must not be blank");
+        });
     }
 }

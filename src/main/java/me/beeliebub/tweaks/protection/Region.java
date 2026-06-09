@@ -32,6 +32,12 @@ import java.util.UUID;
 //                   the manager set, or change ownership. Resolves between
 //                   OWNER and MEMBER in flag-target priority order.
 //   * members     — UUIDs allowed to act inside the region (default permit).
+//   * memberGroups / managerGroups — permission GROUP names (lowercase, stored
+//                   without the `group:` prefix) that grant member/manager
+//                   access to every player belonging to that group, without
+//                   their UUID being listed. These are a SEPARATE concept from
+//                   FlagTarget GROUP rules (flags.<FLAG>.group:<name>); they
+//                   control membership/role, not per-flag verdicts.
 //
 // Two flag tables share resolution duties:
 //   * flagRules     — Map<RegionFlag, Map<FlagTarget, Boolean>> for the
@@ -66,7 +72,9 @@ public record Region(
         String worldName,
         List<UUID> managers,
         Map<RegionFlag, Set<org.bukkit.entity.EntityType>> entityFlags,
-        int cost
+        int cost,
+        List<String> memberGroups,
+        List<String> managerGroups
 ) {
 
     // Inclusive chunk-coordinate AABB. Stored as four ints rather than two
@@ -89,6 +97,21 @@ public record Region(
         materialFlags = deepCopyMaterialFlags(materialFlags);
         managers = managers == null ? List.of() : List.copyOf(managers);
         entityFlags = deepCopyEntityFlags(entityFlags);
+        memberGroups = normalizeGroups(memberGroups);
+        managerGroups = normalizeGroups(managerGroups);
+    }
+
+    // Lowercase + dedupe-preserving copy of a group-name list. Null and empty
+    // both collapse to an immutable empty list so callers never see null.
+    private static List<String> normalizeGroups(List<String> raw) {
+        if (raw == null || raw.isEmpty()) return List.of();
+        List<String> out = new ArrayList<>(raw.size());
+        for (String g : raw) {
+            if (g == null) continue;
+            String norm = g.toLowerCase(java.util.Locale.ROOT);
+            if (!norm.isEmpty() && !out.contains(norm)) out.add(norm);
+        }
+        return List.copyOf(out);
     }
 
     // Pre-bounds canonical constructor used by every call site written before
@@ -98,7 +121,7 @@ public record Region(
                   Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules,
                   Map<RegionFlag, Set<Material>> materialFlags,
                   String parentId) {
-        this(id, owner, members, flagRules, materialFlags, parentId, null, null, List.of(), Map.of(), 0);
+        this(id, owner, members, flagRules, materialFlags, parentId, null, null, List.of(), Map.of(), 0, List.of(), List.of());
     }
 
     // Bounds-aware constructor without world (legacy bounds-only call sites).
@@ -107,7 +130,7 @@ public record Region(
                   Map<RegionFlag, Set<Material>> materialFlags,
                   String parentId,
                   RegionBounds bounds) {
-        this(id, owner, members, flagRules, materialFlags, parentId, bounds, null, List.of(), Map.of(), 0);
+        this(id, owner, members, flagRules, materialFlags, parentId, bounds, null, List.of(), Map.of(), 0, List.of(), List.of());
     }
 
     // World + bounds constructor without managers/entityFlags — legacy 8-arg
@@ -118,7 +141,7 @@ public record Region(
                   String parentId,
                   RegionBounds bounds,
                   String worldName) {
-        this(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, List.of(), Map.of(), 0);
+        this(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, List.of(), Map.of(), 0, List.of(), List.of());
     }
 
     // Full constructor without cost — every pre-cost call site (loader, mutators,
@@ -132,7 +155,23 @@ public record Region(
                   String worldName,
                   List<UUID> managers,
                   Map<RegionFlag, Set<org.bukkit.entity.EntityType>> entityFlags) {
-        this(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, managers, entityFlags, 0);
+        this(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, managers, entityFlags, 0, List.of(), List.of());
+    }
+
+    // Full constructor WITH cost but without member/manager groups — preserves
+    // every pre-group call site (claim flow, mutators) that passed the 11-arg
+    // canonical form. Groups default to empty; use withMemberGroups/with-
+    // ManagerGroups (or the canonical 13-arg constructor) to populate them.
+    public Region(String id, UUID owner, List<UUID> members,
+                  Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules,
+                  Map<RegionFlag, Set<Material>> materialFlags,
+                  String parentId,
+                  RegionBounds bounds,
+                  String worldName,
+                  List<UUID> managers,
+                  Map<RegionFlag, Set<org.bukkit.entity.EntityType>> entityFlags,
+                  int cost) {
+        this(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, managers, entityFlags, cost, List.of(), List.of());
     }
 
     private static Map<RegionFlag, Map<FlagTarget, Boolean>> deepCopyFlagRules(
@@ -177,7 +216,7 @@ public record Region(
     // call sites that only care about boolean rules.
     public Region(String id, UUID owner, List<UUID> members,
                   Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules) {
-        this(id, owner, members, flagRules, Map.of(), null, null, null, List.of(), Map.of(), 0);
+        this(id, owner, members, flagRules, Map.of(), null, null, null, List.of(), Map.of(), 0, List.of(), List.of());
     }
 
     // Convenience constructor without material flags but WITH parent — for
@@ -185,7 +224,7 @@ public record Region(
     public Region(String id, UUID owner, List<UUID> members,
                   Map<RegionFlag, Map<FlagTarget, Boolean>> flagRules,
                   String parentId) {
-        this(id, owner, members, flagRules, Map.of(), parentId, null, null, List.of(), Map.of(), 0);
+        this(id, owner, members, flagRules, Map.of(), parentId, null, null, List.of(), Map.of(), 0, List.of(), List.of());
     }
 
     // Legacy constructor preserved so call sites (and tests) that still pass an
@@ -193,7 +232,7 @@ public record Region(
     // listed flag is translated to a DEFAULT-target rule with value=true,
     // matching the pre-refactor "flag in set = non-members may act" semantic.
     public Region(String id, UUID owner, List<UUID> members, EnumSet<RegionFlag> legacyFlags) {
-        this(id, owner, members, legacyToTargeted(legacyFlags), Map.of(), null, null, null, List.of(), Map.of(), 0);
+        this(id, owner, members, legacyToTargeted(legacyFlags), Map.of(), null, null, null, List.of(), Map.of(), 0, List.of(), List.of());
     }
 
     private static Map<RegionFlag, Map<FlagTarget, Boolean>> legacyToTargeted(EnumSet<RegionFlag> legacyFlags) {
@@ -216,6 +255,34 @@ public record Region(
     public boolean isMember(UUID uuid) {
         if (uuid == null) return false;
         return owner.equals(uuid) || managers.contains(uuid) || members.contains(uuid);
+    }
+
+    // Group-aware manager check: true if the UUID is a listed manager OR the
+    // actor belongs to any group in managerGroups. `groups` is the actor's
+    // lowercased permission groups (see ProtectionManager#groupsOf); null is
+    // treated as empty. memberGroups/managerGroups are stored lowercase.
+    public boolean isManager(UUID uuid, Set<String> groups) {
+        if (isManager(uuid)) return true;
+        return intersects(groups, managerGroups);
+    }
+
+    // Group-aware member check: true if the UUID is owner/manager/member OR the
+    // actor belongs to any group in memberGroups OR managerGroups (managers are
+    // members). `groups` null is treated as empty.
+    public boolean isMember(UUID uuid, Set<String> groups) {
+        if (isMember(uuid)) return true;
+        return intersects(groups, memberGroups) || intersects(groups, managerGroups);
+    }
+
+    // True if any element of the actor's lowercased `groups` appears in the
+    // lowercased `regionGroups` list. Both sides are already normalized, so the
+    // comparison is a plain contains.
+    private static boolean intersects(Set<String> groups, List<String> regionGroups) {
+        if (groups == null || groups.isEmpty() || regionGroups.isEmpty()) return false;
+        for (String g : groups) {
+            if (regionGroups.contains(g)) return true;
+        }
+        return false;
     }
 
     public boolean hasParent() {
@@ -369,7 +436,7 @@ public record Region(
         } else {
             newRules.put(flag, updated);
         }
-        return new Region(id, owner, members, newRules, materialFlags, parentId, bounds, worldName, managers, entityFlags, cost);
+        return new Region(id, owner, members, newRules, materialFlags, parentId, bounds, worldName, managers, entityFlags, cost, memberGroups, managerGroups);
     }
 
     // Return a new Region with the material set for `flag` replaced wholesale.
@@ -385,7 +452,7 @@ public record Region(
         } else {
             newMaterials.put(flag, Set.copyOf(EnumSet.copyOf(materials)));
         }
-        return new Region(id, owner, members, flagRules, newMaterials, parentId, bounds, worldName, managers, entityFlags, cost);
+        return new Region(id, owner, members, flagRules, newMaterials, parentId, bounds, worldName, managers, entityFlags, cost, memberGroups, managerGroups);
     }
 
     // Return a new Region with the entity-type set for `flag` replaced wholesale.
@@ -400,31 +467,44 @@ public record Region(
         } else {
             newEntities.put(flag, Set.copyOf(EnumSet.copyOf(entities)));
         }
-        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, managers, newEntities, cost);
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, managers, newEntities, cost, memberGroups, managerGroups);
     }
 
     // Returns a copy of this region with the parent pointer rewritten. Passing
     // null clears the parent (promotes the region back to top-level).
     public Region withParent(String newParentId) {
         String normalized = (newParentId == null || newParentId.isBlank()) ? null : newParentId;
-        return new Region(id, owner, members, flagRules, materialFlags, normalized, bounds, worldName, managers, entityFlags, cost);
+        return new Region(id, owner, members, flagRules, materialFlags, normalized, bounds, worldName, managers, entityFlags, cost, memberGroups, managerGroups);
     }
 
     public Region withBounds(RegionBounds newBounds) {
-        return new Region(id, owner, members, flagRules, materialFlags, parentId, newBounds, worldName, managers, entityFlags, cost);
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, newBounds, worldName, managers, entityFlags, cost, memberGroups, managerGroups);
     }
 
     public Region withWorld(String newWorldName) {
-        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, newWorldName, managers, entityFlags, cost);
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, newWorldName, managers, entityFlags, cost, memberGroups, managerGroups);
     }
 
     public Region withMembers(List<UUID> newMembers) {
-        return new Region(id, owner, members(newMembers), flagRules, materialFlags, parentId, bounds, worldName, managers, entityFlags, cost);
+        return new Region(id, owner, members(newMembers), flagRules, materialFlags, parentId, bounds, worldName, managers, entityFlags, cost, memberGroups, managerGroups);
     }
 
     public Region withManagers(List<UUID> newManagers) {
         return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName,
-                newManagers == null ? List.of() : newManagers, entityFlags, cost);
+                newManagers == null ? List.of() : newManagers, entityFlags, cost, memberGroups, managerGroups);
+    }
+
+    // Replace the member-group list wholesale. Null collapses to empty; names
+    // are lowercased/deduped by the compact constructor.
+    public Region withMemberGroups(List<String> newMemberGroups) {
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName,
+                managers, entityFlags, cost, newMemberGroups == null ? List.of() : newMemberGroups, managerGroups);
+    }
+
+    // Replace the manager-group list wholesale.
+    public Region withManagerGroups(List<String> newManagerGroups) {
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName,
+                managers, entityFlags, cost, memberGroups, newManagerGroups == null ? List.of() : newManagerGroups);
     }
 
     // Returns a copy of this region with the `cost` field replaced. Used by the
@@ -433,7 +513,7 @@ public record Region(
     // at unclaim time. The full price paid (no depreciation) is refunded on
     // unclaim, so the field stays unchanged for the lifetime of the region.
     public Region withCost(int newCost) {
-        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, managers, entityFlags, newCost);
+        return new Region(id, owner, members, flagRules, materialFlags, parentId, bounds, worldName, managers, entityFlags, newCost, memberGroups, managerGroups);
     }
 
     public Region addManager(UUID uuid) {
@@ -448,6 +528,45 @@ public record Region(
         List<UUID> updated = new ArrayList<>(managers);
         updated.remove(uuid);
         return withManagers(updated);
+    }
+
+    // Group membership mutators. Names are normalized to lowercase before the
+    // contains/equality check so callers may pass any casing. A no-op returns
+    // `this` (no new allocation) so cache swaps stay cheap when nothing changes.
+    public Region addMemberGroup(String group) {
+        if (group == null) return this;
+        String norm = group.toLowerCase(java.util.Locale.ROOT);
+        if (norm.isEmpty() || memberGroups.contains(norm)) return this;
+        List<String> updated = new ArrayList<>(memberGroups);
+        updated.add(norm);
+        return withMemberGroups(updated);
+    }
+
+    public Region removeMemberGroup(String group) {
+        if (group == null) return this;
+        String norm = group.toLowerCase(java.util.Locale.ROOT);
+        if (!memberGroups.contains(norm)) return this;
+        List<String> updated = new ArrayList<>(memberGroups);
+        updated.remove(norm);
+        return withMemberGroups(updated);
+    }
+
+    public Region addManagerGroup(String group) {
+        if (group == null) return this;
+        String norm = group.toLowerCase(java.util.Locale.ROOT);
+        if (norm.isEmpty() || managerGroups.contains(norm)) return this;
+        List<String> updated = new ArrayList<>(managerGroups);
+        updated.add(norm);
+        return withManagerGroups(updated);
+    }
+
+    public Region removeManagerGroup(String group) {
+        if (group == null) return this;
+        String norm = group.toLowerCase(java.util.Locale.ROOT);
+        if (!managerGroups.contains(norm)) return this;
+        List<String> updated = new ArrayList<>(managerGroups);
+        updated.remove(norm);
+        return withManagerGroups(updated);
     }
 
     private static List<UUID> members(List<UUID> raw) {

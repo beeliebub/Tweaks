@@ -213,6 +213,72 @@ public class SilkTouchQualityListener implements Listener {
         m.put(Material.SCULK_SHRIEKER, Material.SCULK_SHRIEKER);
         m.put(Material.SCULK_VEIN,     Material.SCULK_VEIN);
 
+        // Clay — drops 4 clay balls without silk; block with silk
+        m.put(Material.CLAY, Material.CLAY);
+
+        // Snow — drops snowballs without silk; snow layer/block with silk
+        m.put(Material.SNOW,       Material.SNOW);
+        m.put(Material.SNOW_BLOCK, Material.SNOW_BLOCK);
+
+        // Cobweb — drops string without silk; cobweb block with silk
+        m.put(Material.COBWEB, Material.COBWEB);
+
+        // Nylium — drops netherrack without silk; nylium block with silk
+        m.put(Material.CRIMSON_NYLIUM, Material.CRIMSON_NYLIUM);
+        m.put(Material.WARPED_NYLIUM,  Material.WARPED_NYLIUM);
+
+        // Gilded Blackstone — 10% chance gold nuggets without silk; always itself with silk
+        m.put(Material.GILDED_BLACKSTONE, Material.GILDED_BLACKSTONE);
+
+        // Bee Nest / Beehive — drop nothing without silk; block with silk (bees preserved)
+        m.put(Material.BEE_NEST, Material.BEE_NEST);
+        m.put(Material.BEEHIVE,  Material.BEEHIVE);
+
+        // Campfire / Soul Campfire — drop charcoal/soul soil without silk; block with silk
+        m.put(Material.CAMPFIRE,      Material.CAMPFIRE);
+        m.put(Material.SOUL_CAMPFIRE, Material.SOUL_CAMPFIRE);
+
+        // Turtle Egg — drops nothing without silk; egg with silk
+        m.put(Material.TURTLE_EGG, Material.TURTLE_EGG);
+
+        // Chiseled Bookshelf — drops nothing without silk; block with silk
+        m.put(Material.CHISELED_BOOKSHELF, Material.CHISELED_BOOKSHELF);
+
+        // Dead coral blocks — drop nothing without silk; dead coral block with silk
+        m.put(Material.DEAD_TUBE_CORAL_BLOCK,   Material.DEAD_TUBE_CORAL_BLOCK);
+        m.put(Material.DEAD_BRAIN_CORAL_BLOCK,  Material.DEAD_BRAIN_CORAL_BLOCK);
+        m.put(Material.DEAD_BUBBLE_CORAL_BLOCK, Material.DEAD_BUBBLE_CORAL_BLOCK);
+        m.put(Material.DEAD_FIRE_CORAL_BLOCK,   Material.DEAD_FIRE_CORAL_BLOCK);
+        m.put(Material.DEAD_HORN_CORAL_BLOCK,   Material.DEAD_HORN_CORAL_BLOCK);
+
+        // Dead coral plants — drop nothing without silk; dead coral with silk
+        m.put(Material.DEAD_TUBE_CORAL,   Material.DEAD_TUBE_CORAL);
+        m.put(Material.DEAD_BRAIN_CORAL,  Material.DEAD_BRAIN_CORAL);
+        m.put(Material.DEAD_BUBBLE_CORAL, Material.DEAD_BUBBLE_CORAL);
+        m.put(Material.DEAD_FIRE_CORAL,   Material.DEAD_FIRE_CORAL);
+        m.put(Material.DEAD_HORN_CORAL,   Material.DEAD_HORN_CORAL);
+
+        // Dead coral fans — drop nothing without silk; dead coral fan with silk
+        m.put(Material.DEAD_TUBE_CORAL_FAN,   Material.DEAD_TUBE_CORAL_FAN);
+        m.put(Material.DEAD_BRAIN_CORAL_FAN,  Material.DEAD_BRAIN_CORAL_FAN);
+        m.put(Material.DEAD_BUBBLE_CORAL_FAN, Material.DEAD_BUBBLE_CORAL_FAN);
+        m.put(Material.DEAD_FIRE_CORAL_FAN,   Material.DEAD_FIRE_CORAL_FAN);
+        m.put(Material.DEAD_HORN_CORAL_FAN,   Material.DEAD_HORN_CORAL_FAN);
+
+        // Wall coral fans — wall-placed block; silk touch drops the corresponding floor fan item
+        m.put(Material.TUBE_CORAL_WALL_FAN,   Material.TUBE_CORAL_FAN);
+        m.put(Material.BRAIN_CORAL_WALL_FAN,  Material.BRAIN_CORAL_FAN);
+        m.put(Material.BUBBLE_CORAL_WALL_FAN, Material.BUBBLE_CORAL_FAN);
+        m.put(Material.FIRE_CORAL_WALL_FAN,   Material.FIRE_CORAL_FAN);
+        m.put(Material.HORN_CORAL_WALL_FAN,   Material.HORN_CORAL_FAN);
+
+        // Dead wall coral fans — wall-placed block; silk touch drops the corresponding dead floor fan item
+        m.put(Material.DEAD_TUBE_CORAL_WALL_FAN,   Material.DEAD_TUBE_CORAL_FAN);
+        m.put(Material.DEAD_BRAIN_CORAL_WALL_FAN,  Material.DEAD_BRAIN_CORAL_FAN);
+        m.put(Material.DEAD_BUBBLE_CORAL_WALL_FAN, Material.DEAD_BUBBLE_CORAL_FAN);
+        m.put(Material.DEAD_FIRE_CORAL_WALL_FAN,   Material.DEAD_FIRE_CORAL_FAN);
+        m.put(Material.DEAD_HORN_CORAL_WALL_FAN,   Material.DEAD_HORN_CORAL_FAN);
+
         // Nether wart block / shroomlight — drop themselves regardless; NOT included
         // (no distinction between silk and non-silk drops)
 

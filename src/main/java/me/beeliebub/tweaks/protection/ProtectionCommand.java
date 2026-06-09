@@ -179,14 +179,14 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
                     "Restore a region's outline onto your selection.", Permissions.PROTECTION_INFO),
             new UsageEntry("/region unclaim <name>",
                     "Delete a region (full Resource Rupee refund to the owner).", Permissions.PROTECTION_UNCLAIM),
-            new UsageEntry("/region addmember <name> <player>",
-                    "Add a member to a region.", Permissions.PROTECTION_MEMBER),
-            new UsageEntry("/region removemember <name> <player>",
-                    "Remove a member from a region.", Permissions.PROTECTION_MEMBER),
-            new UsageEntry("/region addmanager <name> <player>",
-                    "Promote a player to manager on a region (owner-only).", Permissions.PROTECTION_MEMBER),
-            new UsageEntry("/region removemanager <name> <player>",
-                    "Demote a manager (owner-only).", Permissions.PROTECTION_MEMBER),
+            new UsageEntry("/region addmember <name> <player|group:<name>>",
+                    "Add a player or permission group as a member of a region.", Permissions.PROTECTION_MEMBER),
+            new UsageEntry("/region removemember <name> <player|group:<name>>",
+                    "Remove a player or permission group from a region.", Permissions.PROTECTION_MEMBER),
+            new UsageEntry("/region addmanager <name> <player|group:<name>>",
+                    "Promote a player or permission group to manager on a region (owner-only).", Permissions.PROTECTION_MEMBER),
+            new UsageEntry("/region removemanager <name> <player|group:<name>>",
+                    "Demote a manager player or permission group (owner-only).", Permissions.PROTECTION_MEMBER),
             new UsageEntry("/region flag <name> <flag> [true|false|materials...]",
                     "Set a flag rule, or list rules when no value is given.", Permissions.PROTECTION_FLAG),
             new UsageEntry("/region unflag <name> <flag> [target]",
@@ -540,13 +540,13 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         return Bukkit.getPlayer(ownerId);
     }
 
-    // /region addmember|removemember <name> <player>
+    // /region addmember|removemember <name> <player|group:<name>>
     @SuppressWarnings("deprecation")
     private void handleMember(CommandSender sender, String[] args, boolean add) {
-        String usagePrefix = "/region " + (add ? "addmember" : "removemember") + " <name> <player>";
+        String usagePrefix = "/region " + (add ? "addmember" : "removemember") + " <name> <player|group:<name>>";
         if (args.length < 2) { showUsage(sender, usagePrefix); return; }
         String name = args[0];
-        String playerName = args[1];
+        String target = args[1];
 
         Region region = resolveRegion(sender, name);
         if (region != null && !isOwnerManagerOrAdmin(sender, region)) {
@@ -556,15 +556,46 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        OfflinePlayer target = Bukkit.getOfflinePlayer(playerName);
-        if (target.getUniqueId() == null) {
-            sender.sendMessage(Component.text("Unknown player '" + playerName + "'.", NamedTextColor.RED));
+        if (target.toLowerCase(Locale.ROOT).startsWith("group:")) {
+            String groupName = target.substring("group:".length()).trim();
+            if (groupName.isEmpty()) {
+                sender.sendMessage(Component.text(
+                        "Group name cannot be empty. Usage: group:<name>", NamedTextColor.RED));
+                return;
+            }
+            PermissionManager pm = permissions();
+            if (pm != null && !pm.getGroups().containsKey(groupName.toLowerCase(Locale.ROOT))) {
+                sender.sendMessage(Component.text(
+                        "Note: permission group '" + groupName + "' does not exist yet — "
+                                + "adding anyway; create the group first if this was unintentional.",
+                        NamedTextColor.YELLOW));
+            }
+            boolean ok = add
+                    ? protection.addMemberGroup(name, groupName)
+                    : protection.removeMemberGroup(name, groupName);
+            if (!ok) {
+                sender.sendMessage(Component.text(add
+                        ? "Group '" + groupName + "' is already a member of '" + name + "'."
+                        : "Group '" + groupName + "' is not a member of '" + name + "'.",
+                        NamedTextColor.RED));
+                return;
+            }
+            sender.sendMessage(Component.text(
+                    add ? "Added group '" + groupName + "' as a member of '" + name + "'."
+                        : "Removed group '" + groupName + "' from '" + name + "'.",
+                    NamedTextColor.GREEN));
+            return;
+        }
+
+        OfflinePlayer offlineTarget = Bukkit.getOfflinePlayer(target);
+        if (offlineTarget.getUniqueId() == null) {
+            sender.sendMessage(Component.text("Unknown player '" + target + "'.", NamedTextColor.RED));
             return;
         }
 
         boolean ok = add
-                ? protection.addMember(name, target.getUniqueId())
-                : protection.removeMember(name, target.getUniqueId());
+                ? protection.addMember(name, offlineTarget.getUniqueId())
+                : protection.removeMember(name, offlineTarget.getUniqueId());
         if (!ok) {
             sender.sendMessage(Component.text(add
                     ? "Could not add — region missing or player already a member."
@@ -573,18 +604,18 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
             return;
         }
         sender.sendMessage(Component.text(
-                (add ? "Added " : "Removed ") + playerName + " "
+                (add ? "Added " : "Removed ") + target + " "
                         + (add ? "to" : "from") + " '" + name + "'.",
                 NamedTextColor.GREEN));
     }
 
-    // /region addmanager|removemanager <name> <player>  — owner-only by design.
+    // /region addmanager|removemanager <name> <player|group:<name>>  — owner-only by design.
     @SuppressWarnings("deprecation")
     private void handleManager(CommandSender sender, String[] args, boolean add) {
-        String usagePrefix = "/region " + (add ? "addmanager" : "removemanager") + " <name> <player>";
+        String usagePrefix = "/region " + (add ? "addmanager" : "removemanager") + " <name> <player|group:<name>>";
         if (args.length < 2) { showUsage(sender, usagePrefix); return; }
         String name = args[0];
-        String playerName = args[1];
+        String target = args[1];
 
         Region region = resolveRegion(sender, name);
         if (region == null) {
@@ -602,12 +633,43 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
             }
         }
 
-        OfflinePlayer target = Bukkit.getOfflinePlayer(playerName);
-        if (target.getUniqueId() == null) {
-            sender.sendMessage(Component.text("Unknown player '" + playerName + "'.", NamedTextColor.RED));
+        if (target.toLowerCase(Locale.ROOT).startsWith("group:")) {
+            String groupName = target.substring("group:".length()).trim();
+            if (groupName.isEmpty()) {
+                sender.sendMessage(Component.text(
+                        "Group name cannot be empty. Usage: group:<name>", NamedTextColor.RED));
+                return;
+            }
+            PermissionManager pm = permissions();
+            if (pm != null && !pm.getGroups().containsKey(groupName.toLowerCase(Locale.ROOT))) {
+                sender.sendMessage(Component.text(
+                        "Note: permission group '" + groupName + "' does not exist yet — "
+                                + "adding anyway; create the group first if this was unintentional.",
+                        NamedTextColor.YELLOW));
+            }
+            boolean ok = add
+                    ? protection.addManagerGroup(name, groupName)
+                    : protection.removeManagerGroup(name, groupName);
+            if (!ok) {
+                sender.sendMessage(Component.text(add
+                        ? "Group '" + groupName + "' is already a manager of '" + name + "'."
+                        : "Group '" + groupName + "' is not a manager of '" + name + "'.",
+                        NamedTextColor.RED));
+                return;
+            }
+            sender.sendMessage(Component.text(
+                    add ? "Added group '" + groupName + "' as a manager of '" + name + "'."
+                        : "Removed group '" + groupName + "' from managers of '" + name + "'.",
+                    NamedTextColor.GREEN));
             return;
         }
-        if (add && region.owner().equals(target.getUniqueId())) {
+
+        OfflinePlayer offlineTarget = Bukkit.getOfflinePlayer(target);
+        if (offlineTarget.getUniqueId() == null) {
+            sender.sendMessage(Component.text("Unknown player '" + target + "'.", NamedTextColor.RED));
+            return;
+        }
+        if (add && region.owner().equals(offlineTarget.getUniqueId())) {
             sender.sendMessage(Component.text(
                     "The owner is implicitly a manager — promotion is unnecessary.",
                     NamedTextColor.YELLOW));
@@ -615,8 +677,8 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         }
 
         boolean ok = add
-                ? protection.addManager(name, target.getUniqueId())
-                : protection.removeManager(name, target.getUniqueId());
+                ? protection.addManager(name, offlineTarget.getUniqueId())
+                : protection.removeManager(name, offlineTarget.getUniqueId());
         if (!ok) {
             sender.sendMessage(Component.text(add
                     ? "Could not add — player is already a manager."
@@ -625,7 +687,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
             return;
         }
         sender.sendMessage(Component.text(
-                (add ? "Promoted " : "Demoted ") + playerName + " "
+                (add ? "Promoted " : "Demoted ") + target + " "
                         + (add ? "to manager on " : "from manager on ") + "'" + name + "'.",
                 NamedTextColor.GREEN));
     }
@@ -772,7 +834,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
                     NamedTextColor.RED));
             return;
         }
-        RegionGUI.openRegionHub(player, region, protection);
+        RegionGUI.openRegionHub(player, region, protection, permissions());
     }
 
     // From a candidate list of overlapping regions at one chunk, return the
@@ -1172,7 +1234,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
                     "    parent: " + region.parentId(), NamedTextColor.GRAY));
         }
         sender.sendMessage(Component.text("    owner: " + resolveName(region.owner()), NamedTextColor.GRAY));
-        if (!region.managers().isEmpty()) {
+        if (!region.managers().isEmpty() || !region.managerGroups().isEmpty()) {
             StringBuilder sb = new StringBuilder("    managers: ");
             boolean first = true;
             for (UUID m : region.managers()) {
@@ -1180,9 +1242,14 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
                 sb.append(resolveName(m));
                 first = false;
             }
+            for (String g : region.managerGroups()) {
+                if (!first) sb.append(", ");
+                sb.append("group:").append(g);
+                first = false;
+            }
             sender.sendMessage(Component.text(sb.toString(), NamedTextColor.GRAY));
         }
-        if (region.members().isEmpty()) {
+        if (region.members().isEmpty() && region.memberGroups().isEmpty()) {
             sender.sendMessage(Component.text("    members: (none)", NamedTextColor.GRAY));
         } else {
             StringBuilder sb = new StringBuilder("    members: ");
@@ -1190,6 +1257,11 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
             for (UUID m : region.members()) {
                 if (!first) sb.append(", ");
                 sb.append(resolveName(m));
+                first = false;
+            }
+            for (String g : region.memberGroups()) {
+                if (!first) sb.append(", ");
+                sb.append("group:").append(g);
                 first = false;
             }
             sender.sendMessage(Component.text(sb.toString(), NamedTextColor.GRAY));
@@ -1427,16 +1499,52 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
             return regionSuggestions(sender, args[1]);
         }
         if (args.length == 3) {
-            String prefix = args[2].toLowerCase(Locale.ROOT);
+            String partial = args[2];
+            String prefix = partial.toLowerCase(Locale.ROOT);
             if (membersOfRegion) {
-                return regionMemberNames(args[1], prefix);
+                // Remove: suggest current UUID-member names + current member groups.
+                List<String> out = new ArrayList<>(regionMemberNames(args[1], prefix));
+                out.addAll(regionGroupSuggestions(args[1], prefix, /*managers=*/false));
+                return out;
             }
             if (managersOfRegion) {
-                return regionManagerNames(args[1], prefix);
+                // Remove: suggest current UUID-manager names + current manager groups.
+                List<String> out = new ArrayList<>(regionManagerNames(args[1], prefix));
+                out.addAll(regionGroupSuggestions(args[1], prefix, /*managers=*/true));
+                return out;
             }
-            return onlinePlayerNames(prefix);
+            // Add: online player names + all known permission groups as group:<name>.
+            List<String> out = new ArrayList<>(onlinePlayerNames(prefix));
+            out.addAll(allGroupSuggestions(prefix));
+            return out;
         }
         return Collections.emptyList();
+    }
+
+    // Suggest "group:<name>" for every group currently listed on the region
+    // (member groups or manager groups), prefix-filtered.
+    private List<String> regionGroupSuggestions(String regionName, String prefix, boolean managers) {
+        Region r = protection.byNameAnyWorld(regionName);
+        if (r == null) return Collections.emptyList();
+        List<String> groups = managers ? r.managerGroups() : r.memberGroups();
+        List<String> out = new ArrayList<>();
+        for (String g : groups) {
+            String suggestion = "group:" + g;
+            if (suggestion.startsWith(prefix)) out.add(suggestion);
+        }
+        return out;
+    }
+
+    // Suggest "group:<name>" for every known permission group, prefix-filtered.
+    private List<String> allGroupSuggestions(String prefix) {
+        PermissionManager pm = permissions();
+        if (pm == null) return Collections.emptyList();
+        List<String> out = new ArrayList<>();
+        for (String groupName : pm.getGroups().keySet()) {
+            String suggestion = "group:" + groupName.toLowerCase(Locale.ROOT);
+            if (suggestion.startsWith(prefix)) out.add(suggestion);
+        }
+        return out;
     }
 
     @SuppressWarnings("deprecation")

@@ -127,8 +127,19 @@ public final class RegionLoader {
             return null;
         }
 
+        // members/managers lists mix UUID strings with `group:<name>` entries.
+        // The prefix routes the entry into the parallel *Groups list instead of
+        // UUID parsing, so any player in that permission group gets member/
+        // manager access without their UUID being listed. RegionWriter emits the
+        // same mixed format, so this round-trips.
         List<UUID> members = new ArrayList<>();
+        List<String> memberGroups = new ArrayList<>();
         for (String raw : yaml.getStringList("members")) {
+            String group = stripGroupPrefix(raw);
+            if (group != null) {
+                if (!group.isEmpty() && !memberGroups.contains(group)) memberGroups.add(group);
+                continue;
+            }
             try {
                 members.add(UUID.fromString(raw));
             } catch (IllegalArgumentException e) {
@@ -137,7 +148,13 @@ public final class RegionLoader {
         }
 
         List<UUID> managers = new ArrayList<>();
+        List<String> managerGroups = new ArrayList<>();
         for (String raw : yaml.getStringList("managers")) {
+            String group = stripGroupPrefix(raw);
+            if (group != null) {
+                if (!group.isEmpty() && !managerGroups.contains(group)) managerGroups.add(group);
+                continue;
+            }
             try {
                 managers.add(UUID.fromString(raw));
             } catch (IllegalArgumentException e) {
@@ -166,7 +183,18 @@ public final class RegionLoader {
         // they originally received.
         int cost = Math.max(0, yaml.getInt("cost", 0));
 
-        return new Region(id, owner, members, flagRules, materialFlags, parent, bounds, world, managers, entityFlags, cost);
+        return new Region(id, owner, members, flagRules, materialFlags, parent, bounds, world, managers, entityFlags, cost, memberGroups, managerGroups);
+    }
+
+    // Detect and strip the `group:` prefix (case-insensitive) from a members/
+    // managers list entry. Returns the lowercased group name when the entry is a
+    // group reference, or null when it is a plain UUID string. An empty name
+    // after the prefix (e.g. "group:") returns "" so the caller can drop it.
+    private static String stripGroupPrefix(String raw) {
+        if (raw == null) return null;
+        if (raw.length() < 6) return null;
+        if (!raw.regionMatches(true, 0, "group:", 0, 6)) return null;
+        return raw.substring(6).trim().toLowerCase(Locale.ROOT);
     }
 
     // Parse the optional `entity_flags:` map. Schema mirrors material_flags:

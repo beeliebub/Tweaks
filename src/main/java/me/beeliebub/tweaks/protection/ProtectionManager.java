@@ -478,7 +478,7 @@ public final class ProtectionManager {
             // permissive behaviour in unclaimed chunks until an admin
             // explicitly restricts a flag on the global region.
             if (isGlobal(leaf)) continue;
-            if (actor != null && leaf.isMember(actor)) continue;
+            if (actor != null && leaf.isMember(actor, groups)) continue;
             return false;
         }
         return true;
@@ -515,8 +515,8 @@ public final class ProtectionManager {
         Region cursor = start;
         while (cursor != null && visited.add(cursor.id())) {
             boolean isOwner = actor != null && cursor.isOwner(actor);
-            boolean isManager = actor != null && cursor.isManager(actor);
-            boolean isMember = actor != null && cursor.isMember(actor);
+            boolean isManager = actor != null && cursor.isManager(actor, groups);
+            boolean isMember = actor != null && cursor.isMember(actor, groups);
             Optional<Boolean> resolved = cursor.resolveFlag(flag, isOwner, isManager, isMember, groups);
             if (resolved.isPresent()) return resolved;
             cursor = cursor.hasParent() ? regions.get(cursor.parentId()) : null;
@@ -561,7 +561,7 @@ public final class ProtectionManager {
             }
             // Same wilderness-permissive semantic as isAllowed.
             if (isGlobal(leaf)) continue;
-            if (actor != null && leaf.isMember(actor)) continue;
+            if (actor != null && leaf.isMember(actor, groups)) continue;
             return false;
         }
         return true;
@@ -577,8 +577,8 @@ public final class ProtectionManager {
             if (matVerdict.isPresent()) return matVerdict;
 
             boolean isOwner = actor != null && cursor.isOwner(actor);
-            boolean isManager = actor != null && cursor.isManager(actor);
-            boolean isMember = actor != null && cursor.isMember(actor);
+            boolean isManager = actor != null && cursor.isManager(actor, groups);
+            boolean isMember = actor != null && cursor.isMember(actor, groups);
             Optional<Boolean> boolVerdict = cursor.resolveFlag(baseFlag, isOwner, isManager, isMember, groups);
             if (boolVerdict.isPresent()) return boolVerdict;
 
@@ -798,6 +798,56 @@ public final class ProtectionManager {
         Region r = byNameAnyWorld(id);
         if (r == null || manager == null || !r.managers().contains(manager)) return false;
         Region updated = r.removeManager(manager);
+        regions.put(keyOf(updated), updated);
+        if (writer != null) writer.queue(updated);
+        return true;
+    }
+
+    // -- Member/manager GROUP mutators --------------------------------------
+    //
+    // A region's member/manager lists may contain permission GROUPS (stored as
+    // lowercase names): any player in that group gains member/manager access
+    // without their UUID being listed. These mirror the UUID add*/remove*
+    // mutators above — immutable copy, atomic cache swap, async persist — and
+    // return false when the region is missing or the change is a no-op (group
+    // already present on add / absent on remove). Group names are normalized to
+    // lowercase by the Region copy methods, so any casing is accepted.
+
+    public boolean addMemberGroup(String id, String group) {
+        Region r = byNameAnyWorld(id);
+        if (r == null || group == null || group.isBlank()) return false;
+        Region updated = r.addMemberGroup(group);
+        if (updated == r) return false;
+        regions.put(keyOf(updated), updated);
+        if (writer != null) writer.queue(updated);
+        return true;
+    }
+
+    public boolean removeMemberGroup(String id, String group) {
+        Region r = byNameAnyWorld(id);
+        if (r == null || group == null) return false;
+        Region updated = r.removeMemberGroup(group);
+        if (updated == r) return false;
+        regions.put(keyOf(updated), updated);
+        if (writer != null) writer.queue(updated);
+        return true;
+    }
+
+    public boolean addManagerGroup(String id, String group) {
+        Region r = byNameAnyWorld(id);
+        if (r == null || group == null || group.isBlank()) return false;
+        Region updated = r.addManagerGroup(group);
+        if (updated == r) return false;
+        regions.put(keyOf(updated), updated);
+        if (writer != null) writer.queue(updated);
+        return true;
+    }
+
+    public boolean removeManagerGroup(String id, String group) {
+        Region r = byNameAnyWorld(id);
+        if (r == null || group == null) return false;
+        Region updated = r.removeManagerGroup(group);
+        if (updated == r) return false;
         regions.put(keyOf(updated), updated);
         if (writer != null) writer.queue(updated);
         return true;

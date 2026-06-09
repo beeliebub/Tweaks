@@ -46,6 +46,8 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Help Menu](#help-menu)
   - [XP Storage Bottles](#xp-storage-bottles)
   - [Disenchanting Bundle](#disenchanting-bundle)
+  - [Economy](#economy)
+  - [Ranks](#ranks)
 - [Cosmetics](#cosmetics)
   - [Boot Trails](#boot-trails)
 - [World Protections](#world-protections)
@@ -61,6 +63,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
 - [Minigames](#minigames)
   - [Resource Rupee](#resource-rupee)
   - [Whack an Andrew](#whack-an-andrew)
+  - [Blackjack](#blackjack)
   - [Resource Hunt](#resource-hunt)
   - [Rewards](#rewards)
 - [Land Protection](#land-protection)
@@ -482,20 +485,30 @@ You also enter AFK automatically after **10 minutes** of not moving. Only positi
 
 ### Tab List
 
-Players in the tab list are automatically sorted by their current world profile and labeled with a colored prefix based on the **specific world** they are in:
+Players in the tab list are automatically sorted by their current world profile and labeled with a colored prefix based on the **specific world** they are in. The display name follows a unified format:
 
-| World | Tag |
-|---|---|
-| `jass:lobby` | **[Lobby]** (aqua) |
-| `minecraft:overworld` | **[Survival]** (green) |
-| `minecraft:the_nether` | **[Nether]** (light purple) |
-| `minecraft:the_end` | **[End]** (dark purple) |
-| `jass:resource` | **[Resource]** (aqua) |
-| `jass:resource_nether` | **[Resource]** (aqua) |
-| `jass:archive` | **[Archive]** (gold) |
-| `jass:pi` | **[Pi]** (light purple) |
+`[WorldPrefix][RankName] Name [$balance] [AFK]`
 
-Any other world falls back to the **[Survival]** tag. Players in the lobby appear at the top of the tab list, followed by the standard worlds (overworld, nether, end, resource), then archive, then pi. Tags update automatically when you change worlds. Players who have toggled `/afk` also display a red **[AFK]** suffix after their name — see [AFK](#afk).
+- **World Prefix**: A colored tag based on the player's current world.
+- **Rank Name**: Your current rank in gold brackets (e.g., `&6[I]`, `&b[VIP]`). Rank names support color codes (legacy `&` and `&#rrggbb` hex) and are displayed in the tab list.
+- **Name**: Your nickname (if set) or real name, colored to match the world prefix.
+- **$balance**: Your current balance in yellow. This is omitted if you have hidden your balance via `/bal hide`.
+- **[AFK]**: A red suffix appended when you are away-from-keyboard.
+
+#### World Tags & Sorting
+
+| World | Tag | Profile (Sorting) |
+|---|---|---|
+| `jass:lobby` | **[Lobby]** (aqua) | Lobby (1st) |
+| `minecraft:overworld` | **[Survival]** (green) | Standard (2nd) |
+| `minecraft:the_nether` | **[Nether]** (light purple) | Standard (2nd) |
+| `minecraft:the_end` | **[End]** (dark purple) | Standard (2nd) |
+| `jass:resource` | **[Resource]** (aqua) | Standard (2nd) |
+| `jass:resource_nether` | **[Resource]** (aqua) | Standard (2nd) |
+| `jass:archive` | **[Archive]** (gold) | Archive (3rd) |
+| `jass:pi` | **[Pi]** (light purple) | Pi (4th) |
+
+Any other world falls back to the **[Survival]** tag. Tags and sorting update automatically when you change worlds or profiles.
 ### Help Menu
 
 A comprehensive, interactive help system is available to guide you through the server's features. The entire system — including the category menu and individual articles — is rendered via **Paper Dialogs** (clickable GUIs) for a seamless, immersive experience.
@@ -533,10 +546,10 @@ A hybrid GUI/CLI permission system with **multi-group membership**, single-paren
 
 When two of the player's groups share an ancestor in the inheritance graph, that ancestor's permissions are added exactly once. Cycles in the inheritance graph are skipped safely.
 
-**Permissions GUI**: The visual editor is a tree of Paper Dialogs (multi-action and confirmation) that lets you manage groups and players with simple click toggles. List screens paginate at 12 entries per page; toggle buttons prefix `✓` for "on" and `✗` for "off".
+**Permissions GUI**: The visual editor is a tree of Paper Dialogs (multi-action and confirmation) that organizes permissions into logical categories (Admin & Tools, Minigames, etc.) for easier management. Groups and players can be managed with simple click toggles. List screens paginate at 12 entries per page; toggle buttons prefix `✓` for "on" and `✗` for "off".
 - **Main Menu**: Entry point with `Groups` and `Players` buttons.
-- **Groups Hub**: Manage group permissions, member list (toggle-based), and inheritance. The **+ Create Group** button opens a name-entry dialog; **Delete Group** is hidden for the protected `default` group.
-- **Users Hub**: Manage player-specific overrides and multi-group memberships. The **Edit Groups** panel lists every group with a `✓` marker on the ones the player already belongs to — click any entry to toggle membership. The **⌕ Search Player** button on the players list opens a name-entry dialog for looking up offline players.
+- **Groups Hub**: Manage group permissions (organized by category), member list (toggle-based), and inheritance. The **+ Create Group** button opens a name-entry dialog; **Delete Group** is hidden for the protected `default` group.
+- **Users Hub**: Manage player-specific overrides (organized by category) and multi-group memberships. The **Edit Groups** panel lists every group with a `✓` marker on the ones the player already belongs to — click any entry to toggle membership. The **⌕ Search Player** button on the players list opens a name-entry dialog for looking up offline players.
 
 ---
 
@@ -584,6 +597,49 @@ Any **bundle with lore** (any custom lore will work) can be used to safely (or m
 - **Restrictions**: The Disenchanting Bundle **cannot** be used on tools containing the **Spawner Pickup** or **Egg Collector** enchantments. The bundle will refuse the extraction to prevent players from bypassing the limited uses of these enchants.
 
 This mechanic provides a strategic way to recover powerful enchantments from tools at the cost of the bundle itself and the risk of losing some enchantments on heavily enchanted items.
+
+---
+
+### Economy
+
+The server features a simple, dollar-based economy system. You can earn money through daily login rewards and spend it on ranking up.
+
+#### Daily Login Rewards
+
+Every day you log in, you receive a **Daily Reward**. The amount you receive increases with your **Login Streak**, up to a maximum of 7 days.
+
+- **Base Reward**: $100
+- **Streak Multipliers**: Your base reward is multiplied by a factor that grows each day you log in consecutively (1.0x → 2.5x).
+- **Rank Bonus**: Higher ranks provide an additional flat bonus to every daily reward.
+
+When you join, you'll see a message like:
+> *Daily reward: +$100 (Day 1 streak)*
+
+#### Commands
+
+| Command | What it does |
+|---|---|
+| `/balance` | View your current balance. Alias: `/bal`. |
+| `/balance hide` | Toggles whether your balance is visible to others in the tab list. |
+
+### Ranks
+
+Progress through the server's rank hierarchy to unlock higher daily reward bonuses and better casino rakeback rates.
+
+| Rank | Cost | Daily Bonus | Rakeback |
+|---|---|---|---|
+| **I** | $1,000 | +1% | +1% |
+| **II** | $5,000 | +2% | +2% |
+| **III** | $15,000 | +3% | +3% |
+| ... | ... | ... | ... |
+| **X** | $1,000,000 | +10% | +10% |
+
+Costs and bonuses are configurable by admins.
+
+| Command | What it does |
+|---|---|
+| `/ranks` | Lists all available ranks, their costs, and their benefits. |
+| `/rankup` | Purchase the next rank using your current balance. |
 
 ---
 
@@ -756,6 +812,50 @@ A "Whack-a-Mole" style minigame where armor stands pop up on designated blocks i
 
 This is entirely admin-managed — see the [admin commands](#admin-commands) section for setup instructions.
 
+### Blackjack
+
+An in-world casino game played at physical tables using 3D card models. Supports both **Player-versus-Dealer** and head-to-head **Player-versus-Player** modes.
+
+**Requirement**: Players must have the **`dqc.cards`** resource pack enabled to see the 3D card models.
+
+#### Player vs. Dealer (PvD)
+
+The standard casino experience. Play against an automated dealer at tables with a pre-set bet amount.
+
+- **Interaction**: Right-click the **MIDDLE** button to start a game or clear a finished board.
+- **Controls**: **LEFT**=Hit, **MIDDLE**=Start/Clear, **RIGHT**=Stand.
+- **Rules**: Standard 52-card deck (reshuffled every game); Dealer stands on all 17s; Blackjack pays 3:2.
+- **Dealer Mannequin**: A 'LimeLush' visual mannequin appears on the dealer side at game end. It celebrates on dealer wins and performs a death animation on player wins.
+- **Rakeback**: Losing hands grant a small percentage of the bet back, based on your [Rank](#ranks).
+
+#### Player vs. Player (PvP)
+
+Head-to-head Blackjack for two human players. Each player takes one side of a dedicated PvP table.
+
+- **Claiming**: Right-click the **MIDDLE** button on an empty side to claim it.
+- **Wagering & Readying**: Press **MIDDLE** to open the **PvP Betting Menu**. From this interactive dialog, you can select **Bet Money** to enter your stake, or toggle your **Ready** status. You can also use the menu to un-ready and adjust your wager.
+- **Advancing**: Once both players have locked in their stakes (Ready), the game enters the **CONFIRMING_BETS** phase. Both players press **MIDDLE** again to confirm the final stakes and deal the cards.
+- **Gameplay**: Both players play their hands independently. **Per-Player Visibility**: During play, you see only your own cards face-up; your opponent's cards (and yours to them) appear face-down. All cards are revealed to everyone once the round ends.
+- **Settlement**: The winner takes their own stake back plus the opponent's money and items. Equal totals or both busting results in a **PUSH** (full refund).
+
+#### General Mechanics
+
+- **Inactivity Timeout**: If a game sits idle for **10 minutes** (no hit/stand/deal actions), the session is evicted. Any escrowed bets are forfeited. Setup/betting phases time out after **3 minutes**.
+- **Rendering**: Cards lie flat on the table surface. Jacks, Queens, and Kings feature custom player-head portraits.
+- **Orientation**: Card spreads automatically use the table's wide axis (X or Z) for all button facings. Upright orientation is deterministic via per-facing yaw: North=180, South=0, East=90, West=270.
+- **Face-down Cards**: The PvD dealer's hole card remains face-down until the player stands to prevent information leaks. PvP cards are hidden from opponents until settlement.
+
+#### Table Construction (Admin)
+
+Admins can build and register Blackjack tables in the world.
+
+- **Footprint**: A table must be a solid **2×3** (or 3×2) block area (e.g., stone, wood, etc.). No carpet is required.
+- **Controls**: Three wall-mounted buttons (LEFT/MIDDLE/RIGHT) must be placed on one of the 3-long sides.
+- **Registration**:
+  - **PvD**: Stand near the table and run `/blackjack createtable <bet> [hexColor]`, then right-click the **MIDDLE** button.
+  - **PvP**: Run `/blackjack createpvptable [hexColor]`, then right-click the **MIDDLE** button on the first side.
+- **Card Backs**: The optional `[hexColor]` argument (e.g., `#FF8800` or `FF8800`) sets a custom tint for card backs at that table.
+
 ### Resource Hunt
 
 A gathering minigame that runs in the **`jass:resource`** (Overworld) or **`jass:resource_nether`** (Nether) world. The active world is picked uniformly at random at server startup (each world that has at least one configured target has an equal chance, regardless of how many entries are in each section), and then **each player receives their own unique task** from that world's pool when they join.
@@ -875,6 +975,7 @@ Regions support multiple roles and hierarchical parenting.
   - **Owner**: Full control. Can unclaim, transfer ownership, and manage managers/members.
   - **Manager**: Delegated control. Can edit flags, add/remove members, and add/remove other managers. Cannot unclaim or transfer ownership.
   - **Member**: Build access. Can bypass most protection flags (e.g. they can always build/break).
+- **Group Membership**: Instead of individual players, you can grant roles to entire permission groups (e.g. `builders`). All members of the group automatically gain the role's privileges.
 - **Sub-regions**: You can nest one region inside another using `/region setparent <child> <parent>`.
   - Sub-regions must be at least one full chunk.
   - Sub-region flags **override** their parent's flags.
@@ -903,7 +1004,7 @@ Flags control what non-members can do in a region. Rules can target specific gro
 - **Tab Completion**: Fully implemented for the legacy command system.
   - **Subcommands**: Filtered based on your permissions.
   - **Region IDs**: Suggestions are ownership-aware. Owners and managers see their regions. Admins with the `tweaks.protection.admin` permission see all regions in their current world (limited to the first 100 results).
-  - **Players**: Online players are suggested for `addmember`/`addmanager`, while current members/managers are suggested for `removemember`/`removemanager`.
+  - **Players & Groups**: Online players and existing permission groups (prefixed with `group:`) are suggested for `addmember`/`addmanager`, while current members/managers (including groups) are suggested for `removemember`/`removemanager`.
   - **Flags & Targets**: Region flags, targets, block materials, and entity types are fully tab-completable.
 
 ### Region GUI
@@ -912,6 +1013,7 @@ Type `/region gui` while standing in a region you own (or manage) to open a clic
 
 From the dialog you can:
 - Toggle boolean flags and per-role overrides (owner/manager/member/group).
+  - **Permission Groups**: The GUI dynamically lists all registered permission groups, allowing you to set specific rules for group members (e.g. `ALLOW_BLOCK_BREAK` for `group:builders`).
 - Add or remove members and managers.
 - Edit material and entity lists for flags that support them.
 
@@ -958,6 +1060,10 @@ When an action occurs, the system checks rules in this order:
 | `/help [section]` | Show comprehensive help menu. |
 | `/region <subcommand>` | Land protection management. Alias: `/rg`. |
 | `/reward claim` | Claim pending minigame rewards. |
+| `/balance` | View your current balance. Alias: `/bal`. |
+| `/balance hide` | Toggle whether your balance is visible in the tab list. |
+| `/ranks` | List all available ranks and their benefits. |
+| `/rankup` | Purchase the next rank in the hierarchy. |
 | `/reroll` | Re-roll your current Resource Hunt target. |
 | `/resource` | Teleport to the resource world. |
 
@@ -981,15 +1087,17 @@ When an action occurs, the system checks rules in this order:
 | `/region select <name>` | `tweaks.protection.info` | Restore wand selection to match a region. |
 | `/region clear` | — | Drop the current wand selection. |
 | `/region wand` | — | Get the selection wand. |
-| `/region addmember <r> <p>` | `tweaks.protection.member` | Add a member to a region. Alias: `/rg am`. |
-| `/region removemember <r> <p>` | `tweaks.protection.member` | Remove a member from a region. Alias: `/rg rm`. |
-| `/region addmanager <r> <p>` | `tweaks.protection.member` | Add a manager to a region. Alias: `/rg aman`. |
-| `/region removemanager <r> <p>` | `tweaks.protection.member` | Remove a manager from a region. Alias: `/rg rman`. |
+| `/region addmember <r> <p|group:name>` | `tweaks.protection.member` | Add a member (player or group) to a region. Alias: `/rg am`. |
+| `/region removemember <r> <p|group:name>` | `tweaks.protection.member` | Remove a member from a region. Alias: `/rg rm`. |
+| `/region addmanager <r> <p|group:name>` | `tweaks.protection.member` | Add a manager (player or group) to a region. Alias: `/rg aman`. |
+| `/region removemanager <r> <p|group:name>` | `tweaks.protection.member` | Remove a manager from a region. Alias: `/rg rman`. |
 | `/region flag [name] <f> <v...>` | `tweaks.protection.flag` | Set a targeted boolean or material flag. |
 | `/region unflag <r> <f> [t]` | `tweaks.protection.flag` | Remove a targeted flag rule or material list. |
 | `/region setparent <c> <p>` | `tweaks.protection.purchaseable` | Nest a region inside another. |
 | `/region unsetparent <c>` | `tweaks.protection.purchaseable` | Remove region parenting. |
 | `/region gui [name]` | `tweaks.protection.info` | Open the dialog dashboard for a region. |
+| `/blackjack <createtable <bet>\|createpvptable> [hexColor]` | `tweaks.blackjack.createtable` | Create button-linked Blackjack tables. |
+| `/blackjack removetable` | `tweaks.blackjack.removetable` | Remove a Blackjack table. |
 | `/tconfig max_homes <int>` | `tweaks.admin.config` | Set global max homes per player. |
 | `/tconfig max_chunks <int>` | `tweaks.admin.config` | Set global max chunk claims per player. |
 | `/tconfig eggdrop <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable Egg Collector drops for a mob. |
@@ -1050,7 +1158,11 @@ When an action occurs, the system checks rules in this order:
 | `tweaks.admin.itemedit` | Allows editing item properties, such as display name and lore. |
 | `tweaks.admin.guicopy` | Allows saving a targeted chest's contents to a YAML file for GUI layouts. |
 | `tweaks.admin.gamemode` | Allows switching gamemodes via command. |
+| `tweaks.admin.balance` | Allows administrative balance management (set, add, remove). |
+| `tweaks.admin.ranks` | Allows administrative rank management and GUI access. |
 | `tweaks.admin.permissions` | Grants full access to the custom permission management system, including groups, users, and GUI editor. |
+| `tweaks.blackjack.createtable` | Allows starting the button-linking table creation flow. |
+| `tweaks.blackjack.removetable` | Allows starting the table removal flow. |
 
 ---
 

@@ -127,16 +127,27 @@ public final class RegionWriter {
         yaml.set("id", region.id());
         yaml.set("owner", region.owner().toString());
 
-        List<String> memberStrings = new ArrayList<>(region.members().size());
+        // members/managers serialize as a mixed list of UUID strings and
+        // `group:<name>` entries. RegionLoader splits them back apart on read,
+        // so the round-trip is lossless. The members list is always written
+        // (even when empty) to match the historical schema; managers is written
+        // when there are UUID managers OR managerGroups.
+        List<String> memberStrings = new ArrayList<>(region.members().size() + region.memberGroups().size());
         for (UUID m : region.members()) {
             memberStrings.add(m.toString());
         }
+        for (String g : region.memberGroups()) {
+            memberStrings.add("group:" + g);
+        }
         yaml.set("members", memberStrings);
 
-        if (!region.managers().isEmpty()) {
-            List<String> managerStrings = new ArrayList<>(region.managers().size());
+        if (!region.managers().isEmpty() || !region.managerGroups().isEmpty()) {
+            List<String> managerStrings = new ArrayList<>(region.managers().size() + region.managerGroups().size());
             for (UUID m : region.managers()) {
                 managerStrings.add(m.toString());
+            }
+            for (String g : region.managerGroups()) {
+                managerStrings.add("group:" + g);
             }
             yaml.set("managers", managerStrings);
         }

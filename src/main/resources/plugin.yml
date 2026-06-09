@@ -53,6 +53,9 @@ commands:
     description: Manage and claim minigame rewards
   whack:
     description: Whack an Andrew minigame admin commands
+  blackjack:
+    description: Admin commands to create and remove in-world Blackjack tables via button-linking.
+    usage: /blackjack <createtable <bet> [hexColor]|createpvptable [hexColor]|removetable>
   more:
     description: Maximize the stack size of the held item
   condense:
@@ -115,6 +118,21 @@ commands:
   creative:
     description: Switch your gamemode to Creative (admin).
     usage: /creative
+  balance:
+    description: View or manage player balances.
+    usage: /balance [hide | <player> | set|add|remove <player> <amount>]
+    aliases: [bal]
+  ranks:
+    description: List all ranks, or edit them (admin).
+    usage: |
+      /ranks
+      /ranks edit
+  rankup:
+    description: Purchase the next rank with your balance.
+    usage: /rankup
+  rank:
+    description: Manually set a player's rank (admin).
+    usage: /rank set <player> <rank>
   region:
     description: Land protection management — claim regions, set flags, manage members.
     usage: |

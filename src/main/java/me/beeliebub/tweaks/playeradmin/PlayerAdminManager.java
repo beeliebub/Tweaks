@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.playeradmin;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.tab.TabManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -10,7 +11,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.Particle;
 import org.bukkit.Registry;
 import org.bukkit.World;
@@ -30,10 +30,7 @@ import org.bukkit.inventory.meta.ArmorMeta;
 import org.bukkit.inventory.meta.trim.TrimMaterial;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
-import org.bukkit.scoreboard.Scoreboard;
-import org.bukkit.scoreboard.Team;
 
 import java.io.File;
 import java.io.IOException;
@@ -48,10 +45,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
 // Shared state, listeners, and periodic tasks for the player-administration commands:
-// /afk, /fly, /nick (+ tab list ordering + boot trail cosmetics that live alongside it).
+// /afk, /fly, /nick (+ boot trail cosmetics that live alongside it).
 //
 // Holds the durable PDC keys, the AFK location map, the nickname pending-removal queue,
-// the scoreboard team plumbing, and the boot-trail tick loop.
+// and the boot-trail tick loop. Tab-list rendering is delegated to TabManager.
 public class PlayerAdminManager implements Listener {
 
     // ------------------------------------------------------------
@@ -66,38 +63,9 @@ public class PlayerAdminManager implements Listener {
     private BukkitTask afkIdleCheckTask;
 
     // ------------------------------------------------------------
-    // Tab list
+    // Tab list (delegated to TabManager; set after construction)
     // ------------------------------------------------------------
-    private static final Component AFK_SUFFIX = Component.text(" [AFK]", NamedTextColor.RED);
-    private static final String ARCHIVE_WORLD_KEY = "jass:archive";
-    private static final String LOBBY_WORLD_KEY   = "jass:lobby";
-    private static final String PI_WORLD_KEY      = "jass:pi";
-
-    private static final String PROFILE_LOBBY    = "lobby";
-    private static final String PROFILE_STANDARD = "standard";
-    private static final String PROFILE_ARCHIVE  = "archive";
-    private static final String PROFILE_PI       = "pi";
-
-    private static final Map<String, String> TAB_SORT_KEYS = Map.of(
-            PROFILE_LOBBY,    "a",
-            PROFILE_STANDARD, "b",
-            PROFILE_ARCHIVE,  "c",
-            PROFILE_PI,       "d"
-    );
-
-    private static final Component FALLBACK_TAG = Component.text("[Survival] ", NamedTextColor.GREEN);
-    private static final Map<String, Component> WORLD_TAGS = Map.of(
-            LOBBY_WORLD_KEY,        Component.text("[Lobby] ",    NamedTextColor.AQUA),
-            ARCHIVE_WORLD_KEY,      Component.text("[Archive] ",  NamedTextColor.GOLD),
-            PI_WORLD_KEY,           Component.text("[Pi] ",       NamedTextColor.LIGHT_PURPLE),
-            "minecraft:overworld",  Component.text("[Survival] ", NamedTextColor.GREEN),
-            "minecraft:the_nether", Component.text("[Nether] ",   NamedTextColor.LIGHT_PURPLE),
-            "minecraft:the_end",    Component.text("[End] ",      NamedTextColor.DARK_PURPLE),
-            "jass:resource",        Component.text("[Resource] ", NamedTextColor.AQUA),
-            "jass:resource_nether", Component.text("[Resource] ", NamedTextColor.AQUA)
-    );
-
-    private final Scoreboard scoreboard;
+    private TabManager tabManager;
 
     // ------------------------------------------------------------
     // Fly
@@ -132,7 +100,6 @@ public class PlayerAdminManager implements Listener {
 
     public PlayerAdminManager(Tweaks plugin) {
         this.plugin = plugin;
-        this.scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
         this.flyKey = new NamespacedKey(plugin, "fly_enabled");
         this.nickKey = new NamespacedKey(plugin, "nickname");
         this.nickPendingFile = new File(plugin.getDataFolder(), "nick-removals.yml");
@@ -176,17 +143,21 @@ public class PlayerAdminManager implements Listener {
         return afkLocations.containsKey(player.getUniqueId());
     }
 
+    public void setTabManager(TabManager tabManager) {
+        this.tabManager = tabManager;
+    }
+
     void enterAfk(Player player) {
         afkLocations.put(player.getUniqueId(), player.getLocation().clone());
         player.setSleepingIgnored(true);
-        refreshTabName(player);
+        if (tabManager != null) tabManager.refreshTab(player);
         player.sendMessage(Component.text("You are now AFK.", NamedTextColor.GRAY));
     }
 
     void exitAfk(Player player, boolean announce) {
         if (afkLocations.remove(player.getUniqueId()) == null) return;
         player.setSleepingIgnored(false);
-        refreshTabName(player);
+        if (tabManager != null) tabManager.refreshTab(player);
         lastMovementMs.put(player.getUniqueId(), System.currentTimeMillis());
         if (announce) {
             player.sendMessage(Component.text("You are no longer AFK.", NamedTextColor.GRAY));
@@ -203,66 +174,6 @@ public class PlayerAdminManager implements Listener {
                 enterAfk(player);
             }
         }
-    }
-
-    // ============================================================
-    // Tab list
-    // ============================================================
-
-    private String getProfileForWorldKey(String worldKey) {
-        if (worldKey.equalsIgnoreCase(ARCHIVE_WORLD_KEY)) return PROFILE_ARCHIVE;
-        if (worldKey.equalsIgnoreCase(LOBBY_WORLD_KEY))   return PROFILE_LOBBY;
-        if (worldKey.equalsIgnoreCase(PI_WORLD_KEY))      return PROFILE_PI;
-        return PROFILE_STANDARD;
-    }
-
-    private String teamName(String profile) {
-        return "tab_" + TAB_SORT_KEYS.getOrDefault(profile, "b");
-    }
-
-    private Team getOrCreateTeam(String profile) {
-        String name = teamName(profile);
-        Team team = scoreboard.getTeam(name);
-        if (team == null) {
-            team = scoreboard.registerNewTeam(name);
-        }
-        return team;
-    }
-
-    private void cleanupTeamIfEmpty(Team team) {
-        if (team != null && team.getEntries().isEmpty()) {
-            team.unregister();
-        }
-    }
-
-    private void assignTeam(Player player) {
-        String profile = getProfileForWorldKey(player.getWorld().getKey().asString());
-        Team current = scoreboard.getPlayerTeam(player);
-        if (current != null) {
-            if (current.getName().equals(teamName(profile))) return;
-            current.removePlayer(player);
-            cleanupTeamIfEmpty(current);
-        }
-        player.setScoreboard(scoreboard);
-        getOrCreateTeam(profile).addPlayer(player);
-    }
-
-    private void removeFromTeam(Player player) {
-        Team team = scoreboard.getPlayerTeam(player);
-        if (team != null) {
-            team.removePlayer(player);
-            cleanupTeamIfEmpty(team);
-        }
-    }
-
-    public void refreshTabName(Player player) {
-        String worldKey = player.getWorld().getKey().asString();
-        Component tag = WORLD_TAGS.getOrDefault(worldKey, FALLBACK_TAG);
-        Component name = tag.append(Component.text(player.getName()));
-        if (isAfk(player)) {
-            name = name.append(AFK_SUFFIX);
-        }
-        player.playerListName(name);
     }
 
     // ============================================================
@@ -433,10 +344,6 @@ public class PlayerAdminManager implements Listener {
         lastMovementMs.put(uuid, System.currentTimeMillis());
         trailLastLocations.put(uuid, player.getLocation().clone());
 
-        // Tab list assignment
-        assignTeam(player);
-        refreshTabName(player);
-
         // Fly restoration
         PersistentDataContainer pdc = player.getPersistentDataContainer();
         Boolean stored = pdc.get(flyKey, PersistentDataType.BOOLEAN);
@@ -509,16 +416,11 @@ public class PlayerAdminManager implements Listener {
         if (afkLocations.remove(uuid) != null) {
             player.setSleepingIgnored(false);
         }
-        removeFromTeam(player);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onWorldChange(PlayerChangedWorldEvent event) {
         Player player = event.getPlayer();
-
-        // Tab list: reassign team and refresh display tag.
-        assignTeam(player);
-        refreshTabName(player);
 
         // Fly: restore or revoke based on PDC preference and eligibility.
         Boolean wasFlying = flyingStates.remove(player.getUniqueId());

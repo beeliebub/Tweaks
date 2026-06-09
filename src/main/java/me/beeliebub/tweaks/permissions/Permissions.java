@@ -2,7 +2,10 @@ package me.beeliebub.tweaks.permissions;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Centralized permission constants for the Tweaks plugin.
@@ -74,6 +77,20 @@ public final class Permissions {
     public static final String ADMIN_WHACK = "tweaks.admin.whack";
 
     /**
+     * Allows starting the button-linking table creation flow via /blackjack createtable.
+     * After running the command, the admin right-clicks the middle control button to
+     * finalize geometry detection and PDC persistence for the new table.
+     */
+    public static final String BLACKJACK_CREATETABLE = "tweaks.blackjack.createtable";
+
+    /**
+     * Allows starting the table removal flow via /blackjack removetable.
+     * After running the command, the admin right-clicks the middle button of the target
+     * table; the listener handles PDC cleanup and entity removal.
+     */
+    public static final String BLACKJACK_REMOVETABLE = "tweaks.blackjack.removetable";
+
+    /**
      * Allows using /resource settarget to override your own Resource Hunt target.
      */
     public static final String ADMIN_RESOURCE_SETTARGET_SELF = "tweaks.admin.resource.settarget.self";
@@ -97,6 +114,11 @@ public final class Permissions {
      * Allows toggling inspector mode to view chest interaction logs.
      */
     public static final String ADMIN_LOGS = "tweaks.admin.logs";
+
+    /**
+     * Allows viewing and modifying other players' balances.
+     */
+    public static final String ADMIN_BALANCE = "tweaks.admin.balance";
 
     /**
      * Allows editing item properties, such as display name and lore.
@@ -149,6 +171,126 @@ public final class Permissions {
      * Grants full administrative access over all regions, bypassing limits and ownership checks.
      */
     public static final String PROTECTION_ADMIN = "tweaks.protection.admin";
+
+    /**
+     * Allows editing rank definitions via /ranks edit.
+     */
+    public static final String ADMIN_RANKS = "tweaks.admin.ranks";
+
+    /**
+     * Allows manually setting a player's rank via /rank set.
+     */
+    public static final String ADMIN_RANK_SET = "tweaks.admin.rank.set";
+
+    // ---------------------------------------------------------------- Categories
+
+    /**
+     * Display name used in the category picker dialog for each category key.
+     * Iteration order is the order buttons appear in the category list.
+     */
+    private static final LinkedHashMap<String, String> CATEGORY_DISPLAY_NAMES = new LinkedHashMap<>(Map.of(
+            "tools",      "Admin & Tools",
+            "teleport",   "Teleportation",
+            "minigames",  "Minigames",
+            "protection", "Protection",
+            "ranks",      "Ranks",
+            "bypass",     "Bypasses"
+    ));
+
+    /**
+     * Explicit mapping from each permission string to its category key.
+     * Every constant defined in this class must appear exactly once here.
+     */
+    private static final Map<String, String> PERM_TO_CATEGORY;
+
+    static {
+        Map<String, String> m = new LinkedHashMap<>();
+
+        // tools — general admin utilities
+        m.put(ADMIN_NICK,         "tools");
+        m.put(ADMIN_CONFIG,       "tools");
+        m.put(ADMIN_MORE,         "tools");
+        m.put(ADMIN_INVSEE,       "tools");
+        m.put(ADMIN_LOGS,         "tools");
+        m.put(ADMIN_BALANCE,      "tools");
+        m.put(ADMIN_ITEM_EDIT,    "tools");
+        m.put(ADMIN_GUI_COPY,     "tools");
+        m.put(ADMIN_GAMEMODE,     "tools");
+        m.put(ADMIN_PERMISSIONS,  "tools");
+
+        // teleport — home and warp administration
+        m.put(ADMIN_HOME,         "teleport");
+        m.put(ADMIN_HOMES,        "teleport");
+        m.put(ADMIN_SETHOME,      "teleport");
+        m.put(ADMIN_DELHOME,      "teleport");
+        m.put(ADMIN_SETWARP,      "teleport");
+        m.put(ADMIN_DELWARP,      "teleport");
+
+        // minigames — events and game administration
+        m.put(ADMIN_REWARD,                    "minigames");
+        m.put(ADMIN_WHACK,                     "minigames");
+        m.put(ADMIN_BLOODMOON,                 "minigames");
+        m.put(ADMIN_RESOURCE_SETTARGET_SELF,   "minigames");
+        m.put(ADMIN_RESOURCE_SETTARGET_OTHER,  "minigames");
+        m.put(BLACKJACK_CREATETABLE,           "minigames");
+        m.put(BLACKJACK_REMOVETABLE,           "minigames");
+
+        // protection — land claim permissions
+        m.put(PROTECTION_PURCHASEABLE, "protection");
+        m.put(PROTECTION_UNCLAIM,      "protection");
+        m.put(PROTECTION_MEMBER,       "protection");
+        m.put(PROTECTION_FLAG,         "protection");
+        m.put(PROTECTION_INFO,         "protection");
+        m.put(PROTECTION_ADMIN,        "protection");
+
+        // ranks — rank editing and assignment
+        m.put(ADMIN_RANKS,    "ranks");
+        m.put(ADMIN_RANK_SET, "ranks");
+
+        // bypass — limit overrides
+        m.put(BYPASS_HOMES, "bypass");
+
+        PERM_TO_CATEGORY = Map.copyOf(m);
+    }
+
+    /**
+     * Returns the category key for the given permission string, or {@code "tools"}
+     * as a safe fallback for any permission not explicitly mapped.
+     *
+     * @param permission a permission string such as {@code "tweaks.admin.nick"}
+     * @return a category key matching a key in {@link #getCategories()}
+     */
+    public static String getCategory(String permission) {
+        return PERM_TO_CATEGORY.getOrDefault(permission, "tools");
+    }
+
+    /**
+     * Returns an ordered map of category key -> display name for every defined category.
+     * The insertion order is the order categories appear in the GUI picker.
+     *
+     * @return unmodifiable ordered map of category key to display name
+     */
+    public static LinkedHashMap<String, String> getCategories() {
+        return new LinkedHashMap<>(CATEGORY_DISPLAY_NAMES);
+    }
+
+    /**
+     * Returns all permissions that belong to the given category, in declaration order.
+     *
+     * @param category a category key as returned by {@link #getCategories()}
+     * @return list of permission strings in that category, may be empty
+     */
+    public static List<String> getPermissionsByCategory(String category) {
+        List<String> result = new ArrayList<>();
+        for (Map.Entry<String, String> entry : PERM_TO_CATEGORY.entrySet()) {
+            if (entry.getValue().equals(category)) {
+                result.add(entry.getKey());
+            }
+        }
+        return result;
+    }
+
+    // ---------------------------------------------------------------- All permissions
 
     /**
      * Gets all permission constants defined in this class using reflection.
