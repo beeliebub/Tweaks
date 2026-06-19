@@ -2,7 +2,7 @@
 
 A Paper plugin that adds custom enchantments, an enchantment quality system, separated world profiles, teleportation utilities, nicknames, flight, world events, cosmetics, and minigames to a multi-world Minecraft server.
 
-**Requires Paper 26.1.2 and Java 25.**
+**Requires Paper 26.2 and Java 25.**
 
 ---
 
@@ -828,22 +828,12 @@ The standard casino experience. Play against an automated dealer at tables with 
 - **Dealer Mannequin**: A 'LimeLush' visual mannequin appears on the dealer side at game end. It celebrates on dealer wins and performs a death animation on player wins.
 - **Rakeback**: Losing hands grant a small percentage of the bet back, based on your [Rank](#ranks).
 
-#### Player vs. Player (PvP)
-
-Head-to-head Blackjack for two human players. Each player takes one side of a dedicated PvP table.
-
-- **Claiming**: Right-click the **MIDDLE** button on an empty side to claim it.
-- **Wagering & Readying**: Press **MIDDLE** to open the **PvP Betting Menu**. From this interactive dialog, you can select **Bet Money** to enter your stake, or toggle your **Ready** status. You can also use the menu to un-ready and adjust your wager.
-- **Advancing**: Once both players have locked in their stakes (Ready), the game enters the **CONFIRMING_BETS** phase. Both players press **MIDDLE** again to confirm the final stakes and deal the cards.
-- **Gameplay**: Both players play their hands independently. **Per-Player Visibility**: During play, you see only your own cards face-up; your opponent's cards (and yours to them) appear face-down. All cards are revealed to everyone once the round ends.
-- **Settlement**: The winner takes their own stake back plus the opponent's money and items. Equal totals or both busting results in a **PUSH** (full refund).
-
 #### General Mechanics
 
 - **Inactivity Timeout**: If a game sits idle for **10 minutes** (no hit/stand/deal actions), the session is evicted. Any escrowed bets are forfeited. Setup/betting phases time out after **3 minutes**.
 - **Rendering**: Cards lie flat on the table surface. Jacks, Queens, and Kings feature custom player-head portraits.
 - **Orientation**: Card spreads automatically use the table's wide axis (X or Z) for all button facings. Upright orientation is deterministic via per-facing yaw: North=180, South=0, East=90, West=270.
-- **Face-down Cards**: The PvD dealer's hole card remains face-down until the player stands to prevent information leaks. PvP cards are hidden from opponents until settlement.
+- **Face-down Cards**: The dealer's hole card remains face-down until the player stands to prevent information leaks.
 
 #### Table Construction (Admin)
 
@@ -851,9 +841,7 @@ Admins can build and register Blackjack tables in the world.
 
 - **Footprint**: A table must be a solid **2×3** (or 3×2) block area (e.g., stone, wood, etc.). No carpet is required.
 - **Controls**: Three wall-mounted buttons (LEFT/MIDDLE/RIGHT) must be placed on one of the 3-long sides.
-- **Registration**:
-  - **PvD**: Stand near the table and run `/blackjack createtable <bet> [hexColor]`, then right-click the **MIDDLE** button.
-  - **PvP**: Run `/blackjack createpvptable [hexColor]`, then right-click the **MIDDLE** button on the first side.
+- **Registration**: Stand near the table and run `/blackjack createtable <bet> [hexColor]`, then right-click the **MIDDLE** button.
 - **Card Backs**: The optional `[hexColor]` argument (e.g., `#FF8800` or `FF8800`) sets a custom tint for card backs at that table.
 
 ### Resource Hunt
@@ -1096,7 +1084,7 @@ When an action occurs, the system checks rules in this order:
 | `/region setparent <c> <p>` | `tweaks.protection.purchaseable` | Nest a region inside another. |
 | `/region unsetparent <c>` | `tweaks.protection.purchaseable` | Remove region parenting. |
 | `/region gui [name]` | `tweaks.protection.info` | Open the dialog dashboard for a region. |
-| `/blackjack <createtable <bet>\|createpvptable> [hexColor]` | `tweaks.blackjack.createtable` | Create button-linked Blackjack tables. |
+| `/blackjack createtable <bet> [hexColor]` | `tweaks.blackjack.createtable` | Create button-linked Blackjack tables. |
 | `/blackjack removetable` | `tweaks.blackjack.removetable` | Remove a Blackjack table. |
 | `/tconfig max_homes <int>` | `tweaks.admin.config` | Set global max homes per player. |
 | `/tconfig max_chunks <int>` | `tweaks.admin.config` | Set global max chunk claims per player. |

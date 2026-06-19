@@ -13,15 +13,19 @@ repositories {
 val mockitoAgent: Configuration by configurations.creating
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.+")
 
-    testImplementation("io.papermc.paper:paper-api:26.1.2.build.+")
+    testImplementation("io.papermc.paper:paper-api:26.2.build.+")
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.junit.jupiter:junit-jupiter-params")
     testImplementation("org.mockito:mockito-core:5.14.2")
     testImplementation("org.mockito:mockito-junit-jupiter:5.14.2")
     testImplementation("org.yaml:snakeyaml:2.3")
+    // TODO(26.2-upgrade): Replace mockbukkit-v26.1.2 with mockbukkit-v26.2:x.x.x once a
+    //   confirmed artifact is published to Maven Central or the Sonatype snapshot repo.
+    //   Check: https://s01.oss.sonatype.org/content/repositories/snapshots/org/mockbukkit/mockbukkit/
+    //   and: https://search.maven.org/search?q=g:org.mockbukkit.mockbukkit
     testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v26.1.2:4.113.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
@@ -38,7 +42,7 @@ tasks {
         // Configure the Minecraft version for our task.
         // This is the only required configuration besides applying the plugin.
         // Your plugin's jar (or shadowJar if present) will be used automatically.
-        minecraftVersion("26.1.2")
+        minecraftVersion("26.2")
         jvmArgs("-Xms2G", "-Xmx2G")
     }
 

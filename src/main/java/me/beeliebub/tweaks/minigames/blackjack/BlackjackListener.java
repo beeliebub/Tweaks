@@ -1,20 +1,10 @@
 package me.beeliebub.tweaks.minigames.blackjack;
 
 import io.papermc.paper.datacomponent.item.ResolvableProfile;
-import io.papermc.paper.dialog.Dialog;
-import io.papermc.paper.registry.data.dialog.ActionButton;
-import io.papermc.paper.registry.data.dialog.DialogBase;
-import io.papermc.paper.registry.data.dialog.action.DialogAction;
-import io.papermc.paper.registry.data.dialog.body.DialogBody;
-import io.papermc.paper.registry.data.dialog.input.DialogInput;
-import io.papermc.paper.registry.data.dialog.type.DialogType;
-import io.papermc.paper.registry.data.dialog.type.MultiActionType;
-import me.beeliebub.tweaks.economy.BalanceCommand;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.minigames.cards.Card;
 import me.beeliebub.tweaks.minigames.cards.CardItemFactory;
 import me.beeliebub.tweaks.ranks.RankManager;
-import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -49,14 +39,13 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+
 
 /**
  * Owns active {@link BlackjackGame} sessions, their rendered {@link ItemDisplay}
@@ -138,9 +127,6 @@ public final class BlackjackListener implements Listener {
     /** PDC key sub-name for the server-table store. Full key: {@code tweaks:blackjack_tables}. */
     private static final String TABLES_KEY_NAME = "blackjack_tables";
 
-    /** PDC key sub-name for the PvP-table store. Full key: {@code tweaks:blackjack_pvp_tables}. */
-    private static final String PVP_TABLES_KEY_NAME = "blackjack_pvp_tables";
-
     /**
      * PDC tag key placed on each session {@link ItemDisplay} card entity so
      * hit-detection can identify it as a session card. Not needed for gameplay in the
@@ -179,21 +165,14 @@ public final class BlackjackListener implements Listener {
     private final RankManager rankManager;
 
     private NamespacedKey tablesKey;
-    private NamespacedKey pvpTablesKey;
     private NamespacedKey cardDisplayKey;
     private NamespacedKey cardOwnerKey;
 
     /** Carries the pending bet and optional back-color for a server table being set up. */
     private record PendingSetup(int bet, Integer backColor) {}
 
-    /** Carries the optional back-color for a PvP table being set up. */
-    private record PendingPvpSetup(Integer backColor) {}
-
     /** Players waiting to finalise a server table by right-clicking the MIDDLE button. */
     private final Map<UUID, PendingSetup> pendingSetups = new HashMap<>();
-
-    /** Players waiting to finalise a PvP table by right-clicking the first side's MIDDLE button. */
-    private final Map<UUID, PendingPvpSetup> pendingPvpSetups = new HashMap<>();
 
     /** Players waiting to remove a table by right-clicking its MIDDLE button. */
     private final Set<UUID> pendingRemovals = new HashSet<>();
@@ -215,36 +194,6 @@ public final class BlackjackListener implements Listener {
     private final Map<String, ButtonRef> buttonMap = new HashMap<>();
 
     /**
-     * Fast O(1) button-to-PvP-table lookup. Keyed by block location string
-     * ({@code "world:x:y:z"}). Each entry stores the PvP table entry, the button role,
-     * and which player side (0 = side-A / first registered, 1 = side-B / opposite side)
-     * the button belongs to. This map is separate from {@link #buttonMap} so PvP buttons
-     * are unambiguously distinguishable from server-table buttons at O(1) cost.
-     */
-    private final Map<String, PvpButtonRef> pvpButtonMap = new HashMap<>();
-
-    /**
-     * Fast O(1) money-betting-button lookup for PvP tables. Keyed by block location string
-     * ({@code "world:x:y:z"}); each entry maps to the owning PvP table and player side.
-     * Separate from {@link #pvpButtonMap} (the LEFT/MIDDLE/RIGHT play controls) so a money
-     * button click opens a wager prompt instead of being treated as a gameplay action.
-     */
-    private final Map<String, MoneyButtonRef> pvpMoneyButtonMap = new HashMap<>();
-
-    /**
-     * Active PvP table sessions keyed by the table identity key {@code blockKey(middleA)}.
-     * At most one running game (or pre-game lobby) per physical table.
-     */
-    private final Map<String, PvpSession> pvpSessions = new HashMap<>();
-
-    /**
-     * Players currently typing a money wager in chat, keyed by player UUID. Read from the
-     * async chat thread, so it is a {@link ConcurrentHashMap}; all mutation of session/economy
-     * state is marshalled back to the main thread.
-     */
-    private final Map<UUID, PvpWagerPrompt> pvpWagerPrompts = new ConcurrentHashMap<>();
-
-    /**
      * Task id of the repeating inactivity-sweep scheduler, or {@code -1} when not yet
      * scheduled (e.g. during unit tests that skip the constructor scheduling path).
      */
@@ -258,7 +207,6 @@ public final class BlackjackListener implements Listener {
         this.economyManager = economyManager;
         this.rankManager = rankManager;
         tablesKey      = new NamespacedKey(plugin, TABLES_KEY_NAME);
-        pvpTablesKey   = new NamespacedKey(plugin, PVP_TABLES_KEY_NAME);
         cardDisplayKey = new NamespacedKey(plugin, CARD_DISPLAY_KEY_NAME);
         cardOwnerKey   = new NamespacedKey(plugin, CARD_OWNER_KEY_NAME);
 
@@ -290,171 +238,6 @@ public final class BlackjackListener implements Listener {
 
     /** Associates a button block with its server-table entry and role. */
     private record ButtonRef(TableEntry table, ButtonRole role) {}
-
-    /**
-     * Serialized PvP table entry. Captures both player sides and their buttons.
-     *
-     * @param center    Support-block top-face center location (table surface).
-     * @param backColor Optional RGB integer for the card-back tint, or {@code null}.
-     * @param middleA   Middle-button block location for player side A.
-     * @param facingA   Direction side-A buttons face (away from the wall).
-     * @param middleB   Middle-button block location for player side B (opposite side).
-     * @param facingB   Direction side-B buttons face (always opposite of facingA).
-     */
-    public record PvpTableEntry(
-            Location center,
-            Integer backColor,
-            Location middleA,
-            BlockFace facingA,
-            Location middleB,
-            BlockFace facingB
-    ) {}
-
-    /**
-     * Associates a button block with its PvP table entry, its role, and which
-     * player side it belongs to (0 = side A, 1 = side B).
-     */
-    public record PvpButtonRef(PvpTableEntry table, ButtonRole role, int side) {}
-
-    public record MoneyButtonRef(PvpTableEntry table, int side) {}
-
-    /** Pending chat-wager prompt: the table identity key and side the typed amount applies to. */
-    public record PvpWagerPrompt(String tableKey, int side) {}
-
-    /**
-     * A PvP table's running state: the two seated players, their escrowed money/item stakes,
-     * readiness flags, the head-to-head game once dealt, and the rendered card entities.
-     * One per physical table (keyed by {@link #tableKey} in {@link #pvpSessions}).
-     */
-    public static final class PvpSession {
-        public final PvpTableEntry table;
-        public final String tableKey;
-        public final World world;
-        public final long chunkKey;
-
-        /** The head-to-head game state machine. Tracks phases and in-game actions. */
-        public final BlackjackPvpGame game;
-
-        /** Side occupants; null until a player claims that side. */
-        public UUID playerA;
-        public UUID playerB;
-
-        /** Escrowed money stakes (already debited from balance) per side. */
-        public int moneyStakeA;
-        public int moneyStakeB;
-
-        /** Escrowed wagered items per side. Currently always empty (item-betting is not yet implemented). */
-        public final List<ItemStack> itemStakeA = new ArrayList<>();
-        public final List<ItemStack> itemStakeB = new ArrayList<>();
-
-        /**
-         * Registration flags for the REGISTERING phase: set when a player presses MIDDLE
-         * to claim their seat. Once both are true the game advances to BETTING.
-         */
-        public boolean registeredA;
-        public boolean registeredB;
-
-        /**
-         * Ready-to-confirm flags for the BETTING phase: set when a player presses MIDDLE
-         * to lock in their stake. Once both are true the game advances to CONFIRMING_BETS.
-         */
-        public boolean readyA;
-        public boolean readyB;
-
-        /** Confirmation flags for the CONFIRMING_BETS phase; set one-way (true only). */
-        public boolean confirmedA;
-        public boolean confirmedB;
-
-        /** UUIDs of the spawned card {@link ItemDisplay} entities for this round. */
-        public final List<UUID> displayIds = new ArrayList<>();
-
-        /**
-         * UUIDs of the face-up {@link ItemDisplay} for each card (visible only to the
-         * card's owner during play; revealed to all at round end via {@link #revealAllPvpCards}).
-         */
-        public final List<UUID> faceUpIds = new ArrayList<>();
-
-        /**
-         * UUIDs of the face-down {@link ItemDisplay} for each card (visible to everyone
-         * except the owner during play; hidden from all at round end).
-         */
-        public final List<UUID> faceDownIds = new ArrayList<>();
-
-        public boolean waitingToClear;
-        public int autoClearTaskId = -1;
-
-        public PvpSession(PvpTableEntry table, String tableKey, World world, long chunkKey) {
-            this.table = table;
-            this.tableKey = tableKey;
-            this.world = world;
-            this.chunkKey = chunkKey;
-            this.game = new BlackjackPvpGame();
-        }
-
-        public UUID occupant(int side) {
-            return side == BlackjackPvpGame.SIDE_A ? playerA : playerB;
-        }
-
-        public void setOccupant(int side, UUID id) {
-            if (side == BlackjackPvpGame.SIDE_A) {
-                playerA = id;
-            } else {
-                playerB = id;
-            }
-        }
-
-        public boolean registered(int side) {
-            return side == BlackjackPvpGame.SIDE_A ? registeredA : registeredB;
-        }
-
-        public void setRegistered(int side, boolean value) {
-            if (side == BlackjackPvpGame.SIDE_A) {
-                registeredA = value;
-            } else {
-                registeredB = value;
-            }
-        }
-
-        public boolean ready(int side) {
-            return side == BlackjackPvpGame.SIDE_A ? readyA : readyB;
-        }
-
-        public void setReady(int side, boolean ready) {
-            if (side == BlackjackPvpGame.SIDE_A) {
-                readyA = ready;
-            } else {
-                readyB = ready;
-            }
-        }
-
-        public boolean confirmed(int side) {
-            return side == BlackjackPvpGame.SIDE_A ? confirmedA : confirmedB;
-        }
-
-        public void setConfirmed(int side, boolean value) {
-            if (side == BlackjackPvpGame.SIDE_A) {
-                confirmedA = value;
-            } else {
-                confirmedB = value;
-            }
-        }
-
-        public int moneyStake(int side) {
-            return side == BlackjackPvpGame.SIDE_A ? moneyStakeA : moneyStakeB;
-        }
-
-        public void setMoneyStake(int side, int amount) {
-            if (side == BlackjackPvpGame.SIDE_A) {
-                moneyStakeA = amount;
-            } else {
-                moneyStakeB = amount;
-            }
-        }
-
-        public List<ItemStack> itemStake(int side) {
-            return side == BlackjackPvpGame.SIDE_A ? itemStakeA : itemStakeB;
-        }
-    }
 
     /** Holds a running game plus the entities used to render it. */
     private static final class Session {
@@ -518,31 +301,9 @@ public final class BlackjackListener implements Listener {
 
     // ---- Public API ---------------------------------------------------------
 
-    /** Exposed for {@link BlackjackCommand} to write new table entries. */
-    NamespacedKey pvpTablesKey() {
-        return pvpTablesKey;
-    }
-
-    /**
-     * Returns the live PvP button lookup map.
-     * Package-visible for tests; callers outside this package should use
-     * {@link #pvpButtonMap()} to distinguish PvP buttons from server-table buttons.
-     */
-    public Map<String, PvpButtonRef> pvpButtonMap() {
-        return pvpButtonMap;
-    }
-
-    /**
-     * Returns the live PvP money-betting-button lookup map.
-     * Exposed for test assertions that money buttons are registered to the correct side.
-     */
-    public Map<String, MoneyButtonRef> pvpMoneyButtonMap() {
-        return pvpMoneyButtonMap;
-    }
-
     /**
      * Returns the live server-table button lookup map.
-     * Exposed for test assertions that confirm PvP keys do not leak here.
+     * Exposed for test assertions.
      */
     public Map<String, ButtonRef> buttonMap() {
         return buttonMap;
@@ -615,23 +376,7 @@ public final class BlackjackListener implements Listener {
     public void beginTableRemoval(Player player) {
         pendingRemovals.add(player.getUniqueId());
         player.sendMessage(MM.deserialize(
-                "<yellow>Right-click the <white>MIDDLE</white> button of the server table you want to remove, "
-                        + "or <white>any</white> control button of a PvP table.</yellow>"));
-    }
-
-    /**
-     * Put {@code player} into PvP-table-setup mode for the given optional card-back color.
-     * The next right-click on a wall button anchors side A; the listener then validates
-     * the opposite side's buttons and optional betting infrastructure before persisting.
-     *
-     * @param player    the admin initiating setup
-     * @param backColor optional RGB integer for the card-back tint, or {@code null} for default
-     */
-    public void beginPvpTableSetup(Player player, Integer backColor) {
-        pendingPvpSetups.put(player.getUniqueId(), new PendingPvpSetup(backColor));
-        player.sendMessage(MM.deserialize(
-                "<yellow>Right-click the <white>MIDDLE</white> control button on ONE side of the PvP table "
-                        + "to register it.</yellow>"));
+                "<yellow>Right-click the <white>MIDDLE</white> button of the server table you want to remove.</yellow>"));
     }
 
     /**
@@ -663,34 +408,6 @@ public final class BlackjackListener implements Listener {
 
         // Register the three button locations for fast O(1) click lookup.
         registerButtonsForTable(entry);
-    }
-
-    /**
-     * Spawn a {@link TextDisplay} hologram above the given PvP table centre and
-     * register both sides' button locations in {@link #pvpButtonMap}.
-     * Called on {@link ChunkLoadEvent} and when a new PvP table is placed.
-     */
-    public void spawnPvpTableHologram(PvpTableEntry entry) {
-        Location center = entry.center();
-        World world = center.getWorld();
-        if (world == null) {
-            return;
-        }
-
-        Location hologLoc = center.clone().add(0, HOLOGRAM_HEIGHT, 0);
-        TextDisplay text = (TextDisplay) world.spawnEntity(hologLoc, EntityType.TEXT_DISPLAY);
-        text.text(MM.deserialize(
-                "<gold><bold>PvP Blackjack Table</bold></gold>\n"
-                        + "<aqua>Player vs Player</aqua>"));
-        text.setBillboard(Display.Billboard.CENTER);
-        text.setPersistent(false);
-        text.setDefaultBackground(false);
-        text.setShadowed(true);
-
-        ChunkId cid = chunkId(center.getChunk());
-        tableEntities.computeIfAbsent(cid, k -> new ArrayList<>()).add(text.getUniqueId());
-
-        registerPvpButtonsForTable(entry);
     }
 
     // ---- PDC serialisation --------------------------------------------------
@@ -767,120 +484,6 @@ public final class BlackjackListener implements Listener {
         }
     }
 
-    // ---- PvP table PDC serialisation ----------------------------------------
-
-    /**
-     * Serialises a PvP table entry to a pipe-delimited string.
-     *
-     * <p>Field layout (all fields mandatory):
-     * <pre>
-     * worldName | cx | cy | cz
-     *   | ax | ay | az | facingA
-     *   | bx | by | bz | facingB
-     *   | backColor      (decimal RGB int, or empty string when null)
-     * </pre>
-     * Total: 13 pipe-delimited fields.
-     *
-     * Package-visible so tests can call it directly.
-     */
-    public static String serializePvpTable(PvpTableEntry entry) {
-        String world = entry.center().getWorld().getName();
-        StringBuilder sb = new StringBuilder();
-        sb.append(world)
-          .append('|').append(entry.center().x())
-          .append('|').append(entry.center().y())
-          .append('|').append(entry.center().z())
-          .append('|').append(entry.middleA().getBlockX())
-          .append('|').append(entry.middleA().getBlockY())
-          .append('|').append(entry.middleA().getBlockZ())
-          .append('|').append(entry.facingA().name())
-          .append('|').append(entry.middleB().getBlockX())
-          .append('|').append(entry.middleB().getBlockY())
-          .append('|').append(entry.middleB().getBlockZ())
-          .append('|').append(entry.facingB().name())
-          .append('|').append(entry.backColor() != null ? (entry.backColor() & 0xFFFFFF) : "");
-        return sb.toString();
-    }
-
-    /**
-     * Deserialises a string produced by {@link #serializePvpTable}.
-     * Returns {@code null} if the string is malformed (wrong field count, unparseable
-     * numbers, unknown block face) or the world is not currently loaded.
-     *
-     * <p>Accepts both the current 13-field format and the legacy 17-field format (which
-     * carried barrel/money-button location lists in fields 13–16). The 4 trailing fields
-     * of the old format are silently ignored so already-persisted tables survive a server
-     * upgrade without being orphaned or dropped.
-     *
-     * Package-visible so tests can call it directly.
-     */
-    public static PvpTableEntry deserializePvpTable(String raw) {
-        // Use limit 14 so any extra trailing fields beyond 13 are folded into parts[13].
-        String[] parts = raw.split("\\|", 14);
-        if (parts.length < 13) {
-            return null;
-        }
-        try {
-            World world = Bukkit.getWorld(parts[0]);
-            if (world == null) {
-                return null;
-            }
-            double cx = Double.parseDouble(parts[1]);
-            double cy = Double.parseDouble(parts[2]);
-            double cz = Double.parseDouble(parts[3]);
-            int ax = Integer.parseInt(parts[4]);
-            int ay = Integer.parseInt(parts[5]);
-            int az = Integer.parseInt(parts[6]);
-            BlockFace facingA = BlockFace.valueOf(parts[7]);
-            int bx = Integer.parseInt(parts[8]);
-            int by = Integer.parseInt(parts[9]);
-            int bz = Integer.parseInt(parts[10]);
-            BlockFace facingB = BlockFace.valueOf(parts[11]);
-            Integer backColor = parts[12].isEmpty() ? null : Integer.parseInt(parts[12]);
-            // parts[13] and beyond (if present) are legacy barrel/money-button fields — ignored.
-
-            Location center  = new Location(world, cx, cy, cz);
-            Location middleA = new Location(world, ax, ay, az);
-            Location middleB = new Location(world, bx, by, bz);
-
-            return new PvpTableEntry(center, backColor, middleA, facingA, middleB, facingB);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
-    }
-
-    // ---- PvP button registration --------------------------------------------
-
-    /** Register all six PvP button locations (three per side) in {@link #pvpButtonMap}. */
-    public void registerPvpButtonsForTable(PvpTableEntry entry) {
-        // Side A
-        Location midA   = entry.middleA();
-        Location leftA  = leftButtonLoc(midA, entry.facingA());
-        Location rightA = rightButtonLoc(midA, entry.facingA());
-        pvpButtonMap.put(blockKey(midA),   new PvpButtonRef(entry, ButtonRole.MIDDLE, 0));
-        pvpButtonMap.put(blockKey(leftA),  new PvpButtonRef(entry, ButtonRole.LEFT,   0));
-        pvpButtonMap.put(blockKey(rightA), new PvpButtonRef(entry, ButtonRole.RIGHT,  0));
-        // Side B
-        Location midB   = entry.middleB();
-        Location leftB  = leftButtonLoc(midB, entry.facingB());
-        Location rightB = rightButtonLoc(midB, entry.facingB());
-        pvpButtonMap.put(blockKey(midB),   new PvpButtonRef(entry, ButtonRole.MIDDLE, 1));
-        pvpButtonMap.put(blockKey(leftB),  new PvpButtonRef(entry, ButtonRole.LEFT,   1));
-        pvpButtonMap.put(blockKey(rightB), new PvpButtonRef(entry, ButtonRole.RIGHT,  1));
-    }
-
-    /** Unregister all six PvP button locations for {@code entry} from {@link #pvpButtonMap}. */
-    private void unregisterPvpButtonsForTable(PvpTableEntry entry) {
-        Location midA   = entry.middleA();
-        pvpButtonMap.remove(blockKey(midA));
-        pvpButtonMap.remove(blockKey(leftButtonLoc(midA, entry.facingA())));
-        pvpButtonMap.remove(blockKey(rightButtonLoc(midA, entry.facingA())));
-        Location midB   = entry.middleB();
-        pvpButtonMap.remove(blockKey(midB));
-        pvpButtonMap.remove(blockKey(leftButtonLoc(midB, entry.facingB())));
-        pvpButtonMap.remove(blockKey(rightButtonLoc(midB, entry.facingB())));
-    }
-
     // ---- Button geometry ----------------------------------------------------
 
     /**
@@ -936,11 +539,6 @@ public final class BlackjackListener implements Listener {
                 + ":" + loc.getBlockX()
                 + ":" + loc.getBlockY()
                 + ":" + loc.getBlockZ();
-    }
-
-    /** Returns an unmodifiable view of the active PvP sessions. */
-    public Map<String, PvpSession> pvpSessions() {
-        return Collections.unmodifiableMap(pvpSessions);
     }
 
     /** Register all three button locations for {@code entry} in {@link #buttonMap}. */
@@ -1006,50 +604,6 @@ public final class BlackjackListener implements Listener {
                         return new Location(world, cx, cy, cz);
                     }
                 }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Given side-A's MIDDLE button block and its facing, locates the OPPOSITE side's
-     * (side B's) MIDDLE button {@link Location}, or {@code null} if no valid opposite row
-     * of three wall buttons facing {@code facingB} can be found.
-     *
-     * <p>Geometry: the PvP table is a solid 2×3 (or 3×2) footprint. The two rows of three
-     * control buttons sit on the table's two LONG edges, each facing outward toward its
-     * player. The rows are therefore separated along the table's SHORT (facing) axis. With
-     * {@code facingB = facingA.getOppositeFace()}, side-B's middle button lies at
-     * {@code sideAButton + facingB * (crossDepth + 1)}, where {@code crossDepth} is the
-     * support depth along the facing axis (side-A button is 1 block outside the near support
-     * row, there are {@code crossDepth} support rows, and side-B's button is 1 block outside
-     * the far support row).
-     *
-     * <p>Because {@code findTableCenterFromButton} accepts both 2×3 and 3×2 footprints, the
-     * facing-axis depth may be {@link #TABLE_WIDTH} (2) or {@link #TABLE_DEPTH} (3). We try
-     * both and accept the first candidate whose MIDDLE block plus its {@code leftButtonLoc}/
-     * {@code rightButtonLoc} neighbors (computed with {@code facingB}) are all valid
-     * {@code facingB} wall buttons per {@link #isPvpSideButtonValid}.
-     */
-    public static Location findOppositeMiddleButton(World world, Block sideAButton, BlockFace facingA) {
-        BlockFace facingB = facingA.getOppositeFace();
-        int by = sideAButton.getY();
-        for (int crossDepth : new int[]{TABLE_WIDTH, TABLE_DEPTH}) {
-            int step = crossDepth + 1;
-            int midBX = sideAButton.getX() + facingB.getModX() * step;
-            int midBZ = sideAButton.getZ() + facingB.getModZ() * step;
-            Location middleB = new Location(world, midBX, by, midBZ);
-            Location leftB   = leftButtonLoc(middleB, facingB);
-            Location rightB  = rightButtonLoc(middleB, facingB);
-
-            Block midBlock   = world.getBlockAt(midBX, by, midBZ);
-            Block leftBlock  = world.getBlockAt(leftB.getBlockX(), leftB.getBlockY(), leftB.getBlockZ());
-            Block rightBlock = world.getBlockAt(rightB.getBlockX(), rightB.getBlockY(), rightB.getBlockZ());
-
-            if (isPvpSideButtonValid(midBlock, facingB)
-                    && isPvpSideButtonValid(leftBlock, facingB)
-                    && isPvpSideButtonValid(rightBlock, facingB)) {
-                return middleB;
             }
         }
         return null;
@@ -1173,21 +727,6 @@ public final class BlackjackListener implements Listener {
             spawnTableHologram(entry);
         }
 
-        // --- Load PvP tables ---
-        List<String> pvpTables = pdc.getOrDefault(
-                pvpTablesKey, PersistentDataType.LIST.strings(), List.of());
-        for (String raw : pvpTables) {
-            PvpTableEntry entry = deserializePvpTable(raw);
-            if (entry == null) {
-                plugin.getLogger().warning(
-                        "Blackjack: malformed PvP table entry in chunk PDC (skipping): " + raw);
-                continue;
-            }
-            if (!entry.center().getWorld().equals(chunk.getWorld())) {
-                continue;
-            }
-            spawnPvpTableHologram(entry);
-        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -1197,16 +736,8 @@ public final class BlackjackListener implements Listener {
 
         // Collect the table entries for this chunk so we can unregister their buttons.
         List<TableEntry> entries = collectEntriesForChunk(chunk);
-        // Also collect PvP entries for button unregistration.
-        List<PvpTableEntry> pvpEntries = collectPvpEntriesForChunk(chunk);
 
         removeTableHolograms(cid, entries);
-
-        // Unregister PvP buttons (holograms share the same tableEntities map — they were
-        // already removed in removeTableHolograms via the shared ChunkId list).
-        for (PvpTableEntry pvpEntry : pvpEntries) {
-            unregisterPvpButtonsForTable(pvpEntry);
-        }
 
         // Cancel and remove any active game sessions whose grid lives in this chunk.
         long key = chunk.getChunkKey();
@@ -1220,13 +751,6 @@ public final class BlackjackListener implements Listener {
             }
         }
 
-        // Tear down PvP sessions anchored in this chunk, refunding any un-settled escrow so
-        // wagered money/items are never lost when the chunk unloads mid-round.
-        for (PvpSession pvpSession : new ArrayList<>(pvpSessions.values())) {
-            if (pvpSession.chunkKey == key && pvpSession.world.equals(event.getWorld())) {
-                abortPvpSession(pvpSession, null);
-            }
-        }
     }
 
     /**
@@ -1240,24 +764,6 @@ public final class BlackjackListener implements Listener {
         List<TableEntry> result = new ArrayList<>();
         for (String raw : tables) {
             TableEntry entry = deserializeTable(raw);
-            if (entry != null) {
-                result.add(entry);
-            }
-        }
-        return result;
-    }
-
-    /**
-     * Reads the chunk PDC to collect all deserializable PvpTableEntry objects for the given chunk.
-     * Used so we can unregister PvP button map entries on chunk unload.
-     */
-    private List<PvpTableEntry> collectPvpEntriesForChunk(Chunk chunk) {
-        PersistentDataContainer pdc = chunk.getPersistentDataContainer();
-        List<String> pvpTables = pdc.getOrDefault(
-                pvpTablesKey, PersistentDataType.LIST.strings(), List.of());
-        List<PvpTableEntry> result = new ArrayList<>();
-        for (String raw : pvpTables) {
-            PvpTableEntry entry = deserializePvpTable(raw);
             if (entry != null) {
                 result.add(entry);
             }
@@ -1305,46 +811,14 @@ public final class BlackjackListener implements Listener {
             return;
         }
 
-        // ---- PvP-table setup mode takes precedence --------------------------
-        if (pendingPvpSetups.containsKey(playerId)) {
-            event.setCancelled(true);
-            handlePvpSetup(player, clicked);
-            return;
-        }
-
         // ---- Removal mode takes precedence ----------------------------------
         if (pendingRemovals.contains(playerId)) {
-            // Server tables: only a known MIDDLE button triggers removal.
+            // Only a known MIDDLE button triggers removal.
             ButtonRef ref = buttonMap.get(key);
             if (ref != null && ref.role() == ButtonRole.MIDDLE) {
                 event.setCancelled(true);
                 handleRemoval(player, ref.table());
-                return;
             }
-            // PvP tables: accept ANY of the table's six control buttons. PvP tables have
-            // two MIDDLE buttons (one per side), so the admin should not have to guess
-            // which control to click. The first matching button removes the whole table.
-            PvpButtonRef pvpRef = pvpButtonMap.get(key);
-            if (pvpRef != null) {
-                event.setCancelled(true);
-                handlePvpRemoval(player, pvpRef.table());
-            }
-            return;
-        }
-
-        // ---- PvP money-betting button (opens a wager dialog prompt) -----------
-        MoneyButtonRef money = pvpMoneyButtonMap.get(key);
-        if (money != null) {
-            event.setCancelled(true);
-            promptPvpWager(player, money);
-            return;
-        }
-
-        // ---- PvP gameplay buttons (LEFT/MIDDLE/RIGHT per side) ---------------
-        PvpButtonRef pvpRef = pvpButtonMap.get(key);
-        if (pvpRef != null) {
-            event.setCancelled(true);
-            handlePvpGameplay(player, pvpRef);
             return;
         }
 
@@ -1465,107 +939,6 @@ public final class BlackjackListener implements Listener {
                         + "</yellow> <gray>| Bet:</gray> <yellow>$" + bet + "</yellow>"));
     }
 
-    // ---- PvP setup handler --------------------------------------------------
-
-    /**
-     * Handles the right-click that anchors a PvP table setup.
-     *
-     * <p>Flow:
-     * <ol>
-     *   <li>Validate the clicked block is a wall-mounted button with a valid facing.</li>
-     *   <li>Use {@link #findTableCenterFromButton} to locate the 2×3 footprint.</li>
-     *   <li>Compute side-A's three button locations (left/middle/right).</li>
-     *   <li>Compute the opposite side's (side-B) expected MIDDLE button position and
-     *       validate that it — plus its left and right neighbours — are all wall buttons
-     *       facing the opposite direction.</li>
-     *   <li>Persist to chunk PDC under {@code tweaks:blackjack_pvp_tables} and spawn the
-     *       hologram.</li>
-     * </ol>
-     */
-    private void handlePvpSetup(Player player, Block button) {
-        PendingPvpSetup pending = pendingPvpSetups.remove(player.getUniqueId());
-        Integer backColor = pending.backColor();
-
-        if (!(button.getBlockData() instanceof Switch sw)) {
-            player.sendMessage(MM.deserialize(
-                    "<red>That doesn't look like a wall button. Please right-click a wall-mounted button.</red>"));
-            pendingPvpSetups.put(player.getUniqueId(), pending);
-            return;
-        }
-
-        BlockFace facingA = sw.getFacing();
-        if (facingA == BlockFace.UP || facingA == BlockFace.DOWN) {
-            player.sendMessage(MM.deserialize(
-                    "<red>Please use a wall-mounted button (not floor or ceiling).</red>"));
-            pendingPvpSetups.put(player.getUniqueId(), pending);
-            return;
-        }
-
-        // Compute the table surface centre from the button.
-        Location center = findTableCenterFromButton(button, facingA);
-        if (center == null) {
-            player.sendMessage(MM.deserialize(
-                    "<red>No valid 2x3 block area found for this button. "
-                            + "Ensure a solid 2-wide by 3-deep block area sits beneath the three control buttons.</red>"));
-            return;
-        }
-
-        Location middleA = button.getLocation();
-        World world = button.getWorld();
-
-        // Compute the opposite facing (side B faces the other way).
-        BlockFace facingB = facingA.getOppositeFace();
-
-        // Locate side-B's MIDDLE button across the table's short (facing) axis. The helper
-        // validates that side-B's MIDDLE/LEFT/RIGHT are all wall buttons facing facingB,
-        // trying both the 2×3 and 3×2 facing-axis depths.
-        Location middleB = findOppositeMiddleButton(world, button, facingA);
-        if (middleB == null) {
-            player.sendMessage(MM.deserialize(
-                    "<red>Could not find three valid wall buttons facing "
-                            + facingB.name() + " on the opposite side of the table. "
-                            + "Both long sides must have a row of three wall buttons facing away from the table.</red>"));
-            return;
-        }
-
-        PvpTableEntry entry = new PvpTableEntry(center, backColor,
-                middleA, facingA, middleB, facingB);
-
-        String serialized = serializePvpTable(entry);
-        Chunk chunk = center.getChunk();
-        PersistentDataContainer pdc = chunk.getPersistentDataContainer();
-        List<String> existing = pdc.getOrDefault(pvpTablesKey, PersistentDataType.LIST.strings(), List.of());
-        List<String> updated = new ArrayList<>(existing);
-        updated.add(serialized);
-        pdc.set(pvpTablesKey, PersistentDataType.LIST.strings(), updated);
-
-        spawnPvpTableHologram(entry);
-
-        String colorSuffix = backColor != null
-                ? " <gray>| Back color:</gray> <yellow>#" + String.format("%06X", backColor) + "</yellow>"
-                : "";
-        player.sendMessage(MM.deserialize(
-                "<green>PvP Blackjack table registered!</green> "
-                        + "<gray>Center:</gray> <yellow>"
-                        + String.format("%.1f, %.1f, %.1f", center.x(), center.y(), center.z())
-                        + "</yellow>"
-                        + colorSuffix));
-    }
-
-    /**
-     * Returns true if {@code block} is a button from {@link Tag#BUTTONS} that is
-     * wall-mounted and facing {@code expectedFacing}.
-     */
-    private static boolean isPvpSideButtonValid(Block block, BlockFace expectedFacing) {
-        if (!Tag.BUTTONS.isTagged(block.getType())) {
-            return false;
-        }
-        if (!(block.getBlockData() instanceof Switch sw)) {
-            return false;
-        }
-        return sw.getFacing() == expectedFacing;
-    }
-
     // ---- Removal handler ----------------------------------------------------
 
     private void handleRemoval(Player player, TableEntry table) {
@@ -1595,77 +968,6 @@ public final class BlackjackListener implements Listener {
 
         player.sendMessage(MM.deserialize(
                 "<green>Blackjack table removed.</green>"));
-    }
-
-    /**
-     * Remove a PvP Blackjack table that the admin clicked while in removal mode.
-     *
-     * <p>The matching PDC entry is dropped by <em>identity</em> rather than by exact
-     * serialized-string equality: the existing {@code pvpTablesKey} list is read, every
-     * raw string deserialized, and the entry whose two MIDDLE button block coordinates
-     * (and world) match {@code table} is removed. Matching by identity avoids silent
-     * failures if {@code serializePvpTable(deserializePvpTable(x))} ever drifts from the
-     * original {@code x} (e.g. double or list formatting). Side A and side B middles
-     * together uniquely identify a PvP table.
-     */
-    public void handlePvpRemoval(Player player, PvpTableEntry table) {
-        pendingRemovals.remove(player.getUniqueId());
-
-        // Tear down any live game/escrow for this table before the entry is dropped.
-        PvpSession live = pvpSessions.get(pvpTableKey(table));
-        if (live != null) {
-            abortPvpSession(live, "<red>This PvP Blackjack table was removed. All wagers refunded.</red>");
-        }
-
-        Location center = table.center();
-        Chunk chunk = center.getChunk();
-        PersistentDataContainer pdc = chunk.getPersistentDataContainer();
-
-        // Read / modify / write the PvP table list on the table's CENTER chunk PDC.
-        List<String> existing = pdc.getOrDefault(pvpTablesKey, PersistentDataType.LIST.strings(), List.of());
-        List<String> updated = new ArrayList<>(existing.size());
-        for (String raw : existing) {
-            PvpTableEntry parsed = deserializePvpTable(raw);
-            if (parsed != null && sameTableIdentity(parsed, table)) {
-                continue; // drop the entry that matches the clicked table's identity
-            }
-            updated.add(raw);
-        }
-        pdc.set(pvpTablesKey, PersistentDataType.LIST.strings(), updated);
-
-        // Remove the hologram entity for this specific table. PvP holograms live in the
-        // same tableEntities map as server holograms, so removeHologramNear works as-is.
-        removeHologramNear(center.clone().add(0, HOLOGRAM_HEIGHT, 0), chunkId(chunk));
-
-        // Unregister all six PvP button keys.
-        unregisterPvpButtonsForTable(table);
-
-        player.sendMessage(MM.deserialize(
-                "<green>PvP Blackjack table removed.</green>"));
-    }
-
-    /**
-     * Identity comparison for two PvP table entries. Two entries refer to the same
-     * physical table iff their side-A and side-B MIDDLE button block coordinates match
-     * and they share the same world. Compared by block coordinates (not object identity
-     * or floating-point center) so it is robust across a serialize/deserialize round-trip.
-     */
-    private static boolean sameTableIdentity(PvpTableEntry a, PvpTableEntry b) {
-        Location aWorldAnchor = a.middleA();
-        Location bWorldAnchor = b.middleA();
-        World aw = aWorldAnchor.getWorld();
-        World bw = bWorldAnchor.getWorld();
-        if (aw == null || bw == null || !aw.getName().equals(bw.getName())) {
-            return false;
-        }
-        return sameBlock(a.middleA(), b.middleA()) && sameBlock(a.middleB(), b.middleB());
-    }
-
-    /** True if the two locations share the same integer block coordinates. */
-    private static boolean sameBlock(Location a, Location b) {
-        return a.getBlockX() == b.getBlockX()
-                && a.getBlockY() == b.getBlockY()
-                && a.getBlockZ() == b.getBlockZ();
     }
 
     /**
@@ -1702,847 +1004,6 @@ public final class BlackjackListener implements Listener {
         }
     }
 
-    // ---- PvP gameplay -------------------------------------------------------
-
-    /** Stable per-table identity key for the {@link #pvpSessions} map. */
-    private static String pvpTableKey(PvpTableEntry table) {
-        return blockKey(table.middleA());
-    }
-
-    /** Get the existing session for a table, or create a fresh pre-game lobby. */
-    private PvpSession pvpSessionFor(PvpTableEntry table) {
-        String key = pvpTableKey(table);
-        PvpSession existing = pvpSessions.get(key);
-        if (existing != null) {
-            return existing;
-        }
-        Location center = table.center();
-        PvpSession session = new PvpSession(table, key, center.getWorld(),
-                center.getChunk().getChunkKey());
-        pvpSessions.put(key, session);
-        return session;
-    }
-
-    /**
-     * Verify that {@code player} holds {@code side}, or return {@code false} with a message.
-     * This does NOT assign a seat — seat assignment is handled exclusively by the REGISTERING
-     * phase MIDDLE-button press in {@link #handlePvpMiddle}.
-     */
-    private boolean claimSide(Player player, PvpSession session, int side) {
-        UUID id = player.getUniqueId();
-        UUID occupant = session.occupant(side);
-        if (occupant != null && occupant.equals(id)) {
-            return true;
-        }
-        if (occupant == null) {
-            player.sendMessage(MM.deserialize(
-                    "<red>You haven't registered for this side yet. Press the MIDDLE button first.</red>"));
-        } else {
-            player.sendMessage(MM.deserialize("<red>That side of the table is taken.</red>"));
-        }
-        return false;
-    }
-
-    /**
-     * Opens the Paper Dialog wager prompt for the side whose money button was pressed.
-     * Only the registered occupant of that side may set a wager, and only during the
-     * BETTING phase. Keeps the {@code pvpWagerPrompts} entry so that the test/headless
-     * {@link #applyWager(Player, String)} entry point can still function.
-     */
-    public void promptPvpWager(Player player, MoneyButtonRef money) {
-        PvpSession session = pvpSessionFor(money.table());
-        BlackjackPvpGame.State state = session.game.state();
-        if (state != BlackjackPvpGame.State.BETTING) {
-            if (state == BlackjackPvpGame.State.REGISTERING) {
-                player.sendMessage(MM.deserialize(
-                        "<red>Both players must register first (press MIDDLE) before placing wagers.</red>"));
-            } else {
-                player.sendMessage(MM.deserialize(
-                        "<red>Wagers can only be changed during the betting phase.</red>"));
-            }
-            return;
-        }
-        if (!claimSide(player, session, money.side())) {
-            return;
-        }
-        pvpWagerPrompts.put(player.getUniqueId(), new PvpWagerPrompt(session.tableKey, money.side()));
-        openWagerDialog(player, session, money.side(), null);
-    }
-
-    /**
-     * Opens (or reopens) the Paper Dialog menu for a PvP betting session.
-     *
-     * @param player  The player who must select a bet type or ready up.
-     * @param session The active PvP session for their table.
-     * @param side    0 for side A, 1 for side B.
-     * @param error   Optional red error line shown when reopening after bad input; {@code null}
-     *                on first open.
-     */
-    private void openWagerDialog(Player player, PvpSession session, int side, String error) {
-        showPvpBetMenu(player, session, side, error);
-    }
-
-    /** Primary PvP betting menu with buttons for money, items, and readiness. */
-    private void showPvpBetMenu(Player player, PvpSession session, int side, String error) {
-        try {
-            List<DialogBody> bodyLines = new ArrayList<>();
-            String status = session.ready(side) ? "<green>READY" : "<red>NOT READY";
-            bodyLines.add(DialogBody.plainMessage(MM.deserialize(
-                    "<gray>Status: <white>" + status + "</white></gray>")));
-            bodyLines.add(DialogBody.plainMessage(MM.deserialize(
-                    "<gray>Money Stake: <yellow>$" + session.moneyStake(side) + "</yellow></gray>")));
-            if (error != null) {
-                bodyLines.add(DialogBody.plainMessage(MM.deserialize(error)));
-            }
-
-            ActionButton betMoney = ActionButton.builder(MM.deserialize("<!italic><gold>Bet Money"))
-                    .tooltip(MM.deserialize("<!italic><gray>Open the money wager input."))
-                    .action(DialogAction.customClick((view, audience) -> {
-                        if (audience instanceof Player p) {
-                            showWagerDialog(p, session, side, null);
-                        }
-                    }, ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).build()))
-                    .build();
-
-            ActionButton betItems = ActionButton.builder(MM.deserialize("<!italic><aqua>Bet Items"))
-                    .tooltip(MM.deserialize("<!italic><gray>Open the item escrow GUI (coming soon)."))
-                    .action(DialogAction.customClick((view, audience) -> {
-                        if (audience instanceof Player p) {
-                            p.sendMessage(MM.deserialize("<yellow>Item betting is not yet implemented.</yellow>"));
-                        }
-                    }, ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).build()))
-                    .build();
-
-            String readyLabel = session.ready(side) ? "Unlock" : "Ready";
-            ActionButton ready = ActionButton.builder(MM.deserialize("<!italic><green><bold>" + readyLabel))
-                    .tooltip(MM.deserialize("<!italic><gray>Lock in your stakes and wait for your opponent."))
-                    .action(DialogAction.customClick((view, audience) -> {
-                        if (audience instanceof Player p) {
-                            toggleReady(p, session, side);
-                            // Refresh the menu if the game hasn't advanced to the next phase yet.
-                            if (session.game.state() == BlackjackPvpGame.State.BETTING) {
-                                showPvpBetMenu(p, session, side, null);
-                            }
-                        }
-                    }, ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).build()))
-                    .build();
-
-            ActionButton cancel = ActionButton.builder(MM.deserialize("<!italic><red>Cancel"))
-                    .tooltip(MM.deserialize("<!italic><gray>Close the betting menu."))
-                    .action(DialogAction.customClick((view, audience) -> {
-                        if (audience instanceof Player p) {
-                            pvpWagerPrompts.remove(p.getUniqueId());
-                        }
-                    }, ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).build()))
-                    .build();
-
-            DialogBase base = DialogBase.builder(MM.deserialize("<!italic><gold><bold>PvP Betting Menu"))
-                    .body(bodyLines)
-                    .build();
-
-            Dialog dialog = Dialog.create(b -> b.empty()
-                    .base(base)
-                    .type(DialogType.multiAction(List.of(betMoney, betItems, ready, cancel), cancel, 2)));
-            player.showDialog(dialog);
-        } catch (Throwable ignored) {
-            // Registry-backed API unavailable in MockBukkit.
-        }
-    }
-
-    /** Builds and shows the money-wager input Dialog. */
-    private void showWagerDialog(Player player, PvpSession session, int side, String error) {
-        try {
-            // Available = current balance + any already-escrowed stake (which a new wager refunds).
-            double available = economyManager.getBalance(player.getUniqueId()) + session.moneyStake(side);
-            List<DialogBody> bodyLines = new ArrayList<>();
-            bodyLines.add(DialogBody.plainMessage(MM.deserialize(
-                    "<gray>Your balance: <yellow>" + BalanceCommand.formatBalance(available)
-                    + "</yellow>.</gray>")));
-            if (error != null) {
-                bodyLines.add(DialogBody.plainMessage(MM.deserialize(error)));
-            }
-
-            ActionButton accept = ActionButton.builder(
-                            MM.deserialize("<!italic><green><bold>Set Wager"))
-                    .tooltip(MM.deserialize("<!italic><gray>Confirm the amount and escrow it."))
-                    .action(DialogAction.customClick(
-                            (view, audience) -> {
-                                if (audience instanceof Player p) {
-                                    submitWager(p, view.getText("amount"));
-                                }
-                            },
-                            ClickCallback.Options.builder()
-                                    .uses(ClickCallback.UNLIMITED_USES)
-                                    .build()))
-                    .build();
-
-            ActionButton cancel = ActionButton.builder(
-                            MM.deserialize("<!italic><red><bold>Back"))
-                    .tooltip(MM.deserialize("<!italic><gray>Return to the betting menu."))
-                    .action(DialogAction.customClick(
-                            (view, audience) -> {
-                                if (audience instanceof Player p) {
-                                    showPvpBetMenu(p, session, side, null);
-                                }
-                            },
-                            ClickCallback.Options.builder()
-                                    .uses(ClickCallback.UNLIMITED_USES)
-                                    .build()))
-                    .build();
-
-            DialogBase base = DialogBase.builder(MM.deserialize("<!italic><gold><bold>Set Money Wager"))
-                    .body(bodyLines)
-                    .inputs(List.of(
-                            DialogInput.text("amount",
-                                            MM.deserialize("<!italic><yellow>Amount"))
-                                    .maxLength(12)
-                                    .build()))
-                    .build();
-
-            Dialog dialog = Dialog.create(b -> b.empty()
-                    .base(base)
-                    .type(DialogType.confirmation(accept, cancel)));
-            player.showDialog(dialog);
-        } catch (Throwable ignored) {
-            // Registry-backed API unavailable in MockBukkit.
-        }
-    }
-
-    /**
-     * Called from the dialog Accept button (main thread). Parses and validates the amount;
-     * reopens the dialog with an error message on failure.  On success delegates to
-     * {@link #escrowWager(Player, PvpSession, int, int, int)} and returns to the primary menu.
-     */
-    private void submitWager(Player player, String raw) {
-        UUID id = player.getUniqueId();
-        PvpWagerPrompt prompt = pvpWagerPrompts.get(id);
-        if (prompt == null) {
-            return;
-        }
-        PvpSession session = pvpSessions.get(prompt.tableKey());
-        if (session == null || session.game.state() != BlackjackPvpGame.State.BETTING) {
-            pvpWagerPrompts.remove(id);
-            player.sendMessage(MM.deserialize("<red>That table is no longer accepting wagers.</red>"));
-            return;
-        }
-        String trimmed = raw == null ? "" : raw.trim();
-        int amount;
-        try {
-            amount = Integer.parseInt(trimmed);
-        } catch (NumberFormatException e) {
-            showWagerDialog(player, session, prompt.side(),
-                    "<red>That's not a whole number. Please enter a positive integer.</red>");
-            return;
-        }
-        if (amount <= 0) {
-            showWagerDialog(player, session, prompt.side(),
-                    "<red>Wager must be greater than 0.</red>");
-            return;
-        }
-        int side = prompt.side();
-        if (!id.equals(session.occupant(side))) {
-            pvpWagerPrompts.remove(id);
-            player.sendMessage(MM.deserialize("<red>You no longer hold that side of the table.</red>"));
-            return;
-        }
-        int previous = session.moneyStake(side);
-        double available = economyManager.getBalance(id) + previous;
-        if (available < amount) {
-            showWagerDialog(player, session, side,
-                    "<red>You can't afford $" + amount + ". Available: "
-                    + BalanceCommand.formatBalance(available) + ".</red>");
-            return;
-        }
-        pvpWagerPrompts.remove(id);
-        escrowWager(player, session, side, previous, amount);
-        // Return to the primary betting menu after successful money stake.
-        showPvpBetMenu(player, session, side, null);
-    }
-
-    /**
-     * Shared escrow logic used by both the dialog Accept path ({@link #submitWager}) and the
-     * headless/test entry point ({@link #applyWager(Player, String)}).
-     * Refunds any previous stake, debits the new amount, updates the session, and messages
-     * the player.  Caller is responsible for removing the {@code pvpWagerPrompts} entry and
-     * for all validation (non-null session, correct state, side ownership, affordability).
-     *
-     * @param previous the existing escrowed money stake to refund first (may be 0).
-     * @param amount   the validated positive amount to escrow.
-     */
-    private void escrowWager(Player player, PvpSession session, int side, int previous, int amount) {
-        UUID id = player.getUniqueId();
-        if (previous > 0) {
-            economyManager.addBalance(id, previous);
-        }
-        economyManager.removeBalance(id, amount);
-        session.setMoneyStake(side, amount);
-        player.sendMessage(MM.deserialize("<green>Wager set:</green> <yellow>$" + amount
-                + "</yellow>. <gray>Press the MIDDLE button to ready up.</gray>"));
-    }
-
-    /**
-     * Headless/test entry point: parse, validate, and escrow a money wager from a raw string.
-     * Surfaces validation errors via chat messages (not by reopening a dialog).
-     * Tests call {@code listener.promptPvpWager(player, ref)} then
-     * {@code listener.applyWager(player, "100")} and assert {@code session.moneyStakeA == 100}.
-     */
-    public void applyWager(Player player, String raw) {
-        UUID id = player.getUniqueId();
-        PvpWagerPrompt prompt = pvpWagerPrompts.remove(id);
-        if (prompt == null) {
-            return;
-        }
-        if (raw.equalsIgnoreCase("cancel")) {
-            player.sendMessage(MM.deserialize("<gray>Wager cancelled.</gray>"));
-            return;
-        }
-        int amount;
-        try {
-            amount = Integer.parseInt(raw);
-        } catch (NumberFormatException e) {
-            player.sendMessage(MM.deserialize("<red>That's not a whole number. Wager not set.</red>"));
-            return;
-        }
-        if (amount <= 0) {
-            player.sendMessage(MM.deserialize("<red>Wager must be greater than 0.</red>"));
-            return;
-        }
-        PvpSession session = pvpSessions.get(prompt.tableKey());
-        if (session == null || session.game.state() != BlackjackPvpGame.State.BETTING) {
-            player.sendMessage(MM.deserialize("<red>That table is no longer accepting wagers.</red>"));
-            return;
-        }
-        int side = prompt.side();
-        if (!id.equals(session.occupant(side))) {
-            player.sendMessage(MM.deserialize("<red>You no longer hold that side of the table.</red>"));
-            return;
-        }
-        int previous = session.moneyStake(side);
-        double available = economyManager.getBalance(id) + previous;
-        if (available < amount) {
-            player.sendMessage(MM.deserialize("<red>You can't afford a wager of $" + amount
-                    + ". Your balance is $" + (long) economyManager.getBalance(id) + ".</red>"));
-            return;
-        }
-        escrowWager(player, session, side, previous, amount);
-    }
-
-    /** Route a PvP control-button press to the correct handler. */
-    private void handlePvpGameplay(Player player, PvpButtonRef ref) {
-        PvpSession session = pvpSessionFor(ref.table());
-        switch (ref.role()) {
-            case MIDDLE -> handlePvpMiddle(player, session, ref.side());
-            case LEFT   -> handlePvpAction(player, session, ref.side(), true);
-            case RIGHT  -> handlePvpAction(player, session, ref.side(), false);
-        }
-    }
-
-    /**
-     * MIDDLE button: drives the full pre-game registration pipeline and clears a finished board.
-     *
-     * <pre>
-     * REGISTERING    — both players press MIDDLE to claim seats.
-     *                  Each press plays a confirmation sound + message.
-     *                  When both have registered, game advances to BETTING.
-     * BETTING        — both players press MIDDLE to lock in stakes.
-     *                  Item stakes are captured at this point.
-     *                  When both are ready, game advances to CONFIRMING_BETS and
-     *                  both players see a summary of all escrowed bets.
-     * CONFIRMING_BETS — both players press MIDDLE to confirm the displayed terms.
-     *                  When both confirm, cards are dealt (ACTIVE).
-     * ACTIVE         — gameplay only; MIDDLE does nothing during a live round.
-     * </pre>
-     */
-    private void handlePvpMiddle(Player player, PvpSession session, int side) {
-        // Clear a settled board immediately.
-        if (session.game.isFinished() && session.waitingToClear) {
-            cancelPvpAutoClear(session);
-            clearPvpBoard(session);
-            return;
-        }
-
-        BlackjackPvpGame.State state = session.game.state();
-        if (state == BlackjackPvpGame.State.ACTIVE) {
-            player.sendMessage(MM.deserialize(
-                    "<red>The round is underway — use LEFT to hit, RIGHT to stand.</red>"));
-            return;
-        }
-
-        UUID playerId = player.getUniqueId();
-
-        // --- Phase 0: REGISTERING — claim a seat -----------------------------
-        if (state == BlackjackPvpGame.State.REGISTERING) {
-            UUID occupant = session.occupant(side);
-            int otherSide = side == 0 ? 1 : 0;
-
-            if (occupant != null && !occupant.equals(playerId)) {
-                player.sendMessage(MM.deserialize("<red>That side of the table is already taken.</red>"));
-                return;
-            }
-            if (playerId.equals(session.occupant(otherSide))) {
-                player.sendMessage(MM.deserialize(
-                        "<red>You're already seated on the other side of this table.</red>"));
-                return;
-            }
-
-            // First-time registration for this side.
-            if (occupant == null) {
-                session.setOccupant(side, playerId);
-                session.setRegistered(side, true);
-                player.sendMessage(MM.deserialize(
-                        "<green>Registered!</green> <gray>Waiting for your opponent to register...</gray>"));
-                player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.2f);
-                notifyOpponentRegistered(session, side);
-            } else {
-                // Already registered; idempotent.
-                player.sendMessage(MM.deserialize(
-                        "<gray>You're already registered. Waiting for your opponent...</gray>"));
-            }
-
-            // Both registered — advance to BETTING.
-            if (session.registeredA && session.registeredB) {
-                session.game.setState(BlackjackPvpGame.State.BETTING);
-                messageBoth(session,
-                        "<gold>Both players registered!</gold> <gray>Place your money wager, "
-                        + "then press MIDDLE when ready.</gray>");
-                playBothSounds(session, Sound.BLOCK_NOTE_BLOCK_CHIME, 1.0f, 1.0f);
-            }
-            return;
-        }
-
-        // Require the player to be the registered occupant for phases past REGISTERING.
-        if (!claimSide(player, session, side)) {
-            return;
-        }
-
-        // --- Phase 1: BETTING — lock in stakes --------------------------------
-        if (state == BlackjackPvpGame.State.BETTING) {
-            toggleReady(player, session, side);
-            openWagerDialog(player, session, side, null);
-            return;
-        }
-
-        // --- Phase 2: CONFIRMING_BETS — confirm displayed terms ---------------
-        if (state == BlackjackPvpGame.State.CONFIRMING_BETS) {
-            if (session.confirmed(side)) {
-                player.sendMessage(MM.deserialize(
-                        "<gray>You've already confirmed. Waiting for your opponent...</gray>"));
-                return;
-            }
-            session.setConfirmed(side, true);
-            player.sendMessage(MM.deserialize(
-                    "<green>Confirmed!</green> <gray>Waiting for your opponent...</gray>"));
-            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.6f);
-            if (session.confirmedA && session.confirmedB) {
-                dealPvp(session);
-            }
-        }
-    }
-
-    /**
-     * Toggles the ready status for a player in the BETTING phase. If both players
-     * become ready, the game advances to CONFIRMING_BETS.
-     */
-    private void toggleReady(Player player, PvpSession session, int side) {
-        if (session.ready(side)) {
-            // Allow un-readying so the player can adjust their stake.
-            session.setReady(side, false);
-            player.sendMessage(MM.deserialize(
-                    "<yellow>Stake unlocked. Adjust your wager and press READY again.</yellow>"));
-            return;
-        }
-        session.setReady(side, true);
-        player.sendMessage(MM.deserialize("<green>Stake locked!</green> <gray>$"
-                + session.moneyStake(side) + " money</gray>"));
-        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.4f);
-        notifyOpponentReady(session, side);
-
-        if (session.readyA && session.readyB) {
-            session.game.setState(BlackjackPvpGame.State.CONFIRMING_BETS);
-            announcePvpTerms(session);
-            playBothSounds(session, Sound.BLOCK_NOTE_BLOCK_CHIME, 1.0f, 1.2f);
-        } else {
-            player.sendMessage(MM.deserialize("<gray>Waiting for your opponent to lock in...</gray>"));
-        }
-    }
-
-    /**
-     * Displays the escrowed stakes of both players to confirm before dealing.
-     * Called when entering the CONFIRMING_BETS phase.
-     */
-    private void announcePvpTerms(PvpSession session) {
-        Player a = playerOrNull(session.playerA);
-        Player b = playerOrNull(session.playerB);
-        String nameA = a != null ? a.getName() : "Player A";
-        String nameB = b != null ? b.getName() : "Player B";
-
-        String msg = "<gold>Bets Summary — confirm to deal!</gold>\n"
-                + "<gray> - <white>" + nameA + "</white>: <yellow>$" + session.moneyStakeA
-                + "</yellow> money\n"
-                + "<gray> - <white>" + nameB + "</white>: <yellow>$" + session.moneyStakeB
-                + "</yellow> money\n"
-                + "<yellow>Both players press MIDDLE to confirm and deal!</yellow>";
-        messageBoth(session, msg);
-    }
-
-    /** LEFT (hit) / RIGHT (stand) during a live PvP round. */
-    private void handlePvpAction(Player player, PvpSession session, int side, boolean isHit) {
-        if (session.game.isFinished()) {
-            return;
-        }
-
-        // --- Phase: Pre-deal — LEFT or RIGHT cancels the entire session -------
-        if (session.game.state() != BlackjackPvpGame.State.ACTIVE) {
-            abortPvpSession(session, "<red>The PvP Blackjack session was cancelled. "
-                    + "All wagers have been refunded.</red>");
-            return;
-        }
-
-        if (!player.getUniqueId().equals(session.occupant(side))) {
-            player.sendMessage(MM.deserialize("<red>That's not your side.</red>"));
-            return;
-        }
-        if (isHit) {
-            session.game.hit(side);
-        } else {
-            session.game.stand(side);
-        }
-        if (session.game.isFinished()) {
-            finishPvp(session);
-        } else {
-            redrawPvp(session);
-            int value = side == BlackjackPvpGame.SIDE_A ? session.game.valueA() : session.game.valueB();
-            String label = isHit ? "<green>Hit!</green>" : "<red>Stand.</red>";
-            player.sendMessage(MM.deserialize(label + " <gray>Your hand:</gray> <yellow>"
-                    + value + "</yellow>"));
-        }
-    }
-
-    /**
-     * Deal a fresh head-to-head game once both sides have confirmed and render both hands.
-     */
-    private void dealPvp(PvpSession session) {
-        session.game.dealInitial();
-        renderPvpHands(session);
-
-        messageBoth(session, "<gold>PvP Blackjack!</gold> "
-                + "<gray>Cards dealt. LEFT = Hit, RIGHT = Stand. "
-                + "LEFT or RIGHT before your turn to cancel.</gray>");
-        Player a = playerOrNull(session.playerA);
-        Player b = playerOrNull(session.playerB);
-        if (a != null) {
-            a.sendMessage(MM.deserialize("<gray>Your hand:</gray> <yellow>" + session.game.valueA() + "</yellow>"));
-        }
-        if (b != null) {
-            b.sendMessage(MM.deserialize("<gray>Your hand:</gray> <yellow>" + session.game.valueB() + "</yellow>"));
-        }
-        playBothSounds(session, Sound.BLOCK_NOTE_BLOCK_CHIME, 1.0f, 1.4f);
-    }
-
-    /**
-     * Settle a finished PvP round: distribute money + items per the result, then schedule the
-     * auto-clear. Stakes are zeroed after distribution so cleanup paths never double-refund.
-     */
-    private void finishPvp(PvpSession session) {
-        BlackjackPvpGame.Result result = session.game.result();
-        UUID a = session.playerA;
-        UUID b = session.playerB;
-        int stakeA = session.moneyStakeA;
-        int stakeB = session.moneyStakeB;
-
-        switch (result) {
-            case A_WINS -> {
-                if (a != null) {
-                    economyManager.addBalance(a, stakeA + stakeB);
-                }
-                giveItems(a, session.itemStakeA, session.itemStakeB, session);
-                announceWinner(a, b, stakeB);
-            }
-            case B_WINS -> {
-                if (b != null) {
-                    economyManager.addBalance(b, stakeA + stakeB);
-                }
-                giveItems(b, session.itemStakeB, session.itemStakeA, session);
-                announceWinner(b, a, stakeA);
-            }
-            case PUSH -> {
-                if (a != null) {
-                    economyManager.addBalance(a, stakeA);
-                }
-                if (b != null) {
-                    economyManager.addBalance(b, stakeB);
-                }
-                giveItems(a, session.itemStakeA, List.of(), session);
-                giveItems(b, session.itemStakeB, List.of(), session);
-                messageBoth(session, "<yellow>Push! Both wagers are returned.</yellow>");
-            }
-        }
-
-        session.moneyStakeA = 0;
-        session.moneyStakeB = 0;
-        session.itemStakeA.clear();
-        session.itemStakeB.clear();
-
-        redrawPvp(session);
-        // Reveal all card faces to every online viewer now that the round is over.
-        revealAllPvpCards(session);
-        messageBoth(session, "<gray>Press MIDDLE to clear the board.</gray>");
-
-        session.waitingToClear = true;
-        schedulePvpAutoClear(session);
-    }
-
-    private void announceWinner(UUID winner, UUID loser, int opponentMoney) {
-        Player w = playerOrNull(winner);
-        Player l = playerOrNull(loser);
-        if (w != null) {
-            w.sendMessage(MM.deserialize("<green><bold>You win!</bold></green> <gray>You took</gray> "
-                    + "<yellow>$" + opponentMoney + "</yellow> "
-                    + "<gray>plus your opponent's wagered items.</gray>"));
-        }
-        if (l != null) {
-            l.sendMessage(MM.deserialize("<red>You lost the round and your wager.</red>"));
-        }
-    }
-
-    /**
-     * Give {@code recipient} the combined {@code own} + {@code opponent} item stacks. Inventory
-     * overflow drops at the player; if the recipient is offline, everything drops at the table.
-     */
-    private void giveItems(UUID recipientId, List<ItemStack> own, List<ItemStack> opponent,
-                           PvpSession session) {
-        List<ItemStack> all = new ArrayList<>(own.size() + opponent.size());
-        all.addAll(own);
-        all.addAll(opponent);
-        if (all.isEmpty()) {
-            return;
-        }
-        Player recipient = playerOrNull(recipientId);
-        if (recipient != null) {
-            var leftover = recipient.getInventory().addItem(all.toArray(new ItemStack[0]));
-            for (ItemStack drop : leftover.values()) {
-                recipient.getWorld().dropItemNaturally(recipient.getLocation(), drop);
-            }
-        } else {
-            Location center = session.table.center();
-            World world = center.getWorld();
-            if (world != null) {
-                for (ItemStack drop : all) {
-                    world.dropItemNaturally(center, drop);
-                }
-            }
-        }
-    }
-
-    /** Refund a single side's un-settled escrow (money + items), then clear it. */
-    private void refundSide(PvpSession session, int side) {
-        UUID id = session.occupant(side);
-        int money = session.moneyStake(side);
-        if (money > 0 && id != null) {
-            economyManager.addBalance(id, money);
-        }
-        session.setMoneyStake(side, 0);
-        List<ItemStack> items = session.itemStake(side);
-        if (!items.isEmpty()) {
-            giveItems(id, new ArrayList<>(items), List.of(), session);
-            items.clear();
-        }
-    }
-
-    /**
-     * Abort a session entirely: refund any un-settled escrow on both sides, remove displays,
-     * optionally message both players, and drop the session.
-     */
-    private void abortPvpSession(PvpSession session, String reason) {
-        cancelPvpAutoClear(session);
-        refundSide(session, BlackjackPvpGame.SIDE_A);
-        refundSide(session, BlackjackPvpGame.SIDE_B);
-        removePvpDisplays(session);
-        if (reason != null) {
-            messageBoth(session, reason);
-        }
-        pvpSessions.remove(session.tableKey);
-    }
-
-    /** Tear down a finished board (stakes already settled) without refunding. */
-    private void clearPvpBoard(PvpSession session) {
-        removePvpDisplays(session);
-        pvpSessions.remove(session.tableKey);
-    }
-
-    private void schedulePvpAutoClear(PvpSession session) {
-        session.autoClearTaskId = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            PvpSession current = pvpSessions.get(session.tableKey);
-            if (current == session && session.waitingToClear) {
-                removePvpDisplays(session);
-                pvpSessions.remove(session.tableKey);
-            }
-        }, AUTO_CLEAR_TICKS).getTaskId();
-    }
-
-    private void cancelPvpAutoClear(PvpSession session) {
-        if (session.autoClearTaskId != -1) {
-            Bukkit.getScheduler().cancelTask(session.autoClearTaskId);
-            session.autoClearTaskId = -1;
-        }
-    }
-
-    /** Handle a quitting player's involvement in any PvP table. */
-    private void handlePvpQuit(UUID id) {
-        for (PvpSession session : new ArrayList<>(pvpSessions.values())) {
-            int side;
-            if (id.equals(session.playerA)) {
-                side = BlackjackPvpGame.SIDE_A;
-            } else if (id.equals(session.playerB)) {
-                side = BlackjackPvpGame.SIDE_B;
-            } else {
-                continue;
-            }
-            if (session.game.state() != BlackjackPvpGame.State.ACTIVE) {
-                // Pre-game: refund just this side and vacate the seat.
-                refundSide(session, side);
-                session.setOccupant(side, null);
-                session.setRegistered(side, false);
-                session.setReady(side, false);
-                session.setConfirmed(side, false);
-                if (session.playerA == null && session.playerB == null) {
-                    cancelPvpAutoClear(session);
-                    removePvpDisplays(session);
-                    pvpSessions.remove(session.tableKey);
-                }
-            } else if (!session.waitingToClear) {
-                // Mid-round: a fair settlement isn't possible — refund both and abort.
-                abortPvpSession(session, "<red>The PvP Blackjack round was cancelled because a "
-                        + "player left. All wagers refunded.</red>");
-            } else {
-                // Already settled, just clearing the board.
-                cancelPvpAutoClear(session);
-                removePvpDisplays(session);
-                pvpSessions.remove(session.tableKey);
-            }
-        }
-        pvpWagerPrompts.remove(id);
-    }
-
-    // ---- PvP rendering ------------------------------------------------------
-
-    /** Render both hands flat on the table surface, each oriented toward its own seat. */
-    private void renderPvpHands(PvpSession session) {
-        BlackjackPvpGame game = session.game;
-        if (game.state() != BlackjackPvpGame.State.ACTIVE) {
-            return;
-        }
-        Location center = session.table.center();
-        double anchorY = center.y() + TABLE_CARD_HEIGHT;
-        // Pass each hand's owner UUID so per-player visibility can be applied.
-        renderPvpHand(session, center, anchorY, game.handA(), session.table.facingA(), session.playerA);
-        renderPvpHand(session, center, anchorY, game.handB(), session.table.facingB(), session.playerB);
-    }
-
-    /**
-     * Render one side's hand. The seat sits in the {@code facing} direction from the table
-     * centre; cards are placed {@link #PLAYER_Z_OFFSET} toward that seat and spread along the
-     * horizontal axis perpendicular to {@code facing}.
-     *
-     * @param ownerId UUID of the player who owns this hand (may be null if offline); used
-     *                to apply per-player card visibility (owner sees face-up, others see back).
-     */
-    private void renderPvpHand(PvpSession session, Location center, double anchorY,
-                               List<Card> hand, BlockFace facing, UUID ownerId) {
-        int size = hand.size();
-        if (size == 0) {
-            return;
-        }
-        double seatX = facing.getModX() * PLAYER_Z_OFFSET;
-        double seatZ = facing.getModZ() * PLAYER_Z_OFFSET;
-        // The two PvP seats sit on the table's 3-long sides facing each other across the
-        // 2-wide axis. The axis perpendicular to 'facing' is therefore the 3-wide axis —
-        // the correct spread direction so cards fan along the long edge.
-        // For NORTH/SOUTH: crossX = ±1, crossZ = 0 (spreads along X, the wide axis).
-        // For EAST/WEST:   crossX = 0,  crossZ = ±1 (spreads along Z, the wide axis).
-        int crossX = -facing.getModZ();
-        int crossZ = facing.getModX();
-        double totalWidth = (size - 1) * CARD_SPACING;
-        Quaternionf rotation = flatCardRotationForFacing(facing);
-        for (int i = 0; i < size; i++) {
-            double off = -totalWidth / 2.0 + i * CARD_SPACING;
-            Location cardLoc = new Location(center.getWorld(),
-                    center.x() + seatX + crossX * off,
-                    anchorY,
-                    center.z() + seatZ + crossZ * off);
-            spawnPvpCard(session, cardLoc, hand.get(i), rotation, ownerId);
-        }
-    }
-
-    /**
-     * Spawn a face-up and a face-down {@link ItemDisplay} for one PvP card at the same
-     * location. The owner sees only the face-up copy; all other online players (opponent
-     * and spectators) see only the face-down copy. Both UUIDs are tracked for cleanup.
-     *
-     * <p>If {@code ownerId} is null (owner offline), every viewer sees the face-down copy.
-     *
-     * <p>Known limitation: a player who joins the server mid-round after cards are spawned
-     * will not have had {@code hideEntity} applied and may briefly see overlapping displays
-     * until the next redraw.
-     *
-     * @param ownerId UUID of the player who owns this hand; may be null.
-     */
-    private void spawnPvpCard(PvpSession session, Location loc, Card card,
-                              Quaternionf rotation, UUID ownerId) {
-        World world = session.world;
-        Integer backColor = session.table.backColor();
-
-        // Spawn the face-up display (visible to the card owner only).
-        ItemDisplay faceUp = (ItemDisplay) world.spawnEntity(loc, EntityType.ITEM_DISPLAY);
-        faceUp.setItemStack(CardItemFactory.createCardItem(card, false, backColor));
-        configurePvpDisplay(faceUp, rotation, session, ownerId);
-        session.faceUpIds.add(faceUp.getUniqueId());
-
-        // Spawn the face-down display (visible to everyone except the owner).
-        ItemDisplay faceDown = (ItemDisplay) world.spawnEntity(loc, EntityType.ITEM_DISPLAY);
-        faceDown.setItemStack(CardItemFactory.createCardItem(card, true, backColor));
-        configurePvpDisplay(faceDown, rotation, session, ownerId);
-        session.faceDownIds.add(faceDown.getUniqueId());
-
-        // Apply initial per-viewer visibility.
-        Player owner = ownerId != null ? playerOrNull(ownerId) : null;
-        for (Player viewer : Bukkit.getOnlinePlayers()) {
-            if (viewer.equals(owner)) {
-                // Owner sees face-up; hide the face-down copy.
-                try { viewer.hideEntity(plugin, faceDown); } catch (Throwable ignored) {} // MockBukkit fix
-            } else {
-                // Everyone else sees face-down; hide the face-up copy.
-                try { viewer.hideEntity(plugin, faceUp); } catch (Throwable ignored) {} // MockBukkit fix
-            }
-        }
-    }
-
-    /**
-     * Apply shared {@link ItemDisplay} configuration to a PvP card entity: FIXED billboard
-     * and transform, 0.4x scale, non-persistent, {@code cardDisplayKey} PDC tag, and
-     * optional {@code cardOwnerKey} PDC string. Also adds the entity UUID to
-     * {@code session.displayIds} so {@link #removePvpDisplays} picks it up.
-     */
-    private void configurePvpDisplay(ItemDisplay display, Quaternionf rotation,
-                                     PvpSession session, UUID ownerId) {
-        try {
-            display.setBillboard(Display.Billboard.FIXED);
-        } catch (Throwable ignored) {} // MockBukkit fix
-        display.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.FIXED);
-        display.setTransformation(new Transformation(
-                new Vector3f(),
-                rotation,
-                new Vector3f(0.4f, 0.4f, 0.4f),
-                new Quaternionf()));
-        display.setPersistent(false);
-        PersistentDataContainer pdc = display.getPersistentDataContainer();
-        pdc.set(cardDisplayKey, PersistentDataType.BOOLEAN, true);
-        if (ownerId != null) {
-            pdc.set(cardOwnerKey, PersistentDataType.STRING, ownerId.toString());
-        }
-        session.displayIds.add(display.getUniqueId());
-    }
-
     /**
      * Flat-on-table rotation that reads upright from the seat in direction {@code facing}.
      *
@@ -2569,91 +1030,6 @@ public final class BlackjackListener implements Listener {
             default    -> 0f;
         };
         return new Quaternionf().rotateY(yaw).rotateX((float) (-Math.PI / 2));
-    }
-
-    private void redrawPvp(PvpSession session) {
-        removePvpDisplays(session);
-        renderPvpHands(session);
-    }
-
-    private void removePvpDisplays(PvpSession session) {
-        for (UUID id : session.displayIds) {
-            var entity = Bukkit.getEntity(id);
-            if (entity instanceof ItemDisplay) {
-                entity.remove();
-            }
-        }
-        session.displayIds.clear();
-        session.faceUpIds.clear();
-        session.faceDownIds.clear();
-    }
-
-    /**
-     * Reveal the true card faces to all online viewers at round end. For every online player:
-     * show each face-up entity (owner's real card) and hide each face-down entity (the backs),
-     * so everybody — both players and spectators — sees the final hands face-up.
-     */
-    private void revealAllPvpCards(PvpSession session) {
-        for (Player viewer : Bukkit.getOnlinePlayers()) {
-            for (UUID id : session.faceUpIds) {
-                var entity = Bukkit.getEntity(id);
-                if (entity != null) {
-                    try { viewer.showEntity(plugin, entity); } catch (Throwable ignored) {} // MockBukkit fix
-                }
-            }
-            for (UUID id : session.faceDownIds) {
-                var entity = Bukkit.getEntity(id);
-                if (entity != null) {
-                    try { viewer.hideEntity(plugin, entity); } catch (Throwable ignored) {} // MockBukkit fix
-                }
-            }
-        }
-    }
-
-    // ---- PvP helpers --------------------------------------------------------
-
-    private static Player playerOrNull(UUID id) {
-        return id == null ? null : Bukkit.getPlayer(id);
-    }
-
-    private void messageBoth(PvpSession session, String miniMessage) {
-        Player a = playerOrNull(session.playerA);
-        Player b = playerOrNull(session.playerB);
-        if (a != null) {
-            a.sendMessage(MM.deserialize(miniMessage));
-        }
-        if (b != null) {
-            b.sendMessage(MM.deserialize(miniMessage));
-        }
-    }
-
-    private void notifyOpponentReady(PvpSession session, int readiedSide) {
-        int other = readiedSide == 0 ? 1 : 0;
-        Player opponent = playerOrNull(session.occupant(other));
-        if (opponent != null) {
-            opponent.sendMessage(MM.deserialize("<gray>Your opponent has locked in their stake.</gray>"));
-        }
-    }
-
-    private void notifyOpponentRegistered(PvpSession session, int registeredSide) {
-        int other = registeredSide == 0 ? 1 : 0;
-        Player opponent = playerOrNull(session.occupant(other));
-        if (opponent != null) {
-            opponent.sendMessage(MM.deserialize("<gray>Your opponent has registered at the table.</gray>"));
-            opponent.playSound(opponent.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 1.2f);
-        }
-    }
-
-    /** Play a sound at each seated player's location. */
-    private void playBothSounds(PvpSession session, Sound sound, float volume, float pitch) {
-        Player a = playerOrNull(session.playerA);
-        Player b = playerOrNull(session.playerB);
-        if (a != null) {
-            a.playSound(a.getLocation(), sound, volume, pitch);
-        }
-        if (b != null) {
-            b.playSound(b.getLocation(), sound, volume, pitch);
-        }
     }
 
     // ---- Dealer Mannequin geometry -----------------------------------------
@@ -2813,7 +1189,6 @@ public final class BlackjackListener implements Listener {
         UUID id = event.getPlayer().getUniqueId();
         // Cancel pending setup/removal modes.
         pendingSetups.remove(id);
-        pendingPvpSetups.remove(id);
         pendingRemovals.remove(id);
         // Cancel any active session.
         Session session = sessions.remove(id);
@@ -2821,8 +1196,6 @@ public final class BlackjackListener implements Listener {
             cancelAutoClear(session);
             removeDisplays(session);
         }
-        // Handle any PvP table the player was seated at.
-        handlePvpQuit(id);
     }
 
     /**
@@ -2863,28 +1236,6 @@ public final class BlackjackListener implements Listener {
                 }
             }
         }
-
-        // Sweep idle PvP rounds.
-        for (PvpSession pvpSession : new ArrayList<>(pvpSessions.values())) {
-            if (pvpSession.game.isFinished() || pvpSession.waitingToClear) {
-                continue;
-            }
-
-            long idle = now - pvpSession.game.lastInteractionTime();
-            if (pvpSession.game.state() == BlackjackPvpGame.State.ACTIVE) {
-                // Active game: 10-minute timeout.
-                if (idle > INACTIVITY_TIMEOUT_MS) {
-                    abortPvpSession(pvpSession, "<red>Your PvP Blackjack round was ended due to "
-                            + "10 minutes of inactivity. All wagers refunded.</red>");
-                }
-            } else {
-                // Setup phase: 3-minute timeout.
-                if (idle > 3L * 60L * 1000L) {
-                    abortPvpSession(pvpSession, "<red>The PvP Blackjack setup was cancelled due to "
-                            + "3 minutes of inactivity. All wagers refunded.</red>");
-                }
-            }
-        }
     }
 
     /** Called from {@code Tweaks#onDisable} to guarantee no displays survive a stop. */
@@ -2913,18 +1264,6 @@ public final class BlackjackListener implements Listener {
         }
         tableEntities.clear();
         buttonMap.clear();
-        pvpButtonMap.clear();
-
-        // Refund any in-flight PvP escrow and remove PvP card displays.
-        for (PvpSession session : new ArrayList<>(pvpSessions.values())) {
-            cancelPvpAutoClear(session);
-            refundSide(session, BlackjackPvpGame.SIDE_A);
-            refundSide(session, BlackjackPvpGame.SIDE_B);
-            removePvpDisplays(session);
-        }
-        pvpSessions.clear();
-        pvpMoneyButtonMap.clear();
-        pvpWagerPrompts.clear();
     }
 
     /** Cancel the session's auto-clear task if one is scheduled. */

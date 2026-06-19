@@ -774,21 +774,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("- Left: Hit, Middle: Start/Clear, Right: Stand."),
                 green("Dealer Mannequin: celebrates or mourns at game end."),
                 red("Requirement: 'dqc.cards' resource pack.")
-        ), Material.GREEN_WOOL, 33, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack_pvp", "blackjack_mechanics")));
-
-        articles.add(new HelpArticle("blackjack_pvp", "Blackjack (PvP)", List.of(
-                gray("Head-to-head Blackjack for two human players."),
-                white("Each player takes one side of a dedicated PvP table."),
-                aqua("Workflow:"),
-                white("1. Claim: click MIDDLE button on an empty side."),
-                white("2. Wager: click money button for a dialog prompt,"),
-                white("   and/or place items on your side's barrel."),
-                red("   (Shelves lock to opponents on claim; to all on start)"),
-                white("3. Ready: both players click MIDDLE to ready up,"),
-                white("   then click again to confirm final stakes."),
-                white("4. Play: only your own cards are visible face-up."),
-                gold("Winner takes both stakes; cards revealed at end.")
-        ), Material.PLAYER_HEAD, 34, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack", "blackjack_mechanics")));
+        ), Material.GREEN_WOOL, 33, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack_mechanics")));
 
         articles.add(new HelpArticle("blackjack_mechanics", "Blackjack Mechanics", List.of(
                 gray("Technical details for all Blackjack tables."),
@@ -798,9 +784,9 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("Deck: standard 52-card, reshuffled every game."),
                 gold("Admin Setup:"),
                 white("- Footprint: solid 2×3 area (no carpet required)."),
-                white("- Registration: /blackjack <createtable|createpvptable>"),
+                white("- Registration: /blackjack createtable <bet> [hexColor]"),
                 white("- Card Backs: optional [hexColor] for custom tints.")
-        ), Material.KNOWLEDGE_BOOK, 35, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack", "blackjack_pvp")));
+        ), Material.KNOWLEDGE_BOOK, 35, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack")));
 
         return new HelpCategory("minigames", "Minigames", articles, Material.TARGET, 32, ColorUtil.HELP_GRAD_MINIGAMES);
     }

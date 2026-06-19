@@ -2,7 +2,7 @@ name: Tweaks
 version: '$version'
 
 main: me.beeliebub.tweaks.Tweaks
-api-version: '26.1.1'
+api-version: '26.2'
 load: POSTWORLD
 
 commands:
@@ -55,7 +55,7 @@ commands:
     description: Whack an Andrew minigame admin commands
   blackjack:
     description: Admin commands to create and remove in-world Blackjack tables via button-linking.
-    usage: /blackjack <createtable <bet> [hexColor]|createpvptable [hexColor]|removetable>
+    usage: /blackjack <createtable <bet> [hexColor]|removetable>
   more:
     description: Maximize the stack size of the held item
   condense:

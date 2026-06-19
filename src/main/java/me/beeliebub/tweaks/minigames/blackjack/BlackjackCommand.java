@@ -23,9 +23,6 @@ import java.util.List;
  *       the admin right-clicks the middle control button to finalize the table. The optional
  *       {@code hexColor} sets the card-back tint for every card rendered at this table. Accepted
  *       forms: {@code RRGGBB}, {@code #RRGGBB}, or a plain decimal integer (e.g. {@code 16744448}).</li>
- *   <li>{@code /blackjack createpvptable [hexColor]} — begins the PvP-table setup flow;
- *       the admin right-clicks the MIDDLE button on ONE side of the table. The listener
- *       auto-detects the opposing side's buttons and optional betting shelves.</li>
  *   <li>{@code /blackjack removetable} — begins the removal flow; the admin right-clicks the
  *       middle button of the target table to remove it.</li>
  * </ul>
@@ -62,9 +59,8 @@ public final class BlackjackCommand implements CommandExecutor, TabCompleter {
         }
 
         return switch (args[0].toLowerCase()) {
-            case "createtable"    -> handleCreateTable(player, label, args);
-            case "createpvptable" -> handleCreatePvpTable(player, label, args);
-            case "removetable"    -> handleRemoveTable(player);
+            case "createtable" -> handleCreateTable(player, label, args);
+            case "removetable" -> handleRemoveTable(player);
             default -> {
                 sendUsage(player, label);
                 yield true;
@@ -130,42 +126,6 @@ public final class BlackjackCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private boolean handleCreatePvpTable(Player player, String label, String[] args) {
-        if (!player.hasPermission(Permissions.BLACKJACK_CREATETABLE)) {
-            player.sendMessage(MM.deserialize("<red>You do not have permission to create Blackjack tables.</red>"));
-            return true;
-        }
-
-        // Optional second argument: card-back hex color. Same parsing as createtable.
-        Integer backColor = null;
-        if (args.length >= 2) {
-            String colorArg = args[1].startsWith("#") ? args[1].substring(1) : args[1];
-            try {
-                if (colorArg.matches("[0-9A-Fa-f]{1,6}")) {
-                    backColor = Integer.parseUnsignedInt(colorArg, 16) & 0xFFFFFF;
-                } else {
-                    backColor = Integer.parseUnsignedInt(colorArg) & 0xFFFFFF;
-                }
-            } catch (NumberFormatException e) {
-                player.sendMessage(MM.deserialize(
-                        "<red>Invalid color. Use a hex value like <yellow>FF8800</yellow>"
-                                + " or <yellow>#FF8800</yellow>.</red>"));
-                return true;
-            }
-        }
-
-        listener.beginPvpTableSetup(player, backColor);
-        String colorSuffix = backColor != null
-                ? " <gray>| Back color:</gray> <yellow>#" + String.format("%06X", backColor) + "</yellow>"
-                : "";
-        player.sendMessage(MM.deserialize(
-                "<green>PvP table setup started!</green> "
-                        + "<gray>Right-click the</gray> <yellow>middle control button</yellow> "
-                        + "<gray>on ONE side of the table to finalize.</gray>"
-                        + colorSuffix));
-        return true;
-    }
-
     private boolean handleRemoveTable(Player player) {
         if (!player.hasPermission(Permissions.BLACKJACK_REMOVETABLE)) {
             player.sendMessage(MM.deserialize("<red>You do not have permission to remove Blackjack tables.</red>"));
@@ -187,13 +147,9 @@ public final class BlackjackCommand implements CommandExecutor, TabCompleter {
                                                 @NotNull String label, @NotNull String[] args) {
         if (args.length == 1) {
             List<String> suggestions = new ArrayList<>();
-            if (sender.hasPermission(Permissions.BLACKJACK_CREATETABLE)) {
-                if ("createtable".startsWith(args[0].toLowerCase())) {
-                    suggestions.add("createtable");
-                }
-                if ("createpvptable".startsWith(args[0].toLowerCase())) {
-                    suggestions.add("createpvptable");
-                }
+            if (sender.hasPermission(Permissions.BLACKJACK_CREATETABLE)
+                    && "createtable".startsWith(args[0].toLowerCase())) {
+                suggestions.add("createtable");
             }
             if (sender.hasPermission(Permissions.BLACKJACK_REMOVETABLE)
                     && "removetable".startsWith(args[0].toLowerCase())) {
@@ -213,12 +169,6 @@ public final class BlackjackCommand implements CommandExecutor, TabCompleter {
             return List.of("FF0000", "00FF00", "0000FF", "FF8800", "8800FF");
         }
 
-        if (args.length == 2 && args[0].equalsIgnoreCase("createpvptable")
-                && sender.hasPermission(Permissions.BLACKJACK_CREATETABLE)) {
-            // Only a color arg for PvP tables — no bet.
-            return List.of("FF0000", "00FF00", "0000FF", "FF8800", "8800FF");
-        }
-
         return Collections.emptyList();
     }
 
@@ -227,6 +177,6 @@ public final class BlackjackCommand implements CommandExecutor, TabCompleter {
     private static void sendUsage(Player player, String label) {
         player.sendMessage(MM.deserialize(
                 "<gray>Usage:</gray> <yellow>/" + label
-                        + " <createtable <bet> [hexColor]|createpvptable [hexColor]|removetable></yellow>"));
+                        + " <createtable <bet> [hexColor]|removetable></yellow>"));
     }
 }
