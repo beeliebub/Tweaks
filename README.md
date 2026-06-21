@@ -54,6 +54,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Spawn Egg Restrictions](#spawn-egg-restrictions)
 - [Admin Tools](#admin-tools)
   - [Block Log](#block-log)
+  - [Death Inventory](#death-inventory)
   - [Display Chests](#display-chests)
   - [Item Editing](#item-editing)
   - [Chest GUI Copy](#chest-gui-copy)
@@ -372,7 +373,7 @@ Quality Silk Touch is **deterministic**: using a quality silk shovel on gravel w
 
 ### Nicknames
 
-Set a custom display name with color support using `&` color codes and hex colors.
+Set a custom display name with color support using `&` color codes and hex codes.
 
 | Command | What it does |
 |---|---|
@@ -509,6 +510,7 @@ Players in the tab list are automatically sorted by their current world profile 
 | `jass:pi` | **[Pi]** (light purple) | Pi (4th) |
 
 Any other world falls back to the **[Survival]** tag. Tags and sorting update automatically when you change worlds or profiles.
+
 ### Help Menu
 
 A comprehensive, interactive help system is available to guide you through the server's features. The entire system — including the category menu and individual articles — is rendered via **Paper Dialogs** (clickable GUIs) for a seamless, immersive experience.
@@ -719,6 +721,22 @@ A lightweight chest-audit system: every time a player adds or removes items from
 - Ender chests and shulker boxes are **not** tracked (per-player or portable; no useful audit value).
 - Logs persist as long as the chunk does — destroying a chest does not erase its prior history.
 
+### Death Inventory
+
+Browse and restore player inventories captured at the exact moment of death. All 41 item slots (36 main + 4 armor + 1 off-hand) are saved to a YAML file under `plugins/Tweaks/data/deathinventories/<uuid>/` when a player dies.
+
+| Command | Permission | What it does |
+|---|---|---|
+| `/deathinventory <player> list` | `tweaks.admin.deathinventory` | List all saved records for the player (newest first), with human-readable dates. |
+| `/deathinventory <player> <id>` | `tweaks.admin.deathinventory` | Open a 54-slot GUI showing the captured inventory. Click any item to remove it from the view and receive it yourself. |
+| `/deathinventory <player> <id> restore` | `tweaks.admin.deathinventory` | Fully restore all saved slots to the online target player. |
+
+Alias: `/di`.
+
+**Restore behaviour**: slots are set one-by-one; the target's current inventory is overwritten slot-for-slot. Both admin and target player must be online to perform a restore. The target receives an in-chat notification.
+
+**Retention**: records older than **30 days** are deleted on plugin startup. Empty player directories are also pruned to keep the data folder tidy.
+
 ### Display Chests
 
 Render a floating preview of chest contents as a non-solid `ItemDisplay` entity.
@@ -827,6 +845,7 @@ The standard casino experience. Play against an automated dealer at tables with 
 - **Rules**: Standard 52-card deck (reshuffled every game); Dealer stands on all 17s; Blackjack pays 3:2.
 - **Dealer Mannequin**: A 'LimeLush' visual mannequin appears on the dealer side at game end. It celebrates on dealer wins and performs a death animation on player wins.
 - **Rakeback**: Losing hands grant a small percentage of the bet back, based on your [Rank](#ranks).
+- **Free/Practice Tables**: Admins can create tables with **bet 0** (use `free` or `0` as the bet argument). These tables display **"Bet: FREE"** on the hologram, perform no currency transfers, and skip rakeback entirely — ideal for learning the game.
 
 #### General Mechanics
 
@@ -842,6 +861,7 @@ Admins can build and register Blackjack tables in the world.
 - **Footprint**: A table must be a solid **2×3** (or 3×2) block area (e.g., stone, wood, etc.). No carpet is required.
 - **Controls**: Three wall-mounted buttons (LEFT/MIDDLE/RIGHT) must be placed on one of the 3-long sides.
 - **Registration**: Stand near the table and run `/blackjack createtable <bet> [hexColor]`, then right-click the **MIDDLE** button.
+- **Bet**: Use any positive integer for a currency-backed table, or `0`/`free` for a no-stakes practice table.
 - **Card Backs**: The optional `[hexColor]` argument (e.g., `#FF8800` or `FF8800`) sets a custom tint for card backs at that table.
 
 ### Resource Hunt
@@ -881,7 +901,7 @@ While inside the active resource world, a **green boss bar** shows your progress
 **Protection & Anti-Exploit**:
 - **Disallowed Items**: Traveling **into** a resource world via `/resource`, `/back`, or `/tpa` fails if you carry restricted items (managed in `resource_hunt_items.yml`).
 - **Anti-recount**: Items counted toward progress (for collect, smelt, enchant, and craft) carry an invisible PDC tag and won't be counted again. This tag is removed when you bring items out of the resource world.
-- **Nether Safety**: The plugin generates a **5x5 bedrock platform** at Y=64 if no safe landing is found in the Nether resource world.
+- **Nether Safety**: The plugin generates a **5×5 bedrock platform** at Y=64 if no safe landing is found in the Nether resource world. A ring of **Nether Brick Fence** posts surrounds the platform perimeter at Y=65, acting as a guardrail to prevent players from immediately falling off the edge.
 
 **Configuration** (`plugins/Tweaks/resource_hunt.yml`):
 Tasks are grouped by world and category. Each entry is either a bare amount (multiplier defaults to `2.0`) or `"<amount>:<multiplier>"`.
@@ -979,12 +999,16 @@ Flags control what non-members can do in a region. Rules can target specific gro
 
 - **Defaults**: If `[name]` is omitted, it defaults to the region you are currently standing in.
 - **Targets**: `owner`, `manager`, `member`, `default` (everyone), or a permission group name (e.g. `admin`).
-- **Boolean Flags**: `BLOCK_BREAK`, `BLOCK_PLACE`, `CONTAINER_ACCESS`, `INTERACT`, `REDSTONE`, `EXPLOSION`, `PVP`, `MOB_GRIEFING`, `MOB_SPAWNING`, `INVINCIBILITY`.
+- **Boolean Flags**: `BLOCK_BREAK`, `BLOCK_PLACE`, `CONTAINER_ACCESS`, `INTERACT`, `REDSTONE`, `EXPLOSION`, `PVP`, `MOB_GRIEFING`, `MOB_SPAWNING`, `INVINCIBILITY`, `ENTRY`.
   - Use `true|false` as the value.
 - **EntityType-Specific Flags**: `ALLOW_MOB_SPAWN`, `DENY_MOB_SPAWN`. (No-op pending entity-list storage).
 - **Material-Specific Flags**: `ALLOW_BLOCK_BREAK`, `DENY_BLOCK_BREAK`, `ALLOW_BLOCK_PLACE`, `DENY_BLOCK_PLACE`.
   - Use a space-separated list of block materials as the value.
 - **Gamerule Overrides**: Region flags take precedence over world gamerules. For example, if `MOB_GRIEFING` is set to `true` in a region, creepers will destroy blocks there even if the world's `mobGriefing` is `false`.
+- **ENTRY Flag**: Controls who may physically enter the region.
+  - When `ENTRY` is set to `false` for `default`, non-members are blocked at the border and shown an action-bar message.
+  - Per-role overrides work the same as all other boolean flags (e.g. `ENTRY true manager` to permit managers).
+  - Players who respawn inside an ENTRY-denied region are redirected to the world's default spawn point.
 
 ### Command UX & Tab Completion
 
@@ -1105,6 +1129,9 @@ When an action occurs, the system checks rules in this order:
 | `/whack stop` | `tweaks.admin.whack` | Stop the current game. |
 | `/whack setreward <1\|2\|3> <name>` | `tweaks.admin.whack` | Set the reward for 1st/2nd/3rd place. |
 | `/logs` | `tweaks.admin.logs` | Toggle chest-log inspector mode. |
+| `/deathinventory <player> list` | `tweaks.admin.deathinventory` | List saved death inventories for a player (newest first). Alias: `/di`. |
+| `/deathinventory <player> <id>` | `tweaks.admin.deathinventory` | Open a GUI of the saved inventory; click items to claim them. |
+| `/deathinventory <player> <id> restore` | `tweaks.admin.deathinventory` | Restore the saved inventory slots to the online target player. |
 | `/name <name>\|off\|blank` | `tweaks.admin.itemedit` | Set or clear the held item's display name. |
 | `/lore add <line#> <text>` | `tweaks.admin.itemedit` | Insert a lore line at the 1-indexed position. |
 | `/lore remove <line#>` | `tweaks.admin.itemedit` | Remove the lore line at the 1-indexed position. |
@@ -1143,6 +1170,7 @@ When an action occurs, the system checks rules in this order:
 | `tweaks.admin.resource.settarget.self` | Allows setting your own Resource Hunt target. |
 | `tweaks.admin.resource.settarget.other` | Allows setting another player's Resource Hunt target. |
 | `tweaks.admin.logs` | Allows toggling inspector mode to view chest interaction logs. |
+| `tweaks.admin.deathinventory` | Allows viewing and restoring player death inventories via `/deathinventory`. |
 | `tweaks.admin.itemedit` | Allows editing item properties, such as display name and lore. |
 | `tweaks.admin.guicopy` | Allows saving a targeted chest's contents to a YAML file for GUI layouts. |
 | `tweaks.admin.gamemode` | Allows switching gamemodes via command. |

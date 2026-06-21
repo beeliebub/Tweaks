@@ -74,6 +74,17 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         return plugin == null ? null : plugin.getPermissionManager();
     }
 
+    // Checks whether sender holds `perm`, consulting both the Bukkit attachment
+    // (set on join) and PermissionManager's live effective-permission calculation
+    // (handles the case where permissions were granted after the player joined
+    // and the attachment hasn't been refreshed yet).
+    private boolean hasPerm(CommandSender sender, String perm) {
+        if (sender.hasPermission(perm)) return true;
+        if (!(sender instanceof Player player)) return false;
+        PermissionManager pm = permissions();
+        return pm != null && pm.calculateEffectivePermissions(player.getUniqueId()).contains(perm);
+    }
+
     // ------------------------------------------------------------------
     // Subcommand registry — drives both dispatch and tab completion.
     // ------------------------------------------------------------------
@@ -126,7 +137,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
             showRootUsage(sender);
             return true;
         }
-        if (sc.permission() != null && !sender.hasPermission(sc.permission())) {
+        if (sc.permission() != null && !hasPerm(sender, sc.permission())) {
             sender.sendMessage(Component.text(
                     "You don't have permission for /region " + sc.name() + ".",
                     NamedTextColor.RED));
@@ -203,11 +214,11 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
                     "Open the management dialog for a region.", Permissions.PROTECTION_INFO)
     );
 
-    private static void showRootUsage(CommandSender sender) {
+    private void showRootUsage(CommandSender sender) {
         sender.sendMessage(Component.text("Region commands:", NamedTextColor.YELLOW));
         int shown = 0;
         for (UsageEntry entry : USAGE_ENTRIES) {
-            if (entry.permission() != null && !sender.hasPermission(entry.permission())) continue;
+            if (entry.permission() != null && !hasPerm(sender, entry.permission())) continue;
             sender.sendMessage(Component.text("  " + entry.syntax(), NamedTextColor.GRAY)
                     .append(Component.text(" — " + entry.description(), NamedTextColor.DARK_GRAY)));
             shown++;
@@ -219,10 +230,10 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private static void showUsage(CommandSender sender, String literalPrefix) {
+    private void showUsage(CommandSender sender, String literalPrefix) {
         for (UsageEntry entry : USAGE_ENTRIES) {
             if (entry.syntax().equals(literalPrefix) || entry.syntax().startsWith(literalPrefix + " ")) {
-                if (entry.permission() != null && !sender.hasPermission(entry.permission())) continue;
+                if (entry.permission() != null && !hasPerm(sender, entry.permission())) continue;
                 sender.sendMessage(Component.text("Usage:", NamedTextColor.YELLOW));
                 sender.sendMessage(Component.text("  " + entry.syntax(), NamedTextColor.GRAY)
                         .append(Component.text(" — " + entry.description(), NamedTextColor.DARK_GRAY)));
@@ -309,7 +320,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
                                 + "</yellow> more.</red>"));
                 return;
             }
-            if (!player.hasPermission(Permissions.PROTECTION_PURCHASEABLE)) {
+            if (!hasPerm(player, Permissions.PROTECTION_PURCHASEABLE)) {
                 player.sendMessage(mm.deserialize(
                         "<red>You don't have permission to purchase land claims.</red>"));
                 return;
@@ -1425,7 +1436,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
 
         Subcommand sc = findSubcommand(args[0]);
         if (sc == null) return Collections.emptyList();
-        if (sc.permission() != null && !sender.hasPermission(sc.permission())) return Collections.emptyList();
+        if (sc.permission() != null && !hasPerm(sender, sc.permission())) return Collections.emptyList();
 
         return switch (sc.name()) {
             case "claim" -> Collections.emptyList(); // <name> is freeform
@@ -1462,7 +1473,7 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         List<String> out = new ArrayList<>();
         for (Subcommand sc : SUBCOMMANDS) {
             if (!sc.visibleInUsage()) continue; // Hide aliases from the primary suggestion list.
-            if (sc.permission() == null || sender.hasPermission(sc.permission())) out.add(sc.name());
+            if (sc.permission() == null || hasPerm(sender, sc.permission())) out.add(sc.name());
         }
         return out;
     }

@@ -83,16 +83,19 @@ public final class BlackjackCommand implements CommandExecutor, TabCompleter {
         }
 
         int bet;
-        try {
-            bet = Integer.parseInt(args[1]);
-        } catch (NumberFormatException e) {
-            player.sendMessage(MM.deserialize("<red>Bet must be a whole number.</red>"));
-            return true;
-        }
-
-        if (bet <= 0) {
-            player.sendMessage(MM.deserialize("<red>Bet must be greater than 0.</red>"));
-            return true;
+        if (args[1].equalsIgnoreCase("free") || args[1].equals("0")) {
+            bet = 0;
+        } else {
+            try {
+                bet = Integer.parseInt(args[1]);
+            } catch (NumberFormatException e) {
+                player.sendMessage(MM.deserialize("<red>Bet must be a positive number, 0, or 'free'.</red>"));
+                return true;
+            }
+            if (bet < 0) {
+                player.sendMessage(MM.deserialize("<red>Bet cannot be negative.</red>"));
+                return true;
+            }
         }
 
         // Optional third argument: card-back hex color. Accepts #RRGGBB, RRGGBB, or decimal int.
@@ -115,13 +118,14 @@ public final class BlackjackCommand implements CommandExecutor, TabCompleter {
         }
 
         listener.beginTableSetup(player, bet, backColor);
+        String betDisplay = bet == 0 ? "FREE" : String.valueOf(bet);
         String colorSuffix = backColor != null
                 ? " <gray>| Back color:</gray> <yellow>#" + String.format("%06X", backColor) + "</yellow>"
                 : "";
         player.sendMessage(MM.deserialize(
                 "<green>Table setup started!</green> "
                         + "<gray>Right-click the</gray> <yellow>middle control button</yellow> "
-                        + "<gray>to finalize the table (bet:</gray> <yellow>" + bet + "</yellow><gray>).</gray>"
+                        + "<gray>to finalize the table (bet:</gray> <yellow>" + betDisplay + "</yellow><gray>).</gray>"
                         + colorSuffix));
         return true;
     }

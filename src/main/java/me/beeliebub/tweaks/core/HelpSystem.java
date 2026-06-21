@@ -712,6 +712,24 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 red("Permission: tweaks.admin.logs.")
         ), Material.WRITABLE_BOOK, 43, ColorUtil.HELP_GRAD_BLOCK_LOG, List.of("toolprotect"), Permissions.ADMIN_LOGS));
 
+        articles.add(new HelpArticle("death_inventory", "Death Inventory (Admin)", List.of(
+                gray("Browse and restore player inventories captured at the moment of death."),
+                cmd("/deathinventory <player> list", "List all saved death records (newest first)."),
+                cmd("/deathinventory <player> <id>", "Open a 54-slot GUI of the saved inventory."),
+                cmd("/deathinventory <player> <id> restore", "Fully replace the player's current inventory."),
+                aqua("GUI:"),
+                white("Clicking an item removes it from the view and gives it to you."),
+                aqua("Restore:"),
+                white("Clears the target player's inventory, then fills all 41 slots"),
+                white("(main, armor, offhand) exactly as they were at time of death."),
+                white("Both admin and target player must be online to restore."),
+                aqua("Retention:"),
+                white("Records are kept for 30 days; older files are purged on startup."),
+                yellow("Alias: /di"),
+                red("Permission: tweaks.admin.deathinventory.")
+        ), Material.CHEST, 45, ColorUtil.HELP_GRAD_BLOCK_LOG, List.of("item_admin", "blocklog"),
+                Permissions.ADMIN_DEATH_INVENTORY));
+
         return new HelpCategory("features", "Player Features", articles, Material.WRITABLE_BOOK, 30, ColorUtil.HELP_GRAD_PLAYER_FEATURES);
     }
 
@@ -773,6 +791,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 aqua("Controls:"),
                 white("- Left: Hit, Middle: Start/Clear, Right: Stand."),
                 green("Dealer Mannequin: celebrates or mourns at game end."),
+                green("Practice tables (bet: FREE) available — no currency required."),
                 red("Requirement: 'dqc.cards' resource pack.")
         ), Material.GREEN_WOOL, 33, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack_mechanics")));
 
@@ -785,6 +804,8 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 gold("Admin Setup:"),
                 white("- Footprint: solid 2×3 area (no carpet required)."),
                 white("- Registration: /blackjack createtable <bet> [hexColor]"),
+                white("- Free/practice table: use '0' or 'free' as the bet."),
+                white("- Free tables display 'Bet: FREE' and skip all economy."),
                 white("- Card Backs: optional [hexColor] for custom tints.")
         ), Material.KNOWLEDGE_BOOK, 35, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack")));
 
@@ -942,9 +963,14 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 gray("Control actions within regions with targeted rules."),
                 cmd("/region flag <name> <flag> <value...> [target]", "Set a flag rule."),
                 aqua("Flag Types:"),
-                white("- Boolean (BLOCK_BREAK, PVP, MOB_SPAWNING, INVINCIBILITY)."),
+                white("- Boolean (BLOCK_BREAK, PVP, MOB_SPAWNING, INVINCIBILITY, ENTRY)."),
                 white("- Material (ALLOW_BLOCK_BREAK, etc.): use block list."),
                 white("- EntityType (ALLOW_MOB_SPAWN, DENY_MOB_SPAWN): use entity list."),
+                aqua("ENTRY flag:"),
+                white("- Controls who may enter the region at all."),
+                white("- ENTRY false default blocks all non-exempt players at the border."),
+                white("- Players already inside cannot move; must /home or /spawn to leave."),
+                white("- Respawn inside a denied region redirects to world spawn."),
                 aqua("Targeting (Boolean only):"),
                 white("- [target] can be: owner, manager, member, or group (e.g. group:admin)."),
                 white("- Priority: GROUP > OWNER > MANAGER > MEMBER > DEFAULT."),

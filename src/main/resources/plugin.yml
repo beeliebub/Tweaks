@@ -133,6 +133,10 @@ commands:
   rank:
     description: Manually set a player's rank (admin).
     usage: /rank set <player> <rank>
+  deathinventory:
+    description: View and restore a player's death inventories (admin).
+    usage: /deathinventory <player> list | /deathinventory <player> <id> [restore]
+    aliases: [di]
   region:
     description: Land protection management — claim regions, set flags, manage members.
     usage: |

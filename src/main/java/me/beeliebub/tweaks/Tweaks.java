@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks;
 
 import me.beeliebub.tweaks.blocklog.BlockLogSystem;
+import me.beeliebub.tweaks.deathinventory.DeathInventoryListener;
+import me.beeliebub.tweaks.deathinventory.DeathInventoryManager;
 import me.beeliebub.tweaks.combos.*;
 import me.beeliebub.tweaks.commands.*;
 import me.beeliebub.tweaks.core.HelpSystem;
@@ -343,6 +345,13 @@ public class Tweaks extends JavaPlugin {
         BlockLogSystem blockLogSystem = new BlockLogSystem(this);
         getCommand("logs").setExecutor(blockLogSystem);
         getServer().getPluginManager().registerEvents(blockLogSystem, this);
+
+        // Death Inventory - capture and restore player inventories on death
+        DeathInventoryManager deathInventoryManager = new DeathInventoryManager(this);
+        DeathInventoryListener deathInventoryListener = new DeathInventoryListener(this, deathInventoryManager);
+        getServer().getPluginManager().registerEvents(deathInventoryListener, this);
+        getCommand("deathinventory").setExecutor(deathInventoryListener);
+        getCommand("deathinventory").setTabCompleter(deathInventoryListener);
 
         // Display Chest
         DisplayChestSystem displayChestSystem = new DisplayChestSystem(this);

@@ -6,6 +6,7 @@ import me.beeliebub.tweaks.utils.PDCUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Chunk;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Tag;
 import org.bukkit.block.Block;
@@ -22,6 +23,8 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.ItemStack;
 
@@ -214,6 +217,7 @@ public final class ProtectionListeners implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onCreatureSpawn(CreatureSpawnEvent event) {
+        if (event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.CUSTOM) return;
         var loc = event.getLocation();
         var type = event.getEntityType();
         if (protection.isEntityListed(loc, RegionFlag.DENY_MOB_SPAWN, type)) {
@@ -243,6 +247,32 @@ public final class ProtectionListeners implements Listener {
         if (protection.isExplicitlyAllowed(
                 player.getLocation(), player.getUniqueId(), RegionFlag.INVINCIBILITY)) {
             event.setCancelled(true);
+        }
+    }
+
+    // ─── ENTRY flag (movement restriction) ───────────────────────────────────
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onPlayerMove(PlayerMoveEvent event) {
+        Location from = event.getFrom();
+        Location to = event.getTo();
+        if (from.getBlockX() == to.getBlockX() && from.getBlockZ() == to.getBlockZ()) return;
+        Player player = event.getPlayer();
+        if (!protection.isAllowed(to, player.getUniqueId(), RegionFlag.ENTRY)) {
+            event.setCancelled(true);
+            player.sendActionBar(
+                    Component.text("You do not have permission to enter this area.", NamedTextColor.RED));
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onPlayerRespawn(PlayerRespawnEvent event) {
+        Location respawnLoc = event.getRespawnLocation();
+        if (!protection.isAllowed(respawnLoc, event.getPlayer().getUniqueId(), RegionFlag.ENTRY)) {
+            org.bukkit.World world = respawnLoc.getWorld();
+            if (world != null) {
+                event.setRespawnLocation(world.getSpawnLocation());
+            }
         }
     }
 

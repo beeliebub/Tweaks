@@ -1104,6 +1104,13 @@ public class ResourceHunt implements Listener {
                 world.getBlockAt(x, y + 2, z).setType(Material.AIR);
             }
         }
+        for (int x = cx - 2; x <= cx + 2; x++) {
+            for (int z = cz - 2; z <= cz + 2; z++) {
+                if (x == cx - 2 || x == cx + 2 || z == cz - 2 || z == cz + 2) {
+                    world.getBlockAt(x, y + 1, z).setType(Material.NETHER_BRICK_FENCE);
+                }
+            }
+        }
         return new Location(world, cx + 0.5, y + 1, cz + 0.5);
     }
 

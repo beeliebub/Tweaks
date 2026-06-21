@@ -394,10 +394,11 @@ public final class BlackjackListener implements Listener {
 
         Location hologLoc = center.clone().add(0, HOLOGRAM_HEIGHT, 0);
         TextDisplay text = (TextDisplay) world.spawnEntity(hologLoc, EntityType.TEXT_DISPLAY);
+        String betLabel = entry.bet() == 0 ? "FREE" : ("$" + entry.bet());
         text.text(MM.deserialize(
                 "<gold><bold>Blackjack Table</bold></gold>\n"
                         + "<gray>Press MIDDLE to Play</gray>\n"
-                        + "<yellow>Bet: $" + entry.bet() + "</yellow>"));
+                        + "<yellow>Bet: " + betLabel + "</yellow>"));
         text.setBillboard(Display.Billboard.CENTER);
         text.setPersistent(false);
         text.setDefaultBackground(false);
@@ -842,22 +843,25 @@ public final class BlackjackListener implements Listener {
                     removeDisplays(session);
                     sessions.remove(playerId);
                 } else if (session == null) {
-                    // Start a new game: economy flow.
+                    // Start a new game: economy flow (skipped for free/practice tables).
                     int bet = table.bet();
-                    double balance = economyManager.getBalance(playerId);
-                    if (balance < bet) {
-                        player.sendMessage(MM.deserialize(
-                                "<red>You cannot afford a bet of $" + bet
-                                        + ". Your balance is $" + (long) balance + ".</red>"));
-                        return;
+                    if (bet > 0) {
+                        double balance = economyManager.getBalance(playerId);
+                        if (balance < bet) {
+                            player.sendMessage(MM.deserialize(
+                                    "<red>You cannot afford a bet of $" + bet
+                                            + ". Your balance is $" + (long) balance + ".</red>"));
+                            return;
+                        }
+                        economyManager.removeBalance(playerId, bet);
                     }
-                    economyManager.removeBalance(playerId, bet);
                     boolean started = startGame(player, bet, tableCenter,
                             table.facing(), table.backColor());
                     if (!started) {
-                        economyManager.addBalance(playerId, bet);
+                        if (bet > 0) economyManager.addBalance(playerId, bet);
                         player.sendMessage(MM.deserialize(
-                                "<red>Could not start a Blackjack game here. Your bet was refunded.</red>"));
+                                "<red>Could not start a Blackjack game here."
+                                        + (bet > 0 ? " Your bet was refunded." : "") + "</red>"));
                     }
                 } else {
                     // Session is active but not finished — inform the player.
@@ -1087,14 +1091,18 @@ public final class BlackjackListener implements Listener {
      */
     private void finish(Player player, Session session) {
         BlackjackGame game = session.game;
-        int payout = game.payout();
-        if (payout > 0) {
-            economyManager.addBalance(player.getUniqueId(), payout);
+        boolean freeTurn = game.bet() == 0;
+
+        if (!freeTurn) {
+            int payout = game.payout();
+            if (payout > 0) {
+                economyManager.addBalance(player.getUniqueId(), payout);
+            }
         }
 
-        // Rakeback on dealer win (work item 4).
+        // Rakeback on dealer win — skipped for free/practice tables.
         String rakebackSuffix = "";
-        if (game.result() == BlackjackGame.Result.DEALER_WIN) {
+        if (!freeTurn && game.result() == BlackjackGame.Result.DEALER_WIN) {
             double rate = rankManager.getCasinoRakebackRate(player.getUniqueId());
             if (rate > 0.0) {
                 int rakeback = (int) Math.floor(game.bet() * rate);
@@ -1105,12 +1113,21 @@ public final class BlackjackListener implements Listener {
             }
         }
 
+        String practiceNote = freeTurn ? " <gray>(Practice table — no stakes)</gray>" : "";
+        int payout = freeTurn ? 0 : game.payout();
         String summary = switch (game.result()) {
-            case PLAYER_BLACKJACK -> "<gold><bold>BLACKJACK!</bold></gold> <green>You won $"
-                    + (payout - game.bet()) + "!</green>";
-            case PLAYER_WIN -> "<green>You win! Payout: $" + payout + " (net +$" + game.bet() + ")</green>";
-            case PUSH -> "<yellow>Push. Your bet of $" + game.bet() + " is returned.</yellow>";
-            case DEALER_WIN -> "<red>Dealer wins. You lost $" + game.bet() + ".</red>" + rakebackSuffix;
+            case PLAYER_BLACKJACK -> "<gold><bold>BLACKJACK!</bold></gold>" + (freeTurn
+                    ? " <green>You win!</green>" + practiceNote
+                    : " <green>You won $" + (payout - game.bet()) + "!</green>");
+            case PLAYER_WIN -> "<green>You win!</green>" + (freeTurn
+                    ? practiceNote
+                    : " <green>Payout: $" + payout + " (net +$" + game.bet() + ")</green>");
+            case PUSH -> "<yellow>Push.</yellow>" + (freeTurn
+                    ? " <yellow>Tie game.</yellow>" + practiceNote
+                    : " <yellow>Your bet of $" + game.bet() + " is returned.</yellow>");
+            case DEALER_WIN -> "<red>Dealer wins.</red>" + (freeTurn
+                    ? practiceNote
+                    : " <red>You lost $" + game.bet() + ".</red>" + rakebackSuffix);
         };
         player.sendMessage(MM.deserialize(summary));
         player.sendMessage(MM.deserialize(
@@ -1230,9 +1247,12 @@ public final class BlackjackListener implements Listener {
                 // Notify the player if they are still online.
                 var player = Bukkit.getPlayer(playerId);
                 if (player != null) {
+                    String betClause = session.game.bet() == 0
+                            ? "(Practice table — no stakes.)"
+                            : "Your bet of $" + session.game.bet() + " was forfeited.";
                     player.sendMessage(MM.deserialize(
                             "<red>Your Blackjack game was ended due to 10 minutes of inactivity. "
-                                    + "Your bet of $" + session.game.bet() + " was forfeited.</red>"));
+                                    + betClause + "</red>"));
                 }
             }
         }

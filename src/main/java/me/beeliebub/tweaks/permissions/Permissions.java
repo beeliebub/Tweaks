@@ -173,6 +173,11 @@ public final class Permissions {
     public static final String PROTECTION_ADMIN = "tweaks.protection.admin";
 
     /**
+     * Allows viewing and restoring player death inventories via /deathinventory.
+     */
+    public static final String ADMIN_DEATH_INVENTORY = "tweaks.admin.deathinventory";
+
+    /**
      * Allows editing rank definitions via /ranks edit.
      */
     public static final String ADMIN_RANKS = "tweaks.admin.ranks";
@@ -216,7 +221,8 @@ public final class Permissions {
         m.put(ADMIN_ITEM_EDIT,    "tools");
         m.put(ADMIN_GUI_COPY,     "tools");
         m.put(ADMIN_GAMEMODE,     "tools");
-        m.put(ADMIN_PERMISSIONS,  "tools");
+        m.put(ADMIN_PERMISSIONS,       "tools");
+        m.put(ADMIN_DEATH_INVENTORY,  "tools");
 
         // teleport — home and warp administration
         m.put(ADMIN_HOME,         "teleport");

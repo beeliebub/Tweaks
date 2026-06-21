@@ -42,6 +42,7 @@ public enum RegionFlag {
     MOB_GRIEFING,
     MOB_SPAWNING,
     INVINCIBILITY,
+    ENTRY,
     ALLOW_BLOCK_BREAK,
     DENY_BLOCK_BREAK,
     ALLOW_BLOCK_PLACE,
