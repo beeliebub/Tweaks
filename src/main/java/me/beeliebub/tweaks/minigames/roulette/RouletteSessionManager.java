@@ -134,14 +134,13 @@ final class RouletteSessionManager {
     }
 
     /**
-     * True if the round's net winnings ({@code payout - wagered} — {@code payout} is
-     * stake-inclusive, see {@code Messages.MINIGAMES.rouletteRoundOutcome}) reach
-     * {@link #BIG_WIN_MULTIPLIER}x {@code wagered}. Pulled out as a pure predicate so the
+     * True if {@code payout} (already winnings only — see {@code RouletteRound.computeSettlement})
+     * reaches {@link #BIG_WIN_MULTIPLIER}x {@code wagered}. Pulled out as a pure predicate so the
      * threshold itself is unit-testable without MockBukkit, mirroring {@link #withinBoardBounds}.
      * {@code wagered <= 0} is never a big win (nothing was staked).
      */
     static boolean isBigWin(long wagered, long payout) {
-        return wagered > 0 && (payout - wagered) >= wagered * BIG_WIN_MULTIPLIER;
+        return wagered > 0 && payout >= wagered * BIG_WIN_MULTIPLIER;
     }
 
     // ---- Bet placement -------------------------------------------------------------------
@@ -567,7 +566,7 @@ final class RouletteSessionManager {
                 long wagered = wageredByPlayer.getOrDefault(entry.getKey(), 0L);
                 long payout = entry.getValue().payout();
                 if (isBigWin(wagered, payout)) {
-                    announceBigWin(entry.getKey(), payout - wagered, pocket, colorName);
+                    announceBigWin(entry.getKey(), payout, pocket, colorName);
                 }
             }
         }
@@ -577,10 +576,11 @@ final class RouletteSessionManager {
      * Server-wide celebration for a round settlement reaching {@link #BIG_WIN_MULTIPLIER}x the
      * bettor's own wager — gated behind {@code presentation} (see {@link #settleRound}'s only
      * caller) alongside every other cosmetic post-settlement broadcast, unlike the per-bettor
-     * outcome message which always sends. {@code winnings} is net (payout minus wagered, matching
-     * {@code rouletteRoundOutcome}'s "Won" figure), not the stake-inclusive gross payout. Resolves
-     * the winner's name via {@link Bukkit#getOfflinePlayer(UUID)} rather than requiring them
-     * online, since a round settles regardless of who is still connected.
+     * outcome message which always sends. {@code winnings} is the same settlement payout {@code
+     * rouletteRoundOutcome}'s "Won" figure shows — winnings only, the stake is never returned —
+     * so the two messages always agree on the amount. Resolves the winner's name via {@link
+     * Bukkit#getOfflinePlayer(UUID)} rather than requiring them online, since a round settles
+     * regardless of who is still connected.
      */
     private void announceBigWin(UUID playerId, long winnings, int pocket, String colorName) {
         String name = Bukkit.getOfflinePlayer(playerId).getName();

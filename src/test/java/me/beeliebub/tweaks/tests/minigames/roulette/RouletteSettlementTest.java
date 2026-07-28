@@ -7,6 +7,7 @@ import me.beeliebub.tweaks.minigames.roulette.RouletteRound.PlayerCredit;
 import me.beeliebub.tweaks.minigames.roulette.RouletteRound.Settlement;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -14,36 +15,36 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Pins {@link RouletteRound#computeSettlement}'s money math: the stake-inclusive payout
- * convention, pocket 0 losing every bet family, house winnings being gross of losing wagers only,
- * and rakeback applying strictly to a player's net loss.
+ * Pins {@link RouletteRound#computeSettlement}'s money math: the winnings-only payout convention
+ * (the wagered stake is never returned, even on a win), pocket 0 losing every bet family, house
+ * winnings being gross of losing wagers only, and rakeback applying strictly to a player's net loss.
  */
 class RouletteSettlementTest {
 
     private static final UUID PLAYER = UUID.randomUUID();
     private static final UUID OTHER = UUID.randomUUID();
 
-    // ---- payout convention: amount * (multiplier + 1), stake returned + winnings ----
+    // ---- payout convention: amount * multiplier, winnings only — the stake is never returned ----
 
     @Test
-    void winningStraightBetCreditsStakePlusThirtySixTimes() {
+    void winningStraightBetCreditsThirtySixTimesTheStake() {
         RouletteBet win = new RouletteBet(PLAYER, BetType.STRAIGHT, 17, 10);
         Settlement settlement = RouletteRound.computeSettlement(List.of(win), 17, Map.of());
-        assertEquals(370L, settlement.credits().get(PLAYER).payout(), "10 * (36 + 1) = 370");
+        assertEquals(360L, settlement.credits().get(PLAYER).payout(), "10 * 36 = 360");
     }
 
     @Test
-    void winningDozenBetCreditsStakePlusThreeTimes() {
+    void winningDozenBetCreditsThreeTimesTheStake() {
         RouletteBet win = new RouletteBet(PLAYER, BetType.DOZEN, 1, 10);
         Settlement settlement = RouletteRound.computeSettlement(List.of(win), 5, Map.of());
-        assertEquals(40L, settlement.credits().get(PLAYER).payout(), "10 * (3 + 1) = 40");
+        assertEquals(30L, settlement.credits().get(PLAYER).payout(), "10 * 3 = 30");
     }
 
     @Test
-    void winningColorBetCreditsStakePlusTwoTimes() {
+    void winningColorBetCreditsTwoTimesTheStake() {
         RouletteBet win = new RouletteBet(PLAYER, BetType.COLOR, RouletteBet.COLOR_RED, 10);
         Settlement settlement = RouletteRound.computeSettlement(List.of(win), 1, Map.of());
-        assertEquals(30L, settlement.credits().get(PLAYER).payout(), "10 * (2 + 1) = 30, pocket 1 is red");
+        assertEquals(20L, settlement.credits().get(PLAYER).payout(), "10 * 2 = 20, pocket 1 is red");
     }
 
     @Test
@@ -70,8 +71,8 @@ class RouletteSettlementTest {
     void straightBetOnPocketZeroItselfCanWin() {
         RouletteBet straightOnZero = new RouletteBet(PLAYER, BetType.STRAIGHT, 0, 10);
         Settlement settlement = RouletteRound.computeSettlement(List.of(straightOnZero), 0, Map.of());
-        assertEquals(510L, settlement.credits().get(PLAYER).payout(),
-                "a straight-up bet ON 0 wins the Green rate when 0 is drawn: 10 * (50 + 1) = 510");
+        assertEquals(500L, settlement.credits().get(PLAYER).payout(),
+                "a straight-up bet ON 0 wins the Green rate when 0 is drawn: 10 * 50 = 500");
     }
 
     // ---- house winnings: gross of losing wagers only, never offset by a win ----
@@ -123,13 +124,13 @@ class RouletteSettlementTest {
 
     @Test
     void rakebackNeverAppliesOnAnEvenSplitAcrossMultipleBets() {
-        // Player stakes 30 total across two bets: a 10-stake color win pays 30 (10 * (2 + 1)),
-        // exactly offsetting the 20-stake losing straight bet — net 0, not a net loss.
+        // Player stakes 20 total across two equal bets: a 10-stake color win pays 20 (10 * 2,
+        // winnings only), exactly offsetting the 10-stake losing straight bet — net 0, not a loss.
         RouletteBet win = new RouletteBet(PLAYER, BetType.COLOR, RouletteBet.COLOR_RED, 10);
-        RouletteBet lose = new RouletteBet(PLAYER, BetType.STRAIGHT, 18, 20);
+        RouletteBet lose = new RouletteBet(PLAYER, BetType.STRAIGHT, 18, 10);
         Settlement settlement = RouletteRound.computeSettlement(
                 List.of(win, lose), 1, Map.of(PLAYER, 0.1));
-        // payout = 30 (color win), wagered = 30, net = 0 -> not a net loss.
+        // payout = 20 (color win), wagered = 20, net = 0 -> not a net loss.
         assertEquals(0L, settlement.credits().get(PLAYER).rakeback(), "breaking even is not a net loss");
     }
 
@@ -150,7 +151,7 @@ class RouletteSettlementTest {
                 List.of(playerWins, otherLoses), 17, Map.of());
         PlayerCredit playerCredit = settlement.credits().get(PLAYER);
         PlayerCredit otherCredit = settlement.credits().get(OTHER);
-        assertEquals(370L, playerCredit.payout());
+        assertEquals(360L, playerCredit.payout());
         assertEquals(0L, otherCredit.payout());
         assertEquals(10L, settlement.houseCredit());
     }
@@ -162,32 +163,30 @@ class RouletteSettlementTest {
      * single pocket that's actually drawn — every other bet in the stack is a separate ledger
      * entry that independently loses. This pins that {@code computeSettlement} never double-counts
      * (crediting more than the one winning bet's payout) or under-counts (losing money it never
-     * should have, e.g. by treating the whole stack as a single bet).
+     * should have, e.g. by treating the whole stack as a single bet). Since no bet ever returns its
+     * own stake, covering every non-zero pocket at equal stakes is a guaranteed small loss — the
+     * winning bet's 36x payout falls one stake short of the 37 stakes risked.
      */
     @Test
     void coveringEveryPocketOnlyEverPaysTheOneWinningBet() {
         int amount = 10;
-        List<RouletteBet> everyPocket = new java.util.ArrayList<>();
+        List<RouletteBet> everyPocket = new ArrayList<>();
         for (int pocket = 0; pocket <= 36; pocket++) {
             everyPocket.add(new RouletteBet(PLAYER, BetType.STRAIGHT, pocket, amount));
         }
         int totalWagered = 37 * amount;
 
-        // A non-zero pocket wins at the standard 36:1 rate: payout exactly refunds the whole
-        // stack (37 * 10 wagered, 10 * 37 paid back) — net zero, not a profit and not a loss.
         Settlement onNonZero = RouletteRound.computeSettlement(everyPocket, 5, Map.of());
-        assertEquals((long) amount * 37, onNonZero.credits().get(PLAYER).payout(),
-                "the pocket-5 bet alone pays 10 * (36 + 1) = 370, matching the 370 wagered overall");
-        assertEquals(totalWagered, onNonZero.credits().get(PLAYER).payout(),
-                "covering every pocket at equal stakes must break exactly even on any non-zero pocket");
-        assertEquals(0L, onNonZero.credits().get(PLAYER).rakeback(), "breaking even is not a net loss");
+        long nonZeroPayout = (long) amount * 36;
+        assertEquals(nonZeroPayout, onNonZero.credits().get(PLAYER).payout(), "the pocket-5 bet alone pays 10 * 36 = 360");
+        assertTrue(nonZeroPayout < totalWagered,
+                "covering every pocket at equal stakes must fall short of the 370 wagered — no bet returns its own stake");
         assertEquals((long) amount * 36, onNonZero.houseCredit(), "the 36 losing bets fund the house credit");
 
-        // Pocket 0 wins at the Green rate (50:1) instead — the stack turns a real profit, not the
-        // 36:1 rate the other 36 losing bets might suggest if the override were dropped.
+        // Pocket 0 wins at the Green rate (50:1) instead — the stack turns a real profit.
         Settlement onGreen = RouletteRound.computeSettlement(everyPocket, 0, Map.of());
-        long greenPayout = (long) amount * (RouletteBet.GREEN_PAYOUT_MULTIPLIER + 1);
-        assertEquals(greenPayout, onGreen.credits().get(PLAYER).payout(), "10 * (50 + 1) = 510");
+        long greenPayout = (long) amount * RouletteBet.GREEN_PAYOUT_MULTIPLIER;
+        assertEquals(greenPayout, onGreen.credits().get(PLAYER).payout(), "10 * 50 = 500");
         assertTrue(greenPayout > totalWagered, "the Green bonus must turn covering every pocket into a net win");
         assertEquals((long) amount * 36, onGreen.houseCredit(),
                 "the house credit is unaffected by which pocket won — still the 36 losing bets");
@@ -205,7 +204,7 @@ class RouletteSettlementTest {
         Settlement settlement = RouletteRound.computeSettlement(
                 List.of(straightWin, dozenWin, colorLoss), 5, Map.of());
 
-        long expectedPayout = 10L * (36 + 1) + 20L * (3 + 1); // straight + dozen both hit; color (black) misses on odd pocket 5
+        long expectedPayout = 10L * 36 + 20L * 3; // straight + dozen both hit; color (black) misses on odd pocket 5
         assertEquals(expectedPayout, settlement.credits().get(PLAYER).payout());
         assertEquals(15L, settlement.houseCredit(), "only the losing colour bet funds the house credit");
     }

@@ -100,31 +100,29 @@ class RouletteStakeValidationTest {
         assertFalse(RouletteSessionManager.withinBoardBounds(101, 5, 100));
     }
 
-    // ---- isBigWin: compares NET winnings (payout - wagered), not the stake-inclusive payout ----
+    // ---- isBigWin: compares payout (winnings only — the stake is never returned) to 8x wagered ----
 
     @Test
     void isBigWinAcceptsExactlyEightTimesWagered() {
-        // net winnings = 90 - 10 = 80, exactly 8x the 10 wagered.
-        assertTrue(RouletteSessionManager.isBigWin(10, 90), "exactly 8x net winnings must count as a big win");
+        assertTrue(RouletteSessionManager.isBigWin(10, 80), "exactly 8x winnings must count as a big win");
     }
 
     @Test
     void isBigWinRejectsJustUnderEightTimesWagered() {
-        // net winnings = 89 - 10 = 79, one dollar under the 80 threshold.
-        assertFalse(RouletteSessionManager.isBigWin(10, 89));
+        assertFalse(RouletteSessionManager.isBigWin(10, 79));
     }
 
     @Test
     void isBigWinAcceptsWellOverTheThreshold() {
-        // a Green (50:1) win on a 10 stake pays 510 gross; net winnings = 500, well past the 80 threshold.
-        assertTrue(RouletteSessionManager.isBigWin(10, 510));
+        // a Green (50:1) win on a 10 stake pays 10 * 50 = 500, well past the 80 threshold.
+        assertTrue(RouletteSessionManager.isBigWin(10, 500));
     }
 
     @Test
     void isBigWinRejectsATypicalDozenOrColorWin() {
-        // Dozen (3:1) pays 4x stake, colour (2:1) pays 3x stake — neither reaches the 8x threshold.
-        assertFalse(RouletteSessionManager.isBigWin(10, 40));
+        // Dozen (3:1) pays 10 * 3 = 30, colour (2:1) pays 10 * 2 = 20 — neither reaches the 8x threshold.
         assertFalse(RouletteSessionManager.isBigWin(10, 30));
+        assertFalse(RouletteSessionManager.isBigWin(10, 20));
     }
 
     @Test

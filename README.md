@@ -874,14 +874,14 @@ Admins can build and register Blackjack tables in the world.
 
 An in-world roulette wheel — a real physical build the server team constructed, with this plugin overlaying click targets, betting, a spin animation, and payouts on top of it.
 
-- **Bet families**: **Straight-up** on a single pocket (1-36, pays 36:1; pocket **0**/Green pays **50:1**), a **dozen/thirds** (1st/2nd/3rd twelve, pays 3:1), or a **colour** (red/black, pays 2:1). Green **0** loses every dozen/colour bet — there is no odd/even, high/low, or column betting on this board.
+- **Bet families**: **Straight-up** on a single pocket (1-36, pays 36:1; pocket **0**/Green pays **50:1**), a **dozen/thirds** (1st/2nd/3rd twelve, pays 3:1), or a **colour** (red/black, pays 2:1). A win credits exactly `stake × odds` — your wagered stake itself is never returned on top of that, even on a win. Green **0** loses every dozen/colour bet — there is no odd/even, high/low, or column betting on this board.
 - **Labeled bets**: Every clickable segment shows a floating label with its bet description and odds (e.g. "Straight: 18 (Black)" — 36:1, "Dozen: 1st (1-12)" — 3:1, "Red"/"Black" — 2:1, "Straight: 0 (Green)" — 50:1, shown in green) for as long as the board is active. Labels hide during the spin and reappear once the result is shown. Colors alternate strictly by parity (odd = red, even = black).
 - **Color-coded segments**: Each clickable segment is itself a colored block matching its bet — red/black/green wool for straight-up and colour bets, grey/yellow/orange terracotta for the 1st/2nd/3rd dozen — so the betting area is visually readable at a glance. These also hide during the spin and reappear with the labels.
 - **Sticky stake**: Set your wager once with `/roulette stake <amount>`, then every segment you click wagers that amount. Multiple bets in the same round are allowed and stack — including clicking more than one physical segment of the same dozen, which places two independent bets.
 - **Shared round**: The first bet on an idle board opens a **30-second** betting window for everyone nearby — there's no host and no spin button for players. Once the window closes, the wheel spins, a ball orbits and settles into the winning pocket, and the round settles automatically.
 - **Bets are final**: There is no un-betting, no refund on quitting mid-round, and winnings are still credited to your balance even if you log off before the wheel stops.
 - **Settlement summary**: Your personal result message shows the amount wagered and the amount actually won (winnings only, not your returned stake) — e.g. a $100 stake winning at 36:1 shows wagered $100, won $3,600.
-- **Big win announcements**: If your net winnings reach 8x your wager, the whole server is notified.
+- **Big win announcements**: If your winnings reach 8x your wager, the whole server is notified.
 - **House balance**: A hologram over each wheel shows the single server-wide house balance — the same account Blackjack's losses feed.
 
 #### Board Construction (Admin)

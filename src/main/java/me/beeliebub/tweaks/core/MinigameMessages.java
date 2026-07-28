@@ -695,29 +695,26 @@ public final class MinigameMessages {
 
     /**
      * Per-bettor settlement summary, sent only to bettors who are still online. Shows the gross
-     * amount wagered and the amount actually won — {@code payout} is stake-inclusive (the
-     * settlement math returns the stake plus winnings together, since the stake was already
-     * debited at bet-placement time), so this factory subtracts {@code wagered} back out before
-     * display: a $100 stake at 36:1 nets $3,600 in winnings, not the $3,700 {@code payout} itself
-     * carries. Floored at {@code 0} rather than shown negative on a loss — {@code wagered} alone
-     * already conveys what was lost.
+     * amount wagered and the amount actually won — {@code payout} is already winnings only
+     * ({@code RouletteRound.computeSettlement} never returns the wagered stake, even on a win), so
+     * this factory shows it verbatim: a $1,000 stake winning at 2:1 shows wagered $1,000, won
+     * $2,000 (not a net-profit figure of $1,000 — that stake is gone regardless of outcome).
      */
     public Component rouletteRoundOutcome(int pocket, String pocketColorName, long wagered, long payout, long rakeback) {
-        long net = payout - wagered;
-        long winnings = Math.max(0L, net);
-        String wonColor = net >= 0 ? "green" : "red";
+        String wonColor = payout >= wagered ? "green" : "red";
         String rakebackSuffix = rakeback > 0 ? " <gray>(Rakeback: +$" + rakeback + ")</gray>" : "";
         return Messages.MM.deserialize("<gold>Roulette result:</gold> <yellow>" + pocket + "</yellow> "
                 + colorTag(pocketColorName) + " <gray>| Wagered:</gray> <yellow>$" + wagered + "</yellow> "
-                + "<gray>| Won:</gray> <" + wonColor + ">$" + winnings + "</" + wonColor + ">" + rakebackSuffix);
+                + "<gray>| Won:</gray> <" + wonColor + ">$" + payout + "</" + wonColor + ">" + rakebackSuffix);
     }
 
     /**
-     * Server-wide broadcast for a round settlement whose net winnings reached the "big win"
-     * threshold ({@code winnings >= 8x wagered} — see {@code RouletteSessionManager.isBigWin}).
-     * {@code winnings} is net (stake already excluded), matching {@code rouletteRoundOutcome}'s
-     * "Won" figure. {@code playerName} is a pre-resolved display name (the winner may be offline
-     * by the time this fires) so this class stays decoupled from {@code OfflinePlayer} lookups.
+     * Server-wide broadcast for a round settlement whose winnings reached the "big win" threshold
+     * ({@code payout >= 8x wagered} — see {@code RouletteSessionManager.isBigWin}). {@code
+     * winnings} matches {@code rouletteRoundOutcome}'s "Won" figure exactly (the same settlement
+     * payout, not a separately-derived number), so the two messages never disagree about how much
+     * was won. {@code playerName} is a pre-resolved display name (the winner may be offline by the
+     * time this fires) so this class stays decoupled from {@code OfflinePlayer} lookups.
      */
     public Component rouletteBigWinAnnouncement(String playerName, long winnings, int pocket, String pocketColorName) {
         return Messages.MM.deserialize("<gold><bold>Big Win!</bold></gold> <yellow>" + playerName + "</yellow> "

@@ -18,9 +18,11 @@ public enum BetType {
     }
 
     /**
-     * Winnings multiplier, excluding the returned stake (e.g. 36 for a 36:1 straight-up on 1-36).
-     * Does not account for the pocket-0 Green override on {@link #STRAIGHT} — use
-     * {@link RouletteBet#payoutMultiplierFor(BetType, int)} when a selector is available.
+     * Winnings multiplier (e.g. 36 for a 36:1 straight-up on 1-36) — the wagered stake itself is
+     * never returned, even on a win, so a winning bet's total credit is {@code amount *
+     * payoutMultiplier()} and nothing more. Does not account for the pocket-0 Green override on
+     * {@link #STRAIGHT} — use {@link RouletteBet#payoutMultiplierFor(BetType, int)} when a
+     * selector is available.
      */
     public int payoutMultiplier() {
         return payoutMultiplier;

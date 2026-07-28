@@ -18,9 +18,10 @@ public final class RouletteRound {
     /** {@code IDLE -> BETTING -> SPINNING -> SETTLED}. There is no bet-removal method at any stage. */
     public enum State { IDLE, BETTING, SPINNING, SETTLED }
 
-    /** Worst-case payout multiplier + 1 (STRAIGHT on pocket 0, Green, 50:1), used to size the
-     *  exposure guard. */
-    private static final long MAX_EXPOSURE_MULTIPLIER = RouletteBet.GREEN_PAYOUT_MULTIPLIER + 1;
+    /** Worst-case payout multiplier (STRAIGHT on pocket 0, Green, 50:1), used to size the exposure
+     *  guard. No {@code + 1} — a winning bet's total credit is {@code amount * multiplier} only,
+     *  since the wagered stake itself is never returned. */
+    private static final long MAX_EXPOSURE_MULTIPLIER = RouletteBet.GREEN_PAYOUT_MULTIPLIER;
 
     /**
      * The largest single cumulative round exposure any player can ever reach — the same ceiling
@@ -107,7 +108,11 @@ public final class RouletteRound {
         }
     }
 
-    /** Per-player credit from a settled round: stake-inclusive payout, plus any rakeback. */
+    /**
+     * Per-player credit from a settled round: {@code payout} is winnings only — the sum of {@code
+     * amount * multiplier} over every bet this player won this round. The wagered stake, already
+     * debited at bet-placement time, is never returned as part of this figure — plus any rakeback.
+     */
     public record PlayerCredit(long payout, long rakeback) {
     }
 
@@ -120,12 +125,15 @@ public final class RouletteRound {
      * math is unit-testable without MockBukkit. Returns per-player {@code (payout, rakeback)}
      * credits plus the round's house winnings.
      *
-     * <p>A winning bet credits {@code amount * (multiplier + 1)} (stake returned + winnings) since
-     * the stake was already deducted at placement. Rakeback applies only to a player's net loss
-     * across the whole round (never a net win), floored, using that player's own rate. The house is
-     * credited the gross sum of losing wagers only (the house-accounting invariant) — a winning wager contributes
-     * {@code 0}, it never offsets, so a rakeback-bearing loss still credits the house the full
-     * losing wager (rakeback is minted, never taken from the house's cut).
+     * <p>A winning bet credits {@code amount * multiplier} — winnings only. The wagered stake was
+     * already deducted at placement and is never returned, even on a win, so a 2:1 win on a $1,000
+     * bet credits exactly $2,000 (not $3,000). Rakeback applies only to a player's net loss across
+     * the whole round (never a net win), floored, using that player's own rate — note that under
+     * this no-stake-return rule, "net" (payout minus wagered) already nets out correctly to the
+     * player's true profit/loss without needing to separately account for a returned stake. The
+     * house is credited the gross sum of losing wagers only (the house-accounting invariant) — a
+     * winning wager contributes {@code 0}, it never offsets, so a rakeback-bearing loss still
+     * credits the house the full losing wager (rakeback is minted, never taken from the house's cut).
      */
     public static Settlement computeSettlement(
             List<RouletteBet> bets, int pocket, Map<UUID, Double> rakebackRates) {
@@ -136,7 +144,7 @@ public final class RouletteRound {
         for (RouletteBet bet : bets) {
             wageredByPlayer.merge(bet.player(), (long) bet.amount(), Long::sum);
             if (bet.wins(pocket)) {
-                long payout = (long) bet.amount() * (bet.payoutMultiplier() + 1);
+                long payout = (long) bet.amount() * bet.payoutMultiplier();
                 payoutByPlayer.merge(bet.player(), payout, Long::sum);
             } else {
                 houseCredit += bet.amount();
