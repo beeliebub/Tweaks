@@ -18,16 +18,11 @@ Desktop.ini
 # Build artifacts
 /Tweaks/
 /src/main/resources/temp
+.run/
 
 *.md
 !README.md
 .claude/
-.beads/
 .mux/
 .gemini/
 /org/mockbukkit/
-
-# Beads / Dolt files (added by bd init)
-.dolt/
-*.db
-.beads-credential-key
