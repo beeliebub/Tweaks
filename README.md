@@ -65,6 +65,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Resource Rupee](#resource-rupee)
   - [Whack an Andrew](#whack-an-andrew)
   - [Blackjack](#blackjack)
+  - [Roulette](#roulette)
   - [Resource Hunt](#resource-hunt)
   - [Rewards](#rewards)
 - [Land Protection](#land-protection)
@@ -623,6 +624,9 @@ When you join, you'll see a message like:
 |---|---|
 | `/balance` | View your current balance. Alias: `/bal`. |
 | `/balance hide` | Toggles whether your balance is visible to others in the tab list. |
+| `/house balance` | View the server-wide casino house account. Admin permission required. |
+| `/house add\|remove\|set <amount>` | Adjust the casino house account. Admin permission required. |
+| `/house pay <player> <amount>` | Transfer house funds to an online or known offline player. Admin permission required. |
 
 ### Ranks
 
@@ -631,10 +635,10 @@ Progress through the server's rank hierarchy to unlock higher daily reward bonus
 | Rank | Cost | Daily Bonus | Rakeback |
 |---|---|---|---|
 | **I** | $1,000 | +1% | +1% |
-| **II** | $5,000 | +2% | +2% |
-| **III** | $15,000 | +3% | +3% |
+| **II** | $2,500 | +2% | +2% |
+| **III** | $5,000 | +3% | +3% |
 | ... | ... | ... | ... |
-| **X** | $1,000,000 | +10% | +10% |
+| **X** | $350,000 | +10% | +10% |
 
 Costs and bonuses are configurable by admins.
 
@@ -642,6 +646,8 @@ Costs and bonuses are configurable by admins.
 |---|---|
 | `/ranks` | Lists all available ranks, their costs, and their benefits. |
 | `/rankup` | Purchase the next rank using your current balance. |
+| `/ranks edit` | Open the visual rank editor. Admin permission: `tweaks.admin.ranks`. |
+| `/rank set <player> <rank_id/name>` | Manually assign a player's rank. Admin permission: `tweaks.admin.rank.set`. |
 
 ---
 
@@ -864,6 +870,27 @@ Admins can build and register Blackjack tables in the world.
 - **Bet**: Use any positive integer for a currency-backed table, or `0`/`free` for a no-stakes practice table.
 - **Card Backs**: The optional `[hexColor]` argument (e.g., `#FF8800` or `FF8800`) sets a custom tint for card backs at that table.
 
+### Roulette
+
+An in-world roulette wheel — a real physical build the server team constructed, with this plugin overlaying click targets, betting, a spin animation, and payouts on top of it.
+
+- **Bet families**: **Straight-up** on a single pocket (1-36, pays 36:1; pocket **0**/Green pays **50:1**), a **dozen/thirds** (1st/2nd/3rd twelve, pays 3:1), or a **colour** (red/black, pays 2:1). Green **0** loses every dozen/colour bet — there is no odd/even, high/low, or column betting on this board.
+- **Labeled bets**: Every clickable segment shows a floating label with its bet description and odds (e.g. "Straight: 18 (Black)" — 36:1, "Dozen: 1st (1-12)" — 3:1, "Red"/"Black" — 2:1, "Straight: 0 (Green)" — 50:1, shown in green) for as long as the board is active. Labels hide during the spin and reappear once the result is shown. Colors alternate strictly by parity (odd = red, even = black).
+- **Color-coded segments**: Each clickable segment is itself a colored block matching its bet — red/black/green wool for straight-up and colour bets, grey/yellow/orange terracotta for the 1st/2nd/3rd dozen — so the betting area is visually readable at a glance. These also hide during the spin and reappear with the labels.
+- **Sticky stake**: Set your wager once with `/roulette stake <amount>`, then every segment you click wagers that amount. Multiple bets in the same round are allowed and stack — including clicking more than one physical segment of the same dozen, which places two independent bets.
+- **Shared round**: The first bet on an idle board opens a **30-second** betting window for everyone nearby — there's no host and no spin button for players. Once the window closes, the wheel spins, a ball orbits and settles into the winning pocket, and the round settles automatically.
+- **Bets are final**: There is no un-betting, no refund on quitting mid-round, and winnings are still credited to your balance even if you log off before the wheel stops.
+- **Settlement summary**: Your personal result message shows the amount wagered and the amount actually won (winnings only, not your returned stake) — e.g. a $100 stake winning at 36:1 shows wagered $100, won $3,600.
+- **Big win announcements**: If your net winnings reach 8x your wager, the whole server is notified.
+- **House balance**: A hologram over each wheel shows the single server-wide house balance — the same account Blackjack's losses feed.
+
+#### Board Construction (Admin)
+
+- Stand near the physical wheel and run `/roulette createboard <min> <max>`, then right-click the button or lever that will act as the board's admin spin control.
+- `<min>`/`<max>` set the board's stake range; both must be whole numbers, `min` at least 1 and no greater than `max`.
+- `/roulette removeboard` begins the removal flow the same way — right-click the target board's spin control to unregister it. Removal is refused while a round is in progress.
+- Once a board is registered, right-clicking its spin control (`tweaks.roulette.forcespin`) force-closes an open betting window and spins immediately — the exact same spin path a window naturally expiring uses, just triggered early. It's a no-op with a message if there's no open round to force, or if the wheel is already spinning.
+
 ### Resource Hunt
 
 A gathering minigame that runs in the **`jass:resource`** (Overworld) or **`jass:resource_nether`** (Nether) world. The active world is picked uniformly at random at server startup (each world that has at least one configured target has an equal chance, regardless of how many entries are in each section), and then **each player receives their own unique task** from that world's pool when they join.
@@ -981,7 +1008,7 @@ Regions support multiple roles and hierarchical parenting.
 
 - **Roles**:
   - **Owner**: Full control. Can unclaim, transfer ownership, and manage managers/members.
-  - **Manager**: Delegated control. Can edit flags, add/remove members, and add/remove other managers. Cannot unclaim or transfer ownership.
+  - **Manager**: Delegated control. Can edit flags and add/remove members. Cannot edit the manager list, unclaim, or transfer ownership — those require the owner (or an admin).
   - **Member**: Build access. Can bypass most protection flags (e.g. they can always build/break).
 - **Group Membership**: Instead of individual players, you can grant roles to entire permission groups (e.g. `builders`). All members of the group automatically gain the role's privileges.
 - **Sub-regions**: You can nest one region inside another using `/region setparent <child> <parent>`.
@@ -1074,10 +1101,12 @@ When an action occurs, the system checks rules in this order:
 | `/reward claim` | Claim pending minigame rewards. |
 | `/balance` | View your current balance. Alias: `/bal`. |
 | `/balance hide` | Toggle whether your balance is visible in the tab list. |
+| `/house balance` | View the casino house account (admin). |
 | `/ranks` | List all available ranks and their benefits. |
 | `/rankup` | Purchase the next rank in the hierarchy. |
 | `/reroll` | Re-roll your current Resource Hunt target. |
 | `/resource` | Teleport to the resource world. |
+| `/roulette stake <amount>` | Set your sticky Roulette stake; every segment click wagers it. |
 
 ### Admin Commands
 
@@ -1093,6 +1122,8 @@ When an action occurs, the system checks rules in this order:
 | `/tprm` | `tweaks.admin.permissions` | Open the Permissions GUI. |
 | `/tprm group <name> <create\|delete\|addperm\|delperm\|inherited-from>` | `tweaks.admin.permissions` | CLI group management. |
 | `/tprm user <player> <addperm\|delperm\|setgroup>` | `tweaks.admin.permissions` | CLI user management. |
+| `/ranks edit` | `tweaks.admin.ranks` | Open the visual rank editor. |
+| `/rank set <player> <rank_id/name>` | `tweaks.admin.rank.set` | Manually assign a player's rank. |
 | `/region claim <name>` | `tweaks.protection.purchaseable` | Claim territory using wand selection. |
 | `/region unclaim <name>` | `tweaks.protection.unclaim` | Remove a region claim. Alias: `/rg unclaim`. |
 | `/region info [name]` | `tweaks.protection.info` | Show region details. Alias: `/rg i`. |
@@ -1110,6 +1141,9 @@ When an action occurs, the system checks rules in this order:
 | `/region gui [name]` | `tweaks.protection.info` | Open the dialog dashboard for a region. |
 | `/blackjack createtable <bet> [hexColor]` | `tweaks.blackjack.createtable` | Create button-linked Blackjack tables. |
 | `/blackjack removetable` | `tweaks.blackjack.removetable` | Remove a Blackjack table. |
+| `/roulette createboard <min> <max>` | `tweaks.roulette.createboard` | Begin Roulette board setup; right-click a button/lever to finalize. |
+| `/roulette removeboard` | `tweaks.roulette.removeboard` | Begin Roulette board removal; right-click the board's spin control. |
+| `/house <balance\|add\|remove\|set\|pay>` | `tweaks.admin.house` | View or administer the server-wide casino house account. |
 | `/tconfig max_homes <int>` | `tweaks.admin.config` | Set global max homes per player. |
 | `/tconfig max_chunks <int>` | `tweaks.admin.config` | Set global max chunk claims per player. |
 | `/tconfig eggdrop <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable Egg Collector drops for a mob. |
@@ -1175,10 +1209,15 @@ When an action occurs, the system checks rules in this order:
 | `tweaks.admin.guicopy` | Allows saving a targeted chest's contents to a YAML file for GUI layouts. |
 | `tweaks.admin.gamemode` | Allows switching gamemodes via command. |
 | `tweaks.admin.balance` | Allows administrative balance management (set, add, remove). |
-| `tweaks.admin.ranks` | Allows administrative rank management and GUI access. |
+| `tweaks.admin.house` | Allows viewing and administering the server-wide casino house account. |
+| `tweaks.admin.ranks` | Allows access to the administrative rank editor via `/ranks edit`. |
+| `tweaks.admin.rank.set` | Allows manually assigning a player's rank via `/rank set`. |
 | `tweaks.admin.permissions` | Grants full access to the custom permission management system, including groups, users, and GUI editor. |
 | `tweaks.blackjack.createtable` | Allows starting the button-linking table creation flow. |
 | `tweaks.blackjack.removetable` | Allows starting the table removal flow. |
+| `tweaks.roulette.createboard` | Allows starting the Roulette board setup flow. |
+| `tweaks.roulette.removeboard` | Allows starting the Roulette board removal flow. |
+| `tweaks.roulette.forcespin` | Allows an admin's board-side control to force-close betting and spin immediately. |
 
 ---
 
@@ -1230,7 +1269,7 @@ efficacy: "jass:test9"
 ### Installation
 
 1. Place the JAR in `plugins/`.
-2. Ensure you are running **Paper 26.1.2** with **Java 25**.
+2. Ensure you are running **Paper 26.2** with **Java 25**.
 3. Install the required **data pack** for custom enchantments.
 4. Start the server, then update namespaced keys in `config.yml`.
 5. Run `/setwarp spawn` to enable `/spawn`.

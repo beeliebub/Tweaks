@@ -1,12 +1,11 @@
 package me.beeliebub.tweaks.tests.protection;
 
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.protection.ProtectionKeys;
 import me.beeliebub.tweaks.protection.ProtectionListeners;
-import me.beeliebub.tweaks.protection.RegionSelectionManager;
-import me.beeliebub.tweaks.protection.ProtectionManager;
-import me.beeliebub.tweaks.protection.Region;
-import me.beeliebub.tweaks.protection.RegionFlag;
+import me.beeliebub.tweaks.protection.ui.RegionSelectionManager;
+import me.beeliebub.tweaks.protection.region.ProtectionManager;
+import me.beeliebub.tweaks.protection.region.Region;
+import me.beeliebub.tweaks.protection.region.RegionFlag;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -25,7 +24,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
-import org.mockito.MockedConstruction;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -44,9 +42,6 @@ class ProtectionListenerTest {
     @BeforeAll
     static void setUp() {
         MockBukkit.mock();
-        try (MockedConstruction<NamespacedKey> ignored = mockConstruction(NamespacedKey.class)) {
-            ProtectionKeys.init(mock(Tweaks.class));
-        }
     }
 
     @AfterAll
@@ -149,7 +144,7 @@ class ProtectionListenerTest {
         // BLOCK_BREAK=true at DEFAULT, but DENY_BLOCK_BREAK protects beacons.
         protection.regions().put("home", new Region("home", UUID.randomUUID(), List.of(),
                 java.util.Map.of(RegionFlag.BLOCK_BREAK,
-                        java.util.Map.of(me.beeliebub.tweaks.protection.FlagTarget.DEFAULT, true)),
+                        java.util.Map.of(me.beeliebub.tweaks.protection.region.FlagTarget.DEFAULT, true)),
                 java.util.Map.of(RegionFlag.DENY_BLOCK_BREAK, java.util.Set.of(Material.BEACON)),
                 null));
         Block b = blockAt(locationInProtectedChunk(List.of("home")), Material.BEACON);
@@ -200,7 +195,7 @@ class ProtectionListenerTest {
     void blockPlaceBlockedByDenyListEvenWhenBaseFlagPermits() {
         protection.regions().put("home", new Region("home", UUID.randomUUID(), List.of(),
                 java.util.Map.of(RegionFlag.BLOCK_PLACE,
-                        java.util.Map.of(me.beeliebub.tweaks.protection.FlagTarget.DEFAULT, true)),
+                        java.util.Map.of(me.beeliebub.tweaks.protection.region.FlagTarget.DEFAULT, true)),
                 java.util.Map.of(RegionFlag.DENY_BLOCK_PLACE, java.util.Set.of(Material.TNT)),
                 null));
         Block b = blockAt(locationInProtectedChunk(List.of("home")), Material.TNT);

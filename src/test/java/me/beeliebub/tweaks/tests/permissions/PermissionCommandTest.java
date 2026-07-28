@@ -44,7 +44,7 @@ class PermissionCommandTest {
     void onCommandNoPermission() {
         player.addAttachment(plugin, Permissions.ADMIN_PERMISSIONS, false);
         command.onCommand(player, mock(Command.class), "tprm", new String[0]);
-        MessageAssert.assertMessageSent(player, "No permission.");
+        MessageAssert.assertMessageSent(player, "do not have permission");
     }
 
     // The /tprm gui main menu is now a Paper Dialog. MockBukkit does not load a

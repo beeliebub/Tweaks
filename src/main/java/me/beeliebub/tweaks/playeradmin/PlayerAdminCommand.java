@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.playeradmin;
 
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -45,7 +46,7 @@ public class PlayerAdminCommand implements CommandExecutor {
 
     private boolean handleGameMode(CommandSender sender, Command command) {
         if (!sender.hasPermission(Permissions.ADMIN_GAMEMODE)) {
-            sender.sendMessage(Component.text("No permission.", NamedTextColor.RED));
+            sender.sendMessage(Messages.noPermission());
             return true;
         }
         if (!(sender instanceof Player player)) {
@@ -147,7 +148,7 @@ public class PlayerAdminCommand implements CommandExecutor {
     private boolean handleNickOff(CommandSender sender, String[] args) {
         if (args.length == 2) {
             if (!sender.hasPermission(Permissions.ADMIN_NICK)) {
-                sender.sendMessage(Component.text("No permission.").color(NamedTextColor.RED));
+                sender.sendMessage(Messages.noPermission());
                 return true;
             }
             String targetName = args[1];

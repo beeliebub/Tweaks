@@ -3,7 +3,7 @@ package me.beeliebub.tweaks.enchantments;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.combos.ItemFilterCommand;
+import me.beeliebub.tweaks.itemadmin.ItemFilterCommand;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Location;

@@ -1,7 +1,6 @@
 package me.beeliebub.tweaks.itemadmin;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+import me.beeliebub.tweaks.core.Messages;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -70,7 +69,7 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can use this command.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.ITEM_ADMIN.displayChestRequiresPlayer());
             return true;
         }
 
@@ -79,9 +78,9 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
             if (arg.equalsIgnoreCase("off")) {
                 boolean enabled = toggleRemovalMode(player.getUniqueId());
                 if (enabled) {
-                    player.sendMessage(Component.text("Display Chest removal mode ENABLED. Click a chest to remove its item display.").color(NamedTextColor.GREEN));
+                    player.sendMessage(Messages.ITEM_ADMIN.displayChestRemovalEnabled());
                 } else {
-                    player.sendMessage(Component.text("Display Chest removal mode DISABLED.").color(NamedTextColor.RED));
+                    player.sendMessage(Messages.ITEM_ADMIN.displayChestRemovalDisabled());
                 }
                 return true;
             }
@@ -99,30 +98,11 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
         if (enabled) {
             setUseCurrentHand(player.getUniqueId(), handFlag);
             setEmbedSide(player.getUniqueId(), sideFlag);
-            player.sendMessage(Component.text(buildEnableMessage(handFlag, sideFlag)).color(NamedTextColor.GREEN));
+            player.sendMessage(Messages.ITEM_ADMIN.displayChestSetupEnabled(handFlag, sideFlag));
         } else {
-            player.sendMessage(Component.text("Display Chest setup mode DISABLED.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.ITEM_ADMIN.displayChestSetupDisabled());
         }
         return true;
-    }
-
-    private static String buildEnableMessage(boolean hand, boolean side) {
-        String source = hand
-                ? "Currently-held item is used on each click"
-                : "Click a chest to display its top-left item";
-        String placement = side
-                ? "Item embeds on the clicked face."
-                : "Item floats above the chest.";
-        StringBuilder sb = new StringBuilder("Display Chest setup mode ENABLED");
-        if (hand || side) {
-            sb.append(" (");
-            if (hand) sb.append("hand");
-            if (hand && side) sb.append(" + ");
-            if (side) sb.append("side");
-            sb.append(")");
-        }
-        sb.append(". ").append(source).append(". ").append(placement);
-        return sb.toString();
     }
 
     @Override
@@ -177,10 +157,10 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
                     } else {
                         processChest(block, player);
                     }
-                    player.sendMessage(Component.text("Display chest generated/updated!").color(NamedTextColor.GREEN));
+                    player.sendMessage(Messages.ITEM_ADMIN.displayChestGeneratedOrUpdated());
                 } else {
                     removeDisplay(block);
-                    player.sendMessage(Component.text("Display chest removed!").color(NamedTextColor.RED));
+                    player.sendMessage(Messages.ITEM_ADMIN.displayChestRemoved());
                 }
             }
         }

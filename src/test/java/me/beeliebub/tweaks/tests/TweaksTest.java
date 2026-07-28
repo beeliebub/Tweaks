@@ -40,9 +40,30 @@ class TweaksTest {
         assertNotNull(server.getCommandMap().getCommand("help"));
     }
 
+    // One command per bootstrap tier, so a dropped or mis-ordered XxxBootstrap.register
+    // call in Tweaks.onEnable() fails a named test instead of silently vanishing.
+    @Test
+    void commandsAreRegisteredPerBootstrapTier() {
+        assertNotNull(server.getCommandMap().getCommand("balance"), "tier 1 - economy");
+        assertNotNull(server.getCommandMap().getCommand("region"), "tier 1 - protection");
+        assertNotNull(server.getCommandMap().getCommand("resource"), "tier 2 - minigames");
+        assertNotNull(server.getCommandMap().getCommand("bloodmoon"), "tier 2 - worldmanagement");
+        assertNotNull(server.getCommandMap().getCommand("home"), "tier 3 - teleport");
+        assertNotNull(server.getCommandMap().getCommand("invsee"), "tier 3 - itemadmin");
+        assertNotNull(server.getCommandMap().getCommand("toolprotect"), "tier 5 - itemadmin straddle");
+        assertNotNull(server.getCommandMap().getCommand("deathinventory"), "tier 5 - deathinventory");
+    }
+
     @Test
     void managersAreInitialized() {
+        assertNotNull(plugin.getProtectionManager());
+        assertNotNull(plugin.getEconomyManager());
+        assertNotNull(plugin.getRankManager());
+        assertNotNull(plugin.getPermissionManager());
+        assertNotNull(plugin.getRegionSelectionManager());
+        assertNotNull(plugin.getProtectionSelectionTool());
         assertNotNull(plugin.getTelekinesis());
         assertNotNull(plugin.getReplant());
+        assertNotNull(plugin.getBlackjackListener());
     }
 }

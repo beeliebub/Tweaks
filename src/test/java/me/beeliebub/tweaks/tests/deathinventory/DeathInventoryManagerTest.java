@@ -15,9 +15,14 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -40,16 +45,30 @@ class DeathInventoryManagerTest {
     Path tempDataFolder;
 
     private DeathInventoryManager manager;
+    private List<LogRecord> logRecords;
 
     /**
      * Constructs a DeathInventoryManager pointing at {@code tempDataFolder/data/deathinventories}
-     * by injecting a mock JavaPlugin whose getDataFolder() returns the temp directory.
+     * by injecting a mock JavaPlugin whose getDataFolder() returns the temp directory. The
+     * plugin's logger is a real {@link Logger} with a capturing {@link Handler} attached, so
+     * IOException-path tests can assert the failure was logged rather than silently swallowed.
      */
     @BeforeEach
     void setUp() throws Exception {
         org.bukkit.plugin.java.JavaPlugin mockPlugin =
                 Mockito.mock(org.bukkit.plugin.java.JavaPlugin.class);
         Mockito.when(mockPlugin.getDataFolder()).thenReturn(tempDataFolder.toFile());
+
+        Logger logger = Logger.getLogger("DeathInventoryManagerTest-" + System.nanoTime());
+        logger.setUseParentHandlers(false);
+        logRecords = new ArrayList<>();
+        logger.addHandler(new Handler() {
+            @Override public void publish(LogRecord record) { logRecords.add(record); }
+            @Override public void flush() {}
+            @Override public void close() {}
+        });
+        Mockito.when(mockPlugin.getLogger()).thenReturn(logger);
+
         manager = new DeathInventoryManager(mockPlugin);
     }
 
@@ -65,6 +84,29 @@ class DeathInventoryManagerTest {
         List<File> files = manager.listInventories(uuid);
         assertEquals(1, files.size(), "Expected exactly one saved record");
         assertTrue(files.getFirst().getName().endsWith(".yml"));
+    }
+
+    @Test
+    void saveInventory_logsWarningInsteadOfThrowingWhenPlayerDirIsBlockedByFile() throws IOException {
+        // A regular FILE at the exact path the player directory would occupy makes dir.mkdirs()
+        // fail and the subsequent write target unresolvable — the portable way to force
+        // YamlStore.saveNow's IOException path without OS-specific permission flags.
+        UUID uuid = UUID.randomUUID();
+        File blockedPlayerDir = new File(tempDataFolder.toFile(), "data/deathinventories/" + uuid);
+        assertTrue(blockedPlayerDir.getParentFile().isDirectory()
+                || blockedPlayerDir.getParentFile().mkdirs());
+        assertTrue(blockedPlayerDir.createNewFile(),
+                "precondition: a file, not a directory, occupies the player-dir path");
+
+        assertDoesNotThrow(() -> manager.saveInventory(uuid, emptyContents()),
+                "a save failure must be logged, never thrown to the caller");
+
+        assertTrue(manager.listInventories(uuid).isEmpty(),
+                "no record could have been written while the player dir is blocked");
+        assertFalse(logRecords.isEmpty(), "the failure must be logged");
+        assertEquals(Level.WARNING, logRecords.getFirst().getLevel());
+        assertNotNull(logRecords.getFirst().getThrown(),
+                "the IOException must be attached, not just its message");
     }
 
     @Test
@@ -106,6 +148,36 @@ class DeathInventoryManagerTest {
         File file = manager.getFile(uuid, "0");
         // getFile simply constructs the path; exists() is false for missing files.
         assertFalse(file.exists(), "getFile should return a non-existent file for a missing id");
+    }
+
+    @Test
+    void getFile_rejectsPathTraversalId() {
+        // A real save always produces a digit-only System.currentTimeMillis() stem. Anything
+        // else — especially a traversal attempt — must resolve to a sentinel path that can never
+        // exist, rather than escaping the player's directory.
+        UUID uuid = UUID.randomUUID();
+        manager.saveInventory(uuid, emptyContents());
+
+        File traversal = manager.getFile(uuid, "../../../../etc/passwd");
+
+        assertFalse(traversal.exists());
+        assertEquals("invalid-request.yml", traversal.getName());
+    }
+
+    @Test
+    void getFile_rejectsNonDigitId() {
+        UUID uuid = UUID.randomUUID();
+        File file = manager.getFile(uuid, "not-a-timestamp");
+        assertFalse(file.exists());
+        assertEquals("invalid-request.yml", file.getName());
+    }
+
+    @Test
+    void getFile_rejectsEmptyId() {
+        UUID uuid = UUID.randomUUID();
+        File file = manager.getFile(uuid, "");
+        assertFalse(file.exists());
+        assertEquals("invalid-request.yml", file.getName());
     }
 
     // ─── listInventories ordering ─────────────────────────────────────────────

@@ -1,9 +1,8 @@
 package me.beeliebub.tweaks.economy;
 
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.ranks.RankManager;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -83,11 +82,7 @@ public class EconomyListener implements Listener {
         economyManager.setLastLogin(uuid, now);
 
         // Notify the player.
-        player.sendMessage(
-            Component.text("Daily reward: ", NamedTextColor.GOLD)
-                .append(Component.text("+" + BalanceCommand.formatBalance(reward), NamedTextColor.YELLOW))
-                .append(Component.text(" (Day " + newStreak + " streak)", NamedTextColor.GREEN))
-        );
+        player.sendMessage(Messages.dailyReward(BalanceCommand.formatBalance(reward), newStreak));
     }
 
 }

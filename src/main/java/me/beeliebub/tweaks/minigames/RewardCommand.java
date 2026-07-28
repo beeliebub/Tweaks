@@ -1,8 +1,7 @@
 package me.beeliebub.tweaks.minigames;
 
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -55,50 +54,49 @@ public class RewardCommand implements CommandExecutor, TabCompleter {
 
     private void handleCreate(CommandSender sender, String[] args) {
         if (!sender.hasPermission(Permissions.ADMIN_REWARD)) {
-            sender.sendMessage(Component.text("You do not have permission.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.noPermission());
             return;
         }
 
         if (args.length < 2) {
-            sender.sendMessage(Component.text("Usage: /reward create <name>").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.MINIGAMES.rewardCreateUsage());
             return;
         }
 
         String name = args[1].toLowerCase();
 
         if (rewardManager.rewardExists(name)) {
-            sender.sendMessage(Component.text("A reward named '" + name + "' already exists.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.MINIGAMES.rewardAlreadyExists(name));
             return;
         }
 
         rewardManager.createReward(name);
-        sender.sendMessage(Component.text("Reward '" + name + "' created! Use /reward edit " + name + " to set its items.")
-                .color(NamedTextColor.GREEN));
+        sender.sendMessage(Messages.MINIGAMES.rewardCreated(name));
     }
 
     private void handleEdit(CommandSender sender, String[] args) {
         if (!sender.hasPermission(Permissions.ADMIN_REWARD)) {
-            sender.sendMessage(Component.text("You do not have permission.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.noPermission());
             return;
         }
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can edit reward items (opens a chest GUI).").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.MINIGAMES.rewardEditRequiresPlayer());
             return;
         }
 
         if (args.length < 2) {
-            player.sendMessage(Component.text("Usage: /reward edit <name>").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.rewardEditUsage());
             return;
         }
 
         String name = args[1].toLowerCase();
 
         if (!rewardManager.rewardExists(name)) {
-            player.sendMessage(Component.text("No reward named '" + name + "' exists.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.rewardDoesNotExist(name));
             return;
         }
 
-        Inventory inv = Bukkit.createInventory(null, 27, Component.text("Reward: " + name).color(NamedTextColor.GOLD));
+        Inventory inv = Bukkit.createInventory(null, 27, Messages.MINIGAMES.rewardEditorTitle(name));
 
         // Pre-fill with existing items
         ItemStack[] existing = rewardManager.getRewardItems(name);
@@ -113,11 +111,11 @@ public class RewardCommand implements CommandExecutor, TabCompleter {
     @SuppressWarnings("deprecation")
     private void handleGive(CommandSender sender, String[] args) {
         if (!sender.hasPermission(Permissions.ADMIN_REWARD)) {
-            sender.sendMessage(Component.text("You do not have permission.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.noPermission());
             return;
         }
         if (args.length < 3) {
-            sender.sendMessage(Component.text("Usage: /reward give <player> <reward> [count]").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.MINIGAMES.rewardGiveUsage());
             return;
         }
 
@@ -129,23 +127,23 @@ public class RewardCommand implements CommandExecutor, TabCompleter {
             try {
                 count = Integer.parseInt(args[3]);
             } catch (NumberFormatException e) {
-                sender.sendMessage(Component.text("Count must be an integer.").color(NamedTextColor.RED));
+                sender.sendMessage(Messages.MINIGAMES.rewardCountMustBeInteger());
                 return;
             }
             if (count < 1) {
-                sender.sendMessage(Component.text("Count must be at least 1.").color(NamedTextColor.RED));
+                sender.sendMessage(Messages.MINIGAMES.rewardCountMustBePositive());
                 return;
             }
         }
 
         if (!rewardManager.rewardExists(rewardName)) {
-            sender.sendMessage(Component.text("No reward named '" + rewardName + "' exists.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.MINIGAMES.rewardDoesNotExist(rewardName));
             return;
         }
 
         OfflinePlayer target = Bukkit.getOfflinePlayer(playerName);
         if (!target.hasPlayedBefore() && !target.isOnline()) {
-            sender.sendMessage(Component.text("Player '" + playerName + "' has never played before.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.MINIGAMES.rewardRecipientHasNeverPlayed(playerName));
             return;
         }
 
@@ -154,30 +152,23 @@ public class RewardCommand implements CommandExecutor, TabCompleter {
         }
 
         String resolvedName = target.getName() == null ? playerName : target.getName();
-        sender.sendMessage(Component.text("Granted " + count + "x '" + rewardName + "' to " + resolvedName + ".")
-                .color(NamedTextColor.GREEN));
+        sender.sendMessage(Messages.MINIGAMES.rewardGranted(count, rewardName, resolvedName));
 
         Player onlineTarget = target.getPlayer();
         if (onlineTarget != null) {
-            onlineTarget.sendMessage(Component.text()
-                    .append(Component.text("You received " + count + "x ", NamedTextColor.YELLOW))
-                    .append(Component.text("'" + rewardName + "'", NamedTextColor.GOLD))
-                    .append(Component.text(". Use ", NamedTextColor.YELLOW))
-                    .append(Component.text("/reward claim", NamedTextColor.GOLD))
-                    .append(Component.text(" to collect.", NamedTextColor.YELLOW))
-                    .build());
+            onlineTarget.sendMessage(Messages.MINIGAMES.rewardReceived(count, rewardName));
         }
     }
 
     private void handleClaim(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can claim rewards.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.MINIGAMES.rewardClaimRequiresPlayer());
             return;
         }
         List<String> pending = rewardManager.getPendingRewards(player.getUniqueId());
 
         if (pending.isEmpty()) {
-            player.sendMessage(Component.text("You have no rewards to claim.").color(NamedTextColor.YELLOW));
+            player.sendMessage(Messages.MINIGAMES.rewardNoneToClaim());
             return;
         }
 
@@ -198,25 +189,14 @@ public class RewardCommand implements CommandExecutor, TabCompleter {
         rewardManager.clearPendingRewards(player.getUniqueId());
 
         if (totalGiven > 0) {
-            player.sendMessage(Component.text("Rewards claimed! Items that didn't fit were dropped at your feet.")
-                    .color(NamedTextColor.GREEN));
+            player.sendMessage(Messages.MINIGAMES.rewardClaimedWithOverflowWarning());
         } else {
-            player.sendMessage(Component.text("Rewards claimed, but they contained no items.").color(NamedTextColor.YELLOW));
+            player.sendMessage(Messages.MINIGAMES.rewardClaimedNoItems());
         }
     }
 
     private void sendUsage(CommandSender sender, String label) {
-        sender.sendMessage(Component.text("=== Rewards ===").color(NamedTextColor.GOLD));
-        if (sender.hasPermission(Permissions.ADMIN_REWARD)) {
-            sender.sendMessage(Component.text("/" + label + " create <name>").color(NamedTextColor.YELLOW)
-                    .append(Component.text(" - Create a new reward").color(NamedTextColor.GRAY)));
-            sender.sendMessage(Component.text("/" + label + " edit <name>").color(NamedTextColor.YELLOW)
-                    .append(Component.text(" - Edit reward items").color(NamedTextColor.GRAY)));
-            sender.sendMessage(Component.text("/" + label + " give <player> <reward> [count]").color(NamedTextColor.YELLOW)
-                    .append(Component.text(" - Queue a reward for a player").color(NamedTextColor.GRAY)));
-        }
-        sender.sendMessage(Component.text("/" + label + " claim").color(NamedTextColor.YELLOW)
-                .append(Component.text(" - Claim pending rewards").color(NamedTextColor.GRAY)));
+        Messages.MINIGAMES.rewardUsage(label, sender.hasPermission(Permissions.ADMIN_REWARD)).forEach(sender::sendMessage);
     }
 
     @Override

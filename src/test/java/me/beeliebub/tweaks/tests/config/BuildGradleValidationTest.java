@@ -39,16 +39,16 @@ class BuildGradleValidationTest {
     void compileOnlyPaperApiAtRuntimeMatchesPluginYmlApiVersion() {
         assertTrue(buildGradle.contains("io.papermc.paper:paper-api"),
                 "must depend on paper-api");
-        assertTrue(buildGradle.contains("paper-api:26.1.2"),
-                "build.gradle.kts paper-api version should target 26.1.2.x");
-        assertTrue(pluginYml.contains("api-version: '26.1.1'") || pluginYml.contains("api-version: '26.1.2'"),
-                "plugin.yml api-version should align with paper-api 26.1.x");
+        assertTrue(buildGradle.contains("paper-api:26.2"),
+                "build.gradle.kts paper-api version should target 26.2.x");
+        assertTrue(pluginYml.contains("api-version: '26.2'"),
+                "plugin.yml api-version should align with paper-api 26.2");
     }
 
     @Test
     void runServerTaskUsesMatchingMinecraftVersion() {
-        assertTrue(buildGradle.contains("minecraftVersion(\"26.1.2\")"),
-                "runServer task must target Minecraft 26.1.2");
+        assertTrue(buildGradle.contains("minecraftVersion(\"26.2\")"),
+                "runServer task must target Minecraft 26.2");
     }
 
     @Test

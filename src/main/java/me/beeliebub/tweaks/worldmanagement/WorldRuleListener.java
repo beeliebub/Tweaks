@@ -1,8 +1,8 @@
 package me.beeliebub.tweaks.worldmanagement;
 
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.protection.ProtectionManager;
-import me.beeliebub.tweaks.protection.RegionFlag;
+import me.beeliebub.tweaks.protection.region.ProtectionManager;
+import me.beeliebub.tweaks.protection.region.RegionFlag;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;

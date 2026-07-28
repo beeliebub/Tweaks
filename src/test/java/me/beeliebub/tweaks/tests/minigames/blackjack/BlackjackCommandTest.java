@@ -130,19 +130,19 @@ class BlackjackCommandTest {
 
         command.onCommand(player, bukkitCmd, "blackjack", new String[]{"createtable", "notanumber"});
 
-        MessageAssert.assertMessageSent(player, "whole number");
+        MessageAssert.assertMessageSent(player, "positive number, 0, or 'free'");
         verifyNoInteractions(listenerMock);
     }
 
     @Test
-    void createTableWithZeroBetIsRejected() {
+    void createTableWithZeroBetStartsFreeTable() {
         PlayerMock player = server.addPlayer();
         player.addAttachment(plugin, Permissions.BLACKJACK_CREATETABLE, true);
 
         command.onCommand(player, bukkitCmd, "blackjack", new String[]{"createtable", "0"});
 
-        MessageAssert.assertMessageSent(player, "greater than 0");
-        verifyNoInteractions(listenerMock);
+        // "0" is a documented alias for a stakes-free practice table, same as "free".
+        verify(listenerMock, times(1)).beginTableSetup(player, 0, null);
     }
 
     @Test
@@ -152,7 +152,7 @@ class BlackjackCommandTest {
 
         command.onCommand(player, bukkitCmd, "blackjack", new String[]{"createtable", "-50"});
 
-        MessageAssert.assertMessageSent(player, "greater than 0");
+        MessageAssert.assertMessageSent(player, "cannot be negative");
         verifyNoInteractions(listenerMock);
     }
 

@@ -7,11 +7,11 @@ import io.papermc.paper.registry.data.dialog.action.DialogAction;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
+import me.beeliebub.tweaks.core.Messages;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
@@ -41,12 +41,10 @@ import java.util.function.Consumer;
 //          └─ USERS_LIST ──┬─ USER_HUB ──┬─ USER_PERM_CATEGORIES ── USER_PERMS (paginated per category)
 //                          │             └─ USER_GROUP_PICKER
 //                          └─ SEARCH_USER → USER_HUB
-@SuppressWarnings("UnstableApiUsage") // Paper's Dialog API is @ApiStatus.Experimental in 26.1.2.
+@SuppressWarnings("UnstableApiUsage") // Paper's Dialog API is @ApiStatus.Experimental in 26.2.
 public final class PermissionGUI {
 
     private PermissionGUI() {}
-
-    private static final MiniMessage MM = MiniMessage.miniMessage();
 
     // Pagination layout shared by every multi-action list dialog.
     private static final int DIALOG_PAGE_SIZE = 12;
@@ -56,20 +54,19 @@ public final class PermissionGUI {
 
     public static void openMainMenu(Player player, PermissionManager manager) {
         ActionButton groupsButton = dialogButton(
-                Component.text("Groups", NamedTextColor.GREEN, TextDecoration.BOLD),
-                Component.text("Click to manage groups.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.groupsLabel(),
+                Messages.PERMISSIONS.groupsTooltip(),
                 p -> openGroupsMenu(p, manager, 0));
 
         ActionButton playersButton = dialogButton(
-                Component.text("Players", NamedTextColor.GREEN, TextDecoration.BOLD),
-                Component.text("Click to manage players.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.playersLabel(),
+                Messages.PERMISSIONS.playersTooltip(),
                 p -> openUsersMenu(p, manager, 0));
 
         DialogBase base = DialogBase.builder(
-                        MM.deserialize("<!italic><green><bold>Permissions"))
+                        Messages.PERMISSIONS.mainTitle())
                 .body(List.of(
-                        DialogBody.plainMessage(Component.text("Select a category to manage.", NamedTextColor.GRAY)
-                                .decoration(TextDecoration.ITALIC, false))
+                        DialogBody.plainMessage(Messages.PERMISSIONS.mainBody())
                 ))
                 .build();
 
@@ -104,17 +101,18 @@ public final class PermissionGUI {
                 target -> openGroupsMenu(target, manager, currentPage + 1));
 
         buttons.add(dialogButton(
-                Component.text("+ Create Group", NamedTextColor.YELLOW, TextDecoration.BOLD),
-                Component.text("Open the new group dialog.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.createGroupLabel(),
+                Messages.PERMISSIONS.createGroupTooltip(),
                 p -> openCreateGroupDialog(p, manager)));
 
         ActionButton back = dialogButton(
-                Component.text("← Back", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("Return to the main permissions menu.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.backLabel(),
+                Messages.PERMISSIONS.backToMainTooltip(),
                 p -> openMainMenu(p, manager));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Groups"))
-                .body(List.of(DialogBody.plainMessage(pageSummary(groupNames.size(), "group", currentPage, totalPages))))
+        DialogBase base = DialogBase.builder(Messages.PERMISSIONS.groupsTitle())
+                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.pageSummary(
+                        groupNames.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.GROUP, currentPage, totalPages))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -128,16 +126,8 @@ public final class PermissionGUI {
     }
 
     private static ActionButton groupListEntryButton(PermissionGroup group, PermissionManager manager) {
-        Component label = Component.text(group.getName(), NamedTextColor.YELLOW, TextDecoration.BOLD);
-        List<Component> tipLines = new ArrayList<>();
-        tipLines.add(Component.text("Permissions: ", NamedTextColor.GRAY)
-                .append(Component.text(group.getPermissions().size(), NamedTextColor.YELLOW)));
-        if (group.getParentName() != null) {
-            tipLines.add(Component.text("Inherits from: ", NamedTextColor.GRAY)
-                    .append(Component.text(group.getParentName(), NamedTextColor.YELLOW)));
-        }
-        tipLines.add(Component.text("Click to manage.", NamedTextColor.GRAY));
-        return dialogButton(label, joinLines(tipLines.toArray(new Component[0])),
+        return dialogButton(Messages.PERMISSIONS.groupListLabel(group.getName()),
+                Messages.PERMISSIONS.groupListTooltip(group.getPermissions().size(), group.getParentName()),
                 p -> openGroupHub(p, manager, group.getName()));
     }
 
@@ -145,10 +135,9 @@ public final class PermissionGUI {
 
     public static void openCreateGroupDialog(Player player, PermissionManager manager) {
         ActionButton create = ActionButton.builder(
-                        Component.text("Create", NamedTextColor.GREEN, TextDecoration.BOLD)
+                        Messages.PERMISSIONS.createLabel()
                                 .decoration(TextDecoration.ITALIC, false))
-                .tooltip(Component.text("Create the group with the entered name.", NamedTextColor.GRAY)
-                        .decoration(TextDecoration.ITALIC, false))
+                .tooltip(Messages.PERMISSIONS.createTooltip())
                 .action(DialogAction.customClick(
                         (view, audience) -> {
                             if (audience instanceof Player p) {
@@ -159,18 +148,16 @@ public final class PermissionGUI {
                 .build();
 
         ActionButton cancel = dialogButton(
-                Component.text("Cancel", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("Return to the groups list.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.cancelLabel(),
+                Messages.PERMISSIONS.cancelGroupsTooltip(),
                 p -> openGroupsMenu(p, manager, 0));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green><bold>Create Group"))
+        DialogBase base = DialogBase.builder(Messages.PERMISSIONS.createGroupTitle())
                 .body(List.of(DialogBody.plainMessage(
-                        Component.text("Enter the new group name. No spaces.", NamedTextColor.GRAY)
-                                .decoration(TextDecoration.ITALIC, false))))
+                        Messages.PERMISSIONS.createGroupBody())))
                 .inputs(List.of(
                         DialogInput.text("group_name",
-                                        Component.text("Group Name", NamedTextColor.YELLOW)
-                                                .decoration(TextDecoration.ITALIC, false))
+                                        Messages.PERMISSIONS.groupNameInput())
                                 .maxLength(32)
                                 .build()
                 ))
@@ -186,19 +173,19 @@ public final class PermissionGUI {
     private static void handleCreateGroupSubmission(Player player, PermissionManager manager, String rawName) {
         String trimmed = rawName == null ? "" : rawName.trim();
         if (trimmed.isEmpty() || trimmed.contains(" ")) {
-            player.sendMessage(Component.text("Invalid group name. Names cannot contain spaces.", NamedTextColor.RED));
+            player.sendMessage(Messages.PERMISSIONS.invalidGroupName());
             openGroupsMenu(player, manager, 0);
             return;
         }
         String key = trimmed.toLowerCase();
         if (manager.getGroups().containsKey(key)) {
-            player.sendMessage(Component.text("Group already exists.", NamedTextColor.RED));
+            player.sendMessage(Messages.PERMISSIONS.groupAlreadyExists());
             openGroupsMenu(player, manager, 0);
             return;
         }
         manager.getGroups().put(key, new PermissionGroup(trimmed));
         manager.saveGroups();
-        player.sendMessage(Component.text("Group '" + trimmed + "' created.", NamedTextColor.GREEN));
+        player.sendMessage(Messages.PERMISSIONS.groupCreated(trimmed));
         openGroupsMenu(player, manager, 0);
     }
 
@@ -215,40 +202,35 @@ public final class PermissionGUI {
         List<ActionButton> buttons = new ArrayList<>();
 
         buttons.add(dialogButton(
-                Component.text("Edit Permissions", NamedTextColor.GREEN, TextDecoration.BOLD),
-                Component.text(group.getPermissions().size() + " direct permission(s).", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.editPermissionsLabel(),
+                Messages.PERMISSIONS.directPermissionsTooltip(group.getPermissions().size()),
                 p -> openGroupPermCategories(p, manager, name)));
 
         buttons.add(dialogButton(
-                Component.text("Manage Members", NamedTextColor.AQUA, TextDecoration.BOLD),
-                Component.text("Add or remove players via toggle.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.manageMembersLabel(),
+                Messages.PERMISSIONS.manageMembersTooltip(),
                 p -> openGroupMembersToggle(p, manager, name, 0)));
 
         buttons.add(dialogButton(
-                Component.text("Inheritance", NamedTextColor.YELLOW, TextDecoration.BOLD),
-                joinLines(
-                        Component.text("Inherits from: ", NamedTextColor.GRAY)
-                                .append(Component.text(group.getParentName() == null ? "none" : group.getParentName(),
-                                        NamedTextColor.YELLOW)),
-                        Component.text("Click to choose parent group.", NamedTextColor.GRAY)),
+                Messages.PERMISSIONS.inheritanceLabel(),
+                Messages.PERMISSIONS.inheritanceTooltip(group.getParentName()),
                 p -> openGroupInheritancePicker(p, manager, name, 0)));
 
         if (!name.equalsIgnoreCase("default")) {
             buttons.add(dialogButton(
-                    Component.text("Delete Group", NamedTextColor.RED, TextDecoration.BOLD),
-                    Component.text("CAUTION: This cannot be undone!", NamedTextColor.RED),
+                    Messages.PERMISSIONS.deleteGroupLabel(),
+                    Messages.PERMISSIONS.deleteGroupWarning(),
                     p -> handleDeleteGroup(p, manager, name)));
         }
 
         ActionButton back = dialogButton(
-                Component.text("← Back to Groups", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("Return to the groups list.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.backToGroupsLabel(),
+                Messages.PERMISSIONS.groupsListTooltip(),
                 p -> openGroupsMenu(p, manager, 0));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Group: " + name))
+        DialogBase base = DialogBase.builder(Messages.PERMISSIONS.groupTitle(name))
                 .body(List.of(DialogBody.plainMessage(
-                        Component.text("Manage settings for this group.", NamedTextColor.GRAY)
-                                .decoration(TextDecoration.ITALIC, false))))
+                        Messages.PERMISSIONS.groupBody())))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -263,14 +245,14 @@ public final class PermissionGUI {
 
     private static void handleDeleteGroup(Player player, PermissionManager manager, String groupName) {
         if (groupName.equalsIgnoreCase("default")) {
-            player.sendMessage(Component.text("Cannot delete default group.", NamedTextColor.RED));
+            player.sendMessage(Messages.PERMISSIONS.defaultGroupCannotBeDeleted());
             openGroupHub(player, manager, groupName);
             return;
         }
         manager.getGroups().remove(groupName.toLowerCase());
         manager.saveGroups();
         refreshAllInGroupForPlayers(manager, groupName);
-        player.sendMessage(Component.text("Group '" + groupName + "' deleted.", NamedTextColor.GREEN));
+        player.sendMessage(Messages.PERMISSIONS.groupDeleted(groupName));
         openGroupsMenu(player, manager, 0);
     }
 
@@ -289,23 +271,20 @@ public final class PermissionGUI {
             String catDisplay = entry.getValue();
             List<String> catPerms = Permissions.getPermissionsByCategory(catKey);
             long grantedCount = catPerms.stream().filter(group::hasDirectPermission).count();
-            Component label = Component.text(catDisplay, NamedTextColor.YELLOW, TextDecoration.BOLD);
-            Component tip = joinLines(
-                    Component.text(catPerms.size() + " permission(s) — " + grantedCount + " granted.", NamedTextColor.GRAY),
-                    Component.text("Click to view and toggle.", NamedTextColor.GRAY));
+            Component label = Messages.PERMISSIONS.categoryLabel(catDisplay);
+            Component tip = Messages.PERMISSIONS.categoryTooltip(catPerms.size(), grantedCount);
             buttons.add(dialogButton(label, tip,
                     p -> openGroupPerms(p, manager, name, catKey, 0)));
         }
 
         ActionButton back = dialogButton(
-                Component.text("← Back to Group", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("Return to the group menu.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.backToGroupLabel(),
+                Messages.PERMISSIONS.groupMenuTooltip(),
                 p -> openGroupHub(p, manager, name));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Permissions: " + name))
+        DialogBase base = DialogBase.builder(Messages.PERMISSIONS.groupPermissionsTitle(name))
                 .body(List.of(DialogBody.plainMessage(
-                        Component.text("Select a category to edit.", NamedTextColor.GRAY)
-                                .decoration(TextDecoration.ITALIC, false))))
+                        Messages.PERMISSIONS.selectCategoryBody())))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -337,10 +316,8 @@ public final class PermissionGUI {
         for (int i = start; i < end; i++) {
             String perm = catPerms.get(i);
             boolean has = group.hasDirectPermission(perm);
-            Component label = Component.text((has ? "✓ " : "✗ ") + perm,
-                    has ? NamedTextColor.GREEN : NamedTextColor.RED, TextDecoration.BOLD);
-            Component tip = Component.text(has ? "Click to revoke." : "Click to grant.",
-                    NamedTextColor.GRAY);
+            Component label = Messages.PERMISSIONS.permissionToggleLabel(perm, has);
+            Component tip = Messages.PERMISSIONS.permissionToggleTooltip(has);
             buttons.add(dialogButton(label, tip,
                     p -> toggleGroupPermission(p, manager, name, perm, category, currentPage)));
         }
@@ -350,12 +327,13 @@ public final class PermissionGUI {
                 target -> openGroupPerms(target, manager, name, category, currentPage + 1));
 
         ActionButton back = dialogButton(
-                Component.text("← Back to Categories", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("Return to the category list.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.backToCategoriesLabel(),
+                Messages.PERMISSIONS.categoriesTooltip(),
                 p -> openGroupPermCategories(p, manager, name));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>" + catDisplay + ": " + name))
-                .body(List.of(DialogBody.plainMessage(pageSummary(catPerms.size(), "permission", currentPage, totalPages))))
+        DialogBase base = DialogBase.builder(Messages.PERMISSIONS.permissionsTitle(catDisplay, name))
+                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.pageSummary(
+                        catPerms.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PERMISSION, currentPage, totalPages))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -406,15 +384,8 @@ public final class PermissionGUI {
                     ? "default"
                     : String.join(", ", u.getGroups());
 
-            Component label = Component.text((isMember ? "✓ " : "✗ ") + playerName,
-                    isMember ? NamedTextColor.GREEN : NamedTextColor.GRAY, TextDecoration.BOLD);
-            Component tip = joinLines(
-                    Component.text(target.isOnline() ? "Online" : "Offline",
-                            target.isOnline() ? NamedTextColor.GREEN : NamedTextColor.DARK_GRAY),
-                    Component.text("Groups: ", NamedTextColor.GRAY)
-                            .append(Component.text(groupsLabel, NamedTextColor.YELLOW)),
-                    Component.text(isMember ? "Click to remove from this group." : "Click to add to this group.",
-                            NamedTextColor.GRAY));
+            Component label = Messages.PERMISSIONS.playerMembershipLabel(playerName, isMember, NamedTextColor.GRAY);
+            Component tip = Messages.PERMISSIONS.playerDetailsTooltip(target.isOnline(), groupsLabel, isMember);
             buttons.add(dialogButton(label, tip,
                     p -> toggleGroupMembership(p, manager, name, uuid, currentPage)));
         }
@@ -424,12 +395,13 @@ public final class PermissionGUI {
                 target -> openGroupMembersToggle(target, manager, name, currentPage + 1));
 
         ActionButton back = dialogButton(
-                Component.text("← Back to Group", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("Return to the group menu.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.backToGroupLabel(),
+                Messages.PERMISSIONS.groupMenuTooltip(),
                 p -> openGroupHub(p, manager, name));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Members: " + name))
-                .body(List.of(DialogBody.plainMessage(pageSummary(all.size(), "player", currentPage, totalPages))))
+        DialogBase base = DialogBase.builder(Messages.PERMISSIONS.membersTitle(name))
+                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.pageSummary(
+                        all.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PLAYER, currentPage, totalPages))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -472,24 +444,15 @@ public final class PermissionGUI {
             PermissionGroup candidate = manager.getGroups().get(candidates.get(i));
             boolean isCurrentParent = candidate.getName().equalsIgnoreCase(group.getParentName());
 
-            Component label = Component.text((isCurrentParent ? "✓ " : "  ") + candidate.getName(),
-                    isCurrentParent ? NamedTextColor.GREEN : NamedTextColor.YELLOW, TextDecoration.BOLD);
-            List<Component> tipLines = new ArrayList<>();
-            tipLines.add(Component.text("Permissions: ", NamedTextColor.GRAY)
-                    .append(Component.text(candidate.getPermissions().size(), NamedTextColor.YELLOW)));
-            if (candidate.getParentName() != null) {
-                tipLines.add(Component.text("Inherits from: ", NamedTextColor.GRAY)
-                        .append(Component.text(candidate.getParentName(), NamedTextColor.YELLOW)));
-            }
-            tipLines.add(Component.text(isCurrentParent ? "Currently the parent." : "Click to set as parent.",
-                    NamedTextColor.GRAY));
-            buttons.add(dialogButton(label, joinLines(tipLines.toArray(new Component[0])),
+            Component label = Messages.PERMISSIONS.parentCandidateLabel(candidate.getName(), isCurrentParent);
+            buttons.add(dialogButton(label, Messages.PERMISSIONS.parentCandidateTooltip(
+                    candidate.getPermissions().size(), candidate.getParentName(), isCurrentParent),
                     p -> setGroupParent(p, manager, name, candidate.getName())));
         }
 
         buttons.add(dialogButton(
-                Component.text("✗ None", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("Clear inheritance.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.noneLabel(),
+                Messages.PERMISSIONS.clearInheritanceTooltip(),
                 p -> setGroupParent(p, manager, name, null)));
 
         addPageNavButtons(buttons, currentPage, totalPages,
@@ -497,12 +460,13 @@ public final class PermissionGUI {
                 target -> openGroupInheritancePicker(target, manager, name, currentPage + 1));
 
         ActionButton back = dialogButton(
-                Component.text("← Back to Group", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("Return to the group menu.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.backToGroupLabel(),
+                Messages.PERMISSIONS.groupMenuTooltip(),
                 p -> openGroupHub(p, manager, name));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Inheritance: " + name))
-                .body(List.of(DialogBody.plainMessage(pageSummary(candidates.size(), "group", currentPage, totalPages))))
+        DialogBase base = DialogBase.builder(Messages.PERMISSIONS.inheritanceTitle(name))
+                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.pageSummary(
+                        candidates.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.GROUP, currentPage, totalPages))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -524,8 +488,7 @@ public final class PermissionGUI {
         group.setParentName(parentName == null ? null : parentName.toLowerCase());
         manager.saveGroups();
         refreshAllInGroupForPlayers(manager, group.getName());
-        player.sendMessage(Component.text("Set inheritance for " + group.getName() + " to "
-                + (parentName == null ? "none" : parentName) + ".", NamedTextColor.GREEN));
+        player.sendMessage(Messages.PERMISSIONS.groupInheritanceSetFromGui(group.getName(), parentName));
         openGroupHub(player, manager, group.getName());
     }
 
@@ -549,13 +512,8 @@ public final class PermissionGUI {
                     ? "default"
                     : String.join(", ", u.getGroups());
 
-            Component label = Component.text(playerName, NamedTextColor.YELLOW, TextDecoration.BOLD);
-            Component tip = joinLines(
-                    Component.text(target.isOnline() ? "Online" : "Offline",
-                            target.isOnline() ? NamedTextColor.GREEN : NamedTextColor.DARK_GRAY),
-                    Component.text("Groups: ", NamedTextColor.GRAY)
-                            .append(Component.text(groupsLabel, NamedTextColor.YELLOW)),
-                    Component.text("Click to edit permissions.", NamedTextColor.GRAY));
+            Component label = Messages.PERMISSIONS.playerListLabel(playerName);
+            Component tip = Messages.PERMISSIONS.playerListTooltip(target.isOnline(), groupsLabel);
             buttons.add(dialogButton(label, tip, p -> openUserHub(p, manager, uuid)));
         }
 
@@ -564,17 +522,18 @@ public final class PermissionGUI {
                 target -> openUsersMenu(target, manager, currentPage + 1));
 
         buttons.add(dialogButton(
-                Component.text("⌕ Search Player", NamedTextColor.AQUA, TextDecoration.BOLD),
-                Component.text("Open the player search dialog.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.searchPlayerLabel(),
+                Messages.PERMISSIONS.searchPlayerTooltip(),
                 p -> openSearchUserDialog(p, manager)));
 
         ActionButton back = dialogButton(
-                Component.text("← Back", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("Return to the main permissions menu.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.backLabel(),
+                Messages.PERMISSIONS.backToMainTooltip(),
                 p -> openMainMenu(p, manager));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Players"))
-                .body(List.of(DialogBody.plainMessage(pageSummary(uuids.size(), "player", currentPage, totalPages))))
+        DialogBase base = DialogBase.builder(Messages.PERMISSIONS.playersTitle())
+                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.pageSummary(
+                        uuids.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PLAYER, currentPage, totalPages))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -591,10 +550,9 @@ public final class PermissionGUI {
 
     public static void openSearchUserDialog(Player player, PermissionManager manager) {
         ActionButton submit = ActionButton.builder(
-                        Component.text("Search", NamedTextColor.GREEN, TextDecoration.BOLD)
+                        Messages.PERMISSIONS.searchLabel()
                                 .decoration(TextDecoration.ITALIC, false))
-                .tooltip(Component.text("Open the matching player's hub.", NamedTextColor.GRAY)
-                        .decoration(TextDecoration.ITALIC, false))
+                .tooltip(Messages.PERMISSIONS.searchTooltip())
                 .action(DialogAction.customClick(
                         (view, audience) -> {
                             if (audience instanceof Player p) {
@@ -605,18 +563,16 @@ public final class PermissionGUI {
                 .build();
 
         ActionButton cancel = dialogButton(
-                Component.text("Cancel", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("Return to the players list.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.cancelLabel(),
+                Messages.PERMISSIONS.cancelPlayersTooltip(),
                 p -> openUsersMenu(p, manager, 0));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green><bold>Search Player"))
+        DialogBase base = DialogBase.builder(Messages.PERMISSIONS.searchPlayerTitle())
                 .body(List.of(DialogBody.plainMessage(
-                        Component.text("Enter a player name. The player must have joined before.",
-                                NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false))))
+                        Messages.PERMISSIONS.searchPlayerBody())))
                 .inputs(List.of(
                         DialogInput.text("player_name",
-                                        Component.text("Player Name", NamedTextColor.YELLOW)
-                                                .decoration(TextDecoration.ITALIC, false))
+                                        Messages.PERMISSIONS.playerNameInput())
                                 .maxLength(16)
                                 .build()
                 ))
@@ -632,13 +588,13 @@ public final class PermissionGUI {
     private static void handleSearchPlayerSubmission(Player player, PermissionManager manager, String rawName) {
         String trimmed = rawName == null ? "" : rawName.trim();
         if (trimmed.isEmpty()) {
-            player.sendMessage(Component.text("Invalid player name.", NamedTextColor.RED));
+            player.sendMessage(Messages.PERMISSIONS.invalidPlayerName());
             openUsersMenu(player, manager, 0);
             return;
         }
         OfflinePlayer target = Bukkit.getOfflinePlayer(trimmed);
         if (!target.hasPlayedBefore() && !target.isOnline()) {
-            player.sendMessage(Component.text("Player '" + trimmed + "' has never played before.", NamedTextColor.RED));
+            player.sendMessage(Messages.PERMISSIONS.playerNeverPlayed(trimmed));
             openUsersMenu(player, manager, 0);
             return;
         }
@@ -658,34 +614,28 @@ public final class PermissionGUI {
         List<ActionButton> buttons = new ArrayList<>();
 
         buttons.add(dialogButton(
-                Component.text("Edit Permissions", NamedTextColor.GREEN, TextDecoration.BOLD),
-                Component.text(user.getPermissions().size() + " direct permission(s).", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.editPermissionsLabel(),
+                Messages.PERMISSIONS.directPermissionsTooltip(user.getPermissions().size()),
                 p -> openUserPermCategories(p, manager, targetUuid)));
 
         buttons.add(dialogButton(
-                Component.text("Edit Groups", NamedTextColor.AQUA, TextDecoration.BOLD),
-                joinLines(
-                        Component.text("Groups: ", NamedTextColor.GRAY)
-                                .append(Component.text(groupsLabel, NamedTextColor.YELLOW)),
-                        Component.text("Click to toggle group memberships.", NamedTextColor.GRAY)),
+                Messages.PERMISSIONS.editGroupsLabel(),
+                Messages.PERMISSIONS.editGroupsTooltip(groupsLabel),
                 p -> openUserGroupPicker(p, manager, targetUuid, 0)));
 
         buttons.add(dialogButton(
-                Component.text("Reset User", NamedTextColor.RED, TextDecoration.BOLD),
-                joinLines(
-                        Component.text("Clear all direct permissions", NamedTextColor.GRAY),
-                        Component.text("and reset to the default group.", NamedTextColor.GRAY)),
+                Messages.PERMISSIONS.resetUserLabel(),
+                Messages.PERMISSIONS.resetUserTooltip(),
                 p -> resetUser(p, manager, targetUuid)));
 
         ActionButton back = dialogButton(
-                Component.text("← Back to Players", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("Return to the players list.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.backToPlayersLabel(),
+                Messages.PERMISSIONS.playersListTooltip(),
                 p -> openUsersMenu(p, manager, 0));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>User: " + name))
+        DialogBase base = DialogBase.builder(Messages.PERMISSIONS.userTitle(name))
                 .body(List.of(DialogBody.plainMessage(
-                        Component.text("Manage settings for this player.", NamedTextColor.GRAY)
-                                .decoration(TextDecoration.ITALIC, false))))
+                        Messages.PERMISSIONS.userBody())))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -703,8 +653,8 @@ public final class PermissionGUI {
         manager.saveUsers();
         refreshOnlinePlayer(manager, targetUuid);
         String displayName = Bukkit.getOfflinePlayer(targetUuid).getName();
-        player.sendMessage(Component.text("Reset " + (displayName == null ? targetUuid.toString() : displayName)
-                + " to defaults.", NamedTextColor.GREEN));
+        player.sendMessage(Messages.PERMISSIONS.userReset(
+                displayName == null ? targetUuid.toString() : displayName));
         openUserHub(player, manager, targetUuid);
     }
 
@@ -720,23 +670,20 @@ public final class PermissionGUI {
             String catDisplay = entry.getValue();
             List<String> catPerms = Permissions.getPermissionsByCategory(catKey);
             long grantedCount = catPerms.stream().filter(user::hasDirectPermission).count();
-            Component label = Component.text(catDisplay, NamedTextColor.YELLOW, TextDecoration.BOLD);
-            Component tip = joinLines(
-                    Component.text(catPerms.size() + " permission(s) — " + grantedCount + " granted.", NamedTextColor.GRAY),
-                    Component.text("Click to view and toggle.", NamedTextColor.GRAY));
+            Component label = Messages.PERMISSIONS.categoryLabel(catDisplay);
+            Component tip = Messages.PERMISSIONS.categoryTooltip(catPerms.size(), grantedCount);
             buttons.add(dialogButton(label, tip,
                     p -> openUserPerms(p, manager, targetUuid, catKey, 0)));
         }
 
         ActionButton back = dialogButton(
-                Component.text("← Back to User", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("Return to the user menu.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.backToUserLabel(),
+                Messages.PERMISSIONS.userMenuTooltip(),
                 p -> openUserHub(p, manager, targetUuid));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Permissions: " + name))
+        DialogBase base = DialogBase.builder(Messages.PERMISSIONS.userPermissionsTitle(name))
                 .body(List.of(DialogBody.plainMessage(
-                        Component.text("Select a category to edit.", NamedTextColor.GRAY)
-                                .decoration(TextDecoration.ITALIC, false))))
+                        Messages.PERMISSIONS.selectCategoryBody())))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -765,10 +712,8 @@ public final class PermissionGUI {
         for (int i = start; i < end; i++) {
             String perm = catPerms.get(i);
             boolean has = user.hasDirectPermission(perm);
-            Component label = Component.text((has ? "✓ " : "✗ ") + perm,
-                    has ? NamedTextColor.GREEN : NamedTextColor.RED, TextDecoration.BOLD);
-            Component tip = Component.text(has ? "Click to revoke." : "Click to grant.",
-                    NamedTextColor.GRAY);
+            Component label = Messages.PERMISSIONS.permissionToggleLabel(perm, has);
+            Component tip = Messages.PERMISSIONS.permissionToggleTooltip(has);
             buttons.add(dialogButton(label, tip,
                     p -> toggleUserPermission(p, manager, targetUuid, perm, category, currentPage)));
         }
@@ -778,12 +723,13 @@ public final class PermissionGUI {
                 target2 -> openUserPerms(target2, manager, targetUuid, category, currentPage + 1));
 
         ActionButton back = dialogButton(
-                Component.text("← Back to Categories", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("Return to the category list.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.backToCategoriesLabel(),
+                Messages.PERMISSIONS.categoriesTooltip(),
                 p -> openUserPermCategories(p, manager, targetUuid));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>" + catDisplay + ": " + name))
-                .body(List.of(DialogBody.plainMessage(pageSummary(catPerms.size(), "permission", currentPage, totalPages))))
+        DialogBase base = DialogBase.builder(Messages.PERMISSIONS.permissionsTitle(catDisplay, name))
+                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.pageSummary(
+                        catPerms.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PERMISSION, currentPage, totalPages))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -823,18 +769,9 @@ public final class PermissionGUI {
             PermissionGroup group = manager.getGroups().get(groupNames.get(i));
             boolean isMember = user.hasGroup(group.getName());
 
-            Component label = Component.text((isMember ? "✓ " : "✗ ") + group.getName(),
-                    isMember ? NamedTextColor.GREEN : NamedTextColor.YELLOW, TextDecoration.BOLD);
-            List<Component> tipLines = new ArrayList<>();
-            tipLines.add(Component.text("Permissions: ", NamedTextColor.GRAY)
-                    .append(Component.text(group.getPermissions().size(), NamedTextColor.YELLOW)));
-            if (group.getParentName() != null) {
-                tipLines.add(Component.text("Inherits from: ", NamedTextColor.GRAY)
-                        .append(Component.text(group.getParentName(), NamedTextColor.YELLOW)));
-            }
-            tipLines.add(Component.text(isMember ? "Click to remove." : "Click to add.",
-                    NamedTextColor.GRAY));
-            buttons.add(dialogButton(label, joinLines(tipLines.toArray(new Component[0])),
+            Component label = Messages.PERMISSIONS.playerMembershipLabel(group.getName(), isMember, NamedTextColor.YELLOW);
+            buttons.add(dialogButton(label, Messages.PERMISSIONS.userGroupTooltip(
+                    group.getPermissions().size(), group.getParentName(), isMember),
                     p -> toggleUserGroup(p, manager, targetUuid, group.getName(), currentPage)));
         }
 
@@ -843,12 +780,13 @@ public final class PermissionGUI {
                 target2 -> openUserGroupPicker(target2, manager, targetUuid, currentPage + 1));
 
         ActionButton back = dialogButton(
-                Component.text("← Back to User", NamedTextColor.RED, TextDecoration.BOLD),
-                Component.text("Return to the user menu.", NamedTextColor.GRAY),
+                Messages.PERMISSIONS.backToUserLabel(),
+                Messages.PERMISSIONS.userMenuTooltip(),
                 p -> openUserHub(p, manager, targetUuid));
 
-        DialogBase base = DialogBase.builder(MM.deserialize("<!italic><green>Edit Groups: " + name))
-                .body(List.of(DialogBody.plainMessage(pageSummary(groupNames.size(), "group", currentPage, totalPages))))
+        DialogBase base = DialogBase.builder(Messages.PERMISSIONS.editGroupsTitle(name))
+                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.pageSummary(
+                        groupNames.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.GROUP, currentPage, totalPages))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -900,24 +838,18 @@ public final class PermissionGUI {
         return result;
     }
 
-    private static Component pageSummary(int total, String noun, int currentPage, int totalPages) {
-        String pluralized = total == 1 ? noun : noun + "s";
-        return Component.text(total + " " + pluralized + " — Page " + (currentPage + 1) + " of " + totalPages,
-                NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false);
-    }
-
     private static void addPageNavButtons(List<ActionButton> buttons, int currentPage, int totalPages,
                                           Consumer<Player> prevAction, Consumer<Player> nextAction) {
         if (currentPage > 0) {
             buttons.add(dialogButton(
-                    Component.text("◀ Prev Page", NamedTextColor.GREEN, TextDecoration.BOLD),
-                    Component.text("Page " + currentPage + " of " + totalPages, NamedTextColor.GRAY),
+                    Messages.PERMISSIONS.previousPageLabel(),
+                    Messages.PERMISSIONS.pageTooltip(currentPage, totalPages),
                     prevAction));
         }
         if (currentPage + 1 < totalPages) {
             buttons.add(dialogButton(
-                    Component.text("Next Page ▶", NamedTextColor.GREEN, TextDecoration.BOLD),
-                    Component.text("Page " + (currentPage + 2) + " of " + totalPages, NamedTextColor.GRAY),
+                    Messages.PERMISSIONS.nextPageLabel(),
+                    Messages.PERMISSIONS.pageTooltip(currentPage + 2, totalPages),
                     nextAction));
         }
     }

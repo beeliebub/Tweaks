@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.worldmanagement;
 
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
@@ -92,8 +93,7 @@ public class MoonSystem implements Listener, CommandExecutor {
 
     private boolean handleBloodMoon(CommandSender sender) {
         if (!sender.hasPermission(Permissions.ADMIN_BLOODMOON)) {
-            sender.sendMessage(Component.text("You do not have permission to use this command.")
-                    .color(NamedTextColor.RED));
+            sender.sendMessage(Messages.noPermission());
             return true;
         }
         switch (forceNextFullMoon()) {

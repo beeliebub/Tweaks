@@ -1,9 +1,8 @@
 package me.beeliebub.tweaks.ranks;
 
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.permissions.Permissions;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -37,12 +36,12 @@ public class RankSetCommand implements CommandExecutor, TabCompleter {
                              @NotNull String label, @NotNull String[] args) {
 
         if (!sender.hasPermission(Permissions.ADMIN_RANK_SET)) {
-            sender.sendMessage(Component.text("You don't have permission.", NamedTextColor.RED));
+            sender.sendMessage(Messages.noPermission());
             return true;
         }
 
         if (args.length < 3 || !args[0].equalsIgnoreCase("set")) {
-            sender.sendMessage(Component.text("Usage: /rank set <player> <rank_id/name>", NamedTextColor.RED));
+            sender.sendMessage(Messages.rankSetUsage());
             return true;
         }
 
@@ -70,16 +69,13 @@ public class RankSetCommand implements CommandExecutor, TabCompleter {
         }
 
         if (rankId < 0 || rankId > rankManager.getMaxRank()) {
-            sender.sendMessage(Component.text("Invalid rank: " + rankInput, NamedTextColor.RED));
+            sender.sendMessage(Messages.rankSetInvalidRank(rankInput));
             return true;
         }
 
         economyManager.setRank(uuid, rankId);
-        sender.sendMessage(Component.text("Successfully set ", NamedTextColor.GREEN)
-                .append(Component.text(target.getName() != null ? target.getName() : args[1], NamedTextColor.GOLD))
-                .append(Component.text("'s rank to ", NamedTextColor.GREEN))
-                .append(Component.text(rankManager.getRankDisplayName(rankId), NamedTextColor.YELLOW))
-                .append(Component.text(".", NamedTextColor.GREEN)));
+        sender.sendMessage(Messages.rankSetSuccess(target.getName() != null ? target.getName() : args[1],
+                rankManager.getRankDisplayName(rankId)));
 
         return true;
     }

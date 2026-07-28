@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.tests.economy;
 
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.economy.EconomyManager;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -9,7 +10,9 @@ import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
+import java.io.File;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -113,5 +116,42 @@ class EconomyManagerTest {
         economy.setRank(id, 2);
         assertEquals(500.0D, economy.getBalance(id));
         assertEquals(2, economy.getRank(id));
+    }
+
+    @Test
+    void saveAllFlushesBalanceMutatedImmediatelyBeforeDisableToDisk() throws Exception {
+        UUID id = UUID.randomUUID();
+        economy.setBalance(id, 777.0D);
+
+        economy.saveAll().get(5, TimeUnit.SECONDS);
+
+        File file = new File(plugin.getDataFolder(), "players/" + id + ".yml");
+        assertTrue(file.exists());
+        YamlConfiguration onDisk = YamlConfiguration.loadConfiguration(file);
+        assertEquals(777.0D, onDisk.getDouble("balance"));
+    }
+
+    @Test
+    void saveAllWaitsForEveryCachedPlayerNotJustTheFirst() throws Exception {
+        // Each setBalance() call already fires its own independent async write, so a single-player
+        // version of this test can't distinguish "saveAll() did the work" from "the mutator's own
+        // write happened to land first." Exercising several players proves the returned future is
+        // a real CompletableFuture.allOf(...) aggregate that only completes once every cached
+        // player's write has finished, not just the first one in iteration order.
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        UUID third = UUID.randomUUID();
+        economy.setBalance(first, 10.0D);
+        economy.setBalance(second, 20.0D);
+        economy.setBalance(third, 30.0D);
+
+        economy.saveAll().get(5, TimeUnit.SECONDS);
+
+        for (var entry : java.util.Map.of(first, 10.0D, second, 20.0D, third, 30.0D).entrySet()) {
+            File file = new File(plugin.getDataFolder(), "players/" + entry.getKey() + ".yml");
+            assertTrue(file.exists(), "expected a saved file for " + entry.getKey());
+            YamlConfiguration onDisk = YamlConfiguration.loadConfiguration(file);
+            assertEquals(entry.getValue(), onDisk.getDouble("balance"));
+        }
     }
 }

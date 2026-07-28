@@ -14,22 +14,30 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class PluginYmlValidationTest {
 
     private static Map<String, Object> root;
-    private static String tweaksSource;
+    private static String bootstrapSource;
 
     @BeforeAll
     static void load() throws IOException {
         try (var in = Files.newInputStream(Path.of("src/main/resources/plugin.yml"))) {
             root = new Yaml().load(in);
         }
-        tweaksSource = Files.readString(
-                Path.of("src/main/java/me/beeliebub/tweaks/Tweaks.java"),
-                StandardCharsets.UTF_8);
+        // Command wiring lives across Tweaks.java and its per-package
+        // XxxBootstrap.register(...) calls (see the root CLAUDE.md "Bootstrap" section) -
+        // concatenate every main-source file so this check still covers all of it.
+        StringBuilder combined = new StringBuilder();
+        try (Stream<Path> files = Files.walk(Path.of("src/main/java"))) {
+            for (Path file : files.filter(f -> f.toString().endsWith(".java")).toList()) {
+                combined.append(Files.readString(file, StandardCharsets.UTF_8)).append('\n');
+            }
+        }
+        bootstrapSource = combined.toString();
     }
 
     @Test
@@ -72,7 +80,7 @@ class PluginYmlValidationTest {
         Set<String> declared = new HashSet<>(commands.keySet());
 
         Pattern p = Pattern.compile("getCommand\\(\"([^\"]+)\"\\)");
-        Matcher m = p.matcher(tweaksSource);
+        Matcher m = p.matcher(bootstrapSource);
         Set<String> referenced = new HashSet<>();
         while (m.find()) referenced.add(m.group(1));
 
@@ -80,7 +88,7 @@ class PluginYmlValidationTest {
         Set<String> missing = new HashSet<>(referenced);
         missing.removeAll(declared);
         assertTrue(missing.isEmpty(),
-                "Commands referenced in Tweaks.java but missing from plugin.yml: " + missing);
+                "Commands referenced in main sources but missing from plugin.yml: " + missing);
     }
 
     @Test

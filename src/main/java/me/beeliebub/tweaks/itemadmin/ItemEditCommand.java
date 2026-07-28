@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.itemadmin;
 
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.utils.ColorUtil;
 import net.kyori.adventure.text.Component;
@@ -43,11 +44,11 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
 
     private boolean handleLore(CommandSender sender, String label, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can use this command.", NamedTextColor.RED));
+            sender.sendMessage(Messages.ITEM_ADMIN.itemEditRequiresPlayer());
             return true;
         }
         if (!player.hasPermission(Permissions.ADMIN_ITEM_EDIT)) {
-            player.sendMessage(Component.text("You don't have permission to use this command.", NamedTextColor.RED));
+            player.sendMessage(Messages.noPermission());
             return true;
         }
         if (args.length < 2) {
@@ -57,7 +58,7 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
 
         ItemStack item = player.getInventory().getItemInMainHand();
         if (item.isEmpty()) {
-            player.sendMessage(Component.text("You must be holding an item.", NamedTextColor.RED));
+            player.sendMessage(Messages.ITEM_ADMIN.itemEditRequiresHeldItem());
             return true;
         }
 
@@ -66,11 +67,11 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
         try {
             lineNumber = Integer.parseInt(args[1]);
         } catch (NumberFormatException e) {
-            player.sendMessage(Component.text("Line number must be an integer.", NamedTextColor.RED));
+            player.sendMessage(Messages.ITEM_ADMIN.itemEditLoreLineMustBeInteger());
             return true;
         }
         if (lineNumber < 1) {
-            player.sendMessage(Component.text("Line number must be 1 or greater.", NamedTextColor.RED));
+            player.sendMessage(Messages.ITEM_ADMIN.itemEditLoreLineMustBePositive());
             return true;
         }
 
@@ -81,7 +82,7 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
         switch (action) {
             case "add" -> {
                 if (args.length < 3) {
-                    player.sendMessage(Component.text("Usage: /" + label + " add <line#> <text>", NamedTextColor.RED));
+                    player.sendMessage(Messages.ITEM_ADMIN.itemEditLoreAddUsage(label));
                     return true;
                 }
                 String text = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
@@ -93,27 +94,22 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
                 meta.lore(lore);
                 item.setItemMeta(meta);
 
-                player.sendMessage(Component.text("Added lore line " + (index + 1) + ":", NamedTextColor.GREEN)
-                        .append(Component.text(" ", NamedTextColor.GRAY))
-                        .append(parsed));
+                player.sendMessage(Messages.ITEM_ADMIN.itemEditLoreAdded(index + 1, parsed));
             }
             case "remove" -> {
                 if (lore.isEmpty()) {
-                    player.sendMessage(Component.text("This item has no lore to remove.", NamedTextColor.RED));
+                    player.sendMessage(Messages.ITEM_ADMIN.itemEditLoreEmpty());
                     return true;
                 }
                 if (lineNumber > lore.size()) {
-                    player.sendMessage(Component.text("Line " + lineNumber + " does not exist (item has "
-                            + lore.size() + " lore line" + (lore.size() == 1 ? "" : "s") + ").", NamedTextColor.RED));
+                    player.sendMessage(Messages.ITEM_ADMIN.itemEditLoreLineMissing(lineNumber, lore.size()));
                     return true;
                 }
                 Component removed = lore.remove(lineNumber - 1);
                 meta.lore(lore.isEmpty() ? null : lore);
                 item.setItemMeta(meta);
 
-                player.sendMessage(Component.text("Removed lore line " + lineNumber + ":", NamedTextColor.GREEN)
-                        .append(Component.text(" ", NamedTextColor.GRAY))
-                        .append(removed));
+                player.sendMessage(Messages.ITEM_ADMIN.itemEditLoreRemoved(lineNumber, removed));
             }
             default -> sendLoreUsage(player, label);
         }
@@ -121,28 +117,28 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendLoreUsage(CommandSender sender, String label) {
-        sender.sendMessage(Component.text("Usage:", NamedTextColor.RED));
-        sender.sendMessage(Component.text("  /" + label + " add <line#> <text>", NamedTextColor.RED));
-        sender.sendMessage(Component.text("  /" + label + " remove <line#>", NamedTextColor.RED));
+        sender.sendMessage(Messages.ITEM_ADMIN.itemEditUsageHeader());
+        sender.sendMessage(Messages.ITEM_ADMIN.itemEditLoreAddUsageLine(label));
+        sender.sendMessage(Messages.ITEM_ADMIN.itemEditLoreRemoveUsageLine(label));
     }
 
     private boolean handleName(CommandSender sender, String label, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can use this command.", NamedTextColor.RED));
+            sender.sendMessage(Messages.ITEM_ADMIN.itemEditRequiresPlayer());
             return true;
         }
         if (!player.hasPermission(Permissions.ADMIN_ITEM_EDIT)) {
-            player.sendMessage(Component.text("You don't have permission to use this command.", NamedTextColor.RED));
+            player.sendMessage(Messages.noPermission());
             return true;
         }
         if (args.length < 1) {
-            sender.sendMessage(Component.text("Usage: /" + label + " <name> | /" + label + " off | /" + label + " blank", NamedTextColor.RED));
+            sender.sendMessage(Messages.ITEM_ADMIN.itemEditNameUsage(label));
             return true;
         }
 
         ItemStack item = player.getInventory().getItemInMainHand();
         if (item.isEmpty()) {
-            player.sendMessage(Component.text("You must be holding an item.", NamedTextColor.RED));
+            player.sendMessage(Messages.ITEM_ADMIN.itemEditRequiresHeldItem());
             return true;
         }
 
@@ -152,7 +148,7 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
             if (args[0].equalsIgnoreCase("off")) {
                 meta.displayName(null);
                 item.setItemMeta(meta);
-                player.sendMessage(Component.text("Custom name removed.", NamedTextColor.GREEN));
+                player.sendMessage(Messages.ITEM_ADMIN.itemEditNameRemoved());
                 return true;
             }
             if (args[0].equalsIgnoreCase("blank")) {
@@ -160,7 +156,7 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
                 meta.lore(null);
                 meta.addItemFlags(ItemFlag.values());
                 item.setItemMeta(meta);
-                player.sendMessage(Component.text("Item name set to blank and all hover info removed.", NamedTextColor.GREEN));
+                player.sendMessage(Messages.ITEM_ADMIN.itemEditNameBlanked());
                 return true;
             }
         }
@@ -170,26 +166,26 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
         meta.displayName(name);
         item.setItemMeta(meta);
 
-        player.sendMessage(Component.text("Display name set to ", NamedTextColor.GREEN).append(name));
+        player.sendMessage(Messages.ITEM_ADMIN.itemEditNameSet(name));
         return true;
     }
 
     private boolean handleMore(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can use this command!", NamedTextColor.RED));
+            sender.sendMessage(Messages.ITEM_ADMIN.itemMoreRequiresPlayer());
             return true;
         }
         if (!player.hasPermission(Permissions.ADMIN_MORE)) {
-            player.sendMessage(Component.text("You don't have permission to use this command!", NamedTextColor.RED));
+            player.sendMessage(Messages.noPermission());
             return true;
         }
         ItemStack item = player.getInventory().getItemInMainHand();
         if (item.isEmpty()) {
-            player.sendMessage(Component.text("You must be holding an item!", NamedTextColor.RED));
+            player.sendMessage(Messages.ITEM_ADMIN.itemMoreRequiresHeldItem());
             return true;
         }
         item.setAmount(item.getMaxStackSize());
-        player.sendMessage(Component.text("Stack maximized to " + item.getMaxStackSize() + "!", NamedTextColor.GREEN));
+        player.sendMessage(Messages.ITEM_ADMIN.itemMoreSuccess(item.getMaxStackSize()));
         return true;
     }
 

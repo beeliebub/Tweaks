@@ -1,15 +1,11 @@
 package me.beeliebub.tweaks.tests.protection;
 
-import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.utils.PDCUtil;
-import me.beeliebub.tweaks.protection.ProtectionKeys;
 import org.bukkit.Chunk;
 import org.bukkit.NamespacedKey;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedConstruction;
 
 import java.util.List;
 import java.util.Set;
@@ -20,12 +16,9 @@ import static org.mockito.Mockito.*;
 
 class PDCUtilTest {
 
-    @BeforeAll
-    static void initKeys() {
-        try (MockedConstruction<NamespacedKey> ignored = mockConstruction(NamespacedKey.class)) {
-            ProtectionKeys.init(mock(Tweaks.class));
-        }
-    }
+    // PDCUtil no longer resolves its key from a static - the caller (ProtectionManager) passes
+    // it in - so any NamespacedKey stands in here; nothing under test cares about its identity.
+    private static final NamespacedKey KEY = mock(NamespacedKey.class);
 
     private static Chunk chunkWithExisting(List<String> existing) {
         Chunk chunk = mock(Chunk.class);
@@ -38,19 +31,19 @@ class PDCUtilTest {
     @Test
     void readReturnsListFromPdc() {
         Chunk chunk = chunkWithExisting(List.of("home", "spawn"));
-        assertEquals(List.of("home", "spawn"), PDCUtil.read(chunk));
+        assertEquals(List.of("home", "spawn"), PDCUtil.read(chunk, KEY));
     }
 
     @Test
     void readReturnsEmptyWhenPdcUnset() {
         Chunk chunk = chunkWithExisting(List.of());
-        assertTrue(PDCUtil.read(chunk).isEmpty());
+        assertTrue(PDCUtil.read(chunk, KEY).isEmpty());
     }
 
     @Test
     void appendSingleIdWritesMergedList() {
         Chunk chunk = chunkWithExisting(List.of("home"));
-        PDCUtil.append(chunk, "admin");
+        PDCUtil.append(chunk, "admin", KEY);
 
         PersistentDataContainer pdc = chunk.getPersistentDataContainer();
         verify(pdc).set(any(NamespacedKey.class), any(), eq(List.of("home", "admin")));
@@ -59,7 +52,7 @@ class PDCUtilTest {
     @Test
     void appendSkipsWriteWhenIdAlreadyPresent() {
         Chunk chunk = chunkWithExisting(List.of("home", "spawn"));
-        PDCUtil.append(chunk, "home");
+        PDCUtil.append(chunk, "home", KEY);
 
         PersistentDataContainer pdc = chunk.getPersistentDataContainer();
         verify(pdc, never()).set(any(NamespacedKey.class), any(), any());
@@ -68,7 +61,7 @@ class PDCUtilTest {
     @Test
     void appendCollectionDedupsAgainstExisting() {
         Chunk chunk = chunkWithExisting(List.of("home", "spawn"));
-        PDCUtil.append(chunk, List.of("home", "admin", "spawn", "vault"));
+        PDCUtil.append(chunk, List.of("home", "admin", "spawn", "vault"), KEY);
 
         PersistentDataContainer pdc = chunk.getPersistentDataContainer();
         verify(pdc).set(any(NamespacedKey.class), any(), eq(List.of("home", "spawn", "admin", "vault")));
@@ -77,7 +70,7 @@ class PDCUtilTest {
     @Test
     void appendOntoEmptyChunkStartsTheList() {
         Chunk chunk = chunkWithExisting(List.of());
-        PDCUtil.append(chunk, List.of("home"));
+        PDCUtil.append(chunk, List.of("home"), KEY);
 
         PersistentDataContainer pdc = chunk.getPersistentDataContainer();
         verify(pdc).set(any(NamespacedKey.class), any(), eq(List.of("home")));
@@ -86,7 +79,7 @@ class PDCUtilTest {
     @Test
     void appendNoOpsOnEmptyInput() {
         Chunk chunk = chunkWithExisting(List.of("home"));
-        PDCUtil.append(chunk, List.of());
+        PDCUtil.append(chunk, List.of(), KEY);
 
         PersistentDataContainer pdc = chunk.getPersistentDataContainer();
         verify(pdc, never()).set(any(NamespacedKey.class), any(), any());
@@ -95,7 +88,7 @@ class PDCUtilTest {
     @Test
     void removeStripsDeadIdsLeavingOthers() {
         Chunk chunk = chunkWithExisting(List.of("home", "dead", "spawn"));
-        PDCUtil.remove(chunk, Set.of("dead"));
+        PDCUtil.remove(chunk, Set.of("dead"), KEY);
 
         PersistentDataContainer pdc = chunk.getPersistentDataContainer();
         verify(pdc).set(any(NamespacedKey.class), any(), eq(List.of("home", "spawn")));
@@ -105,7 +98,7 @@ class PDCUtilTest {
     @Test
     void removeDeletesKeyWhenListBecomesEmpty() {
         Chunk chunk = chunkWithExisting(List.of("dead1", "dead2"));
-        PDCUtil.remove(chunk, Set.of("dead1", "dead2"));
+        PDCUtil.remove(chunk, Set.of("dead1", "dead2"), KEY);
 
         PersistentDataContainer pdc = chunk.getPersistentDataContainer();
         verify(pdc).remove(any(NamespacedKey.class));
@@ -115,7 +108,7 @@ class PDCUtilTest {
     @Test
     void removeNoOpsWhenNothingMatches() {
         Chunk chunk = chunkWithExisting(List.of("home", "spawn"));
-        PDCUtil.remove(chunk, Set.of("dead"));
+        PDCUtil.remove(chunk, Set.of("dead"), KEY);
 
         PersistentDataContainer pdc = chunk.getPersistentDataContainer();
         verify(pdc, never()).set(any(NamespacedKey.class), any(PersistentDataType.class), any());
@@ -125,7 +118,7 @@ class PDCUtilTest {
     @Test
     void removeNoOpsOnEmptyChunk() {
         Chunk chunk = chunkWithExisting(List.of());
-        PDCUtil.remove(chunk, Set.of("dead"));
+        PDCUtil.remove(chunk, Set.of("dead"), KEY);
 
         PersistentDataContainer pdc = chunk.getPersistentDataContainer();
         verify(pdc, never()).set(any(NamespacedKey.class), any(PersistentDataType.class), any());
@@ -135,7 +128,7 @@ class PDCUtilTest {
     @Test
     void removeNoOpsOnEmptyDeadSet() {
         Chunk chunk = mock(Chunk.class);
-        PDCUtil.remove(chunk, Set.of());
+        PDCUtil.remove(chunk, Set.of(), KEY);
         verifyNoInteractions(chunk);
     }
 }

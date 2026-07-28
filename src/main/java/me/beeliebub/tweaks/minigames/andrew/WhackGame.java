@@ -16,6 +16,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import me.beeliebub.tweaks.minigames.RewardManager;
+import me.beeliebub.tweaks.core.Messages;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -83,8 +84,7 @@ public class WhackGame implements Listener {
         }
 
         state = State.RUNNING;
-        broadcastToArena(Component.text("Whack an Andrew has started! Hit the mannequins to score!")
-                .color(NamedTextColor.GOLD).decorate(TextDecoration.BOLD));
+        broadcastToArena(Messages.MINIGAMES.whackGameStarted());
 
         startSpawnTask();
         startTimerTask();
@@ -95,7 +95,7 @@ public class WhackGame implements Listener {
         state = State.PAUSED;
         cancelTasks();
         despawnAll();
-        broadcastToArena(Component.text("Game paused.").color(NamedTextColor.YELLOW));
+        broadcastToArena(Messages.MINIGAMES.whackGamePaused());
     }
 
     public void stop() {
@@ -133,11 +133,7 @@ public class WhackGame implements Listener {
         mannequin.setHealth(0);
 
         int score = scores.get(player.getUniqueId());
-        String pointsText = points > 0 ? "+" + points + "!" : points + "!";
-        NamedTextColor pointsColor = points > 0 ? NamedTextColor.GREEN : NamedTextColor.RED;
-        player.sendActionBar(Component.text(pointsText + " ")
-                .color(pointsColor)
-                .append(Component.text("Score: " + score).color(NamedTextColor.GOLD)));
+        player.sendActionBar(Messages.MINIGAMES.whackHitScore(points, score));
 
         return true;
     }
@@ -225,12 +221,7 @@ public class WhackGame implements Listener {
                     for (Player player : arena.getWorld().getPlayers()) {
                         if (!arena.contains(player.getLocation())) continue;
                         int score = scores.getOrDefault(player.getUniqueId(), 0);
-                        player.sendActionBar(
-                                Component.text("Score: " + score + " ")
-                                        .color(NamedTextColor.GOLD)
-                                        .append(Component.text("| Time: " + timeStr)
-                                                .color(NamedTextColor.AQUA))
-                        );
+                        player.sendActionBar(Messages.MINIGAMES.whackScoreAndTime(score, timeStr));
                     }
                 }
             }
@@ -382,11 +373,10 @@ public class WhackGame implements Listener {
 
     // Display final scores sorted by points, and grant configured rewards to top 3 players
     private void announceResults() {
-        broadcastToArena(Component.text("=== Whack an Andrew - Results ===")
-                .color(NamedTextColor.GOLD).decorate(TextDecoration.BOLD));
+        broadcastToArena(Messages.MINIGAMES.whackResultsHeader());
 
         if (scores.isEmpty()) {
-            broadcastToArena(Component.text("No scores recorded.").color(NamedTextColor.GRAY));
+            broadcastToArena(Messages.MINIGAMES.whackNoScores());
             return;
         }
 
@@ -409,8 +399,7 @@ public class WhackGame implements Listener {
                 case 3 -> NamedTextColor.RED;
                 default -> NamedTextColor.WHITE;
             };
-            broadcastToArena(Component.text("#" + rank + " " + name + " - " + entry.getValue() + " points")
-                    .color(color));
+            broadcastToArena(Messages.MINIGAMES.whackResultEntry(rank, name, entry.getValue(), color));
 
             // Grant reward for top 3
             if (rank <= 3) {
@@ -418,8 +407,7 @@ public class WhackGame implements Listener {
                 if (rewardName != null && !rewardName.isEmpty() && rewardManager.rewardExists(rewardName)) {
                     rewardManager.grantReward(entry.getKey(), rewardName);
                     if (player != null) {
-                        player.sendMessage(Component.text("You earned a reward! Use /reward claim to collect it.")
-                                .color(NamedTextColor.GREEN));
+                        player.sendMessage(Messages.MINIGAMES.whackRewardEarned());
                     }
                 }
             }

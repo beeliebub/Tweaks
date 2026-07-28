@@ -121,6 +121,11 @@ public final class Permissions {
     public static final String ADMIN_BALANCE = "tweaks.admin.balance";
 
     /**
+     * Allows viewing and administering the server-wide casino house account via /house.
+     */
+    public static final String HOUSE_ADMIN = "tweaks.admin.house";
+
+    /**
      * Allows editing item properties, such as display name and lore.
      */
     public static final String ADMIN_ITEM_EDIT = "tweaks.admin.itemedit";
@@ -187,6 +192,35 @@ public final class Permissions {
      */
     public static final String ADMIN_RANK_SET = "tweaks.admin.rank.set";
 
+    /**
+     * Allows running the throwaway admin diagnostic {@code /roulettescan}, which reads (never
+     * mutates) the physical roulette wheel's BlockDisplay segments and dumps their raw geometry to
+     * a TSV file. Deliberately under {@code tweaks.admin.*}, not {@code tweaks.roulette.*} — the
+     * real board-management/betting feature reserves that namespace.
+     */
+    public static final String ADMIN_ROULETTE_SCAN = "tweaks.admin.roulettescan";
+
+    /**
+     * Allows starting the admin setup flow for a new Roulette board via /roulette createboard.
+     * After running the command, the admin right-clicks a button or lever to register it as the
+     * board's admin-only spin control, which also triggers the segment scan and persistence.
+     */
+    public static final String ROULETTE_CREATEBOARD = "tweaks.roulette.createboard";
+
+    /**
+     * Allows starting the removal flow for a Roulette board via /roulette removeboard.
+     * After running the command, the admin right-clicks the target board's spin control; the
+     * listener handles PDC cleanup, hitbox despawn, and chunk-ticket release.
+     */
+    public static final String ROULETTE_REMOVEBOARD = "tweaks.roulette.removeboard";
+
+    /**
+     * Allows using a Roulette board's admin-only spin control to force-close betting and spin
+     * immediately, bypassing the normal timer. Checked in the listener at the point of use, not
+     * just at command level, since the control is a physical block any player could right-click.
+     */
+    public static final String ROULETTE_FORCESPIN = "tweaks.roulette.forcespin";
+
     // ---------------------------------------------------------------- Categories
 
     /**
@@ -218,6 +252,7 @@ public final class Permissions {
         m.put(ADMIN_INVSEE,       "tools");
         m.put(ADMIN_LOGS,         "tools");
         m.put(ADMIN_BALANCE,      "tools");
+        m.put(HOUSE_ADMIN,        "tools");
         m.put(ADMIN_ITEM_EDIT,    "tools");
         m.put(ADMIN_GUI_COPY,     "tools");
         m.put(ADMIN_GAMEMODE,     "tools");
@@ -240,6 +275,10 @@ public final class Permissions {
         m.put(ADMIN_RESOURCE_SETTARGET_OTHER,  "minigames");
         m.put(BLACKJACK_CREATETABLE,           "minigames");
         m.put(BLACKJACK_REMOVETABLE,           "minigames");
+        m.put(ADMIN_ROULETTE_SCAN,             "minigames");
+        m.put(ROULETTE_CREATEBOARD,            "minigames");
+        m.put(ROULETTE_REMOVEBOARD,            "minigames");
+        m.put(ROULETTE_FORCESPIN,              "minigames");
 
         // protection — land claim permissions
         m.put(PROTECTION_PURCHASEABLE, "protection");

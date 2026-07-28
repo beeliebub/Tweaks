@@ -1,8 +1,7 @@
 package me.beeliebub.tweaks.deathinventory;
 
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -74,7 +73,7 @@ public final class DeathInventoryListener implements Listener, CommandExecutor, 
         if (event.getCurrentItem() == null || event.getCurrentItem().getType().isAir()) return;
         // Give the clicked item to the admin.
         viewer.getInventory().addItem(event.getCurrentItem().clone());
-        viewer.sendMessage(Component.text("Item given.", NamedTextColor.GREEN));
+        viewer.sendMessage(Messages.deathInventoryItemGiven());
     }
 
     @EventHandler
@@ -88,7 +87,7 @@ public final class DeathInventoryListener implements Listener, CommandExecutor, 
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
         if (!sender.hasPermission(Permissions.ADMIN_DEATH_INVENTORY)) {
-            sender.sendMessage(Component.text("You don't have permission.", NamedTextColor.RED));
+            sender.sendMessage(Messages.noPermission());
             return true;
         }
 
@@ -101,7 +100,7 @@ public final class DeathInventoryListener implements Listener, CommandExecutor, 
         @SuppressWarnings("deprecation")
         org.bukkit.OfflinePlayer offlineTarget = Bukkit.getOfflinePlayer(targetName);
         if (!offlineTarget.hasPlayedBefore()) {
-            sender.sendMessage(Component.text("Player '" + targetName + "' has not played before.", NamedTextColor.RED));
+            sender.sendMessage(Messages.deathInventoryPlayerHasNotPlayed(targetName));
             return true;
         }
         UUID targetUuid = offlineTarget.getUniqueId();
@@ -120,10 +119,10 @@ public final class DeathInventoryListener implements Listener, CommandExecutor, 
     private void handleList(CommandSender sender, String targetName, UUID targetUuid) {
         List<File> files = manager.listInventories(targetUuid);
         if (files.isEmpty()) {
-            sender.sendMessage(Component.text("No death inventories found for " + targetName + ".", NamedTextColor.YELLOW));
+            sender.sendMessage(Messages.deathInventoryNoneFound(targetName));
             return;
         }
-        sender.sendMessage(Component.text("Death inventories for " + targetName + ":", NamedTextColor.GOLD));
+        sender.sendMessage(Messages.deathInventoryListHeader(targetName));
         for (File file : files) {
             String stem = stem(file);
             String date;
@@ -132,7 +131,7 @@ public final class DeathInventoryListener implements Listener, CommandExecutor, 
             } catch (NumberFormatException e) {
                 date = stem;
             }
-            sender.sendMessage(Component.text("  " + stem + "  (" + date + ")", NamedTextColor.GRAY));
+            sender.sendMessage(Messages.deathInventoryListEntry(stem, date));
         }
     }
 
@@ -140,7 +139,7 @@ public final class DeathInventoryListener implements Listener, CommandExecutor, 
                              String id, boolean restore) {
         File file = manager.getFile(targetUuid, id);
         if (!file.exists()) {
-            sender.sendMessage(Component.text("No death inventory with ID '" + id + "' for " + targetName + ".", NamedTextColor.RED));
+            sender.sendMessage(Messages.deathInventoryNotFound(id, targetName));
             return;
         }
 
@@ -149,7 +148,7 @@ public final class DeathInventoryListener implements Listener, CommandExecutor, 
         if (restore) {
             Player target = Bukkit.getPlayer(targetUuid);
             if (target == null) {
-                sender.sendMessage(Component.text(targetName + " must be online to restore their inventory.", NamedTextColor.RED));
+                sender.sendMessage(Messages.deathInventoryRestoreTargetOffline(targetName));
                 return;
             }
             for (int i = 0; i < Math.min(items.length, target.getInventory().getSize()); i++) {
@@ -157,13 +156,13 @@ public final class DeathInventoryListener implements Listener, CommandExecutor, 
                     target.getInventory().setItem(i, items[i].clone());
                 }
             }
-            sender.sendMessage(Component.text("Restored inventory for " + targetName + ".", NamedTextColor.GREEN));
-            target.sendMessage(Component.text("An admin restored your inventory from a previous death.", NamedTextColor.YELLOW));
+            sender.sendMessage(Messages.deathInventoryRestored(targetName));
+            target.sendMessage(Messages.deathInventoryRestoreNotice());
             return;
         }
 
         if (!(sender instanceof Player viewer)) {
-            sender.sendMessage(Component.text("Only players can open the death inventory GUI. Use 'restore' to restore.", NamedTextColor.RED));
+            sender.sendMessage(Messages.deathInventoryGuiRequiresPlayer());
             return;
         }
 
@@ -179,7 +178,7 @@ public final class DeathInventoryListener implements Listener, CommandExecutor, 
             dateLabel = stem;
         }
         Inventory inv = Bukkit.createInventory(null, GUI_SIZE,
-                Component.text(targetName + " @ " + dateLabel, NamedTextColor.DARK_AQUA));
+                Messages.deathInventoryGuiTitle(targetName, dateLabel));
         for (int i = 0; i < Math.min(items.length, GUI_SIZE); i++) {
             inv.setItem(i, items[i]);
         }
@@ -232,8 +231,6 @@ public final class DeathInventoryListener implements Listener, CommandExecutor, 
     }
 
     private static void sendUsage(CommandSender sender, String label) {
-        sender.sendMessage(Component.text(
-                "Usage: /" + label + " <player> list | /" + label + " <player> <id> [restore]",
-                NamedTextColor.YELLOW));
+        sender.sendMessage(Messages.deathInventoryUsage(label));
     }
 }

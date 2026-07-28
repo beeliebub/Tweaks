@@ -3,7 +3,7 @@ package me.beeliebub.tweaks.tests.teleport;
 import io.papermc.paper.dialog.Dialog;
 import me.beeliebub.tweaks.utils.Point;
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.managers.StorageManager;
+import me.beeliebub.tweaks.profiles.StorageManager;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.teleport.TeleportCommandManager;

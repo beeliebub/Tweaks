@@ -1,8 +1,7 @@
 package me.beeliebub.tweaks.economy;
 
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -46,8 +45,7 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
         // No args: show own balance (player only)
         if (args.length == 0) {
             if (!(sender instanceof Player player)) {
-                sender.sendMessage(Component.text(
-                        "Console must specify a player: /balance <player>", NamedTextColor.RED));
+                sender.sendMessage(Messages.balanceConsoleMustSpecifyPlayer());
                 return true;
             }
             sendOwnBalance(player);
@@ -59,23 +57,16 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
         // /balance hide — toggle own hidden flag (player only)
         if (sub.equals("hide")) {
             if (!(sender instanceof Player player)) {
-                sender.sendMessage(Component.text(
-                        "Console cannot use /balance hide.", NamedTextColor.RED));
+                sender.sendMessage(Messages.balanceHideConsoleCannotUse());
                 return true;
             }
             UUID uuid = player.getUniqueId();
             boolean nowHidden = !economyManager.isBalanceHidden(uuid);
             economyManager.setBalanceHidden(uuid, nowHidden);
             if (nowHidden) {
-                player.sendMessage(Component.text(
-                        "Your balance is now ", NamedTextColor.YELLOW)
-                        .append(Component.text("hidden", NamedTextColor.RED))
-                        .append(Component.text(" from the tab list.", NamedTextColor.YELLOW)));
+                player.sendMessage(Messages.balanceHidden());
             } else {
-                player.sendMessage(Component.text(
-                        "Your balance is now ", NamedTextColor.YELLOW)
-                        .append(Component.text("visible", NamedTextColor.GREEN))
-                        .append(Component.text(" in the tab list.", NamedTextColor.YELLOW)));
+                player.sendMessage(Messages.balanceVisible());
             }
             return true;
         }
@@ -83,13 +74,11 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
         // /balance set|add|remove <player> <amount> — admin mutations
         if (sub.equals("set") || sub.equals("add") || sub.equals("remove")) {
             if (!sender.hasPermission(Permissions.ADMIN_BALANCE)) {
-                sender.sendMessage(Component.text(
-                        "You don't have permission to modify balances.", NamedTextColor.RED));
+                sender.sendMessage(Messages.balanceModifyNoPermission());
                 return true;
             }
             if (args.length < 3) {
-                sender.sendMessage(Component.text(
-                        "Usage: /balance " + sub + " <player> <amount>", NamedTextColor.RED));
+                sender.sendMessage(Messages.balanceMutationUsage(sub));
                 return true;
             }
             OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
@@ -97,8 +86,7 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
             try {
                 amount = Double.parseDouble(args[2]);
             } catch (NumberFormatException e) {
-                sender.sendMessage(Component.text(
-                        "Invalid amount: " + args[2], NamedTextColor.RED));
+                sender.sendMessage(Messages.balanceInvalidAmount(args[2]));
                 return true;
             }
             UUID targetId = target.getUniqueId();
@@ -110,23 +98,17 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
                 case "add"    -> economyManager.addBalance(targetId, amount);
                 case "remove" -> economyManager.removeBalance(targetId, amount);
             }
-            sender.sendMessage(Component.text(
-                    "Balance of ", NamedTextColor.GREEN)
-                    .append(Component.text(target.getName() != null ? target.getName() : args[1],
-                            NamedTextColor.GOLD))
-                    .append(Component.text(" " + sub + " by ", NamedTextColor.GREEN))
-                    .append(Component.text(formatBalance(amount), NamedTextColor.YELLOW))
-                    .append(Component.text(". New balance: ", NamedTextColor.GREEN))
-                    .append(Component.text(
-                            formatBalance(economyManager.getBalance(targetId)),
-                            NamedTextColor.YELLOW)));
+            sender.sendMessage(Messages.balanceMutationSuccess(
+                    target.getName() != null ? target.getName() : args[1],
+                    sub,
+                    formatBalance(amount),
+                    formatBalance(economyManager.getBalance(targetId))));
             return true;
         }
 
         // /balance <player> — view another player's balance (admin)
         if (!sender.hasPermission(Permissions.ADMIN_BALANCE)) {
-            sender.sendMessage(Component.text(
-                    "You don't have permission to view other players' balances.", NamedTextColor.RED));
+            sender.sendMessage(Messages.balanceViewOtherNoPermission());
             return true;
         }
         OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
@@ -134,8 +116,7 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
         economyManager.loadPlayer(targetId);
         double balance = economyManager.getBalance(targetId);
         String targetName = target.getName() != null ? target.getName() : args[0];
-        sender.sendMessage(Component.text(targetName + "'s balance: ", NamedTextColor.GOLD)
-                .append(Component.text(formatBalance(balance), NamedTextColor.YELLOW)));
+        sender.sendMessage(Messages.balanceOtherPlayer(targetName, formatBalance(balance)));
         return true;
     }
 
@@ -187,8 +168,7 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
     private void sendOwnBalance(Player player) {
         UUID uuid = player.getUniqueId();
         double balance = economyManager.getBalance(uuid);
-        player.sendMessage(Component.text("Your balance: ", NamedTextColor.GOLD)
-                .append(Component.text(formatBalance(balance), NamedTextColor.YELLOW)));
+        player.sendMessage(Messages.balanceOwn(formatBalance(balance)));
     }
 
     /** Formats a double as a dollar-style currency string, e.g. $1,234. */

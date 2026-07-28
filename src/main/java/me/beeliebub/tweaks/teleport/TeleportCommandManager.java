@@ -5,16 +5,13 @@ import io.papermc.paper.registry.data.dialog.ActionButton;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.action.DialogAction;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.utils.Point;
-import me.beeliebub.tweaks.managers.StorageManager;
+import me.beeliebub.tweaks.profiles.StorageManager;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import me.beeliebub.tweaks.permissions.Permissions;
-import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
-import net.kyori.adventure.text.event.ClickEvent;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -133,7 +130,7 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
 
     private boolean handleHome(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can teleport.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.TELEPORT.homeTeleportRequiresPlayer());
             return true;
         }
 
@@ -150,37 +147,37 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
             targetUUID = target.getUniqueId();
             homeName = args[1];
         } else {
-            player.sendMessage(Component.text("Usage: /home [name] | /home <player> <name>").color(NamedTextColor.YELLOW));
+            player.sendMessage(Messages.TELEPORT.homeUsage());
             return true;
         }
 
         Optional<Point> pointOpt = storage.getHome(targetUUID, homeName);
         if (pointOpt.isEmpty()) {
-            player.sendMessage(Component.text("Home not found!").color(NamedTextColor.RED));
+            player.sendMessage(Messages.TELEPORT.homeNotFound());
             return true;
         }
 
         String finalHomeName = homeName;
         pointOpt.get().toLocation().ifPresentOrElse(loc -> {
-            player.sendMessage(Component.text("Teleporting to " + finalHomeName + "...").color(NamedTextColor.GREEN));
+            player.sendMessage(Messages.TELEPORT.homeTeleporting(finalHomeName));
             player.teleportAsync(loc).thenAccept(success -> {
                 if (!success) {
-                    player.sendMessage(Component.text("Teleportation failed. Is the destination safe?").color(NamedTextColor.RED));
+                    player.sendMessage(Messages.TELEPORT.homeTeleportFailed());
                 }
             });
-        }, () -> player.sendMessage(Component.text("The world this home is in is not loaded!").color(NamedTextColor.DARK_RED)));
+        }, () -> player.sendMessage(Messages.TELEPORT.homeWorldNotLoaded()));
 
         return true;
     }
 
     private boolean handleSetHome(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can set homes.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.TELEPORT.setHomeRequiresPlayer());
             return true;
         }
 
         if (DISABLED_HOME_WORLD_KEY.equals(player.getWorld().getKey().asString().toLowerCase())) {
-            player.sendMessage(Component.text("You cannot set a home in this world.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.TELEPORT.setHomeWorldDenied());
             return true;
         }
 
@@ -194,25 +191,25 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
             targetUUID = target.getUniqueId();
             homeName = args[1];
         } else if (args.length > 0) {
-            player.sendMessage(Component.text("Usage: /sethome <name> OR /sethome <player> <name>").color(NamedTextColor.YELLOW));
+            player.sendMessage(Messages.TELEPORT.setHomeUsage());
             return true;
         }
 
         if (targetUUID.equals(player.getUniqueId()) && !player.hasPermission(Permissions.BYPASS_HOMES)) {
             if (storage.getHomeCount(targetUUID) >= maxHomes && storage.getHome(targetUUID, homeName).isEmpty()) {
-                player.sendMessage(Component.text("You have reached the maximum of " + maxHomes + " homes!").color(NamedTextColor.RED));
+                player.sendMessage(Messages.TELEPORT.setHomeMaximumReached(maxHomes));
                 return true;
             }
         }
 
         storage.setHome(targetUUID, homeName, Point.fromLocation(player.getLocation()));
-        player.sendMessage(Component.text("Home '" + homeName + "' set successfully!").color(NamedTextColor.GREEN));
+        player.sendMessage(Messages.TELEPORT.setHomeSuccess(homeName));
         return true;
     }
 
     private boolean handleDelHome(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can delete homes.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.TELEPORT.delHomeRequiresPlayer());
             return true;
         }
 
@@ -226,23 +223,23 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
             targetUUID = target.getUniqueId();
             homeName = args[1];
         } else if (args.length > 0) {
-            player.sendMessage(Component.text("Usage: /delhome <name> OR /delhome <player> <name>").color(NamedTextColor.YELLOW));
+            player.sendMessage(Messages.TELEPORT.delHomeUsage());
             return true;
         }
 
         if (storage.getHome(targetUUID, homeName).isEmpty()) {
-            player.sendMessage(Component.text("Home '" + homeName + "' does not exist!").color(NamedTextColor.RED));
+            player.sendMessage(Messages.TELEPORT.delHomeNotFound(homeName));
             return true;
         }
 
         storage.delHome(targetUUID, homeName);
-        player.sendMessage(Component.text("Home '" + homeName + "' deleted successfully!").color(NamedTextColor.GREEN));
+        player.sendMessage(Messages.TELEPORT.delHomeSuccess(homeName));
         return true;
     }
 
     private boolean handleHomes(CommandSender sender, String[] args) {
         if (!(sender instanceof Player) && args.length == 0) {
-            sender.sendMessage(Component.text("Console must specify a player: /homes <player>").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.TELEPORT.homesConsoleRequiresPlayer());
             return true;
         }
 
@@ -256,15 +253,15 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
             targetUUID = player.getUniqueId();
             targetName = player.getName();
         } else {
-            sender.sendMessage(Component.text("Usage: /homes OR /homes <player>").color(NamedTextColor.YELLOW));
+            sender.sendMessage(Messages.TELEPORT.homesUsage());
             return true;
         }
 
         Set<String> homes = storage.getHomes(targetUUID);
         if (homes.isEmpty()) {
-            sender.sendMessage(Component.text(targetName + " has no homes set.").color(NamedTextColor.YELLOW));
+            sender.sendMessage(Messages.TELEPORT.homesNone(targetName));
         } else {
-            sender.sendMessage(Component.text("Homes for " + targetName + ": " + String.join(", ", homes)).color(NamedTextColor.AQUA));
+            sender.sendMessage(Messages.TELEPORT.homesList(targetName, String.join(", ", homes)));
         }
         return true;
     }
@@ -306,68 +303,68 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
 
     private boolean handleWarp(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can use warps.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.TELEPORT.warpRequiresPlayer());
             return true;
         }
         if (args.length != 1) {
-            player.sendMessage(Component.text("Usage: /warp <name>").color(NamedTextColor.YELLOW));
+            player.sendMessage(Messages.TELEPORT.warpUsage());
             return true;
         }
         String warpName = args[0];
         Optional<Point> pointOpt = storage.getWarp(warpName);
         if (pointOpt.isEmpty()) {
-            player.sendMessage(Component.text("Warp '" + warpName + "' does not exist!").color(NamedTextColor.RED));
+            player.sendMessage(Messages.TELEPORT.warpNotFound(warpName));
             return true;
         }
         pointOpt.get().toLocation().ifPresentOrElse(loc -> {
-            player.sendMessage(Component.text("Warping to '" + warpName + "'...").color(NamedTextColor.GREEN));
+            player.sendMessage(Messages.TELEPORT.warpingTo(warpName));
             player.teleportAsync(loc);
-        }, () -> player.sendMessage(Component.text("The world for this warp is not loaded.").color(NamedTextColor.RED)));
+        }, () -> player.sendMessage(Messages.TELEPORT.warpWorldNotLoaded()));
         return true;
     }
 
     private boolean handleSetWarp(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can set warps.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.TELEPORT.setWarpRequiresPlayer());
             return true;
         }
         if (!player.hasPermission(Permissions.ADMIN_SETWARP)) {
-            sender.sendMessage(Component.text("No permission.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.noPermission());
             return true;
         }
         if (args.length != 1) {
-            player.sendMessage(Component.text("Usage: /setwarp <name>").color(NamedTextColor.YELLOW));
+            player.sendMessage(Messages.TELEPORT.setWarpUsage());
             return true;
         }
         String warpName = args[0];
         storage.setWarp(warpName, Point.fromLocation(player.getLocation()));
-        player.sendMessage(Component.text("Warp '" + warpName + "' set successfully!").color(NamedTextColor.GREEN));
+        player.sendMessage(Messages.TELEPORT.setWarpSuccess(warpName));
         return true;
     }
 
     private boolean handleDelWarp(CommandSender sender, String[] args) {
         if (!sender.hasPermission(Permissions.ADMIN_DELWARP)) {
-            sender.sendMessage(Component.text("No permission.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.noPermission());
             return true;
         }
         if (args.length != 1) {
-            sender.sendMessage(Component.text("Usage: /delwarp <name>").color(NamedTextColor.YELLOW));
+            sender.sendMessage(Messages.TELEPORT.delWarpUsage());
             return true;
         }
         String warpName = args[0];
         if (storage.getWarp(warpName).isEmpty()) {
-            sender.sendMessage(Component.text("Warp '" + warpName + "' does not exist!").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.TELEPORT.warpNotFound(warpName));
             return true;
         }
         storage.delWarp(warpName);
-        sender.sendMessage(Component.text("Warp '" + warpName + "' deleted successfully!").color(NamedTextColor.GREEN));
+        sender.sendMessage(Messages.TELEPORT.delWarpSuccess(warpName));
         return true;
     }
 
     private boolean handleWarps(CommandSender sender) {
         Set<String> warps = storage.getWarps();
         if (warps.isEmpty()) {
-            sender.sendMessage(Component.text("There are no warps available.").color(NamedTextColor.YELLOW));
+            sender.sendMessage(Messages.TELEPORT.warpsNone());
             return true;
         }
         // Players get the click-to-teleport Dialog; console and other non-player
@@ -377,7 +374,7 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
             player.showDialog(buildWarpsDialog(warps));
             return true;
         }
-        sender.sendMessage(Component.text("Available Warps: " + String.join(", ", warps)).color(NamedTextColor.AQUA));
+        sender.sendMessage(Messages.TELEPORT.warpsList(String.join(", ", warps)));
         return true;
     }
 
@@ -387,15 +384,12 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
     // DialogBase.builder out of the call stack (those throw under plain Mockito
     // because no DialogInstancesProvider service is registered).
     private Dialog buildWarpsDialog(Set<String> warps) {
-        Component title = Component.text("Warps", NamedTextColor.AQUA)
-                .decorate(TextDecoration.BOLD)
-                .decoration(TextDecoration.ITALIC, false);
+        var title = Messages.TELEPORT.warpsDialogTitle();
         return Dialog.create(b -> {
             List<ActionButton> buttons = new ArrayList<>();
             for (String warp : warps) {
-                Component label = Component.text(warp, NamedTextColor.WHITE)
-                        .decoration(TextDecoration.ITALIC, false);
-                Component tooltip = Component.text("Teleport to " + warp, NamedTextColor.GRAY);
+                var label = Messages.TELEPORT.warpsDialogButton(warp);
+                var tooltip = Messages.TELEPORT.warpsDialogTooltip(warp);
                 buttons.add(ActionButton.builder(label)
                         .tooltip(tooltip)
                         .width(200)
@@ -416,18 +410,18 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
 
     private boolean handleSpawn(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can teleport to spawn.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.TELEPORT.spawnRequiresPlayer());
             return true;
         }
         Optional<Point> pointOpt = storage.getWarp("spawn");
         if (pointOpt.isEmpty()) {
-            player.sendMessage(Component.text("Spawn has not been set!").color(NamedTextColor.RED));
+            player.sendMessage(Messages.TELEPORT.spawnNotSet());
             return true;
         }
         pointOpt.get().toLocation().ifPresentOrElse(loc -> {
-            player.sendMessage(Component.text("Teleporting to spawn...").color(NamedTextColor.GREEN));
+            player.sendMessage(Messages.TELEPORT.spawnTeleporting());
             player.teleportAsync(loc);
-        }, () -> player.sendMessage(Component.text("The world for spawn is not loaded.").color(NamedTextColor.RED)));
+        }, () -> player.sendMessage(Messages.TELEPORT.spawnWorldNotLoaded()));
         return true;
     }
 
@@ -476,7 +470,7 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
 
     private boolean handleBack(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can use /back.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.TELEPORT.backRequiresPlayer());
             return true;
         }
 
@@ -484,13 +478,13 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
         String raw = pdc.get(backKey(), PersistentDataType.STRING);
 
         if (raw == null || raw.isEmpty()) {
-            player.sendMessage(Component.text("No previous location found.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.TELEPORT.backNoPreviousLocation());
             return true;
         }
 
         String[] parts = raw.split(",");
         if (parts.length != 6) {
-            player.sendMessage(Component.text("Stored location data is corrupt.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.TELEPORT.backLocationCorrupt());
             pdc.remove(backKey());
             return true;
         }
@@ -498,7 +492,7 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
         try {
             var world = Bukkit.getWorld(parts[0]);
             if (world == null) {
-                player.sendMessage(Component.text("The world for your previous location is not loaded.").color(NamedTextColor.RED));
+                player.sendMessage(Messages.TELEPORT.backWorldNotLoaded());
                 return true;
             }
 
@@ -520,22 +514,21 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
                             .map(m -> m.name().toLowerCase().replace('_', ' '))
                             .distinct()
                             .collect(Collectors.joining(", "));
-                    player.sendMessage(Component.text("You cannot return to the resource world with these items: ", NamedTextColor.RED)
-                            .append(Component.text(itemNames, NamedTextColor.YELLOW)));
+                    player.sendMessage(Messages.TELEPORT.backDisallowedItems(itemNames));
                     return true;
                 }
             }
 
             player.teleportAsync(loc).thenAccept(success -> {
                 if (success) {
-                    player.sendMessage(Component.text("Teleported to your previous location!").color(NamedTextColor.GREEN));
+                    player.sendMessage(Messages.TELEPORT.backSuccess());
                 } else {
-                    player.sendMessage(Component.text("Teleportation failed.").color(NamedTextColor.RED));
+                    player.sendMessage(Messages.TELEPORT.teleportFailed());
                 }
             });
 
         } catch (NumberFormatException e) {
-            player.sendMessage(Component.text("Stored location data is corrupt.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.TELEPORT.backLocationCorrupt());
             pdc.remove(backKey());
         }
 
@@ -548,24 +541,22 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
 
     private boolean handleTpaRequest(CommandSender sender, String[] args, boolean here) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can use TPA commands.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.TELEPORT.tpaRequiresPlayer());
             return true;
         }
-        String cmdName = here ? "/tpahere" : "/tpa";
-
         if (args.length != 1) {
-            player.sendMessage(Component.text("Usage: " + cmdName + " <player>").color(NamedTextColor.YELLOW));
+            player.sendMessage(Messages.TELEPORT.tpaUsage(here));
             return true;
         }
 
         Player target = Bukkit.getPlayerExact(args[0]);
         if (target == null) {
-            player.sendMessage(Component.text("Player '" + args[0] + "' is not online.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.playerNotOnline(args[0]));
             return true;
         }
 
         if (target.equals(player)) {
-            player.sendMessage(Component.text("You can't send a TPA request to yourself.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.TELEPORT.tpaCannotTargetSelf());
             return true;
         }
 
@@ -578,47 +569,39 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
                 Player reqPlayer = Bukkit.getPlayer(expired.requester());
                 Player tgtPlayer = Bukkit.getPlayer(expired.target());
                 if (reqPlayer != null) {
-                    reqPlayer.sendMessage(Component.text("TPA request to " + target.getName() + " has expired.").color(NamedTextColor.GRAY));
+                    reqPlayer.sendMessage(Messages.TELEPORT.tpaRequestExpiredTo(target.getName()));
                 }
                 if (tgtPlayer != null) {
-                    tgtPlayer.sendMessage(Component.text("TPA request from " + player.getName() + " has expired.").color(NamedTextColor.GRAY));
+                    tgtPlayer.sendMessage(Messages.TELEPORT.tpaRequestExpiredFrom(player.getName()));
                 }
             }
         }, TPA_TIMEOUT_SECONDS * 20L);
 
         tpaRequests.put(target.getUniqueId(),
                 new TpaRequest(player.getUniqueId(), target.getUniqueId(), here, expiryTask));
-        player.sendMessage(Component.text("TPA request sent to " + target.getName() + "! They have "
-                + TPA_TIMEOUT_SECONDS + " seconds to respond.").color(NamedTextColor.GREEN));
+        player.sendMessage(Messages.TELEPORT.tpaRequestSent(target.getName(), TPA_TIMEOUT_SECONDS));
 
-        String description = here
-                ? player.getName() + " wants you to teleport to them."
-                : player.getName() + " wants to teleport to you.";
-        Component acceptButton = Component.text("[Accept]").color(NamedTextColor.GREEN)
-                .decorate(TextDecoration.BOLD).clickEvent(ClickEvent.runCommand("/tpaccept"));
-        Component denyButton = Component.text("[Deny]").color(NamedTextColor.RED)
-                .decorate(TextDecoration.BOLD).clickEvent(ClickEvent.runCommand("/tpdeny"));
-        target.sendMessage(Component.text(description).color(NamedTextColor.AQUA));
-        target.sendMessage(acceptButton.append(Component.text("  ")).append(denyButton));
+        target.sendMessage(Messages.TELEPORT.tpaRequestDescription(player.getName(), here));
+        target.sendMessage(Messages.TELEPORT.tpaRequestControls());
 
         return true;
     }
 
     private boolean handleTpaAccept(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can use TPA commands.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.TELEPORT.tpaRequiresPlayer());
             return true;
         }
         TpaRequest request = tpaRequests.remove(player.getUniqueId());
         if (request == null) {
-            player.sendMessage(Component.text("You have no pending TPA requests.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.TELEPORT.tpaNoPendingRequest());
             return true;
         }
         request.cancel();
 
         Player requester = Bukkit.getPlayer(request.requester());
         if (requester == null) {
-            player.sendMessage(Component.text("The requesting player is no longer online.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.TELEPORT.tpaRequesterOffline());
             return true;
         }
 
@@ -636,19 +619,18 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
                         .map(m -> m.name().toLowerCase().replace('_', ' '))
                         .distinct()
                         .collect(Collectors.joining(", "));
-                teleporting.sendMessage(Component.text("You cannot teleport into the resource world with these items: ", NamedTextColor.RED)
-                        .append(Component.text(itemNames, NamedTextColor.YELLOW)));
-                destination.sendMessage(Component.text(teleporting.getName() + " has disallowed items and cannot teleport to you.", NamedTextColor.RED));
+                teleporting.sendMessage(Messages.TELEPORT.tpaDisallowedItems(itemNames));
+                destination.sendMessage(Messages.TELEPORT.tpaTeleportingPlayerDisallowed(teleporting.getName()));
                 return true;
             }
         }
 
         teleporting.teleportAsync(destination.getLocation()).thenAccept(success -> {
             if (success) {
-                teleporting.sendMessage(Component.text("Teleported to " + destination.getName() + "!").color(NamedTextColor.GREEN));
-                destination.sendMessage(Component.text(teleporting.getName() + " teleported to you.").color(NamedTextColor.GREEN));
+                teleporting.sendMessage(Messages.TELEPORT.tpaTeleportSuccess(destination.getName()));
+                destination.sendMessage(Messages.TELEPORT.tpaDestinationNotice(teleporting.getName()));
             } else {
-                teleporting.sendMessage(Component.text("Teleportation failed.").color(NamedTextColor.RED));
+                teleporting.sendMessage(Messages.TELEPORT.teleportFailed());
             }
         });
 
@@ -657,20 +639,20 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
 
     private boolean handleTpaDeny(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can use TPA commands.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.TELEPORT.tpaRequiresPlayer());
             return true;
         }
         TpaRequest request = tpaRequests.remove(player.getUniqueId());
         if (request == null) {
-            player.sendMessage(Component.text("You have no pending TPA requests.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.TELEPORT.tpaNoPendingRequest());
             return true;
         }
         request.cancel();
-        player.sendMessage(Component.text("TPA request denied.").color(NamedTextColor.YELLOW));
+        player.sendMessage(Messages.TELEPORT.tpaDenied());
 
         Player requester = Bukkit.getPlayer(request.requester());
         if (requester != null) {
-            requester.sendMessage(Component.text(player.getName() + " denied your TPA request.").color(NamedTextColor.RED));
+            requester.sendMessage(Messages.TELEPORT.tpaDeniedBy(player.getName()));
         }
         return true;
     }

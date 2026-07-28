@@ -1,0 +1,153 @@
+package me.beeliebub.tweaks.economy;
+
+import org.bukkit.plugin.java.JavaPlugin;
+
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+
+/**
+ * Owns the crash-durable sequencing of a {@code /house pay} transfer between {@link HouseAccount}'s
+ * journal and {@link EconomyManager}'s receipts. Neither of those two classes knows about the
+ * other; this service is the only thing that calls both.
+ *
+ * <p>{@link #pay} is strictly sequenced ({@code thenCompose}, never {@code allOf}) through
+ * {@code HouseAccount.beginPayment} (debit + journal, one snapshot) → {@code
+ * EconomyManager.applyHousePayment} (credit + receipt, one snapshot) → a resolving call back into
+ * {@code HouseAccount} ({@code completePayment} on success, {@code refundPayment} on an
+ * unrepresentable balance, {@code markNeedsReconciliation} on a mismatched receipt). Any step that
+ * fails unexpectedly simply propagates — the journal entry is left exactly as it was, which is
+ * always safe to replay, since only a definite outcome ever mutates or compacts it.
+ *
+ * <p>{@link #replayPendingPayments()} resumes every surviving {@code DEBIT_DURABLE} entry from the
+ * point after the debit (never re-debits) and must complete — successfully or not, per entry —
+ * before {@link #isReady()} becomes {@code true}. {@link #beginShutdown()} then {@link
+ * #awaitInFlight()} give {@code Tweaks#onDisable()} a bounded point to wait for in-flight transfers
+ * before the generic economy/house flushes run.
+ */
+public final class HousePaymentService {
+
+    private final JavaPlugin plugin;
+    private final HouseAccount houseAccount;
+    private final EconomyManager economyManager;
+
+    private final AtomicBoolean ready = new AtomicBoolean();
+    private final AtomicBoolean shuttingDown = new AtomicBoolean();
+    private final Map<String, CompletableFuture<HousePayOutcome>> inFlight = new ConcurrentHashMap<>();
+
+    public HousePaymentService(JavaPlugin plugin, HouseAccount houseAccount, EconomyManager economyManager) {
+        this.plugin = plugin;
+        this.houseAccount = houseAccount;
+        this.economyManager = economyManager;
+    }
+
+    /** True once startup replay of any surviving journal entry has finished. */
+    public boolean isReady() {
+        return ready.get();
+    }
+
+    /** Initiates a new admin-driven payment. Generates and owns the payment id. */
+    public CompletableFuture<HousePayOutcome> pay(UUID recipient, long amount) {
+        Objects.requireNonNull(recipient, "recipient");
+        if (amount <= 0) throw new IllegalArgumentException("amount must be positive");
+        if (shuttingDown.get()) {
+            return CompletableFuture.completedFuture(HousePayOutcome.SHUTTING_DOWN);
+        }
+        if (!ready.get()) {
+            return CompletableFuture.completedFuture(HousePayOutcome.NOT_READY);
+        }
+
+        String paymentId = UUID.randomUUID().toString();
+        CompletableFuture<HousePayOutcome> future = houseAccount.beginPayment(paymentId, recipient, amount)
+                .thenCompose(begin -> begin == HouseBeginPaymentOutcome.INSUFFICIENT_FUNDS
+                        ? CompletableFuture.completedFuture(HousePayOutcome.INSUFFICIENT_FUNDS)
+                        : resolvePayment(paymentId, recipient, amount))
+                .exceptionally(error -> {
+                    plugin.getLogger().log(Level.SEVERE, "House payment " + paymentId + " failed unexpectedly; "
+                            + "any debit already recorded is retained for replay on next startup", error);
+                    return HousePayOutcome.FAILED;
+                });
+        trackInFlight(paymentId, future);
+        return future;
+    }
+
+    /**
+     * Resumes every surviving {@code DEBIT_DURABLE} journal entry from the point after the debit.
+     * Idempotent by construction — {@code EconomyManager.applyHousePayment} short-circuits on a
+     * matching receipt — so running this twice (e.g. two crashes before recovery completes) never
+     * double-credits. Sets {@link #isReady()} once every entry has been resolved, whether or not
+     * there were any.
+     */
+    public CompletableFuture<Void> replayPendingPayments() {
+        Map<String, HouseJournalEntry> pending = houseAccount.pendingPayments();
+        if (pending.isEmpty()) {
+            ready.set(true);
+            return CompletableFuture.completedFuture(null);
+        }
+        plugin.getLogger().info("Replaying " + pending.size() + " pending house payment(s) from a prior crash/shutdown");
+        CompletableFuture<?>[] replays = pending.entrySet().stream()
+                .map(entry -> replayOne(entry.getKey(), entry.getValue()))
+                .toArray(CompletableFuture[]::new);
+        return CompletableFuture.allOf(replays).whenComplete((v, err) -> ready.set(true));
+    }
+
+    private CompletableFuture<HousePayOutcome> replayOne(String paymentId, HouseJournalEntry entry) {
+        plugin.getLogger().warning("Replaying house payment " + paymentId + " -> " + entry.recipient()
+                + " (" + entry.amount() + ")");
+        CompletableFuture<HousePayOutcome> future = resolvePayment(paymentId, entry.recipient(), entry.amount())
+                .exceptionally(error -> {
+                    plugin.getLogger().log(Level.SEVERE, "Replay of house payment " + paymentId + " failed; "
+                            + "will be retried on next startup", error);
+                    return HousePayOutcome.FAILED;
+                });
+        trackInFlight(paymentId, future);
+        return future;
+    }
+
+    // Resumes a payment from immediately after the debit: credit the recipient, then resolve the
+    // journal entry according to the credit's outcome. Shared by both the fresh pay() path and replay.
+    private CompletableFuture<HousePayOutcome> resolvePayment(String paymentId, UUID recipient, long amount) {
+        return economyManager.applyHousePayment(recipient, paymentId, amount)
+                .thenCompose(result -> settle(paymentId, result));
+    }
+
+    private CompletableFuture<HousePayOutcome> settle(String paymentId, HousePaymentResult result) {
+        return switch (result) {
+            case APPLIED, ALREADY_APPLIED -> houseAccount.completePayment(paymentId)
+                    .thenApply(v -> HousePayOutcome.SUCCESS);
+            case REJECTED_UNREPRESENTABLE -> houseAccount.refundPayment(paymentId)
+                    .thenApply(v -> HousePayOutcome.UNREPRESENTABLE_REFUNDED);
+            case REJECTED_MISMATCH -> houseAccount.markNeedsReconciliation(paymentId).thenApply(v -> {
+                plugin.getLogger().severe("House payment " + paymentId
+                        + " has a receipt mismatch; needs manual reconciliation");
+                return HousePayOutcome.NEEDS_RECONCILIATION;
+            });
+            case REJECTED_WRITE_FAILED -> {
+                // Cannot prove the credit didn't land, so refunding here would risk minting.
+                // Leave DEBIT_DURABLE in place; the next startup's replay will resolve it.
+                plugin.getLogger().severe("House payment " + paymentId
+                        + " credit write failed; retained for replay on next startup");
+                yield CompletableFuture.completedFuture(HousePayOutcome.WRITE_FAILED_RETAINED);
+            }
+        };
+    }
+
+    private void trackInFlight(String paymentId, CompletableFuture<HousePayOutcome> future) {
+        inFlight.put(paymentId, future);
+        future.whenComplete((v, err) -> inFlight.remove(paymentId));
+    }
+
+    /** Rejects any new payment submitted after this call. Does not affect payments already in flight. */
+    public void beginShutdown() {
+        shuttingDown.set(true);
+    }
+
+    /** A bounded-wait point for {@code Tweaks#onDisable()}: completes once every in-flight payment has resolved. */
+    public CompletableFuture<Void> awaitInFlight() {
+        return CompletableFuture.allOf(inFlight.values().toArray(CompletableFuture[]::new));
+    }
+}

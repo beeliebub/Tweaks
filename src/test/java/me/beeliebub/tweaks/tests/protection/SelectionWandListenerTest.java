@@ -2,10 +2,10 @@ package me.beeliebub.tweaks.tests.protection;
 
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.utils.GeometryUtil;
-import me.beeliebub.tweaks.protection.RegionSelection;
-import me.beeliebub.tweaks.protection.RegionSelectionManager;
+import me.beeliebub.tweaks.protection.ui.RegionSelection;
+import me.beeliebub.tweaks.protection.ui.RegionSelectionManager;
 import me.beeliebub.tweaks.protection.ProtectionListeners;
-import me.beeliebub.tweaks.protection.ProtectionManager;
+import me.beeliebub.tweaks.protection.region.ProtectionManager;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;

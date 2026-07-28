@@ -1,7 +1,6 @@
 package me.beeliebub.tweaks.minigames;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+import me.beeliebub.tweaks.core.Messages;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -30,10 +29,8 @@ public class RewardListener implements Listener {
         List<String> pending = rewardManager.getPendingRewards(player.getUniqueId());
 
         if (!pending.isEmpty()) {
-            player.sendMessage(Component.empty());
-            player.sendMessage(Component.text("You have " + pending.size() + " unclaimed reward(s)! Type ", NamedTextColor.GOLD)
-                    .append(Component.text("/reward claim", NamedTextColor.YELLOW))
-                    .append(Component.text(" to collect them.", NamedTextColor.GOLD)));
+            player.sendMessage(Messages.MINIGAMES.rewardClaimReminderSpacer());
+            player.sendMessage(Messages.MINIGAMES.rewardClaimReminder(pending.size()));
         }
     }
 
@@ -46,6 +43,6 @@ public class RewardListener implements Listener {
 
         ItemStack[] contents = event.getInventory().getContents();
         rewardManager.setRewardItems(rewardName, contents);
-        player.sendMessage(Component.text("Reward '" + rewardName + "' updated!").color(NamedTextColor.GREEN));
+        player.sendMessage(Messages.MINIGAMES.rewardUpdated(rewardName));
     }
 }

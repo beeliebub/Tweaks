@@ -1,9 +1,8 @@
 package me.beeliebub.tweaks.ranks;
 
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.economy.BalanceCommand;
 import me.beeliebub.tweaks.economy.EconomyManager;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -30,7 +29,7 @@ public class RankupCommand implements CommandExecutor {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can use this command.", NamedTextColor.RED));
+            sender.sendMessage(Messages.rankupRequiresPlayer());
             return true;
         }
 
@@ -38,7 +37,7 @@ public class RankupCommand implements CommandExecutor {
         int current = economyManager.getRank(uuid);
 
         if (current >= rankManager.getMaxRank()) {
-            player.sendMessage(Component.text("You are already the maximum rank.", NamedTextColor.RED));
+            player.sendMessage(Messages.rankupAlreadyMaximumRank());
             return true;
         }
 
@@ -47,11 +46,8 @@ public class RankupCommand implements CommandExecutor {
         double balance = economyManager.getBalance(uuid);
 
         if (balance < cost) {
-            player.sendMessage(Component.text(
-                    "Insufficient funds. Rank " + rankManager.getRankDisplayName(next)
-                    + " costs " + BalanceCommand.formatBalance(cost)
-                    + " but you only have " + BalanceCommand.formatBalance(balance) + ".",
-                    NamedTextColor.RED));
+            player.sendMessage(Messages.rankupInsufficientFunds(rankManager.getRankDisplayName(next),
+                    BalanceCommand.formatBalance(cost), BalanceCommand.formatBalance(balance)));
             return true;
         }
 
@@ -59,10 +55,8 @@ public class RankupCommand implements CommandExecutor {
         economyManager.setRank(uuid, next);
 
         double remaining = economyManager.getBalance(uuid);
-        player.sendMessage(Component.text(
-                "Congratulations! You are now Rank " + rankManager.getRankDisplayName(next)
-                + ". Remaining balance: " + BalanceCommand.formatBalance(remaining) + ".",
-                NamedTextColor.GREEN));
+        player.sendMessage(Messages.rankupSuccess(rankManager.getRankDisplayName(next),
+                BalanceCommand.formatBalance(remaining)));
         return true;
     }
 }

@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.utils;
 
+import me.beeliebub.tweaks.core.Messages;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import io.papermc.paper.registry.RegistryAccess;
@@ -38,7 +39,7 @@ import java.util.Set;
 // PDC handling covers all primitive types plus byte/int/long arrays and nested TAG_CONTAINERs.
 public final class GuiCopyJavaGenerator {
 
-    private static final MiniMessage MM = MiniMessage.miniMessage();
+    private static final MiniMessage MM = Messages.MM;
 
     private final StringBuilder out = new StringBuilder(2048);
 

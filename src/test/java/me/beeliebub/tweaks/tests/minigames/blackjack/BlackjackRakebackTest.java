@@ -20,11 +20,15 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>Rule: when a player with casino rakeback loses to the dealer, they receive
  * {@code floor(bet * rakeback_rate)} coins credited back to their balance.
  *
- * <p>The private {@code finish()} method in {@link me.beeliebub.tweaks.minigames.blackjack.BlackjackListener}
- * renders {@link org.bukkit.entity.ItemDisplay} entities, spawns
+ * <p>The private {@code finish()} method in
+ * {@link me.beeliebub.tweaks.minigames.blackjack.BlackjackSessionManager} renders
+ * {@link org.bukkit.entity.ItemDisplay} entities, spawns
  * {@link org.bukkit.entity.TextDisplay} holograms, and schedules delayed tasks — all of which
- * MockBukkit does not fully support. Driving a real game through the listener to a dealer-win
- * is therefore impractical in this test environment and is covered by real-server smoke tests.
+ * MockBukkit does not fully support. Driving a real game through the session manager to a
+ * dealer-win is therefore impractical in this test environment and is covered by real-server
+ * smoke tests. The pure payout/rakeback settlement math extracted from {@code finish()} — the
+ * part that previously had no direct coverage — is now tested against the real production code
+ * path in {@code me.beeliebub.tweaks.minigames.blackjack.BlackjackSessionManagerSettlementTest}.
  *
  * <p>Instead, these tests verify:
  * <ol>

@@ -1,9 +1,8 @@
 package me.beeliebub.tweaks.minigames.andrew;
 
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.minigames.RewardManager;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.command.Command;
@@ -50,12 +49,12 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can use this command.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.MINIGAMES.whackRequiresPlayer());
             return true;
         }
 
         if (!player.hasPermission(Permissions.ADMIN_WHACK)) {
-            player.sendMessage(Component.text("You do not have permission to use this command.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.noPermission());
             return true;
         }
 
@@ -81,41 +80,39 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleArena(Player player, String label) {
-        player.sendMessage(Component.text("Arena setup started.").color(NamedTextColor.GREEN));
-        player.sendMessage(Component.text("Look at the bottom corner and run: ").color(NamedTextColor.YELLOW)
-                .append(Component.text("/" + label + " corner1").color(NamedTextColor.GOLD)));
-        player.sendMessage(Component.text("Then look at the opposite top corner and run: ").color(NamedTextColor.YELLOW)
-                .append(Component.text("/" + label + " corner2").color(NamedTextColor.GOLD)));
+        player.sendMessage(Messages.MINIGAMES.whackArenaSetupStarted());
+        player.sendMessage(Messages.MINIGAMES.whackCornerInstruction(true, label));
+        player.sendMessage(Messages.MINIGAMES.whackCornerInstruction(false, label));
         pendingCorner1.remove(player.getUniqueId());
     }
 
     private void handleCorner1(Player player) {
         Location target = player.getTargetBlockExact(100).getLocation();
         if (target == null) {
-            player.sendMessage(Component.text("Look at a block to set as corner 1.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.whackCornerTargetRequired(1));
             return;
         }
         pendingCorner1.put(player.getUniqueId(), target);
-        player.sendMessage(Component.text("Corner 1 set at " + formatLoc(target) + ".").color(NamedTextColor.GREEN));
-        player.sendMessage(Component.text("Now look at the opposite corner and run /whack corner2.").color(NamedTextColor.YELLOW));
+        player.sendMessage(Messages.MINIGAMES.whackCornerOneSet(formatLoc(target)));
+        player.sendMessage(Messages.MINIGAMES.whackCornerTwoInstruction());
     }
 
     private void handleCorner2(Player player) {
         Location corner1 = pendingCorner1.remove(player.getUniqueId());
         if (corner1 == null) {
-            player.sendMessage(Component.text("You must set corner 1 first! Run /whack arena.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.whackCornerOneRequired());
             return;
         }
 
         Location target = player.getTargetBlockExact(100).getLocation();
         if (target == null) {
-            player.sendMessage(Component.text("Look at a block to set as corner 2.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.whackCornerTargetRequired(2));
             pendingCorner1.put(player.getUniqueId(), corner1);
             return;
         }
 
         if (!corner1.getWorld().equals(target.getWorld())) {
-            player.sendMessage(Component.text("Both corners must be in the same world.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.whackCornersSameWorldRequired());
             return;
         }
 
@@ -131,20 +128,19 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
 
         config.saveArena(arena, spawnBlockMaterials);
 
-        player.sendMessage(Component.text("Arena created from " + formatLoc(corner1) + " to " + formatLoc(target) + "!")
-                .color(NamedTextColor.GREEN));
-        player.sendMessage(Component.text("Now set spawn blocks with /whack setblocks <material>").color(NamedTextColor.YELLOW));
+        player.sendMessage(Messages.MINIGAMES.whackArenaCreated(formatLoc(corner1), formatLoc(target)));
+        player.sendMessage(Messages.MINIGAMES.whackSetBlocksInstruction());
     }
 
     private void handleSetBlocks(Player player, String[] args) {
         if (arena == null) {
-            player.sendMessage(Component.text("Create an arena first with /whack arena.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.whackArenaRequired());
             return;
         }
 
         if (args.length < 2) {
-            player.sendMessage(Component.text("Usage: /whack setblocks <material> [material...]").color(NamedTextColor.RED));
-            player.sendMessage(Component.text("Example: /whack setblocks hay_block gold_block").color(NamedTextColor.GRAY));
+            player.sendMessage(Messages.MINIGAMES.whackSetBlocksUsage());
+            player.sendMessage(Messages.MINIGAMES.whackSetBlocksExample());
             return;
         }
 
@@ -152,7 +148,7 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
         for (int i = 1; i < args.length; i++) {
             Material mat = Material.matchMaterial(args[i]);
             if (mat == null || !mat.isBlock()) {
-                player.sendMessage(Component.text("Unknown block material: " + args[i]).color(NamedTextColor.RED));
+                player.sendMessage(Messages.MINIGAMES.whackUnknownBlock(args[i]));
                 return;
             }
             materials.add(mat);
@@ -162,21 +158,21 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
         spawnBlockMaterials = materials;
         config.saveArena(arena, spawnBlockMaterials);
 
-        player.sendMessage(Component.text("Found " + count + " spawn locations in the arena.").color(NamedTextColor.GREEN));
+        player.sendMessage(Messages.MINIGAMES.whackSpawnLocationsFound(count));
 
         if (count == 0) {
-            player.sendMessage(Component.text("No matching blocks were found in the arena bounds.").color(NamedTextColor.YELLOW));
+            player.sendMessage(Messages.MINIGAMES.whackNoSpawnBlocksFound());
         }
     }
 
     private void handleStart(Player player) {
         if (arena == null) {
-            player.sendMessage(Component.text("Create an arena first with /whack arena.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.whackArenaRequired());
             return;
         }
 
         if (arena.getSpawnBlocks().isEmpty()) {
-            player.sendMessage(Component.text("Set spawn blocks first with /whack setblocks <material>.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.whackSpawnBlocksRequired());
             return;
         }
 
@@ -195,7 +191,7 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
 
     private void handlePause(Player player) {
         if (game == null || game.getState() != WhackGame.State.RUNNING) {
-            player.sendMessage(Component.text("No game is currently running.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.whackNoGameRunning());
             return;
         }
         game.pause();
@@ -203,7 +199,7 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
 
     private void handleStop(Player player) {
         if (game == null || game.getState() == WhackGame.State.IDLE) {
-            player.sendMessage(Component.text("No game is currently active.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.whackNoGameActive());
             return;
         }
         game.stop();
@@ -216,7 +212,7 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
 
     private void handleSetReward(Player player, String[] args) {
         if (args.length < 3) {
-            player.sendMessage(Component.text("Usage: /whack setreward <1|2|3> <reward_name>").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.whackSetRewardUsage());
             return;
         }
 
@@ -224,18 +220,18 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
         try {
             place = Integer.parseInt(args[1]);
         } catch (NumberFormatException e) {
-            player.sendMessage(Component.text("Place must be 1, 2, or 3.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.whackPlaceInvalid());
             return;
         }
 
         if (place < 1 || place > 3) {
-            player.sendMessage(Component.text("Place must be 1, 2, or 3.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.whackPlaceInvalid());
             return;
         }
 
         String rewardName = args[2].toLowerCase();
         if (!rewardManager.rewardExists(rewardName)) {
-            player.sendMessage(Component.text("No reward named '" + rewardName + "' exists.").color(NamedTextColor.RED));
+            player.sendMessage(Messages.MINIGAMES.rewardDoesNotExist(rewardName));
             return;
         }
 
@@ -246,34 +242,16 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
             case 3 -> "3rd";
             default -> place + "th";
         };
-        player.sendMessage(Component.text(ordinal + " place reward set to '" + rewardName + "'.").color(NamedTextColor.GREEN));
+        player.sendMessage(Messages.MINIGAMES.whackPlaceRewardSet(ordinal, rewardName));
     }
 
     private void handleReload(Player player) {
         config.load();
-        player.sendMessage(Component.text("whack.yml reloaded.").color(NamedTextColor.GREEN));
+        player.sendMessage(Messages.MINIGAMES.whackConfigReloaded());
     }
 
     private void sendUsage(Player player, String label) {
-        player.sendMessage(Component.text("=== Whack an Andrew ===").color(NamedTextColor.GOLD));
-        player.sendMessage(Component.text("/" + label + " arena").color(NamedTextColor.YELLOW)
-                .append(Component.text(" - Begin arena setup").color(NamedTextColor.GRAY)));
-        player.sendMessage(Component.text("/" + label + " corner1").color(NamedTextColor.YELLOW)
-                .append(Component.text(" - Set first corner (look at block)").color(NamedTextColor.GRAY)));
-        player.sendMessage(Component.text("/" + label + " corner2").color(NamedTextColor.YELLOW)
-                .append(Component.text(" - Set second corner (look at block)").color(NamedTextColor.GRAY)));
-        player.sendMessage(Component.text("/" + label + " setblocks <material...>").color(NamedTextColor.YELLOW)
-                .append(Component.text(" - Scan arena for spawn blocks").color(NamedTextColor.GRAY)));
-        player.sendMessage(Component.text("/" + label + " start").color(NamedTextColor.YELLOW)
-                .append(Component.text(" - Start the game").color(NamedTextColor.GRAY)));
-        player.sendMessage(Component.text("/" + label + " pause").color(NamedTextColor.YELLOW)
-                .append(Component.text(" - Pause the game").color(NamedTextColor.GRAY)));
-        player.sendMessage(Component.text("/" + label + " stop").color(NamedTextColor.YELLOW)
-                .append(Component.text(" - Stop the game").color(NamedTextColor.GRAY)));
-        player.sendMessage(Component.text("/" + label + " setreward <1|2|3> <name>").color(NamedTextColor.YELLOW)
-                .append(Component.text(" - Set place reward").color(NamedTextColor.GRAY)));
-        player.sendMessage(Component.text("/" + label + " reload").color(NamedTextColor.YELLOW)
-                .append(Component.text(" - Reload whack.yml config").color(NamedTextColor.GRAY)));
+        Messages.MINIGAMES.whackUsage(label).forEach(player::sendMessage);
     }
 
     private String formatLoc(Location loc) {

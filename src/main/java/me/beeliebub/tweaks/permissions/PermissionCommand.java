@@ -1,7 +1,6 @@
 package me.beeliebub.tweaks.permissions;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+import me.beeliebub.tweaks.core.Messages;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -31,7 +30,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (!sender.hasPermission(Permissions.ADMIN_PERMISSIONS)) {
-            sender.sendMessage(Component.text("No permission.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.noPermission());
             return true;
         }
 
@@ -47,7 +46,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
         String sub = args[0].toLowerCase();
         if (sub.equals("gui")) {
             if (!(sender instanceof Player player)) {
-                sender.sendMessage(Component.text("Only players can use the GUI.").color(NamedTextColor.RED));
+                sender.sendMessage(Messages.PERMISSIONS.guiRequiresPlayer());
                 return true;
             }
             PermissionGUI.openMainMenu(player, manager);
@@ -66,7 +65,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
 
     private boolean handleGroup(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            sender.sendMessage(Component.text("Usage: /tprm group <name> <create|delete|addperm|delperm|inherited-from>").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.PERMISSIONS.groupUsage());
             return true;
         }
 
@@ -76,90 +75,90 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
         switch (action) {
             case "create" -> {
                 if (manager.getGroups().containsKey(name)) {
-                    sender.sendMessage(Component.text("Group already exists.").color(NamedTextColor.RED));
+                    sender.sendMessage(Messages.PERMISSIONS.groupAlreadyExists());
                     return true;
                 }
                 manager.getGroups().put(name, new PermissionGroup(name));
                 manager.saveGroups();
-                sender.sendMessage(Component.text("Group '" + name + "' created.").color(NamedTextColor.GREEN));
+                sender.sendMessage(Messages.PERMISSIONS.groupCreated(name));
             }
             case "delete" -> {
                 if (name.equals("default")) {
-                    sender.sendMessage(Component.text("Cannot delete default group.").color(NamedTextColor.RED));
+                    sender.sendMessage(Messages.PERMISSIONS.defaultGroupCannotBeDeleted());
                     return true;
                 }
                 if (manager.getGroups().remove(name) != null) {
                     manager.saveGroups();
-                    sender.sendMessage(Component.text("Group '" + name + "' deleted.").color(NamedTextColor.GREEN));
+                    sender.sendMessage(Messages.PERMISSIONS.groupDeleted(name));
                 } else {
-                    sender.sendMessage(Component.text("Group not found.").color(NamedTextColor.RED));
+                    sender.sendMessage(Messages.PERMISSIONS.groupNotFound());
                 }
             }
             case "addperm" -> {
                 if (args.length < 4) {
-                    sender.sendMessage(Component.text("Usage: /tprm group <name> addperm <permission>").color(NamedTextColor.RED));
+                    sender.sendMessage(Messages.PERMISSIONS.groupAddPermissionUsage());
                     return true;
                 }
                 PermissionGroup group = manager.getGroups().get(name);
                 if (group == null) {
-                    sender.sendMessage(Component.text("Group not found.").color(NamedTextColor.RED));
+                    sender.sendMessage(Messages.PERMISSIONS.groupNotFound());
                     return true;
                 }
                 group.addPermission(args[3]);
                 manager.saveGroups();
                 refreshAllInGroup(name);
-                sender.sendMessage(Component.text("Added permission to group '" + name + "'.").color(NamedTextColor.GREEN));
+                sender.sendMessage(Messages.PERMISSIONS.groupPermissionAdded(name));
             }
             case "delperm" -> {
                 if (args.length < 4) {
-                    sender.sendMessage(Component.text("Usage: /tprm group <name> delperm <permission>").color(NamedTextColor.RED));
+                    sender.sendMessage(Messages.PERMISSIONS.groupRemovePermissionUsage());
                     return true;
                 }
                 PermissionGroup group = manager.getGroups().get(name);
                 if (group == null) {
-                    sender.sendMessage(Component.text("Group not found.").color(NamedTextColor.RED));
+                    sender.sendMessage(Messages.PERMISSIONS.groupNotFound());
                     return true;
                 }
                 group.removePermission(args[3]);
                 manager.saveGroups();
                 refreshAllInGroup(name);
-                sender.sendMessage(Component.text("Removed permission from group '" + name + "'.").color(NamedTextColor.GREEN));
+                sender.sendMessage(Messages.PERMISSIONS.groupPermissionRemoved(name));
             }
             case "inherited-from" -> {
                 if (args.length < 4) {
-                    sender.sendMessage(Component.text("Usage: /tprm group <name> inherited-from <parent|none>").color(NamedTextColor.RED));
+                    sender.sendMessage(Messages.PERMISSIONS.groupInheritanceUsage());
                     return true;
                 }
                 PermissionGroup group = manager.getGroups().get(name);
                 if (group == null) {
-                    sender.sendMessage(Component.text("Group not found.").color(NamedTextColor.RED));
+                    sender.sendMessage(Messages.PERMISSIONS.groupNotFound());
                     return true;
                 }
                 String parent = args[3].equalsIgnoreCase("none") ? null : args[3].toLowerCase();
                 if (parent != null && !manager.getGroups().containsKey(parent)) {
-                    sender.sendMessage(Component.text("Parent group not found.").color(NamedTextColor.RED));
+                    sender.sendMessage(Messages.PERMISSIONS.parentGroupNotFound());
                     return true;
                 }
                 group.setParentName(parent);
                 manager.saveGroups();
                 refreshAllInGroup(name);
-                sender.sendMessage(Component.text("Set inheritance for group '" + name + "' to " + (parent == null ? "none" : parent) + ".").color(NamedTextColor.GREEN));
+                sender.sendMessage(Messages.PERMISSIONS.groupInheritanceSet(name, parent));
             }
-            default -> sender.sendMessage(Component.text("Unknown action.").color(NamedTextColor.RED));
+            default -> sender.sendMessage(Messages.PERMISSIONS.unknownAction());
         }
         return true;
     }
 
     private boolean handleUser(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            sender.sendMessage(Component.text("Usage: /tprm user <player> <addperm|delperm|setgroup>").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.PERMISSIONS.userUsage());
             return true;
         }
 
         @SuppressWarnings("deprecation")
         OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
         if (!target.hasPlayedBefore() && !target.isOnline()) {
-            sender.sendMessage(Component.text("Player '" + args[1] + "' has never played before.").color(NamedTextColor.RED));
+            sender.sendMessage(Messages.PERMISSIONS.playerNeverPlayed(args[1]));
             return true;
         }
         UUID uuid = target.getUniqueId();
@@ -168,32 +167,32 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
         switch (action) {
             case "addperm" -> {
                 if (args.length < 4) {
-                    sender.sendMessage(Component.text("Usage: /tprm user <player> addperm <permission>").color(NamedTextColor.RED));
+                    sender.sendMessage(Messages.PERMISSIONS.userAddPermissionUsage());
                     return true;
                 }
                 manager.getUserPermissions(uuid).addPermission(args[3]);
                 manager.saveUsers();
                 refreshPlayer(uuid);
-                sender.sendMessage(Component.text("Added permission to user " + target.getName() + ".").color(NamedTextColor.GREEN));
+                sender.sendMessage(Messages.PERMISSIONS.userPermissionAdded(target.getName()));
             }
             case "delperm" -> {
                 if (args.length < 4) {
-                    sender.sendMessage(Component.text("Usage: /tprm user <player> delperm <permission>").color(NamedTextColor.RED));
+                    sender.sendMessage(Messages.PERMISSIONS.userRemovePermissionUsage());
                     return true;
                 }
                 manager.getUserPermissions(uuid).removePermission(args[3]);
                 manager.saveUsers();
                 refreshPlayer(uuid);
-                sender.sendMessage(Component.text("Removed permission from user " + target.getName() + ".").color(NamedTextColor.GREEN));
+                sender.sendMessage(Messages.PERMISSIONS.userPermissionRemoved(target.getName()));
             }
             case "setgroup" -> {
                 if (args.length < 4) {
-                    sender.sendMessage(Component.text("Usage: /tprm user <player> setgroup <group|none>").color(NamedTextColor.RED));
+                    sender.sendMessage(Messages.PERMISSIONS.userSetGroupUsage());
                     return true;
                 }
                 String group = args[3].equalsIgnoreCase("none") ? null : args[3].toLowerCase();
                 if (group != null && !manager.getGroups().containsKey(group)) {
-                    sender.sendMessage(Component.text("Group not found.").color(NamedTextColor.RED));
+                    sender.sendMessage(Messages.PERMISSIONS.groupNotFound());
                     return true;
                 }
                 UserPermissions u = manager.getUserPermissions(uuid);
@@ -201,9 +200,9 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 if (group != null) u.addGroup(group);
                 manager.saveUsers();
                 refreshPlayer(uuid);
-                sender.sendMessage(Component.text("Set group for user " + target.getName() + " to " + (group == null ? "none" : group) + ".").color(NamedTextColor.GREEN));
+                sender.sendMessage(Messages.PERMISSIONS.userGroupSet(target.getName(), group));
             }
-            default -> sender.sendMessage(Component.text("Unknown action.").color(NamedTextColor.RED));
+            default -> sender.sendMessage(Messages.PERMISSIONS.unknownAction());
         }
         return true;
     }
@@ -231,10 +230,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendUsage(CommandSender sender) {
-        sender.sendMessage(Component.text("=== Permission Commands ===").color(NamedTextColor.GOLD));
-        sender.sendMessage(Component.text("/tprm gui").color(NamedTextColor.YELLOW));
-        sender.sendMessage(Component.text("/tprm group <name> create|delete|addperm|delperm|inherited-from").color(NamedTextColor.YELLOW));
-        sender.sendMessage(Component.text("/tprm user <player> addperm|delperm|setgroup").color(NamedTextColor.YELLOW));
+        Messages.PERMISSIONS.commandUsage().forEach(sender::sendMessage);
     }
 
     @Override

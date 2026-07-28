@@ -1,6 +1,6 @@
 package me.beeliebub.tweaks.tests.minigames.blackjack;
 
-import me.beeliebub.tweaks.minigames.blackjack.BlackjackListener;
+import me.beeliebub.tweaks.minigames.blackjack.BlackjackRenderer;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.BlockFace;
@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 
 /**
- * Unit tests for {@link BlackjackListener#dealerLocation(Location, BlockFace)} — the pure
+ * Unit tests for {@link BlackjackRenderer#dealerLocation(Location, BlockFace)} — the pure
  * geometry helper that places the dealer mannequin opposite the player's middle button for
  * any table orientation (Tweaks-0ku3).
  *
@@ -50,7 +50,7 @@ class BlackjackDealerMannequinTest {
     @Test
     void south_dealerSitsOnNorthSideFacingPlayer() {
         Location center = new Location(world, 10.0, 64.0, 20.0);
-        Location dealer = BlackjackListener.dealerLocation(center, BlockFace.SOUTH);
+        Location dealer = BlackjackRenderer.dealerLocation(center, BlockFace.SOUTH);
 
         // Dealer direction is NORTH (modZ = -1), offset = -1.55 on Z.
         assertEquals(10.0,          dealer.getX(), DELTA, "X unchanged");
@@ -65,7 +65,7 @@ class BlackjackDealerMannequinTest {
     @Test
     void south_doesNotMutateInput() {
         Location center = new Location(world, -5.0, 70.0, -8.0);
-        Location dealer = BlackjackListener.dealerLocation(center, BlockFace.SOUTH);
+        Location dealer = BlackjackRenderer.dealerLocation(center, BlockFace.SOUTH);
 
         assertNotSame(center, dealer);
         assertEquals(-5.0,         center.getX(), DELTA);
@@ -79,7 +79,7 @@ class BlackjackDealerMannequinTest {
     @Test
     void north_dealerSitsOnSouthSideFacingPlayer() {
         Location center = new Location(world, 10.0, 64.0, 20.0);
-        Location dealer = BlackjackListener.dealerLocation(center, BlockFace.NORTH);
+        Location dealer = BlackjackRenderer.dealerLocation(center, BlockFace.NORTH);
 
         // Dealer direction is SOUTH (modZ = +1), offset = +1.55 on Z.
         assertEquals(10.0,         dealer.getX(), DELTA, "X unchanged");
@@ -96,7 +96,7 @@ class BlackjackDealerMannequinTest {
     @Test
     void east_dealerSitsOnWestSideFacingPlayer() {
         Location center = new Location(world, 10.0, 64.0, 20.0);
-        Location dealer = BlackjackListener.dealerLocation(center, BlockFace.EAST);
+        Location dealer = BlackjackRenderer.dealerLocation(center, BlockFace.EAST);
 
         // Dealer direction is WEST (modX = -1), offset = -1.55 on X; Z unchanged.
         assertEquals(10.0 - DIST,  dealer.getX(), DELTA, "X = center - 1.55");
@@ -113,7 +113,7 @@ class BlackjackDealerMannequinTest {
     @Test
     void west_dealerSitsOnEastSideFacingPlayer() {
         Location center = new Location(world, 10.0, 64.0, 20.0);
-        Location dealer = BlackjackListener.dealerLocation(center, BlockFace.WEST);
+        Location dealer = BlackjackRenderer.dealerLocation(center, BlockFace.WEST);
 
         // Dealer direction is EAST (modX = +1), offset = +1.55 on X; Z unchanged.
         assertEquals(10.0 + DIST,  dealer.getX(), DELTA, "X = center + 1.55");

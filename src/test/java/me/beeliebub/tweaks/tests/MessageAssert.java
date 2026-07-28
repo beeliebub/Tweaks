@@ -11,13 +11,16 @@ public class MessageAssert {
     public static void assertMessageSent(PlayerMock player, String expectedText) {
         boolean found = false;
         Component c;
+        StringBuilder all = new StringBuilder();
         while ((c = player.nextComponentMessage()) != null) {
-            if (PlainTextComponentSerializer.plainText().serialize(c).contains(expectedText)) {
+            String plain = PlainTextComponentSerializer.plainText().serialize(c);
+            all.append("[[").append(plain).append("]] ");
+            if (plain.contains(expectedText)) {
                 found = true;
                 break;
             }
         }
-        assertTrue(found, "Expected message containing '" + expectedText + "' not found in player messages");
+        assertTrue(found, "Expected message containing '" + expectedText + "' not found in player messages. Got: " + all);
     }
 
     public static void assertMessageSent(ConsoleCommandSenderMock console, String expectedText) {

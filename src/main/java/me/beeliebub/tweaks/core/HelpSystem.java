@@ -88,68 +88,44 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         }
     }
 
-    private static final MiniMessage MM = MiniMessage.miniMessage();
+    private static final MiniMessage MM = Messages.MM;
     private static final int BUTTON_WIDTH = 250;
 
-    private final Map<String, HelpCategory> categories = new LinkedHashMap<>();
-    private final Map<String, HelpArticle> allArticles = new LinkedHashMap<>();
-    private final Logger logger;
+    private final HelpCatalog catalog;
+    private final HelpCommandRouter commandRouter;
 
     public HelpSystem() {
         this(Logger.getLogger("Tweaks"));
     }
 
     public HelpSystem(Logger logger) {
-        this.logger = logger;
-        addCategory(buildTeleportation());
-        addCategory(buildEnchantments());
-        addCategory(buildQuality());
-        addCategory(buildFeatures());
-        addCategory(buildMinigames());
-        addCategory(buildPermissions());
-        addCategory(buildProtection());
-        addCategory(buildEconomy());
-        validateCrossReferences();
+        this.catalog = new HelpCatalog(logger);
+        this.commandRouter = new HelpCommandRouter(this);
+        catalog.add(buildTeleportation());
+        catalog.add(buildEnchantments());
+        catalog.add(buildQuality());
+        catalog.add(buildFeatures());
+        catalog.add(buildMinigames());
+        catalog.add(buildPermissions());
+        catalog.add(buildProtection());
+        catalog.add(buildEconomy());
+        catalog.validateCrossReferences();
     }
 
     public Collection<HelpCategory> getCategories() {
-        return Collections.unmodifiableCollection(categories.values());
+        return catalog.categories();
     }
 
     public HelpCategory getCategory(String id) {
-        return id == null ? null : categories.get(id);
+        return catalog.category(id);
     }
 
     public HelpArticle getArticle(String id) {
-        return id == null ? null : allArticles.get(id);
+        return catalog.article(id);
     }
 
     public HelpArticle getRandomArticle(Player player) {
-        List<HelpArticle> visible = allArticles.values().stream()
-                .filter(a -> a.permission() == null || player.hasPermission(a.permission()))
-                .toList();
-        if (visible.isEmpty()) return null;
-        return visible.get(ThreadLocalRandom.current().nextInt(visible.size()));
-    }
-
-    private void addCategory(HelpCategory category) {
-        categories.put(category.id(), category);
-        for (HelpArticle article : category.articles()) {
-            HelpArticle prev = allArticles.put(article.id(), article);
-            if (prev != null) {
-                logger.warning("Help: duplicate article id '" + article.id() + "' in category '" + category.id() + "'");
-            }
-        }
-    }
-
-    private void validateCrossReferences() {
-        for (HelpArticle article : allArticles.values()) {
-            for (String refId : article.relatedArticles()) {
-                if (!allArticles.containsKey(refId)) {
-                    logger.warning("Help: article '" + article.id() + "' references unknown article '" + refId + "'");
-                }
-            }
-        }
+        return catalog.randomVisibleArticle(player);
     }
 
     // ============================================================
@@ -159,39 +135,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only players can use /help.", NamedTextColor.RED));
-            return true;
-        }
-
-        if (args.length == 0) {
-            openMainMenu(player);
-            return true;
-        }
-
-        String target = args[0].toLowerCase();
-        HelpCategory category = getCategory(target);
-        if (category != null) {
-            if (category.hasVisibleArticles(player)) {
-                openCategoryMenu(player, category);
-            } else {
-                player.sendMessage(Component.text("You don't have permission to view this category.", NamedTextColor.RED));
-            }
-            return true;
-        }
-
-        HelpArticle article = getArticle(target);
-        if (article != null) {
-            if (article.permission() == null || player.hasPermission(article.permission())) {
-                openArticle(player, article);
-            } else {
-                player.sendMessage(Component.text("You don't have permission to view this article.", NamedTextColor.RED));
-            }
-            return true;
-        }
-
-        player.sendMessage(Component.text("Unknown help section: " + target, NamedTextColor.RED));
-        return true;
+        return commandRouter.onCommand(sender, command, label, args);
     }
 
     public void openMainMenu(Player player) {
@@ -307,32 +251,13 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
     }
 
     private HelpCategory findCategoryOf(HelpArticle article) {
-        for (HelpCategory category : getCategories()) {
-            for (HelpArticle a : category.articles()) {
-                if (a.id().equals(article.id())) return category;
-            }
-        }
-        return null;
+        return catalog.categoryOf(article);
     }
 
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String label, @NotNull String[] args) {
-        if (!(sender instanceof Player player)) return Collections.emptyList();
-        if (args.length != 1) return Collections.emptyList();
-        String partial = args[0].toLowerCase();
-        List<String> options = new ArrayList<>();
-        for (HelpCategory c : getCategories()) {
-            if (c.hasVisibleArticles(player)) {
-                options.add(c.id());
-                for (HelpArticle a : c.articles()) {
-                    if (a.permission() == null || player.hasPermission(a.permission())) {
-                        options.add(a.id());
-                    }
-                }
-            }
-        }
-        return options.stream().filter(o -> o.startsWith(partial)).toList();
+        return commandRouter.onTabComplete(sender, command, label, args);
     }
 
     // ============================================================
@@ -809,6 +734,29 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("- Card Backs: optional [hexColor] for custom tints.")
         ), Material.KNOWLEDGE_BOOK, 35, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack")));
 
+        articles.add(new HelpArticle("roulette", "Roulette", List.of(
+                gray("Bet on the in-world roulette wheel with nearby players."),
+                cmd("/roulette stake <amount>", "Set your sticky stake; every segment click wagers it."),
+                aqua("Bet families:"),
+                white("- Straight-up: a single pocket (1-36), pays 36:1; pocket 0 (Green) pays 50:1."),
+                white("- Dozen (Thirds): 1st/2nd/3rd twelve, pays 3:1."),
+                white("- Colour: red or black, pays 2:1."),
+                yellow("Green 0 loses every Dozen/Colour bet — no odd/even, high/low, or columns."),
+                white("Segments are color-coded blocks (red/black/green wool, dozen terracotta) with a floating odds label."),
+                aqua("How a round works:"),
+                white("The first bet on an idle wheel opens a 30-second window for everyone nearby."),
+                white("When it closes, the wheel spins, the ball settles, and the round pays out."),
+                red("Bets are final: no un-betting, no refund on quit."),
+                green("Winnings are credited to your balance even if you log off first."),
+                white("Your result message shows the gross amount wagered and gross amount won."),
+                gold("Winning 8x your wager or more announces it to the whole server!"),
+                gold("A hologram over the wheel shows the one server-wide house balance."),
+                red("Admin:"),
+                cmd("/roulette createboard <min> <max>", "Begin board setup; right-click the spin control to finalize."),
+                cmd("/roulette removeboard", "Begin board removal; right-click the target board's spin control."),
+                white("Right-click a registered board's spin control to force-close betting and spin now.")
+        ), Material.RED_CONCRETE, 37, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack", "house")));
+
         return new HelpCategory("minigames", "Minigames", articles, Material.TARGET, 32, ColorUtil.HELP_GRAD_MINIGAMES);
     }
 
@@ -947,7 +895,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/region setparent <child> <parent>", "Create a sub-region relationship."),
                 aqua("Roles:"),
                 white("- Owner: Full control, can unclaim or transfer."),
-                white("- Manager: Can edit flags and members/managers."),
+                white("- Manager: Can edit flags and members. Cannot edit the manager list."),
                 white("- Member: Build access; lowest priority for flags."),
                 aqua("Hierarchy:"),
                 white("- Sub-region flags override their parent(s)."),
@@ -991,7 +939,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("- Standing in overlapping claims picks the innermost (leaf) sub-region."),
                 aqua("In the dialog:"),
                 white("- Toggle boolean flags and per-role overrides without remembering syntax."),
-                white("- Add/remove members and managers."),
+                white("- Add/remove members (owners and managers); add/remove managers (owner only)."),
                 white("- Edit material and entity lists for flags that support them."),
                 yellow("Alias: /rg gui"),
                 red("Requires permission: " + Permissions.PROTECTION_INFO + ".")
@@ -1040,6 +988,15 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 red("Permission: tweaks.admin.balance.")
         ), Material.EMERALD, 22, ColorUtil.HELP_GRAD_ECONOMY, List.of("daily_rewards", "ranks")));
 
+        articles.add(new HelpArticle("house", "Casino House Account", List.of(
+                gray("Administrative account receiving casino losses and inactive-hand forfeitures."),
+                red("Admin:"),
+                cmd("/house balance", "View the server-wide house balance."),
+                cmd("/house add|remove|set <amount>", "Adjust the account; only set may make it negative."),
+                cmd("/house pay <player> <amount>", "Transfer house funds to an online or known offline player."),
+                red("Permission: " + Permissions.HOUSE_ADMIN + ".")
+        ), Material.GOLD_BLOCK, 23, ColorUtil.HELP_GRAD_ECONOMY, List.of("balance", "ranks", "roulette"), Permissions.HOUSE_ADMIN));
+
         articles.add(new HelpArticle("ranks", "Ranks & Progression", List.of(
                 gray("Purchase ranks to unlock better rewards and bonuses."),
                 cmd("/ranks", "List all ranks, costs, and benefits."),
@@ -1049,7 +1006,9 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("- Rakeback: Grants a percentage of losses back in the casino."),
                 red("Admin:"),
                 cmd("/ranks edit", "Open the visual rank editor (Paper Dialog)."),
-                red("Permission: tweaks.admin.ranks.")
+                red("Permission: " + Permissions.ADMIN_RANKS + "."),
+                cmd("/rank set <player> <rank_id/name>", "Manually assign a player's rank."),
+                red("Permission: " + Permissions.ADMIN_RANK_SET + ".")
         ), Material.GOLD_BLOCK, 24, ColorUtil.HELP_GRAD_RANKS, List.of("balance", "daily_rewards")));
 
         return new HelpCategory("economy", "Economy & Ranks", articles, Material.GOLD_INGOT, 38, ColorUtil.HELP_GRAD_ECONOMY);

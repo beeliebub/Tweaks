@@ -59,7 +59,7 @@ class PlayerAdminCommandTest {
         cmd.onCommand(player, bukkitCmdNamed("survival"), "survival", new String[0]);
         // Without permission no gamemode change happens.
         assertEquals(GameMode.SURVIVAL, player.getGameMode()); // default already survival; check perm error path
-        MessageAssert.assertMessageSent(player, "No permission");
+        MessageAssert.assertMessageSent(player, "do not have permission");
     }
 
     @Test void survivalSetsSurvivalMode() {

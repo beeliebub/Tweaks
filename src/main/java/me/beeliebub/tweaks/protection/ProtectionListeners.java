@@ -1,10 +1,14 @@
 package me.beeliebub.tweaks.protection;
 
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.core.ProtectionMessages.Text;
+import me.beeliebub.tweaks.protection.region.ProtectionManager;
+import me.beeliebub.tweaks.protection.region.RegionFlag;
+import me.beeliebub.tweaks.protection.ui.RegionSelection;
+import me.beeliebub.tweaks.protection.ui.RegionSelectionManager;
 import me.beeliebub.tweaks.utils.GeometryUtil;
 import me.beeliebub.tweaks.utils.PDCUtil;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -79,13 +83,13 @@ public final class ProtectionListeners implements Listener {
 
         Set<String> pending = protection.pendingStamps().remove(key);
         if (pending != null && !pending.isEmpty()) {
-            PDCUtil.append(chunk, pending);
+            PDCUtil.append(chunk, pending, protection.regionPointersKey());
         }
 
         Set<String> orphaned = protection.orphanedRegions();
         if (orphaned.isEmpty()) return;
 
-        List<String> current = PDCUtil.read(chunk);
+        List<String> current = PDCUtil.read(chunk, protection.regionPointersKey());
         if (current.isEmpty()) return;
 
         Set<String> deadOnThisChunk = null;
@@ -95,7 +99,7 @@ public final class ProtectionListeners implements Listener {
                 deadOnThisChunk.add(id);
             }
         }
-        if (deadOnThisChunk != null) PDCUtil.remove(chunk, deadOnThisChunk);
+        if (deadOnThisChunk != null) PDCUtil.remove(chunk, deadOnThisChunk, protection.regionPointersKey());
     }
 
     // ─── ProtectionListener (block/interact/explosion/spawn/damage) ───────────
@@ -158,10 +162,10 @@ public final class ProtectionListeners implements Listener {
 
         if (left) {
             sel.setPos1(chunkKey);
-            announce(player, "Pos1", chunkKey, sel);
+            announce(player, Text.SELECTION_POS1, chunkKey, sel);
         } else {
             sel.setPos2(chunkKey);
-            announce(player, "Pos2", chunkKey, sel);
+            announce(player, Text.SELECTION_POS2, chunkKey, sel);
         }
     }
 
@@ -260,8 +264,7 @@ public final class ProtectionListeners implements Listener {
         Player player = event.getPlayer();
         if (!protection.isAllowed(to, player.getUniqueId(), RegionFlag.ENTRY)) {
             event.setCancelled(true);
-            player.sendActionBar(
-                    Component.text("You do not have permission to enter this area.", NamedTextColor.RED));
+            player.sendActionBar(Messages.PROTECTION.text(Text.ENTRY_DENIED));
         }
     }
 
@@ -283,20 +286,19 @@ public final class ProtectionListeners implements Listener {
         return item.getType() == plugin.getProtectionSelectionTool();
     }
 
-    private static void announce(Player player, String label, long chunkKey, RegionSelection sel) {
+    private static void announce(Player player, Text label, long chunkKey, RegionSelection sel) {
         int cx = GeometryUtil.chunkX(chunkKey);
         int cz = GeometryUtil.chunkZ(chunkKey);
-        player.sendMessage(Component.text(label + " set at chunk (" + cx + ", " + cz + ").",
-                NamedTextColor.GREEN));
+        player.sendMessage(Messages.PROTECTION.text(Text.SELECTION_POINT,
+                Messages.PROTECTION.value(label), cx, cz));
         if (sel.isComplete()) {
             int cx1 = GeometryUtil.chunkX(sel.pos1());
             int cz1 = GeometryUtil.chunkZ(sel.pos1());
             int cx2 = GeometryUtil.chunkX(sel.pos2());
             int cz2 = GeometryUtil.chunkZ(sel.pos2());
             int chunks = (Math.abs(cx1 - cx2) + 1) * (Math.abs(cz1 - cz2) + 1);
-            player.sendMessage(Component.text(
-                    "Selection covers " + chunks + " chunk" + (chunks == 1 ? "" : "s") + ". Run /region claim <name> to commit.",
-                    NamedTextColor.GRAY));
+            player.sendMessage(Messages.PROTECTION.text(Text.SELECTION_COVERAGE,
+                    chunks, chunks == 1 ? "" : "s"));
         }
     }
 }

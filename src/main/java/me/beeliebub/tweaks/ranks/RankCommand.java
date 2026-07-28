@@ -1,11 +1,11 @@
 package me.beeliebub.tweaks.ranks;
 
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.economy.BalanceCommand;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -41,11 +41,11 @@ public class RankCommand implements CommandExecutor, TabCompleter {
         switch (sub) {
             case "edit" -> {
                 if (!(sender instanceof Player player)) {
-                    sender.sendMessage(Component.text("Only players can edit ranks.", NamedTextColor.RED));
+                    sender.sendMessage(Messages.ranksEditRequiresPlayer());
                     return true;
                 }
                 if (!sender.hasPermission(Permissions.ADMIN_RANKS)) {
-                    sender.sendMessage(Component.text("You don't have permission.", NamedTextColor.RED));
+                    sender.sendMessage(Messages.noPermission());
                     return true;
                 }
                 RankEditGUI.openRankList(player, rankManager);
@@ -81,7 +81,7 @@ public class RankCommand implements CommandExecutor, TabCompleter {
             playerRank = economyManager.getRank(uuid);
         }
 
-        sender.sendMessage(Component.text("--- Ranks ---", NamedTextColor.GOLD));
+        sender.sendMessage(Messages.ranksListHeader());
 
         int max = rankManager.getMaxRank();
         for (int rank = 1; rank <= max; rank++) {
@@ -97,24 +97,14 @@ public class RankCommand implements CommandExecutor, TabCompleter {
 
             Component parsedName = parseDisplayName(name);
 
-            Component line = Component.text(marker + "Rank ", lineColor)
-                    .append(parsedName)
-                    .append(Component.text(
-                            " — Cost: " + BalanceCommand.formatBalance(cost)
-                            + " | Bonus: " + (int) Math.round(multiplier * 100) + "%"
-                            + " | Rakeback: " + (int) Math.round(rakeback * 100) + "%"
-                            + (isCurrent ? " (current)" : ""),
-                            lineColor));
-            sender.sendMessage(line);
+            sender.sendMessage(Messages.ranksListEntry(marker, parsedName, BalanceCommand.formatBalance(cost),
+                    (int) Math.round(multiplier * 100), (int) Math.round(rakeback * 100), isCurrent, lineColor));
         }
 
         if (uuid != null && playerRank == 0) {
-            sender.sendMessage(Component.text(
-                    "You are currently Unranked. Use /rankup to purchase Rank I.",
-                    NamedTextColor.GRAY));
+            sender.sendMessage(Messages.ranksUnrankedNotice());
         } else if (uuid != null && playerRank >= max) {
-            sender.sendMessage(Component.text(
-                    "You have reached the maximum rank!", NamedTextColor.GOLD));
+            sender.sendMessage(Messages.ranksMaximumRankNotice());
         }
     }
 
@@ -138,6 +128,6 @@ public class RankCommand implements CommandExecutor, TabCompleter {
             // Contains an ampersand — use the ampersand serializer.
             return LegacyComponentSerializer.legacyAmpersand().deserialize(name);
         }
-        return MiniMessage.miniMessage().deserialize(name);
+        return Messages.MM.deserialize(name);
     }
 }

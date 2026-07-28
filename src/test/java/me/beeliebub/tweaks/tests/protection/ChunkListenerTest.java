@@ -1,18 +1,15 @@
 package me.beeliebub.tweaks.tests.protection;
 
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.protection.ProtectionKeys;
 import me.beeliebub.tweaks.protection.ProtectionListeners;
-import me.beeliebub.tweaks.protection.ProtectionManager;
-import me.beeliebub.tweaks.protection.RegionSelectionManager;
+import me.beeliebub.tweaks.protection.region.ProtectionManager;
+import me.beeliebub.tweaks.protection.ui.RegionSelectionManager;
 import org.bukkit.Chunk;
 import org.bukkit.NamespacedKey;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataContainer;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedConstruction;
 
 import java.util.List;
 import java.util.Set;
@@ -24,13 +21,6 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 class ChunkListenerTest {
-
-    @BeforeAll
-    static void initKeys() {
-        try (MockedConstruction<NamespacedKey> ignored = mockConstruction(NamespacedKey.class)) {
-            ProtectionKeys.init(mock(Tweaks.class));
-        }
-    }
 
     private ProtectionManager protection;
     private ProtectionListeners listener;

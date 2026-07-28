@@ -1,11 +1,11 @@
 package me.beeliebub.tweaks.deathinventory;
 
+import me.beeliebub.tweaks.utils.YamlStore;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -17,9 +17,11 @@ public final class DeathInventoryManager {
     private static final int SLOT_COUNT = 41; // 36 main + 4 armor + 1 offhand
     private static final long MAX_AGE_MS = 30L * 24 * 60 * 60 * 1000; // 30 days
 
+    private final JavaPlugin plugin;
     private final File baseDir;
 
     public DeathInventoryManager(JavaPlugin plugin) {
+        this.plugin = plugin;
         this.baseDir = new File(plugin.getDataFolder(), "data/deathinventories");
         this.baseDir.mkdirs();
         purgeOldEntries();
@@ -28,20 +30,15 @@ public final class DeathInventoryManager {
     public void saveInventory(UUID playerUuid, ItemStack[] contents) {
         File dir = playerDir(playerUuid);
         dir.mkdirs();
-        String filename = System.currentTimeMillis() + ".yml";
-        File file = new File(dir, filename);
+        File file = new File(dir, System.currentTimeMillis() + ".yml");
 
-        YamlConfiguration cfg = new YamlConfiguration();
-        for (int i = 0; i < contents.length; i++) {
-            if (contents[i] != null) {
-                cfg.set("slots." + i, contents[i]);
+        YamlStore.saveNow(plugin, file, "death inventory", cfg -> {
+            for (int i = 0; i < contents.length; i++) {
+                if (contents[i] != null) {
+                    cfg.set("slots." + i, contents[i]);
+                }
             }
-        }
-        try {
-            cfg.save(file);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        });
     }
 
     // Returns saved death records sorted newest-first.
@@ -57,15 +54,27 @@ public final class DeathInventoryManager {
     // Loads a saved death inventory. Slots not present in the file are null.
     public ItemStack[] loadInventory(File file) {
         ItemStack[] result = new ItemStack[SLOT_COUNT];
-        YamlConfiguration cfg = YamlConfiguration.loadConfiguration(file);
+        YamlConfiguration cfg = YamlStore.load(file);
         for (int i = 0; i < SLOT_COUNT; i++) {
             result[i] = cfg.getItemStack("slots." + i);
         }
         return result;
     }
 
-    // Resolves <playerUuid>/<id>.yml by bare stem name.
+    /**
+     * Resolves {@code <playerUuid>/<id>.yml} by bare stem name. {@code id} comes from a raw
+     * command argument ({@code /deathinventory <player> <id> [restore]}, gated behind
+     * {@code Permissions.ADMIN_DEATH_INVENTORY}); every real record's stem is a decimal
+     * {@code System.currentTimeMillis()} value, so anything else — including a path-traversal
+     * attempt like {@code ../../../etc/passwd} — resolves to a fixed sentinel filename that no
+     * {@link #saveInventory} call can ever legitimately produce, rather than being passed through
+     * to {@link File} construction. Callers already handle a non-existent result via
+     * {@code !file.exists()}.
+     */
     public File getFile(UUID playerUuid, String id) {
+        if (id.isEmpty() || !id.chars().allMatch(Character::isDigit)) {
+            return new File(playerDir(playerUuid), "invalid-request.yml");
+        }
         return new File(playerDir(playerUuid), id + ".yml");
     }
 

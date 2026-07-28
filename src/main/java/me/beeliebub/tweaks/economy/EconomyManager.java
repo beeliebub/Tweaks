@@ -1,24 +1,30 @@
 package me.beeliebub.tweaks.economy;
 
 import me.beeliebub.tweaks.tab.TabManager;
+import me.beeliebub.tweaks.utils.YamlStore;
 import org.bukkit.Bukkit;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
-import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Consumer;
+import java.util.logging.Level;
 
 // Handles async YAML persistence for per-player economy/ranks data.
-// Each player is cached in memory and saved to disk asynchronously, mirroring StorageManager.
+// Each player is cached in memory and saved to disk asynchronously via utils/YamlStore.
 public class EconomyManager {
 
     private final JavaPlugin plugin;
-    private final File playersDir;
+    private final YamlStore playerStore;
 
     // In-memory cache: one mutable holder per player. Reads are lock-free O(1) map lookups.
     private final ConcurrentMap<UUID, PlayerData> cache = new ConcurrentHashMap<>();
@@ -32,11 +38,7 @@ public class EconomyManager {
 
     public EconomyManager(JavaPlugin plugin) {
         this.plugin = plugin;
-
-        this.playersDir = new File(plugin.getDataFolder(), "players");
-        if (!playersDir.exists()) {
-            playersDir.mkdirs();
-        }
+        this.playerStore = new YamlStore(plugin, new File(plugin.getDataFolder(), "players"), "economy data");
     }
 
     // Mutable holder for a single player's economy fields. Fields default to sane zero-values.
@@ -46,6 +48,9 @@ public class EconomyManager {
         volatile int loginStreak;
         volatile boolean balanceHidden;
         volatile int rank;
+        // paymentId -> whole-dollar amount already applied. Copy-on-write: replaced, never mutated
+        // in place, so writeAsync's calling-thread snapshot filler always sees a coherent map.
+        volatile Map<String, Long> receipts = Map.of();
     }
 
     // ---- Lifecycle ----------------------------------------------------------
@@ -66,9 +71,14 @@ public class EconomyManager {
         }
     }
 
-    // Flush every cached player to disk asynchronously (called on disable).
-    public void saveAll() {
-        cache.forEach(this::writeAsync);
+    // Flush every cached player to disk. The returned future completes once every write has
+    // landed (exceptionally if any write failed — YamlStore logs each failure regardless), so
+    // callers on a shutdown path can block on it with a bounded timeout.
+    public CompletableFuture<Void> saveAll() {
+        CompletableFuture<?>[] writes = cache.entrySet().stream()
+                .map(entry -> writeAsync(entry.getKey(), entry.getValue()))
+                .toArray(CompletableFuture[]::new);
+        return CompletableFuture.allOf(writes);
     }
 
     // ---- Balance ------------------------------------------------------------
@@ -79,24 +89,89 @@ public class EconomyManager {
     }
 
     public void setBalance(UUID player, double balance) {
-        PlayerData data = get(player);
-        data.balance = balance;
+        PlayerData data = mutate(player, holder -> holder.balance = balance);
         writeAsync(player, data);
         refreshTabFor(player);
     }
 
     public void addBalance(UUID player, double amount) {
-        PlayerData data = get(player);
-        data.balance += amount;
+        PlayerData data = mutate(player, holder -> holder.balance += amount);
         writeAsync(player, data);
         refreshTabFor(player);
     }
 
     public void removeBalance(UUID player, double amount) {
-        PlayerData data = get(player);
-        data.balance -= amount;
+        PlayerData data = mutate(player, holder -> holder.balance -= amount);
         writeAsync(player, data);
         refreshTabFor(player);
+    }
+
+    /**
+     * Idempotently credits a whole-dollar house payment: {@code paymentId} and the recipient's new
+     * balance are written together in one snapshot, so "credited but no receipt" is unrepresentable
+     * on disk. Safe to call again with the same {@code paymentId} after a crash — a matching receipt
+     * short-circuits to {@link HousePaymentResult#ALREADY_APPLIED} without touching the balance
+     * again; a mismatched receipt (same id, different amount) fails closed rather than overwriting.
+     *
+     * <p>Reads the recipient's on-disk state directly rather than through {@link #getBalance}, which
+     * returns a hardcoded {@code 0.0} for an unloaded player without touching disk (see this class's
+     * CLAUDE.md) — that trap would silently zero an offline recipient's real balance here. The read
+     * itself uses {@code YamlStore.readOrderedAsyncStrict}, not the tolerant {@code readOrderedAsync}
+     * — a present-but-unreadable file must fail this payment rather than silently parsing as an
+     * empty (zero-balance) document, which this method would then durably overwrite. On such a
+     * failure the returned future completes exceptionally; the debit already recorded by {@code
+     * HouseAccount.beginPayment} is left {@code DEBIT_DURABLE} for a later retry, exactly like any
+     * other unexpected failure in {@link HousePaymentService}'s sequencing.
+     *
+     * <p>Never touches Bukkit player/entity API on the calling thread or in a continuation chained
+     * onto the returned future — {@code YamlStore}'s filler/continuation contract forbids it. The tab
+     * refresh on success is hopped onto the main thread via the scheduler.
+     */
+    public CompletableFuture<HousePaymentResult> applyHousePayment(UUID recipient, String paymentId, long amount) {
+        Objects.requireNonNull(recipient, "recipient");
+        Objects.requireNonNull(paymentId, "paymentId");
+        if (amount < 0) throw new IllegalArgumentException("amount must not be negative");
+
+        return playerStore.readOrderedAsyncStrict(recipient.toString()).thenCompose(config -> {
+            HousePaymentResult[] outcome = new HousePaymentResult[1];
+            PlayerData data = cache.compute(recipient, (uuid, existing) -> {
+                PlayerData holder = existing != null ? existing : parse(config);
+                outcome[0] = applyReceipt(holder, paymentId, amount);
+                return holder;
+            });
+
+            if (outcome[0] != HousePaymentResult.APPLIED) {
+                return CompletableFuture.completedFuture(outcome[0]);
+            }
+            return writeAsync(recipient, data).handle((v, err) -> {
+                if (err != null) {
+                    plugin.getLogger().log(Level.WARNING, "House payment credit write failed for paymentId="
+                            + paymentId + " recipient=" + recipient, err);
+                    return HousePaymentResult.REJECTED_WRITE_FAILED;
+                }
+                scheduleTabRefresh(recipient);
+                return HousePaymentResult.APPLIED;
+            });
+        });
+    }
+
+    private static HousePaymentResult applyReceipt(PlayerData data, String paymentId, long amount) {
+        Long existingReceipt = data.receipts.get(paymentId);
+        if (existingReceipt != null) {
+            return existingReceipt == amount ? HousePaymentResult.ALREADY_APPLIED : HousePaymentResult.REJECTED_MISMATCH;
+        }
+        if (!Double.isFinite(data.balance)) {
+            return HousePaymentResult.REJECTED_UNREPRESENTABLE;
+        }
+        double next = data.balance + (double) amount;
+        if (!Double.isFinite(next) || next - data.balance != (double) amount) {
+            return HousePaymentResult.REJECTED_UNREPRESENTABLE;
+        }
+        Map<String, Long> receipts = new HashMap<>(data.receipts);
+        receipts.put(paymentId, amount);
+        data.balance = next;
+        data.receipts = Map.copyOf(receipts);
+        return HousePaymentResult.APPLIED;
     }
 
     // ---- Last login ---------------------------------------------------------
@@ -159,49 +234,78 @@ public class EconomyManager {
         return cache.computeIfAbsent(player, this::readFromDisk);
     }
 
-    // Read a player's YAML into a fresh holder. Missing/unknown fields fall back to defaults.
+    // Atomically read-modify-write a single field on the cached holder. Routing balance mutation
+    // through ConcurrentHashMap#compute (rather than the plain get-then-mutate the other setters
+    // use) makes it mutually exclusive, per key, with applyHousePayment's own compute — without
+    // this, a same-tick addBalance racing a house-payment credit could silently overwrite the
+    // credit and its receipt (lost update).
+    private PlayerData mutate(UUID player, Consumer<PlayerData> mutator) {
+        return cache.compute(player, (uuid, existing) -> {
+            PlayerData holder = existing != null ? existing : readFromDisk(uuid);
+            mutator.accept(holder);
+            return holder;
+        });
+    }
+
+    // Read a player's YAML into a fresh holder. Missing fields fall back to defaults (an absent
+    // file loads as an empty YamlConfiguration, which already yields every default below).
     private PlayerData readFromDisk(UUID player) {
+        return parse(playerStore.read(player.toString()));
+    }
+
+    private static PlayerData parse(YamlConfiguration config) {
         PlayerData data = new PlayerData();
-        File file = new File(playersDir, player.toString() + ".yml");
-        if (file.exists()) {
-            YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
-            data.balance = config.getDouble("balance", 0.0D);
-            data.lastLogin = config.getLong("last_login", 0L);
-            data.loginStreak = config.getInt("login_streak", 0);
-            data.balanceHidden = config.getBoolean("balance_hidden", false);
-            data.rank = config.getInt("rank", 0);
-        }
+        data.balance = config.getDouble("balance", 0.0D);
+        data.lastLogin = config.getLong("last_login", 0L);
+        data.loginStreak = config.getInt("login_streak", 0);
+        data.balanceHidden = config.getBoolean("balance_hidden", false);
+        data.rank = config.getInt("rank", 0);
+        data.receipts = parseReceipts(config);
         return data;
     }
 
+    private static Map<String, Long> parseReceipts(YamlConfiguration config) {
+        ConfigurationSection section = config.getConfigurationSection("house_payment_receipts");
+        if (section == null) return Map.of();
+        Map<String, Long> receipts = new HashMap<>();
+        for (String key : section.getKeys(false)) {
+            receipts.put(key, section.getLong(key));
+        }
+        return Map.copyOf(receipts);
+    }
+
     // If a TabManager is wired and the player is online, ask it to re-render the tab entry.
-    // Must be called on the main thread (playerListName writes must stay synchronous).
+    // Must be called on the main thread (playerListName writes must stay synchronous) — never
+    // move this into a YamlStore filler or a continuation chained onto a returned future; see
+    // YamlStore's class Javadoc for why that isn't enforced by the type system.
     private void refreshTabFor(UUID uuid) {
         if (tabManager == null) return;
         Player p = Bukkit.getPlayer(uuid);
         if (p != null) tabManager.refreshTab(p);
     }
 
-    // Snapshot the holder's current values and write them to disk off the main thread.
-    private void writeAsync(UUID player, PlayerData data) {
-        double balance = data.balance;
-        long lastLogin = data.lastLogin;
-        int loginStreak = data.loginStreak;
-        boolean balanceHidden = data.balanceHidden;
-        int rank = data.rank;
+    // applyHousePayment resolves off the main thread (chained onto an async read), so the tab
+    // refresh it triggers on success must hop back rather than calling refreshTabFor directly.
+    private void scheduleTabRefresh(UUID uuid) {
+        if (tabManager == null || !plugin.isEnabled()) return;
+        Bukkit.getScheduler().runTask(plugin, () -> refreshTabFor(uuid));
+    }
 
-        CompletableFuture.runAsync(() -> {
-            File file = new File(playersDir, player.toString() + ".yml");
-            YamlConfiguration config = new YamlConfiguration();
-            config.set("balance", balance);
-            config.set("last_login", lastLogin);
-            config.set("login_streak", loginStreak);
-            config.set("balance_hidden", balanceHidden);
-            config.set("rank", rank);
-            try {
-                config.save(file);
-            } catch (IOException e) {
-                plugin.getLogger().warning("Failed to save economy data for " + player + ": " + e.getMessage());
+    // Snapshot the holder's current volatile values (the filler runs on the calling thread — see
+    // YamlStore's class Javadoc) and write them to disk off the main thread.
+    private CompletableFuture<Void> writeAsync(UUID player, PlayerData data) {
+        return playerStore.writeAsync(player.toString(), config -> {
+            config.set("balance", data.balance);
+            config.set("last_login", data.lastLogin);
+            config.set("login_streak", data.loginStreak);
+            config.set("balance_hidden", data.balanceHidden);
+            config.set("rank", data.rank);
+            // Every writer of this file must re-emit receipts, or an unrelated mutation (e.g. a
+            // login-streak update) would silently erase a durable house-payment receipt.
+            Map<String, Long> receipts = data.receipts;
+            if (!receipts.isEmpty()) {
+                ConfigurationSection section = config.createSection("house_payment_receipts");
+                receipts.forEach(section::set);
             }
         });
     }

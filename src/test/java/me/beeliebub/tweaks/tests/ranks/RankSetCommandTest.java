@@ -82,7 +82,7 @@ class RankSetCommandTest {
         rankSetCmd.onCommand(player, bukkitCmd, "rank", new String[]{"set", target.getName(), "5"});
 
         assertNotEquals(5, em.getRank(target.getUniqueId()));
-        MessageAssert.assertMessageSent(player, "don't have permission");
+        MessageAssert.assertMessageSent(player, "do not have permission");
     }
 
     @Test

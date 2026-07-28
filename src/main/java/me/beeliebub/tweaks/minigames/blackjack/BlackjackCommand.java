@@ -1,8 +1,8 @@
 package me.beeliebub.tweaks.minigames.blackjack;
 
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.permissions.Permissions;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -32,8 +32,6 @@ import java.util.List;
  */
 public final class BlackjackCommand implements CommandExecutor, TabCompleter {
 
-    private static final MiniMessage MM = MiniMessage.miniMessage();
-
     private static final List<String> BET_SUGGESTIONS = List.of("10", "50", "100", "500", "1000");
 
     // Economy is kept in the constructor to satisfy the unchanged Tweaks.java wiring.
@@ -49,7 +47,7 @@ public final class BlackjackCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(MM.deserialize("<red>Only players can manage Blackjack tables.</red>"));
+            sender.sendMessage(Messages.MINIGAMES.blackjackManageRequiresPlayer());
             return true;
         }
 
@@ -72,13 +70,12 @@ public final class BlackjackCommand implements CommandExecutor, TabCompleter {
 
     private boolean handleCreateTable(Player player, String label, String[] args) {
         if (!player.hasPermission(Permissions.BLACKJACK_CREATETABLE)) {
-            player.sendMessage(MM.deserialize("<red>You do not have permission to create Blackjack tables.</red>"));
+            player.sendMessage(Messages.noPermission());
             return true;
         }
 
         if (args.length < 2) {
-            player.sendMessage(MM.deserialize(
-                    "<gray>Usage:</gray> <yellow>/" + label + " createtable <bet> [hexColor]</yellow>"));
+            player.sendMessage(Messages.MINIGAMES.blackjackCreateUsage(label));
             return true;
         }
 
@@ -89,11 +86,11 @@ public final class BlackjackCommand implements CommandExecutor, TabCompleter {
             try {
                 bet = Integer.parseInt(args[1]);
             } catch (NumberFormatException e) {
-                player.sendMessage(MM.deserialize("<red>Bet must be a positive number, 0, or 'free'.</red>"));
+                player.sendMessage(Messages.MINIGAMES.blackjackBetInvalid());
                 return true;
             }
             if (bet < 0) {
-                player.sendMessage(MM.deserialize("<red>Bet cannot be negative.</red>"));
+                player.sendMessage(Messages.MINIGAMES.blackjackBetNegative());
                 return true;
             }
         }
@@ -110,37 +107,25 @@ public final class BlackjackCommand implements CommandExecutor, TabCompleter {
                     backColor = Integer.parseUnsignedInt(colorArg) & 0xFFFFFF;
                 }
             } catch (NumberFormatException e) {
-                player.sendMessage(MM.deserialize(
-                        "<red>Invalid color. Use a hex value like <yellow>FF8800</yellow>"
-                                + " or <yellow>#FF8800</yellow>.</red>"));
+                player.sendMessage(Messages.MINIGAMES.blackjackColorInvalid());
                 return true;
             }
         }
 
         listener.beginTableSetup(player, bet, backColor);
         String betDisplay = bet == 0 ? "FREE" : String.valueOf(bet);
-        String colorSuffix = backColor != null
-                ? " <gray>| Back color:</gray> <yellow>#" + String.format("%06X", backColor) + "</yellow>"
-                : "";
-        player.sendMessage(MM.deserialize(
-                "<green>Table setup started!</green> "
-                        + "<gray>Right-click the</gray> <yellow>middle control button</yellow> "
-                        + "<gray>to finalize the table (bet:</gray> <yellow>" + betDisplay + "</yellow><gray>).</gray>"
-                        + colorSuffix));
+        player.sendMessage(Messages.MINIGAMES.blackjackTableSetupStarted(betDisplay, backColor));
         return true;
     }
 
     private boolean handleRemoveTable(Player player) {
         if (!player.hasPermission(Permissions.BLACKJACK_REMOVETABLE)) {
-            player.sendMessage(MM.deserialize("<red>You do not have permission to remove Blackjack tables.</red>"));
+            player.sendMessage(Messages.noPermission());
             return true;
         }
 
         listener.beginTableRemoval(player);
-        player.sendMessage(MM.deserialize(
-                "<green>Table removal started!</green> "
-                        + "<gray>Right-click the</gray> <yellow>middle button</yellow> "
-                        + "<gray>of the table you want to remove.</gray>"));
+        player.sendMessage(Messages.MINIGAMES.blackjackTableRemovalStarted());
         return true;
     }
 
@@ -179,8 +164,6 @@ public final class BlackjackCommand implements CommandExecutor, TabCompleter {
     // ---- Helpers ------------------------------------------------------------
 
     private static void sendUsage(Player player, String label) {
-        player.sendMessage(MM.deserialize(
-                "<gray>Usage:</gray> <yellow>/" + label
-                        + " <createtable <bet> [hexColor]|removetable></yellow>"));
+        player.sendMessage(Messages.MINIGAMES.blackjackUsage(label));
     }
 }

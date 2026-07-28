@@ -56,6 +56,12 @@ commands:
   blackjack:
     description: Admin commands to create and remove in-world Blackjack tables via button-linking.
     usage: /blackjack <createtable <bet> [hexColor]|removetable>
+  roulettescan:
+    description: Admin diagnostic scan of a roulette wheel's BlockDisplay segments.
+    usage: /roulettescan [radius]
+  roulette:
+    description: Bet on in-world Roulette boards; admins also create/remove boards via a spin-control button/lever.
+    usage: /roulette <createboard <min> <max>|removeboard|stake <amount>>
   more:
     description: Maximize the stack size of the held item
   condense:
@@ -122,6 +128,9 @@ commands:
     description: View or manage player balances.
     usage: /balance [hide | <player> | set|add|remove <player> <amount>]
     aliases: [bal]
+  house:
+    description: View and administer the casino house account.
+    usage: /house <balance|add|remove|set|pay>
   ranks:
     description: List all ranks, or edit them (admin).
     usage: |

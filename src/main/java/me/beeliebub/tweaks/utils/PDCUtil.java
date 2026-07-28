@@ -1,7 +1,7 @@
 package me.beeliebub.tweaks.utils;
 
-import me.beeliebub.tweaks.protection.ProtectionKeys;
 import org.bukkit.Chunk;
+import org.bukkit.NamespacedKey;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 
@@ -20,34 +20,38 @@ import java.util.Set;
 // path reads the current list, merges, and writes back the deduplicated
 // result. Removal collapses an empty list to a key delete so unprotected
 // chunks carry no residual NBT.
+//
+// The pointer key is passed in by the caller (ProtectionManager owns it) rather
+// than resolved from a static, so this class has no dependency on the protection
+// package or on plugin-instance state.
 public final class PDCUtil {
 
     private PDCUtil() {}
 
     // Snapshot of every RegionID currently stamped onto the chunk. Returns
     // an empty list when the chunk has never been stamped.
-    public static List<String> read(Chunk chunk) {
+    public static List<String> read(Chunk chunk, NamespacedKey regionPointersKey) {
         PersistentDataContainer pdc = chunk.getPersistentDataContainer();
         return pdc.getOrDefault(
-                ProtectionKeys.regionPointers(),
+                regionPointersKey,
                 PersistentDataType.LIST.strings(),
                 List.of()
         );
     }
 
-    public static void append(Chunk chunk, String regionId) {
-        append(chunk, List.of(regionId));
+    public static void append(Chunk chunk, String regionId, NamespacedKey regionPointersKey) {
+        append(chunk, List.of(regionId), regionPointersKey);
     }
 
     // Merge regionIds into the chunk's pointer list, preserving existing
     // entries and naturally deduplicating. No-op if every supplied id is
     // already present (avoids needlessly dirtying the chunk).
-    public static void append(Chunk chunk, Collection<String> regionIds) {
+    public static void append(Chunk chunk, Collection<String> regionIds, NamespacedKey regionPointersKey) {
         if (regionIds.isEmpty()) return;
 
         PersistentDataContainer pdc = chunk.getPersistentDataContainer();
         List<String> existing = pdc.getOrDefault(
-                ProtectionKeys.regionPointers(),
+                regionPointersKey,
                 PersistentDataType.LIST.strings(),
                 List.of()
         );
@@ -56,7 +60,7 @@ public final class PDCUtil {
         if (!merged.addAll(regionIds)) return;
 
         pdc.set(
-                ProtectionKeys.regionPointers(),
+                regionPointersKey,
                 PersistentDataType.LIST.strings(),
                 new ArrayList<>(merged)
         );
@@ -65,12 +69,12 @@ public final class PDCUtil {
     // Strip dead RegionIDs (orphan cleanup) from the chunk. Collapses the
     // key entirely when the result is empty so unprotected wilderness
     // chunks don't carry empty NBT lists forever.
-    public static void remove(Chunk chunk, Set<String> deadIds) {
+    public static void remove(Chunk chunk, Set<String> deadIds, NamespacedKey regionPointersKey) {
         if (deadIds.isEmpty()) return;
 
         PersistentDataContainer pdc = chunk.getPersistentDataContainer();
         List<String> existing = pdc.getOrDefault(
-                ProtectionKeys.regionPointers(),
+                regionPointersKey,
                 PersistentDataType.LIST.strings(),
                 List.of()
         );
@@ -88,10 +92,10 @@ public final class PDCUtil {
         if (!removed) return;
 
         if (kept.isEmpty()) {
-            pdc.remove(ProtectionKeys.regionPointers());
+            pdc.remove(regionPointersKey);
         } else {
             pdc.set(
-                    ProtectionKeys.regionPointers(),
+                    regionPointersKey,
                     PersistentDataType.LIST.strings(),
                     kept
             );
