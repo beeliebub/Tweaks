@@ -31,18 +31,18 @@ fly-worlds:
   - "jass:lobby"
 
 # Flight permission advancement
-fly-advancement: "jass:test"
+fly-advancement: "jass:fly"
 
 # Namespaced key of the custom enchantments.
-telekinesis: "jass:test1"
-smelter: "jass:test2"
-lumberjack: "jass:test3"
-gem-connoisseur: "jass:test4"
-tunneller: "jass:test5"
-spawner-pickup: "jass:test6"
-egg-collector: "jass:test7"
-replant: "jass:test8"
-efficacy: "jass:test9"
+telekinesis: "jass:telekinesis"
+smelter: "jass:smelter"
+lumberjack: "jass:lumberjack"
+gem-connoisseur: "jass:gem_connoisseur"
+tunneller: "jass:tunneller"
+spawner-pickup: "jass:spawner_pickup"
+egg-collector: "jass:egg_collector"
+replant: "jass:replant"
+efficacy: "jass:efficacy"
 dice-converter: "dqc.dice:dice_converter"
 
 # Drop rates for gem-connoisseur. Each entry is a 1-in-N chance per block mined.
