@@ -23,7 +23,7 @@ public final class RanksBootstrap {
 
         plugin.getCommand("rankup").setExecutor(new RankupCommand(services.economyManager(), rankManager));
 
-        RankSetCommand rankSetCommand = new RankSetCommand(services.economyManager(), rankManager);
+        RankSetCommand rankSetCommand = new RankSetCommand(plugin, services.economyManager(), rankManager);
         plugin.getCommand("rank").setExecutor(rankSetCommand);
         plugin.getCommand("rank").setTabCompleter(rankSetCommand);
     }

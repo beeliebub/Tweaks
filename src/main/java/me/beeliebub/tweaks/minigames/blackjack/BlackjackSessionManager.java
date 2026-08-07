@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.minigames.blackjack;
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
+import me.beeliebub.tweaks.lottery.LotteryManager;
 import me.beeliebub.tweaks.ranks.RankManager;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -36,6 +37,7 @@ public final class BlackjackSessionManager {
     private final HouseAccount houseAccount;
     private final RankManager rankManager;
     private final BlackjackRenderer renderer;
+    private final LotteryManager lotteryManager;
 
     /** Per-player active game session. At most one game per player at a time. */
     private final Map<UUID, Session> sessions = new HashMap<>();
@@ -48,11 +50,17 @@ public final class BlackjackSessionManager {
 
     public BlackjackSessionManager(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
                             RankManager rankManager, BlackjackRenderer renderer) {
+        this(plugin, economyManager, houseAccount, rankManager, renderer, null);
+    }
+
+    public BlackjackSessionManager(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
+                            RankManager rankManager, BlackjackRenderer renderer, LotteryManager lotteryManager) {
         this.plugin = plugin;
         this.economyManager = economyManager;
         this.houseAccount = houseAccount;
         this.rankManager = rankManager;
         this.renderer = renderer;
+        this.lotteryManager = lotteryManager;
 
         // Schedule the inactivity sweeper to run every 60 seconds (1200 ticks).
         sweepTaskId = plugin.getServer().getScheduler()
@@ -252,6 +260,7 @@ public final class BlackjackSessionManager {
         }
         if (settlement.houseWinnings() > 0) {
             houseAccount.credit(settlement.houseWinnings());
+            enterLottery(player.getUniqueId(), settlement.houseWinnings(), "blackjack settlement");
         }
 
         player.sendMessage(settlement.summaryMessage());
@@ -371,27 +380,37 @@ public final class BlackjackSessionManager {
     public void sweepInactiveSessions(long now) {
         long timeoutMillis = inactivityTimeoutMillis();
         for (UUID playerId : new ArrayList<>(sessions.keySet())) {
-            Session session = sessions.get(playerId);
-            if (session == null) {
-                continue;
-            }
-            // Only sweep sessions that are still in-progress (not yet settled / waiting to clear).
-            if (session.game.isFinished() || session.waitingToClear) {
-                continue;
-            }
-            if (now - session.game.lastInteractionTime() > timeoutMillis) {
-                int bet = session.game.bet();
-                endSession(playerId);
-                if (bet > 0) {
-                    houseAccount.credit(bet);
-                }
+            try {
+                Session session = sessions.get(playerId);
+                if (session == null) continue;
+                if (session.game.isFinished() || session.waitingToClear) continue;
+                if (now - session.game.lastInteractionTime() > timeoutMillis) {
+                    int bet = session.game.bet();
+                    endSession(playerId);
+                    if (bet > 0) {
+                        houseAccount.credit(bet);
+                        enterLottery(playerId, bet, "blackjack inactivity forfeiture");
+                    }
 
-                // Notify the player if they are still online.
-                var player = Bukkit.getPlayer(playerId);
-                if (player != null) {
-                    player.sendMessage(Messages.MINIGAMES.blackjackInactiveGameEnded(bet));
+                    var player = Bukkit.getPlayer(playerId);
+                    if (player != null) {
+                        player.sendMessage(Messages.MINIGAMES.blackjackInactiveGameEnded(bet));
+                    }
                 }
+            } catch (RuntimeException e) {
+                plugin.getLogger().log(java.util.logging.Level.WARNING,
+                        "Blackjack inactivity sweep failed for " + playerId, e);
             }
+        }
+    }
+
+    private void enterLottery(UUID playerId, long amount, String source) {
+        if (lotteryManager == null || !lotteryManager.isLoaded()) return;
+        try {
+            lotteryManager.enter(playerId);
+        } catch (RuntimeException e) {
+            plugin.getLogger().log(java.util.logging.Level.WARNING,
+                    "Blackjack lottery entry failed after " + source + " for " + playerId, e);
         }
     }
 

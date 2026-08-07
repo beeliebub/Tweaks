@@ -672,6 +672,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("Targets are unique per-player where possible."),
                 green("Collect category includes mob drops (e.g. ghast tears)."),
                 green("Shear targets support specific colors (e.g. red_sheep)."),
+                green("Turtle, frog, and sniffer targets count one successful pairing before eggs are laid."),
                 aqua("Three cumulative tier thresholds:"),
                 white("T1 = amount, T2 = round(T1 * multiplier), T3 = round(T1 * multiplier²)."),
                 gold("Each tier crossed grants one 'resource' reward."),
@@ -990,7 +991,18 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/balance add <player> <amount>", "Grant funds."),
                 cmd("/balance remove <player> <amount>", "Deduct funds."),
                 red("Permission: tweaks.admin.balance.")
-        ), Material.EMERALD, 22, ColorUtil.HELP_GRAD_ECONOMY, List.of("daily_rewards", "ranks")));
+        ), Material.EMERALD, 22, ColorUtil.HELP_GRAD_ECONOMY, List.of("daily_rewards", "ranks", "lottery")));
+
+        articles.add(new HelpArticle("lottery", "Server Lottery", List.of(
+                gray("Players who lose to the casino can enter the server-wide lottery."),
+                cmd("/lottery info", "View entrants, the baseline, and the current pot."),
+                cmd("/lottery", "Shows the public lottery information."),
+                red("Admin:"),
+                cmd("/lottery draw", "Draw one eligible winner and pay the current pot."),
+                cmd("/lottery entries", "List the current entrant pool."),
+                cmd("/lottery baseline <amount>", "Set the growth baseline."),
+                red("Admin permission: " + Permissions.LOTTERY_ADMIN + ".")
+        ), Material.CHEST, 21, ColorUtil.HELP_GRAD_ECONOMY, List.of("house", "balance")));
 
         articles.add(new HelpArticle("house", "Casino House Account", List.of(
                 gray("Administrative account receiving casino losses and inactive-hand forfeitures."),
@@ -999,7 +1011,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/house add|remove|set <amount>", "Adjust the account; only set may make it negative."),
                 cmd("/house pay <player> <amount>", "Transfer house funds to an online or known offline player."),
                 red("Permission: " + Permissions.HOUSE_ADMIN + ".")
-        ), Material.GOLD_BLOCK, 23, ColorUtil.HELP_GRAD_ECONOMY, List.of("balance", "ranks", "roulette"), Permissions.HOUSE_ADMIN));
+        ), Material.GOLD_BLOCK, 23, ColorUtil.HELP_GRAD_ECONOMY, List.of("balance", "ranks", "roulette", "lottery"), Permissions.HOUSE_ADMIN));
 
         articles.add(new HelpArticle("ranks", "Ranks & Progression", List.of(
                 gray("Purchase ranks to unlock better rewards and bonuses."),

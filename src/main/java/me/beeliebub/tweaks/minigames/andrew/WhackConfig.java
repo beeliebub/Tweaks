@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.List;
+import java.util.logging.Level;
 
 // Loads and saves Whack-an-Andrew settings from whack.yml, including game parameters,
 // profile names, spawn chances, reward assignments, and arena persistence.
@@ -82,7 +83,7 @@ public class WhackConfig {
         try {
             config.save(configFile);
         } catch (IOException e) {
-            plugin.getLogger().severe("Failed to save whack.yml: " + e.getMessage());
+            plugin.getLogger().log(Level.SEVERE, "Failed to save whack.yml", e);
         }
     }
 
@@ -134,7 +135,7 @@ public class WhackConfig {
         String worldName = config.getString("arena.world");
         World world = Bukkit.getWorld(worldName);
         if (world == null) {
-            plugin.getLogger().warning("Arena world '" + worldName + "' not found, skipping arena load.");
+            plugin.getLogger().log(Level.WARNING, "Arena world '" + worldName + "' not found, skipping arena load.");
             return null;
         }
 

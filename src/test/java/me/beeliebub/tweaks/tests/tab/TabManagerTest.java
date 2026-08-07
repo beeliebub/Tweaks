@@ -110,6 +110,20 @@ class TabManagerTest {
                         + "' when balance is hidden");
     }
 
+    @Test
+    void rankChangesRefreshTabImmediatelyWithoutRejoin() {
+        PlayerMock player = server.addPlayer();
+        UUID uuid = player.getUniqueId();
+        EconomyManager em = plugin.getEconomyManager();
+
+        String before = plain(player.playerListName());
+        em.setRank(uuid, 1);
+        String after = plain(player.playerListName());
+
+        assertNotEquals(before, after, "setRank must refresh the online player's tab entry immediately");
+        assertTrue(after.contains("[I]"), "Tab plain text '" + after + "' should contain the new rank bracket");
+    }
+
     // ============================================================
     // Test 3: Rank name (with color codes) renders in tab after setRankName
     // ============================================================

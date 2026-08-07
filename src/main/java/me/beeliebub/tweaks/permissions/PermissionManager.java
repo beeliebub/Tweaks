@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
 
 // Manages permission logic, inheritance, attachments, and YAML persistence.
 // Storage was previously a separate PermissionStorage class.
@@ -79,7 +80,7 @@ public class PermissionManager implements Listener {
         try {
             config.save(groupsFile);
         } catch (IOException e) {
-            plugin.getLogger().severe("Could not save groups.yml: " + e.getMessage());
+            plugin.getLogger().log(Level.SEVERE, "Could not save groups.yml", e);
         }
     }
 
@@ -109,7 +110,7 @@ public class PermissionManager implements Listener {
                 perms.forEach(user::addPermission);
                 loaded.put(uuid, user);
             } catch (IllegalArgumentException e) {
-                plugin.getLogger().warning("Invalid UUID in users.yml: " + key);
+                plugin.getLogger().log(Level.WARNING, "Invalid UUID in users.yml: " + key, e);
             }
         }
         return loaded;
@@ -125,7 +126,7 @@ public class PermissionManager implements Listener {
         try {
             config.save(usersFile);
         } catch (IOException e) {
-            plugin.getLogger().severe("Could not save users.yml: " + e.getMessage());
+            plugin.getLogger().log(Level.SEVERE, "Could not save users.yml", e);
         }
     }
 

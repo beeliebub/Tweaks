@@ -5,6 +5,7 @@ import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.core.ProtectionMessages.Text;
 import me.beeliebub.tweaks.protection.region.Region;
+import me.beeliebub.tweaks.utils.OfflinePlayerResolver;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
@@ -124,22 +125,18 @@ final class MembershipSubcommands {
             return;
         }
 
-        OfflinePlayer offlineTarget = Bukkit.getOfflinePlayer(target);
-        if (offlineTarget.getUniqueId() == null) {
-            sender.sendMessage(Messages.PROTECTION.text(Text.UNKNOWN_PLAYER, target));
-            return;
-        }
-
-        boolean ok = add
-                ? ctx.protection.addMember(name, offlineTarget.getUniqueId())
-                : ctx.protection.removeMember(name, offlineTarget.getUniqueId());
-        if (!ok) {
-            sender.sendMessage(Messages.PROTECTION.text(add
-                    ? Text.MEMBER_ADD_FAILED : Text.MEMBER_REMOVE_FAILED));
-            return;
-        }
-        sender.sendMessage(Messages.PROTECTION.text(Text.MEMBER_SUCCESS,
-                add ? "Added" : "Removed", target, add ? "to" : "from", name));
+        resolveTarget(ctx, sender, target, offlineTarget -> {
+            boolean ok = add
+                    ? ctx.protection.addMember(name, offlineTarget.getUniqueId())
+                    : ctx.protection.removeMember(name, offlineTarget.getUniqueId());
+            if (!ok) {
+                sender.sendMessage(Messages.PROTECTION.text(add
+                        ? Text.MEMBER_ADD_FAILED : Text.MEMBER_REMOVE_FAILED));
+                return;
+            }
+            sender.sendMessage(Messages.PROTECTION.text(Text.MEMBER_SUCCESS,
+                    add ? "Added" : "Removed", target, add ? "to" : "from", name));
+        });
     }
 
     // /region addmanager|removemanager — owner-only by design. The owner-only check now
@@ -191,27 +188,51 @@ final class MembershipSubcommands {
             return;
         }
 
-        OfflinePlayer offlineTarget = Bukkit.getOfflinePlayer(target);
-        if (offlineTarget.getUniqueId() == null) {
-            sender.sendMessage(Messages.PROTECTION.text(Text.UNKNOWN_PLAYER, target));
-            return;
-        }
-        if (add && region.owner().equals(offlineTarget.getUniqueId())) {
-            sender.sendMessage(Messages.PROTECTION.text(Text.OWNER_MANAGER));
-            return;
-        }
+        resolveTarget(ctx, sender, target, offlineTarget -> {
+            if (add && region.owner().equals(offlineTarget.getUniqueId())) {
+                sender.sendMessage(Messages.PROTECTION.text(Text.OWNER_MANAGER));
+                return;
+            }
 
-        boolean ok = add
-                ? ctx.protection.addManager(name, offlineTarget.getUniqueId())
-                : ctx.protection.removeManager(name, offlineTarget.getUniqueId());
-        if (!ok) {
-            sender.sendMessage(Messages.PROTECTION.text(add
-                    ? Text.MANAGER_ADD_FAILED : Text.MANAGER_REMOVE_FAILED));
-            return;
-        }
-        sender.sendMessage(Messages.PROTECTION.text(Text.MANAGER_SUCCESS,
-                add ? "Promoted" : "Demoted", target,
-                add ? "to manager on" : "from manager on", name));
+            boolean ok = add
+                    ? ctx.protection.addManager(name, offlineTarget.getUniqueId())
+                    : ctx.protection.removeManager(name, offlineTarget.getUniqueId());
+            if (!ok) {
+                sender.sendMessage(Messages.PROTECTION.text(add
+                        ? Text.MANAGER_ADD_FAILED : Text.MANAGER_REMOVE_FAILED));
+                return;
+            }
+            sender.sendMessage(Messages.PROTECTION.text(Text.MANAGER_SUCCESS,
+                    add ? "Promoted" : "Demoted", target,
+                    add ? "to manager on" : "from manager on", name));
+        });
+    }
+
+    private static void resolveTarget(RegionCommandContext ctx, CommandSender sender, String input,
+                                      java.util.function.Consumer<OfflinePlayer> action) {
+        var future = OfflinePlayerResolver.resolve(ctx.plugin, sender, input);
+        boolean asynchronous = !future.isDone();
+        future.whenComplete((target, error) -> {
+            Runnable continuation = () -> {
+                if (asynchronous && !OfflinePlayerResolver.isSenderOnline(sender)) return;
+                if (error != null) {
+                    if (OfflinePlayerResolver.isLookupInProgress(error)) {
+                        sender.sendMessage(Messages.COMMANDS.offlinePlayerLookupBusy());
+                    } else {
+                        ctx.plugin.getLogger().log(java.util.logging.Level.WARNING,
+                                "Region player lookup failed for " + input, error);
+                    }
+                    return;
+                }
+                if (target == null) {
+                    sender.sendMessage(Messages.PROTECTION.text(Text.UNKNOWN_PLAYER, input));
+                    return;
+                }
+                action.accept(target);
+            };
+            if (future.isDone()) continuation.run();
+            else if (ctx.plugin.isEnabled()) Bukkit.getScheduler().runTask(ctx.plugin, continuation);
+        });
     }
 
     private static List<String> memberOrManagerSuggestions(RegionCommandContext ctx, CommandSender sender,

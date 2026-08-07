@@ -10,6 +10,7 @@ import me.beeliebub.tweaks.enchantments.Telekinesis;
 import me.beeliebub.tweaks.itemadmin.ItemAdminBootstrap;
 import me.beeliebub.tweaks.minigames.MinigamesBootstrap;
 import me.beeliebub.tweaks.minigames.blackjack.BlackjackListener;
+import me.beeliebub.tweaks.lottery.LotteryManager;
 import me.beeliebub.tweaks.permissions.PermissionManager;
 import me.beeliebub.tweaks.permissions.PermissionsBootstrap;
 import me.beeliebub.tweaks.playeradmin.PlayerAdminBootstrap;
@@ -91,6 +92,10 @@ public class Tweaks extends JavaPlugin {
         return services.blackjackListener;
     }
 
+    public LotteryManager getLotteryManager() {
+        return services.lotteryManager;
+    }
+
     @Override
     public void onEnable() {
         services = new Services();
@@ -110,6 +115,7 @@ public class Tweaks extends JavaPlugin {
             // Tier 1 - foundation state
             ProfilesBootstrap.register(this, services);
             EconomyBootstrap.register(this, services);
+            me.beeliebub.tweaks.lottery.LotteryBootstrap.register(this, services);
             RanksBootstrap.register(this, services);
             EconomyBootstrap.registerRankAwareListener(this, services);
             PermissionsBootstrap.register(this, services);
@@ -167,6 +173,7 @@ public class Tweaks extends JavaPlugin {
         runShutdownStep("permissions", () -> PermissionsBootstrap.shutdown(this, services.permissionManager));
         runShutdownStep("protection", () -> ProtectionBootstrap.shutdown(this, services.pendingStampsStore, services.regionSelectionManager));
         runShutdownStep("economy", () -> EconomyBootstrap.shutdown(this, services.housePaymentService, services.economyManager, services.houseAccount));
+        runShutdownStep("lottery", () -> me.beeliebub.tweaks.lottery.LotteryBootstrap.shutdown(this, services.lotteryManager));
         runShutdownStep("minigames", () -> MinigamesBootstrap.shutdown(this, services.blackjackListener, services.rouletteListener));
     }
 

@@ -15,7 +15,7 @@ public final class PermissionsBootstrap {
         PermissionManager permissionManager = new PermissionManager(plugin);
         services.setPermissionManager(permissionManager);
 
-        PermissionCommand permissionCommand = new PermissionCommand(permissionManager);
+        PermissionCommand permissionCommand = new PermissionCommand(plugin, permissionManager);
         plugin.getCommand("tprm").setExecutor(permissionCommand);
         plugin.getCommand("tprm").setTabCompleter(permissionCommand);
 

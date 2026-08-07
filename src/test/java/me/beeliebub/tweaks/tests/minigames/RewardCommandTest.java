@@ -93,6 +93,19 @@ class RewardCommandTest {
     }
 
     @Test
+    void giveRewardRejectsAnUnboundedCount() {
+        PlayerMock admin = server.addPlayer();
+        admin.addAttachment(plugin, Permissions.ADMIN_REWARD, true);
+        when(rewardManager.rewardExists("test")).thenReturn(true);
+
+        rewardCommand.onCommand(admin, bukkitCmd, "reward",
+                new String[]{"give", "Target", "test", String.valueOf(RewardManager.MAX_GRANT_COUNT + 1)});
+
+        verify(rewardManager, never()).grantReward(any(), anyString());
+        assertNotNull(admin.nextMessage());
+    }
+
+    @Test
     void claimRewardSuccess() {
         PlayerMock player = server.addPlayer();
         when(rewardManager.getPendingRewards(player.getUniqueId())).thenReturn(List.of("test"));

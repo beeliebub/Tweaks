@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.economy;
 
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
+import me.beeliebub.tweaks.utils.OfflinePlayerResolver;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -9,6 +10,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
 import java.text.NumberFormat;
@@ -81,7 +83,6 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(Messages.balanceMutationUsage(sub));
                 return true;
             }
-            OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
             double amount;
             try {
                 amount = Double.parseDouble(args[2]);
@@ -89,20 +90,26 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(Messages.balanceInvalidAmount(args[2]));
                 return true;
             }
-            UUID targetId = target.getUniqueId();
-            // Ensure the player's data is in cache even if they are offline,
-            // so the write is not a blind first-touch with stale defaults.
-            economyManager.loadPlayer(targetId);
-            switch (sub) {
-                case "set"    -> economyManager.setBalance(targetId, amount);
-                case "add"    -> economyManager.addBalance(targetId, amount);
-                case "remove" -> economyManager.removeBalance(targetId, amount);
+            if (!Double.isFinite(amount)) {
+                sender.sendMessage(Messages.balanceInvalidAmount(args[2]));
+                return true;
             }
-            sender.sendMessage(Messages.balanceMutationSuccess(
-                    target.getName() != null ? target.getName() : args[1],
-                    sub,
-                    formatBalance(amount),
-                    formatBalance(economyManager.getBalance(targetId))));
+            resolveTarget(sender, args[1], target -> {
+                UUID targetId = target.getUniqueId();
+                // Ensure the player's data is in cache even if they are offline,
+                // so the write is not a blind first-touch with stale defaults.
+                economyManager.loadPlayer(targetId);
+                switch (sub) {
+                    case "set" -> economyManager.setBalance(targetId, amount);
+                    case "add" -> economyManager.addBalance(targetId, amount);
+                    case "remove" -> economyManager.removeBalance(targetId, amount);
+                }
+                sender.sendMessage(Messages.balanceMutationSuccess(
+                        target.getName() != null ? target.getName() : args[1],
+                        sub,
+                        formatBalance(amount),
+                        formatBalance(economyManager.getBalance(targetId))));
+            });
             return true;
         }
 
@@ -111,13 +118,42 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Messages.balanceViewOtherNoPermission());
             return true;
         }
-        OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
-        UUID targetId = target.getUniqueId();
-        economyManager.loadPlayer(targetId);
-        double balance = economyManager.getBalance(targetId);
-        String targetName = target.getName() != null ? target.getName() : args[0];
-        sender.sendMessage(Messages.balanceOtherPlayer(targetName, formatBalance(balance)));
+        resolveTarget(sender, args[0], target -> {
+            UUID targetId = target.getUniqueId();
+            economyManager.loadPlayer(targetId);
+            double balance = economyManager.getBalance(targetId);
+            String targetName = target.getName() != null ? target.getName() : args[0];
+            sender.sendMessage(Messages.balanceOtherPlayer(targetName, formatBalance(balance)));
+        });
         return true;
+    }
+
+    private void resolveTarget(CommandSender sender, String input,
+                               java.util.function.Consumer<OfflinePlayer> action) {
+        JavaPlugin plugin = economyManager.plugin();
+        var future = OfflinePlayerResolver.resolve(plugin, sender, input);
+        boolean asynchronous = !future.isDone();
+        future.whenComplete((target, error) -> {
+            Runnable continuation = () -> {
+                if (asynchronous && !OfflinePlayerResolver.isSenderOnline(sender)) return;
+                if (error != null) {
+                    if (OfflinePlayerResolver.isLookupInProgress(error)) {
+                        sender.sendMessage(Messages.COMMANDS.offlinePlayerLookupBusy());
+                    } else {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING,
+                                "Balance player lookup failed for " + input, error);
+                    }
+                    return;
+                }
+                if (target == null) {
+                    sender.sendMessage(Messages.balanceUnknownPlayer(input));
+                    return;
+                }
+                action.accept(target);
+            };
+            if (future.isDone()) continuation.run();
+            else if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, continuation);
+        });
     }
 
     // ---- TabCompleter -------------------------------------------------------

@@ -48,7 +48,7 @@ class TabManagerWorldTagTest {
 
         economyManager = mock(EconomyManager.class);
         rankManager = mock(RankManager.class);
-        when(rankManager.getRankDisplayName(anyInt())).thenReturn("");
+        when(rankManager.getRankDisplayComponent(anyInt())).thenReturn(Component.empty());
         playerAdminManager = mock(PlayerAdminManager.class);
         when(playerAdminManager.nickKey()).thenReturn(new NamespacedKey(plugin, "nickname"));
     }

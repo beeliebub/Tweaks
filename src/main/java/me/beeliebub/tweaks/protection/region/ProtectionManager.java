@@ -451,6 +451,16 @@ public final class ProtectionManager {
             if (applicable.isEmpty()) return true;
         }
 
+        return isAllowed(applicable, loc, actor, flag);
+    }
+
+    /** Evaluates a previously resolved region list without repeating the chunk-pointer lookup. */
+    public boolean isAllowed(List<Region> applicable, Location loc, UUID actor, RegionFlag flag) {
+        if (applicable.isEmpty()) {
+            applicable = globalAsFallback(loc.getWorld());
+            if (applicable.isEmpty()) return true;
+        }
+
         Set<String> groups = (actor == null) ? Set.of() : groupsOf(actor);
         List<Region> leaves = leavesOf(applicable);
 
@@ -858,7 +868,13 @@ public final class ProtectionManager {
     // ALLOW_MOB_SPAWN before falling back to the boolean MOB_SPAWNING rule.
     public boolean isEntityListed(Location loc, RegionFlag flag, org.bukkit.entity.EntityType type) {
         if (!flag.isEntityFlag()) return false;
-        List<Region> applicable = regionsAt(loc);
+        return isEntityListed(regionsAt(loc), flag, type);
+    }
+
+    /** Checks an already-resolved region list without performing another chunk lookup. */
+    public boolean isEntityListed(List<Region> applicable, RegionFlag flag,
+                                  org.bukkit.entity.EntityType type) {
+        if (!flag.isEntityFlag()) return false;
         for (Region r : applicable) {
             if (r.entitiesFor(flag).contains(type)) return true;
         }

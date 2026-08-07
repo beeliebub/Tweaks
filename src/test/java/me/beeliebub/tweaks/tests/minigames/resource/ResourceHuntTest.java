@@ -1,20 +1,32 @@
 package me.beeliebub.tweaks.tests.minigames.resource;
 
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.enchantments.quality.FortuneQualityListener;
 import me.beeliebub.tweaks.minigames.RewardManager;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
+import me.beeliebub.tweaks.minigames.resource.ResourceHuntBreedListener;
+import org.bukkit.Bukkit;
 import org.bukkit.DyeColor;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.WorldCreator;
 import org.bukkit.damage.DamageSource;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Animals;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Sheep;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.block.BlockDropItemEvent;
+import org.bukkit.event.entity.EntityBreedEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityEnterLoveModeEvent;
 import org.bukkit.event.player.PlayerShearEntityEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.scheduler.BukkitScheduler;
+import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,16 +34,21 @@ import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import org.mockbukkit.mockbukkit.world.WorldMock;
+import org.mockito.MockedStatic;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 class ResourceHuntTest {
 
@@ -119,6 +136,161 @@ class ResourceHuntTest {
 
         assertEquals(0, getProgress(player.getUniqueId()),
                 "Shearing a BLUE sheep must not credit progress when the target is red_sheep");
+    }
+
+    @Test
+    void blockDropCountingRunsAfterQualityFortuneRerolls() throws NoSuchMethodException {
+        EventHandler resourceHuntHandler = ResourceHunt.class
+                .getDeclaredMethod("onBlockDropItem", BlockDropItemEvent.class)
+                .getAnnotation(EventHandler.class);
+        EventHandler fortuneHandler = FortuneQualityListener.class
+                .getDeclaredMethod("onBlockDropItem", BlockDropItemEvent.class)
+                .getAnnotation(EventHandler.class);
+
+        assertEquals(EventPriority.NORMAL, resourceHuntHandler.priority());
+        assertEquals(EventPriority.LOW, fortuneHandler.priority());
+        assertTrue(resourceHuntHandler.priority().getSlot() > fortuneHandler.priority().getSlot(),
+                "Resource Hunt must observe drops after quality Fortune has re-rolled them");
+    }
+
+    @Test
+    void recordBreedProgressCreditsMatchingBreedTarget() throws IOException {
+        bootstrap("""
+                overworld:
+                  breed:
+                    turtle: "5:2.0"
+                nether:
+                """);
+        player = server.addPlayer();
+        player.teleport(resourceWorld.getSpawnLocation());
+
+        resourceHunt.recordBreedProgress(player, EntityType.TURTLE, 1);
+
+        assertEquals(1, getProgress(player.getUniqueId()));
+    }
+
+    @Test
+    void recordBreedProgressIgnoresCollectTarget() throws IOException {
+        bootstrap("""
+                overworld:
+                  collect:
+                    kelp: "5:2.0"
+                nether:
+                """);
+        player = server.addPlayer();
+        player.teleport(resourceWorld.getSpawnLocation());
+
+        resourceHunt.recordBreedProgress(player, EntityType.TURTLE, 1);
+
+        assertEquals(0, getProgress(player.getUniqueId()));
+    }
+
+    @Test
+    void recordBreedProgressIgnoresInactiveHunt() throws IOException {
+        bootstrap("overworld:\nnether:\n");
+        player = server.addPlayer();
+
+        resourceHunt.recordBreedProgress(player, EntityType.TURTLE, 1);
+
+        assertEquals(0, getProgress(player.getUniqueId()));
+    }
+
+    @Test
+    void recordBreedProgressIgnoresPlayerOutsideActiveWorld() throws IOException {
+        bootstrap("""
+                overworld:
+                  breed:
+                    turtle: "5:2.0"
+                nether:
+                """);
+        player = server.addPlayer();
+
+        resourceHunt.recordBreedProgress(player, EntityType.TURTLE, 1);
+
+        assertEquals(0, getProgress(player.getUniqueId()));
+    }
+
+    @Test
+    void recordBreedProgressIgnoresFullyCompletePlayer() throws IOException {
+        bootstrap("""
+                overworld:
+                  breed:
+                    turtle: "1:1.0"
+                nether:
+                """);
+        player = server.addPlayer();
+        player.teleport(resourceWorld.getSpawnLocation());
+        resourceHunt.recordBreedProgress(player, EntityType.TURTLE, 3);
+
+        resourceHunt.recordBreedProgress(player, EntityType.TURTLE, 1);
+
+        assertEquals(3, getProgress(player.getUniqueId()));
+    }
+
+    @Test
+    void breedListenerCreditsOneNearbyPairing() throws IOException {
+        bootstrap("""
+                overworld:
+                  breed:
+                    turtle: "5:2.0"
+                nether:
+                """);
+        player = server.addPlayer();
+        player.teleport(resourceWorld.getSpawnLocation());
+
+        UUID firstId = UUID.fromString("00000000-0000-0000-0000-000000000071");
+        UUID secondId = UUID.fromString("00000000-0000-0000-0000-000000000072");
+        Animals first = buildBredAnimal(firstId, resourceWorld, 0);
+        Animals second = buildBredAnimal(secondId, resourceWorld, 2);
+        EntityEnterLoveModeEvent firstEvent = loveModeEvent(first, player);
+        EntityEnterLoveModeEvent secondEvent = loveModeEvent(second, player);
+
+        BukkitScheduler scheduler = mock(BukkitScheduler.class);
+        BukkitTask task = mock(BukkitTask.class);
+        AtomicReference<Runnable> sweep = new AtomicReference<>();
+        doAnswer(invocation -> {
+            sweep.set(invocation.getArgument(1));
+            return task;
+        }).when(scheduler).runTaskTimer(eq(plugin), any(Runnable.class), eq(10L), eq(10L));
+
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getCurrentTick).thenReturn(0);
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            bukkit.when(() -> Bukkit.getEntity(firstId)).thenReturn(first);
+            bukkit.when(() -> Bukkit.getEntity(secondId)).thenReturn(second);
+            bukkit.when(() -> Bukkit.getPlayer(player.getUniqueId())).thenReturn(player);
+
+            ResourceHuntBreedListener listener = new ResourceHuntBreedListener(plugin, resourceHunt);
+            listener.onEntityEnterLoveMode(firstEvent);
+            listener.onEntityEnterLoveMode(secondEvent);
+            assertNotNull(sweep.get(), "first tracked animal should start the lazy sweep");
+
+            sweep.get().run();
+        }
+
+        assertEquals(1, getProgress(player.getUniqueId()),
+                "two nearby successful parents must credit one pairing");
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = EntityType.class, names = {"TURTLE", "FROG", "SNIFFER"})
+    void eggLayingBreedEventsAreIgnored(EntityType type) throws IOException {
+        String targetKey = type.name().toLowerCase(Locale.ROOT);
+        bootstrap("overworld:\n  breed:\n    " + targetKey
+                + ": \"1:2.0\"\nnether:\n");
+        player = server.addPlayer();
+        player.teleport(resourceWorld.getSpawnLocation());
+
+        LivingEntity child = mock(LivingEntity.class);
+        when(child.getType()).thenReturn(type);
+        when(child.getWorld()).thenReturn(resourceWorld);
+        EntityBreedEvent event = mock(EntityBreedEvent.class);
+        when(event.getEntity()).thenReturn(child);
+        when(event.getBreeder()).thenReturn(player);
+
+        resourceHunt.onEntityBreed(event);
+
+        assertEquals(0, getProgress(player.getUniqueId()));
     }
 
     // -------------------------------------------------------------------------
@@ -404,6 +576,27 @@ class ResourceHuntTest {
         when(sheep.getColor()).thenReturn(color);
         when(sheep.getWorld()).thenReturn(world);
         return sheep;
+    }
+
+    private Animals buildBredAnimal(UUID uuid, WorldMock world, double x) {
+        Animals animal = mock(Animals.class);
+        when(animal.getUniqueId()).thenReturn(uuid);
+        when(animal.getType()).thenReturn(EntityType.TURTLE);
+        when(animal.getWorld()).thenReturn(world);
+        when(animal.getLocation()).thenReturn(new Location(world, x, 64, 0));
+        when(animal.isDead()).thenReturn(false);
+        when(animal.isValid()).thenReturn(true);
+        when(animal.isLoveMode()).thenReturn(false);
+        when(animal.getAge()).thenReturn(1);
+        return animal;
+    }
+
+    private EntityEnterLoveModeEvent loveModeEvent(Animals animal, PlayerMock feeder) {
+        EntityEnterLoveModeEvent event = mock(EntityEnterLoveModeEvent.class);
+        when(event.getEntity()).thenReturn(animal);
+        when(event.getHumanEntity()).thenReturn(feeder);
+        when(event.getTicksInLove()).thenReturn(600);
+        return event;
     }
 
     // getProgress is package-private in ResourceHunt; reflection is the least-invasive way to

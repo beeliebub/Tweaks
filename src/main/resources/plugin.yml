@@ -136,6 +136,10 @@ commands:
   house:
     description: View and administer the casino house account.
     usage: /house <balance|add|remove|set|pay>
+  lottery:
+    description: View the server-wide lottery and administer draws.
+    usage: /lottery <info|draw|entries|baseline <amount>>
+    aliases: [lot]
   ranks:
     description: List all ranks, or edit them (admin).
     usage: |

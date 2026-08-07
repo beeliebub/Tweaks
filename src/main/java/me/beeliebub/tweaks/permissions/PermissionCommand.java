@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.permissions;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.utils.OfflinePlayerResolver;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -8,6 +9,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -22,8 +24,14 @@ import java.util.stream.Collectors;
  */
 public class PermissionCommand implements CommandExecutor, TabCompleter {
     private final PermissionManager manager;
+    private final JavaPlugin plugin;
 
     public PermissionCommand(PermissionManager manager) {
+        this(null, manager);
+    }
+
+    public PermissionCommand(JavaPlugin plugin, PermissionManager manager) {
+        this.plugin = plugin;
         this.manager = manager;
     }
 
@@ -155,12 +163,11 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        @SuppressWarnings("deprecation")
-        OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
-        if (!target.hasPlayedBefore() && !target.isOnline()) {
-            sender.sendMessage(Messages.PERMISSIONS.playerNeverPlayed(args[1]));
-            return true;
-        }
+        resolveTarget(sender, args[1], target -> applyUserAction(sender, args, target));
+        return true;
+    }
+
+    private void applyUserAction(CommandSender sender, String[] args, OfflinePlayer target) {
         UUID uuid = target.getUniqueId();
         String action = args[2].toLowerCase();
 
@@ -168,7 +175,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
             case "addperm" -> {
                 if (args.length < 4) {
                     sender.sendMessage(Messages.PERMISSIONS.userAddPermissionUsage());
-                    return true;
+                    return;
                 }
                 manager.getUserPermissions(uuid).addPermission(args[3]);
                 manager.saveUsers();
@@ -178,7 +185,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
             case "delperm" -> {
                 if (args.length < 4) {
                     sender.sendMessage(Messages.PERMISSIONS.userRemovePermissionUsage());
-                    return true;
+                    return;
                 }
                 manager.getUserPermissions(uuid).removePermission(args[3]);
                 manager.saveUsers();
@@ -188,12 +195,12 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
             case "setgroup" -> {
                 if (args.length < 4) {
                     sender.sendMessage(Messages.PERMISSIONS.userSetGroupUsage());
-                    return true;
+                    return;
                 }
                 String group = args[3].equalsIgnoreCase("none") ? null : args[3].toLowerCase();
                 if (group != null && !manager.getGroups().containsKey(group)) {
                     sender.sendMessage(Messages.PERMISSIONS.groupNotFound());
-                    return true;
+                    return;
                 }
                 UserPermissions u = manager.getUserPermissions(uuid);
                 u.getGroups().clear();
@@ -204,7 +211,39 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
             }
             default -> sender.sendMessage(Messages.PERMISSIONS.unknownAction());
         }
-        return true;
+    }
+
+    private void resolveTarget(CommandSender sender, String input,
+                               java.util.function.Consumer<OfflinePlayer> action) {
+        if (plugin == null) {
+            Player target = Bukkit.getPlayerExact(input);
+            if (target != null) action.accept(target);
+            else sender.sendMessage(Messages.PERMISSIONS.playerNeverPlayed(input));
+            return;
+        }
+        var future = OfflinePlayerResolver.resolve(plugin, sender, input);
+        boolean asynchronous = !future.isDone();
+        future.whenComplete((target, error) -> {
+            Runnable continuation = () -> {
+                if (asynchronous && !OfflinePlayerResolver.isSenderOnline(sender)) return;
+                if (error != null) {
+                    if (OfflinePlayerResolver.isLookupInProgress(error)) {
+                        sender.sendMessage(Messages.COMMANDS.offlinePlayerLookupBusy());
+                    } else {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING,
+                                "Permission player lookup failed for " + input, error);
+                    }
+                    return;
+                }
+                if (target == null) {
+                    sender.sendMessage(Messages.PERMISSIONS.playerNeverPlayed(input));
+                    return;
+                }
+                action.accept(target);
+            };
+            if (future.isDone()) continuation.run();
+            else if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, continuation);
+        });
     }
 
     private void refreshPlayer(UUID uuid) {

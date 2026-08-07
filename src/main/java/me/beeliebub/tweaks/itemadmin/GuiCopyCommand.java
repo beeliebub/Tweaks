@@ -4,6 +4,7 @@ import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.utils.GuiCopyJavaGenerator;
 import org.bukkit.Location;
+import org.bukkit.Bukkit;
 import org.bukkit.block.Block;
 import org.bukkit.block.Chest;
 import org.bukkit.command.Command;
@@ -25,6 +26,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
 import java.util.regex.Pattern;
 
 // /guicopy [name] — admin command. Copies the targeted chest's full inventory (single or double)
@@ -95,6 +97,15 @@ public class GuiCopyCommand implements CommandExecutor, TabCompleter {
 
         Inventory inventory = chest.getInventory();
         int size = inventory.getSize();
+        List<ItemStack> snapshotItems = new ArrayList<>(size);
+        Inventory snapshotInventory = Bukkit.createInventory(null, size);
+        for (int i = 0; i < size; i++) {
+            ItemStack item = inventory.getItem(i);
+            ItemStack copy = item == null || item.getType().isAir() ? null : item.clone();
+            snapshotItems.add(copy);
+            snapshotInventory.setItem(i, copy);
+        }
+        String javaCode = GuiCopyJavaGenerator.generate(snapshotInventory);
 
         File outputFile = new File(copiesFolder, name + ".yml");
         boolean overwriting = outputFile.exists();
@@ -107,21 +118,24 @@ public class GuiCopyCommand implements CommandExecutor, TabCompleter {
             yaml.set("z", z);
             yaml.set("size", size);
 
-            for (int i = 0; i < size; i++) {
-                ItemStack item = inventory.getItem(i);
+            for (int i = 0; i < snapshotItems.size(); i++) {
+                ItemStack item = snapshotItems.get(i);
                 if (item == null || item.getType().isAir()) continue;
                 yaml.set("items." + i + ".readable", item);
                 yaml.set("items." + i + ".base64",
                         java.util.Base64.getEncoder().encodeToString(item.serializeAsBytes()));
             }
 
-            yaml.set("java-code", GuiCopyJavaGenerator.generate(inventory));
+            yaml.set("java-code", javaCode);
 
             try {
                 yaml.save(outputFile);
             } catch (IOException e) {
-                plugin.getLogger().severe("Failed to save guicopy '" + name + "': " + e.getMessage());
+                plugin.getLogger().log(Level.SEVERE, "Failed to save guicopy '" + name + "'", e);
             }
+        }).exceptionally(error -> {
+            plugin.getLogger().log(Level.SEVERE, "Failed to generate guicopy '" + name + "'", error);
+            return null;
         });
 
         player.sendMessage(Messages.COMMANDS.guiCopySaved(overwriting, name, size, worldKey, x, y, z));

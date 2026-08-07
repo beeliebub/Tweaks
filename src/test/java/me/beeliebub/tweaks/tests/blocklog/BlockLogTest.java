@@ -13,6 +13,9 @@ import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 
 import java.util.ArrayList;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
@@ -103,6 +106,32 @@ class BlockLogTest {
         @Test void decodeRejectsUnknownVersion() {
             byte[] garbage = new byte[]{99, 0, 0, 0, 1};
             assertTrue(BlockLogData.Codec.decode(garbage).isEmpty());
+        }
+
+        @Test void timestampScanAvoidsItemDeserializationWhenNothingIsExpired() throws IOException {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            try (DataOutputStream out = new DataOutputStream(bytes)) {
+                out.writeByte(1);
+                out.writeInt(2);
+                writeHeader(out, 100L);
+                writeHeader(out, 200L);
+            }
+
+            assertFalse(BlockLogData.Codec.containsTimestampBefore(bytes.toByteArray(), 100L));
+            assertTrue(BlockLogData.Codec.containsTimestampBefore(bytes.toByteArray(), 101L));
+        }
+
+        @Test void malformedTimestampScanFailsClosedForPruning() {
+            assertTrue(BlockLogData.Codec.containsTimestampBefore(new byte[]{1, 0, 0, 0, 1}, 0L));
+        }
+
+        private static void writeHeader(DataOutputStream out, long timestamp) throws IOException {
+            out.writeLong(timestamp);
+            out.writeByte(0);
+            out.writeLong(0L);
+            out.writeLong(0L);
+            out.writeShort(0);
+            out.writeInt(0);
         }
     }
 }

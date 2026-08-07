@@ -127,6 +127,9 @@ public final class Permissions {
      */
     public static final String HOUSE_ADMIN = "tweaks.admin.house";
 
+    /** Allows drawing and administering the server-wide lottery. */
+    public static final String LOTTERY_ADMIN = "tweaks.admin.lottery";
+
     /**
      * Allows editing item properties, such as display name and lore.
      */
@@ -261,6 +264,7 @@ public final class Permissions {
         m.put(ADMIN_LOGS,         "tools");
         m.put(ADMIN_BALANCE,      "tools");
         m.put(HOUSE_ADMIN,        "tools");
+        m.put(LOTTERY_ADMIN,      "tools");
         m.put(ADMIN_ITEM_EDIT,    "tools");
         m.put(ADMIN_GUI_COPY,     "tools");
         m.put(ADMIN_GAMEMODE,     "tools");

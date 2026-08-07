@@ -82,15 +82,17 @@ import java.util.concurrent.ThreadLocalRandom;
 // To prevent cheesing, players are restricted from bringing disallowed items into the
 // resource world (enforced by /resource and /back).
 //
-// Listening at EventPriority.LOW for BlockDropItemEvent guarantees we tally the dropped items
-// before Telekinesis (default NORMAL priority) clears the event's item list to route them to
-// the player's inventory.
+// Listening at EventPriority.NORMAL for BlockDropItemEvent ensures we tally the final drops after
+// quality Fortune's LOW-priority re-rolls, while still running before Replant (HIGH) and
+// Telekinesis (HIGHEST), which clears the event's item list to route drops into the inventory.
 public class ResourceHunt implements Listener {
 
     public static final String TARGET_WORLD_KEY = "jass:resource";
     public static final String TARGET_WORLD_NETHER_KEY = "jass:resource_nether";
     private static final String REWARD_NAME = "resource";
     private static final int NUM_TIERS = 3;
+    private static final Set<EntityType> EGG_LAYING_BREED_TYPES =
+            Set.of(EntityType.TURTLE, EntityType.FROG, EntityType.SNIFFER);
 
     public enum Category {
         COLLECT, KILL, SMELT, ENCHANT, SHEAR, BREED, CRAFT, BARTER
@@ -162,8 +164,12 @@ public class ResourceHunt implements Listener {
         return activeWorldKey;
     }
 
-    private boolean isFullyComplete(UUID uuid) {
+    boolean isFullyComplete(UUID uuid) {
         return tiersCompleted.getOrDefault(uuid, 0) >= NUM_TIERS;
+    }
+
+    static boolean isEggLayingBreedType(EntityType entityType) {
+        return EGG_LAYING_BREED_TYPES.contains(entityType);
     }
 
     // Atomically resolves the player's session target, assigning one on first call. First caller
@@ -195,7 +201,7 @@ public class ResourceHunt implements Listener {
         return pt;
     }
 
-    private ResourceHuntTarget.Player targetFor(UUID uuid) {
+    ResourceHuntTarget.Player targetFor(UUID uuid) {
         return playerTargets.get(uuid);
     }
 
@@ -203,7 +209,7 @@ public class ResourceHunt implements Listener {
         return progress.getOrDefault(uuid, 0);
     }
 
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onBlockDropItem(BlockDropItemEvent event) {
         Block block = event.getBlock();
         String worldKey = block.getWorld().getKey().asString();
@@ -363,6 +369,7 @@ public class ResourceHunt implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntityBreed(EntityBreedEvent event) {
         if (!isActive()) return;
+        if (isEggLayingBreedType(event.getEntity().getType())) return;
         if (!(event.getBreeder() instanceof Player player)) return;
         String worldKey = event.getEntity().getWorld().getKey().asString();
         if (!isResourceWorld(worldKey)) return;
@@ -511,6 +518,22 @@ public class ResourceHunt implements Listener {
         String worldKey = player.getWorld().getKey().asString();
         if (!worldKey.equals(activeWorldKey) || isFullyComplete(uuid)) return;
         recordProgress(player, target, amount);
+    }
+
+    /**
+     * Records a successful egg-laying breed pairing for the player's matching target.
+     */
+    public void recordBreedProgress(Player player, EntityType type, int pairings) {
+        if (!isActive()) return;
+        if (pairings <= 0) return;
+        UUID uuid = player.getUniqueId();
+        ResourceHuntTarget.Player target = targetFor(uuid);
+        if (target == null) return;
+        if (target.category != Category.BREED) return;
+        if (target.entityType != type) return;
+        String worldKey = player.getWorld().getKey().asString();
+        if (!worldKey.equals(activeWorldKey) || isFullyComplete(uuid)) return;
+        recordProgress(player, target, pairings);
     }
 
     // When a counted item is placed as a block in the resource world, mark its position on the

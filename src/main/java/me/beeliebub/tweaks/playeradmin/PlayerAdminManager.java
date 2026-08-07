@@ -42,6 +42,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
+import java.util.logging.Level;
 
 // Shared state, listeners, and periodic tasks for the player-administration commands:
 // /afk, /fly, /nick (+ boot trail cosmetics that live alongside it).
@@ -159,11 +160,16 @@ public class PlayerAdminManager implements Listener {
         long now = System.currentTimeMillis();
         long afkAutoMillis = afkAutoMillis();
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (isAfk(player)) continue;
-            Long last = lastMovementMs.get(player.getUniqueId());
-            if (last == null) continue;
-            if (now - last >= afkAutoMillis) {
-                enterAfk(player);
+            try {
+                if (isAfk(player)) continue;
+                Long last = lastMovementMs.get(player.getUniqueId());
+                if (last == null) continue;
+                if (now - last >= afkAutoMillis) {
+                    enterAfk(player);
+                }
+            } catch (RuntimeException error) {
+                plugin.getLogger().log(Level.WARNING,
+                        "AFK idle check failed for " + player.getUniqueId(), error);
             }
         }
     }
@@ -273,7 +279,7 @@ public class PlayerAdminManager implements Listener {
             try {
                 config.save(nickPendingFile);
             } catch (IOException e) {
-                plugin.getLogger().severe("Failed to save nick-removals.yml: " + e.getMessage());
+                plugin.getLogger().log(Level.SEVERE, "Failed to save nick-removals.yml", e);
             }
         });
     }
@@ -330,13 +336,18 @@ public class PlayerAdminManager implements Listener {
 
     private void trailTick() {
         for (Player player : Bukkit.getOnlinePlayers()) {
-            Location current = player.getLocation();
-            Location previous = trailLastLocations.put(player.getUniqueId(), current.clone());
-            if (previous == null) continue;
-            if (previous.getWorld() == null || !previous.getWorld().equals(current.getWorld())) continue;
-            // Horizontal movement only.
-            if (previous.getX() == current.getX() && previous.getZ() == current.getZ()) continue;
-            handleTrail(player, current);
+            try {
+                Location current = player.getLocation();
+                Location previous = trailLastLocations.put(player.getUniqueId(), current.clone());
+                if (previous == null) continue;
+                if (previous.getWorld() == null || !previous.getWorld().equals(current.getWorld())) continue;
+                // Horizontal movement only.
+                if (previous.getX() == current.getX() && previous.getZ() == current.getZ()) continue;
+                handleTrail(player, current);
+            } catch (RuntimeException error) {
+                plugin.getLogger().log(Level.WARNING,
+                        "Boot-trail tick failed for " + player.getUniqueId(), error);
+            }
         }
     }
 

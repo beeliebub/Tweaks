@@ -9,7 +9,6 @@ import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.economy.BalanceCommand;
-import me.beeliebub.tweaks.utils.ColorUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -42,12 +41,12 @@ public final class RankEditGUI {
 
         for (int rank = 1; rank <= max; rank++) {
             final int r = rank;
-            String name = rankManager.getRankDisplayName(r);
             double cost = rankManager.getRankCost(r);
             double multiplier = rankManager.getRankMultiplierBonus(r);
             double rakeback = rankManager.getRankRakeback(r);
 
-            Component label = Messages.rankEditListButtonLabel(ColorUtil.parse(name), BalanceCommand.formatBalance(cost));
+            Component label = Messages.rankEditListButtonLabel(rankManager.getRankDisplayComponent(r),
+                    BalanceCommand.formatBalance(cost));
 
             Component tooltip = joinLines(
                     Messages.rankEditListMultiplierTooltip((int) Math.round(multiplier * 100)),
@@ -77,7 +76,6 @@ public final class RankEditGUI {
      * Opens the attribute selection sub-menu for one rank.
      */
     public static void openRankMenu(Player player, RankManager rankManager, int rank) {
-        String name = rankManager.getRankDisplayName(rank);
         double cost = rankManager.getRankCost(rank);
         double multiplier = rankManager.getRankMultiplierBonus(rank);
         double rakeback = rankManager.getRankRakeback(rank);
@@ -86,7 +84,7 @@ public final class RankEditGUI {
 
         buttons.add(dialogButton(
                 Messages.rankEditNameButtonLabel(),
-                Messages.rankEditNameTooltip(ColorUtil.parse(name)),
+                Messages.rankEditNameTooltip(rankManager.getRankDisplayComponent(rank)),
                 p -> openEditPrompt(p, rankManager, rank, "name")));
 
         buttons.add(dialogButton(
@@ -109,7 +107,7 @@ public final class RankEditGUI {
                 Messages.rankEditBackTooltip(),
                 p -> openRankList(p, rankManager));
 
-        DialogBase base = DialogBase.builder(Messages.rankEditMenuTitle(ColorUtil.parse(name)))
+        DialogBase base = DialogBase.builder(Messages.rankEditMenuTitle(rankManager.getRankDisplayComponent(rank)))
                 .body(List.of(DialogBody.plainMessage(
                         Messages.rankEditMenuBody())))
                 .build();
@@ -132,7 +130,6 @@ public final class RankEditGUI {
      * @param attribute one of "name", "cost", "multiplier", "rakeback"
      */
     public static void openEditPrompt(Player player, RankManager rankManager, int rank, String attribute) {
-        String rankName = rankManager.getRankDisplayName(rank);
         String currentValue = currentValueString(rankManager, rank, attribute);
 
         ActionButton submit = ActionButton.builder(
@@ -154,7 +151,8 @@ public final class RankEditGUI {
 
         String capitalizedAttr = attribute.substring(0, 1).toUpperCase(Locale.ROOT) + attribute.substring(1);
 
-        DialogBase base = DialogBase.builder(Messages.rankEditPromptTitle(capitalizedAttr, ColorUtil.parse(rankName)))
+        DialogBase base = DialogBase.builder(Messages.rankEditPromptTitle(
+                capitalizedAttr, rankManager.getRankDisplayComponent(rank)))
                 .body(List.of(DialogBody.plainMessage(
                         Messages.rankEditPromptBody(currentValue))))
                 .inputs(List.of(
@@ -188,8 +186,7 @@ public final class RankEditGUI {
                 return;
             }
             rankManager.setRankName(rank, trimmed);
-            String displayName = rankManager.getRankDisplayName(rank);
-            player.sendMessage(Messages.rankEditNameUpdated(rank, ColorUtil.parse(displayName)));
+            player.sendMessage(Messages.rankEditNameUpdated(rank, rankManager.getRankDisplayComponent(rank)));
         } else {
             double value;
             try {
@@ -210,8 +207,8 @@ public final class RankEditGUI {
                 }
             }
             String capitalizedAttr = attribute.substring(0, 1).toUpperCase(Locale.ROOT) + attribute.substring(1);
-            String rankName = rankManager.getRankDisplayName(rank);
-            player.sendMessage(Messages.rankEditAttributeUpdated(capitalizedAttr, ColorUtil.parse(rankName), value));
+            player.sendMessage(Messages.rankEditAttributeUpdated(capitalizedAttr,
+                    rankManager.getRankDisplayComponent(rank), value));
         }
 
         openRankMenu(player, rankManager, rank);

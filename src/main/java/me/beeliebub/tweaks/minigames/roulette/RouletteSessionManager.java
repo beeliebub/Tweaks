@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.minigames.roulette;
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
+import me.beeliebub.tweaks.lottery.LotteryManager;
 import me.beeliebub.tweaks.ranks.RankManager;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -50,6 +51,7 @@ final class RouletteSessionManager {
     private final RouletteBoardStore boardStore;
     private final RouletteRenderer renderer;
     private final RouletteRestPoseStore restPoseStore;
+    private final LotteryManager lotteryManager;
     private final RandomGenerator rng = new SecureRandom();
 
     private final Map<UUID, Integer> stickyStakes = new HashMap<>();
@@ -63,6 +65,13 @@ final class RouletteSessionManager {
     RouletteSessionManager(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
                             RankManager rankManager, RouletteBoardStore boardStore,
                             RouletteRenderer renderer, RouletteRestPoseStore restPoseStore) {
+        this(plugin, economyManager, houseAccount, rankManager, boardStore, renderer, restPoseStore, null);
+    }
+
+    RouletteSessionManager(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
+                            RankManager rankManager, RouletteBoardStore boardStore,
+                            RouletteRenderer renderer, RouletteRestPoseStore restPoseStore,
+                            LotteryManager lotteryManager) {
         this.plugin = plugin;
         this.economyManager = economyManager;
         this.houseAccount = houseAccount;
@@ -70,6 +79,7 @@ final class RouletteSessionManager {
         this.boardStore = boardStore;
         this.renderer = renderer;
         this.restPoseStore = restPoseStore;
+        this.lotteryManager = lotteryManager;
 
         this.indicatorTaskId = Bukkit.getScheduler()
                 .runTaskTimer(plugin, this::tickStakeIndicators, STAKE_INDICATOR_PERIOD, STAKE_INDICATOR_PERIOD)
@@ -559,6 +569,17 @@ final class RouletteSessionManager {
         } catch (RuntimeException e) {
             plugin.getLogger().log(Level.SEVERE, "Roulette: house credit of " + settlement.houseCredit()
                     + " threw for board at " + board.center(), e);
+        }
+
+        if (lotteryManager != null && lotteryManager.isLoaded()) {
+            for (UUID playerId : settlement.netLosers()) {
+                try {
+                    lotteryManager.enter(playerId);
+                } catch (RuntimeException e) {
+                    plugin.getLogger().log(Level.WARNING,
+                            "Roulette lottery entry failed after settlement for " + playerId, e);
+                }
+            }
         }
 
         String colorName = RouletteWheel.colorOf(pocket).name();

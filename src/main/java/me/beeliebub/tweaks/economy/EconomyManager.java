@@ -41,6 +41,10 @@ public class EconomyManager {
         this.playerStore = new YamlStore(plugin, new File(plugin.getDataFolder(), "players"), "economy data");
     }
 
+    JavaPlugin plugin() {
+        return plugin;
+    }
+
     // Mutable holder for a single player's economy fields. Fields default to sane zero-values.
     private static final class PlayerData {
         volatile double balance;
@@ -155,6 +159,14 @@ public class EconomyManager {
         });
     }
 
+    /** Reads the authoritative on-disk receipt for a house payment, including offline recipients. */
+    public CompletableFuture<Boolean> hasHousePaymentReceipt(UUID recipient, String paymentId) {
+        Objects.requireNonNull(recipient, "recipient");
+        Objects.requireNonNull(paymentId, "paymentId");
+        return playerStore.readOrderedAsyncStrict(recipient.toString())
+                .thenApply(config -> parseReceipts(config).containsKey(paymentId));
+    }
+
     private static HousePaymentResult applyReceipt(PlayerData data, String paymentId, long amount) {
         Long existingReceipt = data.receipts.get(paymentId);
         if (existingReceipt != null) {
@@ -225,6 +237,7 @@ public class EconomyManager {
         PlayerData data = get(player);
         data.rank = rank;
         writeAsync(player, data);
+        refreshTabFor(player);
     }
 
     // ---- Internals ----------------------------------------------------------

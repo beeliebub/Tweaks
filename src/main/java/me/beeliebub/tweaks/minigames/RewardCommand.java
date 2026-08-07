@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.minigames;
 
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
+import me.beeliebub.tweaks.utils.OfflinePlayerResolver;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -11,10 +12,12 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 // Handles /reward create, /reward edit, and /reward claim commands.
 // Admins create rewards and edit their contents via a chest GUI; players claim pending rewards.
@@ -134,6 +137,10 @@ public class RewardCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(Messages.MINIGAMES.rewardCountMustBePositive());
                 return;
             }
+            if (count > RewardManager.MAX_GRANT_COUNT) {
+                sender.sendMessage(Messages.MINIGAMES.rewardCountTooLarge(RewardManager.MAX_GRANT_COUNT));
+                return;
+            }
         }
 
         if (!rewardManager.rewardExists(rewardName)) {
@@ -141,23 +148,68 @@ public class RewardCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        OfflinePlayer target = Bukkit.getOfflinePlayer(playerName);
-        if (!target.hasPlayedBefore() && !target.isOnline()) {
-            sender.sendMessage(Messages.MINIGAMES.rewardRecipientHasNeverPlayed(playerName));
+        int finalCount = count;
+        resolveTarget(sender, playerName, target -> grantToTarget(sender, target, playerName, rewardName, finalCount));
+    }
+
+    private void grantToTarget(CommandSender sender, OfflinePlayer target, String input,
+                               String rewardName, int count) {
+        String resolvedName = target.getName() == null ? input : target.getName();
+        Player onlineTarget = target.getPlayer();
+        CompletableFuture<Void> persistence = CompletableFuture.completedFuture(null);
+        for (int i = 0; i < count; i++) {
+            CompletableFuture<Void> write = rewardManager.grantReward(target.getUniqueId(), rewardName);
+            if (write != null) persistence = persistence.thenCompose(ignored -> write);
+        }
+
+        CompletableFuture<Void> finalPersistence = persistence;
+        Runnable feedback = () -> {
+            if (finalPersistence.isCompletedExceptionally()) {
+                sender.sendMessage(Messages.MINIGAMES.rewardPersistenceFailed());
+                return;
+            }
+            sender.sendMessage(Messages.MINIGAMES.rewardGranted(count, rewardName, resolvedName));
+            if (onlineTarget != null) onlineTarget.sendMessage(Messages.MINIGAMES.rewardReceived(count, rewardName));
+        };
+        JavaPlugin plugin = rewardManager.plugin();
+        persistence.whenComplete((ignored, error) -> {
+            if (plugin != null) Bukkit.getScheduler().runTask(plugin, feedback);
+            else feedback.run();
+        });
+    }
+
+    private void resolveTarget(CommandSender sender, String input,
+                               java.util.function.Consumer<OfflinePlayer> action) {
+        JavaPlugin plugin = rewardManager.plugin();
+        if (plugin == null) {
+            Player target = Bukkit.getPlayerExact(input);
+            if (target != null) action.accept(target);
+            else sender.sendMessage(Messages.MINIGAMES.rewardRecipientHasNeverPlayed(input));
             return;
         }
-
-        for (int i = 0; i < count; i++) {
-            rewardManager.grantReward(target.getUniqueId(), rewardName);
-        }
-
-        String resolvedName = target.getName() == null ? playerName : target.getName();
-        sender.sendMessage(Messages.MINIGAMES.rewardGranted(count, rewardName, resolvedName));
-
-        Player onlineTarget = target.getPlayer();
-        if (onlineTarget != null) {
-            onlineTarget.sendMessage(Messages.MINIGAMES.rewardReceived(count, rewardName));
-        }
+        var future = OfflinePlayerResolver.resolve(plugin, sender, input);
+        boolean asynchronous = !future.isDone();
+        future.whenComplete((target, error) -> {
+            Runnable continuation = () -> {
+                if (asynchronous && !OfflinePlayerResolver.isSenderOnline(sender)) return;
+                if (error != null) {
+                    if (OfflinePlayerResolver.isLookupInProgress(error)) {
+                        sender.sendMessage(Messages.COMMANDS.offlinePlayerLookupBusy());
+                    } else {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING,
+                                "Reward player lookup failed for " + input, error);
+                    }
+                    return;
+                }
+                if (target == null) {
+                    sender.sendMessage(Messages.MINIGAMES.rewardRecipientHasNeverPlayed(input));
+                    return;
+                }
+                action.accept(target);
+            };
+            if (future.isDone()) continuation.run();
+            else if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, continuation);
+        });
     }
 
     private void handleClaim(CommandSender sender) {

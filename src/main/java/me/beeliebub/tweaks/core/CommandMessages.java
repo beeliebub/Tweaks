@@ -160,9 +160,19 @@ public final class CommandMessages {
         return Component.text("Removed '" + material + "' from resource world allowed items.", NamedTextColor.GREEN);
     }
 
+    /** Explains that the resource-world allowed-material file could not be persisted. */
+    public Component configResourceItemsSaveFailed() {
+        return Component.text("The resource world allowed-items file could not be saved; no change was applied.", NamedTextColor.RED);
+    }
+
     /** Explains the accepted actions for the resource-world allowed-material list. */
     public Component configResourceItemActionInvalid() {
         return Component.text("Action must be 'add' or 'remove'.", NamedTextColor.RED);
+    }
+
+    /** Explains that another asynchronous player-name lookup is already active for this sender. */
+    public Component offlinePlayerLookupBusy() {
+        return Component.text("Please wait for the previous player lookup to finish.", NamedTextColor.YELLOW);
     }
 
     // ---------------------------------------------------------------- GuiCopy

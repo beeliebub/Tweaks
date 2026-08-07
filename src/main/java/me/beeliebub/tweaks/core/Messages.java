@@ -48,6 +48,9 @@ public final class Messages {
     /** Player-feedback factories for minigame systems and their presentation. */
     public static final MinigameMessages MINIGAMES = new MinigameMessages();
 
+    /** Player-feedback factories for the server-wide lottery. */
+    public static final LotteryMessages LOTTERY = new LotteryMessages();
+
     /** Player-feedback factories and dialog copy for permission administration. */
     public static final PermissionMessages PERMISSIONS = new PermissionMessages();
 
@@ -125,6 +128,11 @@ public final class Messages {
     /** Explains that a supplied balance amount was not a valid decimal. */
     public static Component balanceInvalidAmount(String input) {
         return Component.text("Invalid amount: " + input, NamedTextColor.RED);
+    }
+
+    /** Explains that a balance target is not an online or known player. */
+    public static Component balanceUnknownPlayer(String input) {
+        return Component.text("Unknown player: " + input, NamedTextColor.RED);
     }
 
     /** Confirms an administrative balance mutation and the target's resulting balance. */
@@ -583,15 +591,18 @@ public final class Messages {
     }
 
     /** Explains the next rank's cost and the player's insufficient balance. */
-    public static Component rankupInsufficientFunds(String rankName, String formattedCost, String formattedBalance) {
-        return Component.text("Insufficient funds. Rank " + rankName + " costs " + formattedCost
-                + " but you only have " + formattedBalance + ".", NamedTextColor.RED);
+    public static Component rankupInsufficientFunds(Component rankName, String formattedCost, String formattedBalance) {
+        return Component.text("Insufficient funds. Rank ", NamedTextColor.RED)
+                .append(rankName)
+                .append(Component.text(" costs " + formattedCost
+                        + " but you only have " + formattedBalance + ".", NamedTextColor.RED));
     }
 
     /** Confirms a successful rank purchase and shows the remaining balance. */
-    public static Component rankupSuccess(String rankName, String formattedRemainingBalance) {
-        return Component.text("Congratulations! You are now Rank " + rankName
-                + ". Remaining balance: " + formattedRemainingBalance + ".", NamedTextColor.GREEN);
+    public static Component rankupSuccess(Component rankName, String formattedRemainingBalance) {
+        return Component.text("Congratulations! You are now Rank ", NamedTextColor.GREEN)
+                .append(rankName)
+                .append(Component.text(". Remaining balance: " + formattedRemainingBalance + ".", NamedTextColor.GREEN));
     }
 
     /** Shows the syntax for manually assigning a player's rank. */
@@ -605,11 +616,11 @@ public final class Messages {
     }
 
     /** Confirms that an administrator assigned a rank to a player. */
-    public static Component rankSetSuccess(String targetName, String rankName) {
+    public static Component rankSetSuccess(String targetName, Component rankName) {
         return Component.text("Successfully set ", NamedTextColor.GREEN)
                 .append(Component.text(targetName, NamedTextColor.GOLD))
                 .append(Component.text("'s rank to ", NamedTextColor.GREEN))
-                .append(Component.text(rankName, NamedTextColor.YELLOW))
+                .append(rankName)
                 .append(Component.text(".", NamedTextColor.GREEN));
     }
 

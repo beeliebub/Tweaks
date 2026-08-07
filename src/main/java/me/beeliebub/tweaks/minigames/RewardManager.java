@@ -8,11 +8,15 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
 
 // Manages reward definitions (item sets) and pending rewards for players.
 // Rewards are created by admins and granted to players by minigames; players claim them with /reward claim.
 public class RewardManager {
+
+    public static final int MAX_GRANT_COUNT = 64;
 
     private final JavaPlugin plugin;
     private final File rewardsFile;
@@ -22,6 +26,8 @@ public class RewardManager {
     // Pending rewards per player: UUID -> list of reward names to claim
     private final Map<UUID, List<String>> pendingRewards = new ConcurrentHashMap<>();
     private final File pendingFile;
+    private final Object pendingLock = new Object();
+    private CompletableFuture<Void> pendingWriteTail = CompletableFuture.completedFuture(null);
 
     public RewardManager(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -59,19 +65,31 @@ public class RewardManager {
         return Collections.unmodifiableSet(rewards.keySet());
     }
 
-    public void grantReward(UUID player, String rewardName) {
-        pendingRewards.computeIfAbsent(player, k -> Collections.synchronizedList(new ArrayList<>()))
-                .add(rewardName.toLowerCase());
-        savePendingAsync();
+    public CompletableFuture<Void> grantReward(UUID player, String rewardName) {
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(rewardName, "rewardName");
+        synchronized (pendingLock) {
+            pendingRewards.computeIfAbsent(player, k -> Collections.synchronizedList(new ArrayList<>()))
+                    .add(rewardName.toLowerCase());
+            return savePendingAsync();
+        }
     }
 
     public List<String> getPendingRewards(UUID player) {
-        return pendingRewards.getOrDefault(player, Collections.emptyList());
+        synchronized (pendingLock) {
+            return List.copyOf(pendingRewards.getOrDefault(player, Collections.emptyList()));
+        }
     }
 
-    public void clearPendingRewards(UUID player) {
-        pendingRewards.remove(player);
-        savePendingAsync();
+    public CompletableFuture<Void> clearPendingRewards(UUID player) {
+        synchronized (pendingLock) {
+            pendingRewards.remove(player);
+            return savePendingAsync();
+        }
+    }
+
+    JavaPlugin plugin() {
+        return plugin;
     }
 
     private void load() {
@@ -110,21 +128,25 @@ public class RewardManager {
             try {
                 config.save(rewardsFile);
             } catch (IOException e) {
-                plugin.getLogger().severe("Failed to save rewards.yml: " + e.getMessage());
+                plugin.getLogger().log(Level.SEVERE, "Failed to save rewards.yml", e);
             }
         });
     }
 
-    private void savePendingAsync() {
-        Map<UUID, List<String>> snapshot = new HashMap<>(pendingRewards);
-        CompletableFuture.runAsync(() -> {
+    private CompletableFuture<Void> savePendingAsync() {
+        Map<UUID, List<String>> snapshot = new HashMap<>();
+        pendingRewards.forEach((uuid, names) -> snapshot.put(uuid, new ArrayList<>(names)));
+        CompletableFuture<Void> write = pendingWriteTail.handle((ignored, error) -> null).thenRunAsync(() -> {
             YamlConfiguration config = new YamlConfiguration();
             snapshot.forEach((uuid, names) -> config.set(uuid.toString(), new ArrayList<>(names)));
             try {
                 config.save(pendingFile);
             } catch (IOException e) {
-                plugin.getLogger().severe("Failed to save pending-rewards.yml: " + e.getMessage());
+                plugin.getLogger().log(Level.SEVERE, "Failed to save pending-rewards.yml", e);
+                throw new CompletionException(e);
             }
         });
+        pendingWriteTail = write;
+        return write;
     }
 }

@@ -46,7 +46,7 @@ public class RankupCommand implements CommandExecutor {
         double balance = economyManager.getBalance(uuid);
 
         if (balance < cost) {
-            player.sendMessage(Messages.rankupInsufficientFunds(rankManager.getRankDisplayName(next),
+            player.sendMessage(Messages.rankupInsufficientFunds(rankManager.getRankDisplayComponent(next),
                     BalanceCommand.formatBalance(cost), BalanceCommand.formatBalance(balance)));
             return true;
         }
@@ -55,7 +55,7 @@ public class RankupCommand implements CommandExecutor {
         economyManager.setRank(uuid, next);
 
         double remaining = economyManager.getBalance(uuid);
-        player.sendMessage(Messages.rankupSuccess(rankManager.getRankDisplayName(next),
+        player.sendMessage(Messages.rankupSuccess(rankManager.getRankDisplayComponent(next),
                 BalanceCommand.formatBalance(remaining)));
         return true;
     }

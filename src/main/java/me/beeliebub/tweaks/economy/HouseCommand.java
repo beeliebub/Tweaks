@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.economy;
 
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
+import me.beeliebub.tweaks.utils.OfflinePlayerResolver;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -14,7 +15,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 
 /** Administrative command surface for the server-wide casino house account. */
@@ -133,14 +133,29 @@ public final class HouseCommand implements CommandExecutor, TabCompleter {
 
         String targetInput = args[1];
         long resolvedAmount = amount;
-        resolveKnownOfflinePlayer(targetInput).thenAccept(target -> {
-            if (target == null) {
-                deliverUnknownPlayer(sender, targetInput);
-                return;
-            }
-            String targetName = target.getName() != null ? target.getName() : targetInput;
-            housePaymentService.pay(target.getUniqueId(), resolvedAmount)
-                    .thenAccept(outcome -> deliverPayOutcome(sender, targetName, resolvedAmount, outcome));
+        var future = OfflinePlayerResolver.resolve(plugin, sender, targetInput);
+        boolean asynchronous = !future.isDone();
+        future.whenComplete((target, error) -> {
+            Runnable continuation = () -> {
+                if (asynchronous && !OfflinePlayerResolver.isSenderOnline(sender)) return;
+                if (error != null) {
+                    if (OfflinePlayerResolver.isLookupInProgress(error)) {
+                        sender.sendMessage(Messages.COMMANDS.offlinePlayerLookupBusy());
+                    } else {
+                        plugin.getLogger().log(Level.WARNING, "House player lookup failed for " + targetInput, error);
+                    }
+                    return;
+                }
+                if (target == null) {
+                    deliverUnknownPlayer(sender, targetInput);
+                    return;
+                }
+                String targetName = target.getName() != null ? target.getName() : targetInput;
+                housePaymentService.pay(target.getUniqueId(), resolvedAmount)
+                        .thenAccept(outcome -> deliverPayOutcome(sender, targetName, resolvedAmount, outcome));
+            };
+            if (future.isDone()) continuation.run();
+            else if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, continuation);
         });
         return true;
     }
@@ -150,13 +165,6 @@ public final class HouseCommand implements CommandExecutor, TabCompleter {
     // rarely-seen name can't stall the whole server, consistent with the rest of this path already
     // being asynchronous. Returns null when the name matches neither an online nor a previously-seen
     // player, folding that check into the same off-thread hop.
-    private CompletableFuture<OfflinePlayer> resolveKnownOfflinePlayer(String name) {
-        return CompletableFuture.supplyAsync(() -> {
-            OfflinePlayer target = Bukkit.getOfflinePlayer(name);
-            return (!target.isOnline() && !target.hasPlayedBefore()) ? null : target;
-        });
-    }
-
     // Mirrors deliverPayOutcome's main-thread hop and disconnected-sender fallback, for the
     // "no such player" rejection that now also resolves off the main thread.
     private void deliverUnknownPlayer(CommandSender sender, String targetInput) {

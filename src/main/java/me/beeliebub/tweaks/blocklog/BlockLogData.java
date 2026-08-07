@@ -150,6 +150,34 @@ public final class BlockLogData {
             }
         }
 
+        /**
+         * Scans only the fixed-width record headers and variable-length field sizes.
+         * A malformed blob returns true so callers fall back to the existing full decode
+         * path rather than treating corrupt data as safe to retain.
+         */
+        public static boolean containsTimestampBefore(byte[] data, long cutoffMillis) {
+            if (data == null || data.length == 0) return false;
+
+            try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(data))) {
+                if (in.readByte() != FORMAT_VERSION) return true;
+                int count = in.readInt();
+                if (count < 0 || count > 1_000_000) return true;
+
+                for (int i = 0; i < count; i++) {
+                    if (in.readLong() < cutoffMillis) return true;
+                    in.skipNBytes(1 + 16);
+                    int nameLen = in.readShort() & 0xFFFF;
+                    in.skipNBytes(nameLen);
+                    int itemLen = in.readInt();
+                    if (itemLen < 0) return true;
+                    in.skipNBytes(itemLen);
+                }
+                return false;
+            } catch (IOException | RuntimeException error) {
+                return true;
+            }
+        }
+
         private static byte[] truncate(byte[] src, int max) {
             byte[] dst = new byte[max];
             System.arraycopy(src, 0, dst, 0, max);
@@ -234,6 +262,8 @@ public final class BlockLogData {
 
                 byte[] data = pdc.get(key, PersistentDataType.BYTE_ARRAY);
                 if (data == null) continue;
+
+                if (!Codec.containsTimestampBefore(data, cutoffMillis)) continue;
 
                 List<ChestLogEntry> entries = Codec.decode(data);
                 int before = entries.size();

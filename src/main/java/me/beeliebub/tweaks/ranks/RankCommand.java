@@ -6,7 +6,6 @@ import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -85,7 +84,6 @@ public class RankCommand implements CommandExecutor, TabCompleter {
 
         int max = rankManager.getMaxRank();
         for (int rank = 1; rank <= max; rank++) {
-            String name = rankManager.getRankDisplayName(rank);
             double cost = rankManager.getRankCost(rank);
             double multiplier = rankManager.getRankMultiplierBonus(rank);
             double rakeback = rankManager.getRankRakeback(rank);
@@ -95,7 +93,7 @@ public class RankCommand implements CommandExecutor, TabCompleter {
 
             NamedTextColor lineColor = isCurrent ? NamedTextColor.YELLOW : NamedTextColor.WHITE;
 
-            Component parsedName = parseDisplayName(name);
+            Component parsedName = rankManager.getRankDisplayComponent(rank);
 
             sender.sendMessage(Messages.ranksListEntry(marker, parsedName, BalanceCommand.formatBalance(cost),
                     (int) Math.round(multiplier * 100), (int) Math.round(rakeback * 100), isCurrent, lineColor));
@@ -108,26 +106,5 @@ public class RankCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    // ---- Helpers ------------------------------------------------------------
 
-    /**
-     * Parses a rank display name into an Adventure Component.
-     * If the name contains legacy color codes ({@code &} or {@code §}), the
-     * ampersand-based {@link LegacyComponentSerializer} is used so both forms
-     * are handled. Otherwise the name is treated as MiniMessage markup.
-     */
-    public static Component parseDisplayName(String name) {
-        if (name == null || name.isEmpty()) {
-            return Component.empty();
-        }
-        if (name.indexOf('§') >= 0) {
-            // Contains a section-sign (§) — use the section-sign serializer.
-            return LegacyComponentSerializer.legacySection().deserialize(name);
-        }
-        if (name.indexOf('&') >= 0) {
-            // Contains an ampersand — use the ampersand serializer.
-            return LegacyComponentSerializer.legacyAmpersand().deserialize(name);
-        }
-        return Messages.MM.deserialize(name);
-    }
 }

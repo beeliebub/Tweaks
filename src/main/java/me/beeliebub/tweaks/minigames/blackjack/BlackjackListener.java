@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.minigames.blackjack;
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
+import me.beeliebub.tweaks.lottery.LotteryManager;
 import me.beeliebub.tweaks.ranks.RankManager;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
@@ -85,9 +86,15 @@ public final class BlackjackListener implements Listener {
 
     public BlackjackListener(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
                              RankManager rankManager) {
+        this(plugin, economyManager, houseAccount, rankManager, null);
+    }
+
+    public BlackjackListener(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
+                             RankManager rankManager, LotteryManager lotteryManager) {
         this.tableStore = new BlackjackTableStore(plugin);
         this.renderer = new BlackjackRenderer(plugin);
-        this.sessionManager = new BlackjackSessionManager(plugin, economyManager, houseAccount, rankManager, renderer);
+        this.sessionManager = new BlackjackSessionManager(plugin, economyManager, houseAccount, rankManager,
+                renderer, lotteryManager);
     }
 
     // ---- Public API ---------------------------------------------------------

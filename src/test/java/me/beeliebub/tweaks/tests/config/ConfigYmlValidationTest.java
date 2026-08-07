@@ -98,4 +98,11 @@ class ConfigYmlValidationTest {
         assertTrue(String.valueOf(value).contains(":"),
                 "fly-advancement must be a namespaced key");
     }
+
+    @Test
+    void lotteryReseedAmountIsPositive() {
+        Map<?, ?> lottery = (Map<?, ?>) root.get("lottery");
+        assertNotNull(lottery);
+        assertTrue(((Number) lottery.get("reseed-amount")).longValue() > 0);
+    }
 }

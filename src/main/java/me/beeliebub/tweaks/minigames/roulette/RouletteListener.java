@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.minigames.roulette;
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
+import me.beeliebub.tweaks.lottery.LotteryManager;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.ranks.RankManager;
 import me.beeliebub.tweaks.utils.GeometryUtil;
@@ -86,12 +87,19 @@ public final class RouletteListener implements Listener {
 
     public RouletteListener(JavaPlugin plugin, EconomyManager economyManager,
                              HouseAccount houseAccount, RankManager rankManager) {
+        this(plugin, economyManager, houseAccount, rankManager, null);
+    }
+
+    public RouletteListener(JavaPlugin plugin, EconomyManager economyManager,
+                             HouseAccount houseAccount, RankManager rankManager,
+                             LotteryManager lotteryManager) {
         this.plugin = plugin;
         this.boardStore = new RouletteBoardStore(plugin);
         this.restPoseStore = new RouletteRestPoseStore(plugin);
         this.renderer = new RouletteRenderer(plugin, houseAccount, restPoseStore);
         this.sessions = new RouletteSessionManager(
-                plugin, economyManager, houseAccount, rankManager, boardStore, renderer, restPoseStore);
+                plugin, economyManager, houseAccount, rankManager, boardStore, renderer, restPoseStore,
+                lotteryManager);
     }
 
     // ---- Public API -----------------------------------------------------------------

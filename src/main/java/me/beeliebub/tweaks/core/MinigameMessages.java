@@ -49,6 +49,12 @@ public final class MinigameMessages {
     /** Explains that a reward count must be positive. */
     public Component rewardCountMustBePositive() { return red("Count must be at least 1."); }
 
+    /** Explains that a single grant command is capped to keep pending state bounded. */
+    public Component rewardCountTooLarge(int maximum) { return red("Count must not exceed " + maximum + "."); }
+
+    /** Explains that a reward grant could not be durably queued. */
+    public Component rewardPersistenceFailed() { return red("The reward could not be saved. Please try again."); }
+
     /** Explains that a requested offline reward recipient has never joined. */
     public Component rewardRecipientHasNeverPlayed(String name) { return red("Player '" + name + "' has never played before."); }
 

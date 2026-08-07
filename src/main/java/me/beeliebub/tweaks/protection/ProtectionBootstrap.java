@@ -11,6 +11,7 @@ import me.beeliebub.tweaks.protection.ui.RegionSelectionManager;
 import org.bukkit.Material;
 
 import java.io.File;
+import java.util.logging.Level;
 
 /**
  * Tier:      1 - foundation state
@@ -78,7 +79,7 @@ public final class ProtectionBootstrap {
             try {
                 pendingStampsStore.writeNow();
             } catch (java.io.IOException e) {
-                plugin.getLogger().warning("Final pending_stamps flush failed: " + e.getMessage());
+                plugin.getLogger().log(Level.WARNING, "Final pending_stamps flush failed", e);
             }
         }
         if (regionSelectionManager != null) {

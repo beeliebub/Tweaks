@@ -11,6 +11,7 @@ import me.beeliebub.tweaks.profiles.StorageManager;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import me.beeliebub.tweaks.permissions.Permissions;
+import me.beeliebub.tweaks.utils.OfflinePlayerResolver;
 import net.kyori.adventure.text.event.ClickCallback;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -138,18 +139,24 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
             targetUUID = player.getUniqueId();
             homeName = args[0];
         } else if (args.length == 2 && player.hasPermission(Permissions.ADMIN_HOME)) {
-            OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
-            targetUUID = target.getUniqueId();
-            homeName = args[1];
+            String targetInput = args[0];
+            String requestedHome = args[1];
+            resolveTarget(player, targetInput, target -> showHome(player, target.getUniqueId(), requestedHome));
+            return true;
         } else {
             player.sendMessage(Messages.TELEPORT.homeUsage());
             return true;
         }
 
+        showHome(player, targetUUID, homeName);
+        return true;
+    }
+
+    private void showHome(Player player, UUID targetUUID, String homeName) {
         Optional<Point> pointOpt = storage.getHome(targetUUID, homeName);
         if (pointOpt.isEmpty()) {
             player.sendMessage(Messages.TELEPORT.homeNotFound());
-            return true;
+            return;
         }
 
         String finalHomeName = homeName;
@@ -161,8 +168,6 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
                 }
             });
         }, () -> player.sendMessage(Messages.TELEPORT.homeWorldNotLoaded()));
-
-        return true;
     }
 
     private boolean handleSetHome(CommandSender sender, String[] args) {
@@ -182,27 +187,33 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
         if (args.length == 1) {
             homeName = args[0];
         } else if (args.length == 2 && player.hasPermission(Permissions.ADMIN_SETHOME)) {
-            OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
-            targetUUID = target.getUniqueId();
-            homeName = args[1];
+            String targetInput = args[0];
+            String requestedHome = args[1];
+            resolveTarget(player, targetInput,
+                    target -> setHomeFor(player, target.getUniqueId(), requestedHome));
+            return true;
         } else if (args.length > 0) {
             player.sendMessage(Messages.TELEPORT.setHomeUsage());
             return true;
         }
 
+        setHomeFor(player, targetUUID, homeName);
+        return true;
+    }
+
+    private void setHomeFor(Player player, UUID targetUUID, String homeName) {
         if (targetUUID.equals(player.getUniqueId()) && !player.hasPermission(Permissions.BYPASS_HOMES)) {
             // Live read (no constructor-time caching) so a /tconfig edit to max-homes takes
             // effect immediately.
             int maxHomes = plugin.getConfig().getInt("max-homes", 15);
             if (storage.getHomeCount(targetUUID) >= maxHomes && storage.getHome(targetUUID, homeName).isEmpty()) {
                 player.sendMessage(Messages.TELEPORT.setHomeMaximumReached(maxHomes));
-                return true;
+                return;
             }
         }
 
         storage.setHome(targetUUID, homeName, Point.fromLocation(player.getLocation()));
         player.sendMessage(Messages.TELEPORT.setHomeSuccess(homeName));
-        return true;
     }
 
     // Live read (no constructor-time caching) so a /tconfig edit to teleport.sethome-disabled-worlds
@@ -228,22 +239,28 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
         if (args.length == 1) {
             homeName = args[0];
         } else if (args.length == 2 && player.hasPermission(Permissions.ADMIN_DELHOME)) {
-            OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
-            targetUUID = target.getUniqueId();
-            homeName = args[1];
+            String targetInput = args[0];
+            String requestedHome = args[1];
+            resolveTarget(player, targetInput,
+                    target -> deleteHomeFor(player, target.getUniqueId(), requestedHome));
+            return true;
         } else if (args.length > 0) {
             player.sendMessage(Messages.TELEPORT.delHomeUsage());
             return true;
         }
 
+        deleteHomeFor(player, targetUUID, homeName);
+        return true;
+    }
+
+    private void deleteHomeFor(Player player, UUID targetUUID, String homeName) {
         if (storage.getHome(targetUUID, homeName).isEmpty()) {
             player.sendMessage(Messages.TELEPORT.delHomeNotFound(homeName));
-            return true;
+            return;
         }
 
         storage.delHome(targetUUID, homeName);
         player.sendMessage(Messages.TELEPORT.delHomeSuccess(homeName));
-        return true;
     }
 
     private boolean handleHomes(CommandSender sender, String[] args) {
@@ -255,9 +272,9 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
         UUID targetUUID;
         String targetName;
         if (args.length == 1 && sender.hasPermission(Permissions.ADMIN_HOMES)) {
-            OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
-            targetUUID = target.getUniqueId();
-            targetName = target.getName() != null ? target.getName() : args[0];
+            String targetInput = args[0];
+            resolveTarget(sender, targetInput, target -> showHomes(sender, target));
+            return true;
         } else if (sender instanceof Player player) {
             targetUUID = player.getUniqueId();
             targetName = player.getName();
@@ -266,13 +283,21 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
             return true;
         }
 
+        showHomes(sender, targetUUID, targetName);
+        return true;
+    }
+
+    private void showHomes(CommandSender sender, OfflinePlayer target) {
+        showHomes(sender, target.getUniqueId(), target.getName() != null ? target.getName() : "player");
+    }
+
+    private void showHomes(CommandSender sender, UUID targetUUID, String targetName) {
         Set<String> homes = storage.getHomes(targetUUID);
         if (homes.isEmpty()) {
             sender.sendMessage(Messages.TELEPORT.homesNone(targetName));
         } else {
             sender.sendMessage(Messages.TELEPORT.homesList(targetName, String.join(", ", homes)));
         }
-        return true;
     }
 
     private List<String> completeHomeAccess(CommandSender sender, String[] args, String adminPerm) {
@@ -287,7 +312,8 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
                     .toList();
         }
         if (args.length == 2 && player.hasPermission(adminPerm)) {
-            OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
+            Player target = Bukkit.getPlayerExact(args[0]);
+            if (target == null) return Collections.emptyList();
             return storage.getHomes(target.getUniqueId()).stream()
                     .filter(s -> s.toLowerCase().startsWith(args[1].toLowerCase()))
                     .toList();
@@ -684,5 +710,32 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
                 .filter(n -> n.toLowerCase().startsWith(partial))
                 .filter(n -> !(sender instanceof Player p) || !n.equals(p.getName()))
                 .toList();
+    }
+
+    private void resolveTarget(CommandSender sender, String input,
+                               java.util.function.Consumer<OfflinePlayer> action) {
+        var future = OfflinePlayerResolver.resolve(plugin, sender, input);
+        boolean asynchronous = !future.isDone();
+        future.whenComplete((target, error) -> {
+            Runnable continuation = () -> {
+                if (asynchronous && !OfflinePlayerResolver.isSenderOnline(sender)) return;
+                if (error != null) {
+                    if (OfflinePlayerResolver.isLookupInProgress(error)) {
+                        sender.sendMessage(Messages.COMMANDS.offlinePlayerLookupBusy());
+                    } else {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING,
+                                "Teleport player lookup failed for " + input, error);
+                    }
+                    return;
+                }
+                if (target == null) {
+                    sender.sendMessage(Messages.playerNotOnline(input));
+                    return;
+                }
+                action.accept(target);
+            };
+            if (future.isDone()) continuation.run();
+            else if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, continuation);
+        });
     }
 }

@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.logging.Level;
 
 /**
  * Manages the whitelist of items allowed to be brought into the resource world.
@@ -23,6 +24,7 @@ public class ResourceHuntItems {
     private final Tweaks plugin;
     private final File file;
     private final Set<Material> allowedItems = new HashSet<>();
+    private volatile boolean lastSaveFailed;
 
     public ResourceHuntItems(Tweaks plugin) {
         this.plugin = plugin;
@@ -99,7 +101,7 @@ public class ResourceHuntItems {
         try {
             cfg.save(file);
         } catch (IOException e) {
-            plugin.getLogger().severe("Could not save resource_hunt_items.yml!");
+            plugin.getLogger().log(Level.SEVERE, "Could not save resource_hunt_items.yml", e);
         }
     }
 
@@ -129,24 +131,39 @@ public class ResourceHuntItems {
     }
 
     public void addAllowedItem(Material material) {
+        lastSaveFailed = false;
         if (allowedItems.add(material)) {
-            saveList();
+            if (!saveList()) {
+                allowedItems.remove(material);
+                lastSaveFailed = true;
+            }
         }
     }
 
     public void removeAllowedItem(Material material) {
+        lastSaveFailed = false;
         if (allowedItems.remove(material)) {
-            saveList();
+            if (!saveList()) {
+                allowedItems.add(material);
+                lastSaveFailed = true;
+            }
         }
     }
 
-    private void saveList() {
+    /** True only when the most recent changed whitelist operation could not be persisted. */
+    public boolean lastSaveFailed() {
+        return lastSaveFailed;
+    }
+
+    private boolean saveList() {
         YamlConfiguration cfg = new YamlConfiguration();
         cfg.set("allowed-items", allowedItems.stream().map(Material::name).collect(Collectors.toList()));
         try {
             cfg.save(file);
+            return true;
         } catch (IOException e) {
-            plugin.getLogger().severe("Could not save resource_hunt_items.yml!");
+            plugin.getLogger().log(Level.SEVERE, "Could not save resource_hunt_items.yml", e);
+            return false;
         }
     }
 }

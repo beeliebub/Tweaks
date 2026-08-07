@@ -127,6 +127,11 @@ economy:
     6: 1.5
     7: 1.6
 
+# House balance restored after a lottery draw pays out the entire House. A positive floor prevents
+# the empty-House state from causing every later draw to pay 100% again.
+lottery:
+  reseed-amount: 10000
+
 # Player ranks. Rank 0 = unranked (no name/cost/bonus). Ranks 1..10 are purchasable in order via /rankup.
 # multiplier = rank bonus applied to daily login rewards. rakeback = casino rakeback rate. Both are fractions (0.01 = 1%).
 ranks:

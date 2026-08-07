@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -154,6 +155,23 @@ class RouletteSettlementTest {
         assertEquals(360L, playerCredit.payout());
         assertEquals(0L, otherCredit.payout());
         assertEquals(10L, settlement.houseCredit());
+        assertEquals(Set.of(OTHER), settlement.netLosers());
+    }
+
+    @Test
+    void netLoserSetContainsOnlyThePlayerWhoLostAcrossTheRound() {
+        RouletteBet winner = new RouletteBet(PLAYER, BetType.STRAIGHT, 17, 10);
+        RouletteBet loser = new RouletteBet(OTHER, BetType.STRAIGHT, 18, 10);
+        Settlement settlement = RouletteRound.computeSettlement(List.of(winner, loser), 17, Map.of());
+        assertEquals(Set.of(OTHER), settlement.netLosers());
+    }
+
+    @Test
+    void exactZeroNetResultDoesNotEnterTheLottery() {
+        RouletteBet winner = new RouletteBet(PLAYER, BetType.COLOR, RouletteBet.COLOR_RED, 10);
+        RouletteBet loser = new RouletteBet(PLAYER, BetType.STRAIGHT, 18, 10);
+        Settlement settlement = RouletteRound.computeSettlement(List.of(winner, loser), 1, Map.of());
+        assertTrue(settlement.netLosers().isEmpty());
     }
 
     // ---- covering every pocket: exactly one of many stacked bets can ever win ----

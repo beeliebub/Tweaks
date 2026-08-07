@@ -2,6 +2,8 @@ package me.beeliebub.tweaks.ranks;
 
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.tab.TabManager;
+import me.beeliebub.tweaks.utils.ColorUtil;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
@@ -98,6 +100,11 @@ public class RankManager {
         if (rank == 0) return "Unranked";
         RankDef def = ranks.get(rank);
         return def != null ? def.name() : "Unranked";
+    }
+
+    /** Returns the configured rank name rendered with the supported legacy color format. */
+    public Component getRankDisplayComponent(int rank) {
+        return ColorUtil.parse(getRankDisplayName(rank));
     }
 
     /**

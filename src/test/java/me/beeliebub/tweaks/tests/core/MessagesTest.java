@@ -168,14 +168,17 @@ class MessagesTest {
         assertMessage(Messages.ranksMaximumRankNotice(), "You have reached the maximum rank!", NamedTextColor.GOLD);
         assertMessage(Messages.rankupRequiresPlayer(), "Only players can use this command.", NamedTextColor.RED);
         assertMessage(Messages.rankupAlreadyMaximumRank(), "You are already the maximum rank.", NamedTextColor.RED);
-        assertMessage(Messages.rankupInsufficientFunds("I", "$1,000", "$25"),
-                "Insufficient funds. Rank I costs $1,000 but you only have $25.", NamedTextColor.RED);
-        assertMessage(Messages.rankupSuccess("I", "$4,000"),
-                "Congratulations! You are now Rank I. Remaining balance: $4,000.", NamedTextColor.GREEN);
+        Component insufficient = Messages.rankupInsufficientFunds(Component.text("I", NamedTextColor.YELLOW),
+                "$1,000", "$25");
+        assertEquals("Insufficient funds. Rank I costs $1,000 but you only have $25.", fullContent(insufficient));
+        assertEquals(NamedTextColor.RED, insufficient.color());
+        Component success = Messages.rankupSuccess(Component.text("I", NamedTextColor.YELLOW), "$4,000");
+        assertEquals("Congratulations! You are now Rank I. Remaining balance: $4,000.", fullContent(success));
+        assertEquals(NamedTextColor.GREEN, success.color());
         assertMessage(Messages.rankSetUsage(), "Usage: /rank set <player> <rank_id/name>", NamedTextColor.RED);
         assertMessage(Messages.rankSetInvalidRank("bogus"), "Invalid rank: bogus", NamedTextColor.RED);
         assertEquals("Successfully set Alex's rank to I.",
-                fullContent(Messages.rankSetSuccess("Alex", "I")));
+                fullContent(Messages.rankSetSuccess("Alex", Component.text("I", NamedTextColor.YELLOW))));
         assertMessage(Messages.rankEditNameCannotBeEmpty(), "Name cannot be empty.", NamedTextColor.RED);
         assertEquals("Set name of Rank 3 to III.",
                 fullContent(Messages.rankEditNameUpdated(3, Component.text("III", NamedTextColor.GOLD))));

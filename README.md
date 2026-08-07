@@ -47,6 +47,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [XP Storage Bottles](#xp-storage-bottles)
   - [Disenchanting Bundle](#disenchanting-bundle)
   - [Economy](#economy)
+    - [Lottery](#lottery)
   - [Ranks](#ranks)
 - [Cosmetics](#cosmetics)
   - [Boot Trails](#boot-trails)
@@ -494,7 +495,7 @@ Players in the tab list are automatically sorted by their current world profile 
 `[WorldPrefix][RankName] Name [$balance] [AFK]`
 
 - **World Prefix**: A colored tag based on the player's current world.
-- **Rank Name**: Your current rank in gold brackets (e.g., `&6[I]`, `&b[VIP]`). Rank names support color codes (legacy `&` and `&#rrggbb` hex) and are displayed in the tab list.
+- **Rank Name**: Your current rank in gold brackets (e.g., `&6[I]`, `&b[VIP]`). Rank names support color codes (legacy `&` and `&#rrggbb` hex) and render consistently in the tab list, `/ranks`, `/rankup`, and `/rank set` feedback.
 - **Name**: Your nickname (if set) or real name, colored to match the world prefix.
 - **$balance**: Your current balance in yellow. This is omitted if you have hidden your balance via `/bal hide`.
 - **[AFK]**: A red suffix appended when you are away-from-keyboard.
@@ -629,6 +630,21 @@ When you join, you'll see a message like:
 | `/house balance` | View the server-wide casino house account. Admin permission required. |
 | `/house add\|remove\|set <amount>` | Adjust the casino house account. Admin permission required. |
 | `/house pay <player> <amount>` | Transfer house funds to an online or known offline player. Admin permission required. |
+
+#### Lottery
+
+The server-wide lottery grows from House-account growth since the previous draw. A player enters
+after a settled blackjack loss or inactivity forfeiture, or when their roulette round ends net
+negative. Entries are one-per-player and offline entrants remain eligible. The pot is paid from the
+House through the durable house-payment journal; a draw that pays the entire House reseeds it to the
+configured positive amount (default `$10,000`).
+
+| Command | What it does |
+|---|---|
+| `/lottery info` | Show the current entrant count, House balance, baseline, and computed pot. |
+| `/lottery draw` | Draw and announce a winner. Admin permission required. |
+| `/lottery entries` | List current entrants. Admin permission required. |
+| `/lottery baseline <amount>` | Set the growth baseline. Admin permission required. |
 
 ### Ranks
 
@@ -910,7 +926,7 @@ Tasks are categorized by how you must obtain or interact with the target. Depend
 - **Smelt**: Smelt the target item (e.g., smelting raw iron or iron ore for an Iron Ingot task). Supports the **Smelter** enchantment.
 - **Enchant**: Enchant the target item (Overworld only).
 - **Shear**: Shear the targeted entity (Overworld only). Supports specific sheep colors (e.g., `red_sheep`).
-- **Breed**: Breed the targeted entity.
+- **Breed**: Breed the targeted entity; one successful parent pairing counts as one. Turtle, frog, and sniffer targets are credited at pairing time, before eggs are laid (eggs and hatched babies do not add progress).
 - **Craft**: Craft the targeted item.
 - **Barter**: Receive the target item from a Piglin barter (Nether only).
 
@@ -1104,6 +1120,7 @@ When an action occurs, the system checks rules in this order:
 | `/balance` | View your current balance. Alias: `/bal`. |
 | `/balance hide` | Toggle whether your balance is visible in the tab list. |
 | `/house balance` | View the casino house account (admin). |
+| `/lottery info` | View the public lottery status and computed pot. |
 | `/ranks` | List all available ranks and their benefits. |
 | `/rankup` | Purchase the next rank in the hierarchy. |
 | `/reroll` | Re-roll your current Resource Hunt target. |
@@ -1146,6 +1163,9 @@ When an action occurs, the system checks rules in this order:
 | `/roulette createboard <min> <max>` | `tweaks.roulette.createboard` | Begin Roulette board setup; right-click a button/lever to finalize. |
 | `/roulette removeboard` | `tweaks.roulette.removeboard` | Begin Roulette board removal; right-click the board's spin control. |
 | `/house <balance\|add\|remove\|set\|pay>` | `tweaks.admin.house` | View or administer the server-wide casino house account. |
+| `/lottery draw` | `tweaks.admin.lottery` | Draw the server-wide lottery and announce the winner. |
+| `/lottery entries` | `tweaks.admin.lottery` | List current lottery entrants. |
+| `/lottery baseline <amount>` | `tweaks.admin.lottery` | Set the lottery growth baseline. |
 | `/tconfig` / `/tconfig gui` | `tweaks.admin.config` | Open the admin config Dialog GUI (players only; console gets plain usage). |
 | `/tconfig list [category]` | `tweaks.admin.config` | Print every registered setting and its current value. |
 | `/tconfig max_homes <int>` | `tweaks.admin.config` | Set global max homes per player. |

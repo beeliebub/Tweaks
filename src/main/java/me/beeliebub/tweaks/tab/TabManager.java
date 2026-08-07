@@ -72,10 +72,9 @@ public class TabManager implements Listener {
 
         // Rank bracket (e.g. "[I] ").
         int rank = economyManager.getRank(uuid);
-        String label = rankManager.getRankDisplayName(rank);
         name = name
                 .append(Component.text("[", NamedTextColor.GOLD))
-                .append(ColorUtil.parse(label))
+                .append(rankManager.getRankDisplayComponent(rank))
                 .append(Component.text("] ", NamedTextColor.GOLD));
 
         // Player name: nickname if set, otherwise plain name in world-prefix color.

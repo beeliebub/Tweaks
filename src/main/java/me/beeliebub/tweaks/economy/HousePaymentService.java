@@ -36,7 +36,9 @@ public final class HousePaymentService {
     private final EconomyManager economyManager;
 
     private final AtomicBoolean ready = new AtomicBoolean();
+    private final AtomicBoolean replayStarted = new AtomicBoolean();
     private final AtomicBoolean shuttingDown = new AtomicBoolean();
+    private final CompletableFuture<Void> readyFuture = new CompletableFuture<>();
     private final Map<String, CompletableFuture<HousePayOutcome>> inFlight = new ConcurrentHashMap<>();
 
     public HousePaymentService(JavaPlugin plugin, HouseAccount houseAccount, EconomyManager economyManager) {
@@ -52,7 +54,14 @@ public final class HousePaymentService {
 
     /** Initiates a new admin-driven payment. Generates and owns the payment id. */
     public CompletableFuture<HousePayOutcome> pay(UUID recipient, long amount) {
+        return pay(UUID.randomUUID().toString(), recipient, amount);
+    }
+
+    /** Initiates a payment using a durable caller-supplied id, preserving replay idempotency. */
+    public CompletableFuture<HousePayOutcome> pay(String paymentId, UUID recipient, long amount) {
+        Objects.requireNonNull(paymentId, "paymentId");
         Objects.requireNonNull(recipient, "recipient");
+        if (paymentId.isBlank()) throw new IllegalArgumentException("paymentId must not be blank");
         if (amount <= 0) throw new IllegalArgumentException("amount must be positive");
         if (shuttingDown.get()) {
             return CompletableFuture.completedFuture(HousePayOutcome.SHUTTING_DOWN);
@@ -61,7 +70,6 @@ public final class HousePaymentService {
             return CompletableFuture.completedFuture(HousePayOutcome.NOT_READY);
         }
 
-        String paymentId = UUID.randomUUID().toString();
         CompletableFuture<HousePayOutcome> future = houseAccount.beginPayment(paymentId, recipient, amount)
                 .thenCompose(begin -> begin == HouseBeginPaymentOutcome.INSUFFICIENT_FUNDS
                         ? CompletableFuture.completedFuture(HousePayOutcome.INSUFFICIENT_FUNDS)
@@ -83,16 +91,28 @@ public final class HousePaymentService {
      * there were any.
      */
     public CompletableFuture<Void> replayPendingPayments() {
+        if (!replayStarted.compareAndSet(false, true)) return readyFuture;
         Map<String, HouseJournalEntry> pending = houseAccount.pendingPayments();
         if (pending.isEmpty()) {
             ready.set(true);
-            return CompletableFuture.completedFuture(null);
+            readyFuture.complete(null);
+            return readyFuture;
         }
         plugin.getLogger().info("Replaying " + pending.size() + " pending house payment(s) from a prior crash/shutdown");
         CompletableFuture<?>[] replays = pending.entrySet().stream()
                 .map(entry -> replayOne(entry.getKey(), entry.getValue()))
                 .toArray(CompletableFuture[]::new);
-        return CompletableFuture.allOf(replays).whenComplete((v, err) -> ready.set(true));
+        CompletableFuture.allOf(replays).whenComplete((v, err) -> {
+            ready.set(true);
+            if (err == null) readyFuture.complete(null);
+            else readyFuture.completeExceptionally(err);
+        });
+        return readyFuture;
+    }
+
+    /** Completes after the one-time startup replay has finished. */
+    public CompletableFuture<Void> whenReady() {
+        return readyFuture;
     }
 
     private CompletableFuture<HousePayOutcome> replayOne(String paymentId, HouseJournalEntry entry) {

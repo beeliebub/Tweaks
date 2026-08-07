@@ -105,4 +105,13 @@ class ConfigDefaultsTest {
         assertEquals(15, onDisk.getInt("max-homes", -1));
         assertEquals(200, onDisk.getInt("max_chunks", -1));
     }
+
+    @Test
+    void lotteryReseedAmountIsRestoredFromBundledDefault() {
+        writeLiveFile("lottery.reseed-amount", null);
+
+        plugin.reconcileConfigDefaults();
+
+        assertEquals(10000, readLiveFile().getInt("lottery.reseed-amount", -1));
+    }
 }

@@ -43,7 +43,7 @@ class ConfigValueEditorKeyTest {
         EditResult result = editor.applyScalar(setting, "not a valid key!!");
 
         assertInstanceOf(EditResult.Invalid.class, result);
-        assertEquals("jass:test", plugin.getConfig().getString("fly-advancement")); // bundled default
+        assertEquals("jass:fly", plugin.getConfig().getString("fly-advancement")); // bundled default
     }
 
     @Test
@@ -51,7 +51,7 @@ class ConfigValueEditorKeyTest {
         EditResult result = editor.applyScalar(setting, "");
 
         assertInstanceOf(EditResult.Invalid.class, result);
-        assertEquals("jass:test", plugin.getConfig().getString("fly-advancement"));
+        assertEquals("jass:fly", plugin.getConfig().getString("fly-advancement"));
     }
 
     @Test

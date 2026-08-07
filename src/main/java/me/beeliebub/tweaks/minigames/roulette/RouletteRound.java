@@ -2,9 +2,11 @@ package me.beeliebub.tweaks.minigames.roulette;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -116,8 +118,8 @@ public final class RouletteRound {
     public record PlayerCredit(long payout, long rakeback) {
     }
 
-    /** Full settlement result: every bettor's credit, plus the round's gross house winnings. */
-    public record Settlement(Map<UUID, PlayerCredit> credits, long houseCredit) {
+    /** Full settlement result, including players whose net round result was a loss. */
+    public record Settlement(Map<UUID, PlayerCredit> credits, long houseCredit, Set<UUID> netLosers) {
     }
 
     /**
@@ -152,6 +154,7 @@ public final class RouletteRound {
         }
 
         Map<UUID, PlayerCredit> credits = new HashMap<>();
+        Set<UUID> netLosers = new HashSet<>();
         for (Map.Entry<UUID, Long> entry : wageredByPlayer.entrySet()) {
             UUID player = entry.getKey();
             long wagered = entry.getValue();
@@ -159,12 +162,13 @@ public final class RouletteRound {
             long net = payout - wagered;
             long rakeback = 0L;
             if (net < 0) {
+                netLosers.add(player);
                 double rate = rakebackRates.getOrDefault(player, 0.0);
                 rakeback = (long) Math.floor(-net * rate);
             }
             credits.put(player, new PlayerCredit(payout, rakeback));
         }
 
-        return new Settlement(Map.copyOf(credits), Math.max(0L, houseCredit));
+        return new Settlement(Map.copyOf(credits), Math.max(0L, houseCredit), Set.copyOf(netLosers));
     }
 }

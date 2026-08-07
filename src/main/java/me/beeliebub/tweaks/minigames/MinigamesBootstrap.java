@@ -11,6 +11,7 @@ import me.beeliebub.tweaks.minigames.resource.RerollCommand;
 import me.beeliebub.tweaks.minigames.resource.ResourceCommand;
 import me.beeliebub.tweaks.minigames.resource.ResourceCraftListener;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
+import me.beeliebub.tweaks.minigames.resource.ResourceHuntBreedListener;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import me.beeliebub.tweaks.minigames.resource.ResourceWorldListener;
 import me.beeliebub.tweaks.minigames.roulette.RouletteCommand;
@@ -47,6 +48,8 @@ public final class MinigamesBootstrap {
         ResourceHunt resourceHunt = new ResourceHunt(plugin, rewardManager);
         services.setResourceHunt(resourceHunt);
 
+        plugin.getServer().getPluginManager().registerEvents(
+                new ResourceHuntBreedListener(plugin, resourceHunt), plugin);
         plugin.getServer().getPluginManager().registerEvents(new ResourceWorldListener(plugin, services.storageManager()), plugin);
 
         ResourceCommand resourceCommand = new ResourceCommand(resourceHunt, resourceHuntItems);
@@ -74,7 +77,8 @@ public final class MinigamesBootstrap {
         plugin.getCommand("whack").setTabCompleter(whackCommand);
 
         BlackjackListener blackjackListener = new BlackjackListener(
-                plugin, services.economyManager(), services.houseAccount(), services.rankManager());
+                plugin, services.economyManager(), services.houseAccount(), services.rankManager(),
+                services.lotteryManager());
         services.setBlackjackListener(blackjackListener);
         BlackjackCommand blackjackCommand = new BlackjackCommand(services.economyManager(), blackjackListener);
         plugin.getCommand("blackjack").setExecutor(blackjackCommand);
@@ -85,7 +89,8 @@ public final class MinigamesBootstrap {
         // the tier-1 economyManager/houseAccount/rankManager for stake debits, payouts, rakeback,
         // and house credit. See minigames/roulette/CLAUDE.md.
         RouletteListener rouletteListener = new RouletteListener(
-                plugin, services.economyManager(), services.houseAccount(), services.rankManager());
+                plugin, services.economyManager(), services.houseAccount(), services.rankManager(),
+                services.lotteryManager());
         services.setRouletteListener(rouletteListener);
         plugin.getServer().getPluginManager().registerEvents(rouletteListener, plugin);
         RouletteCommand rouletteCommand = new RouletteCommand(rouletteListener);

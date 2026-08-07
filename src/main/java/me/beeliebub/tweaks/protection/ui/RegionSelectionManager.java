@@ -14,6 +14,7 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
 
 // Owns the per-player RegionSelection map and the particle-outline ticker.
 //
@@ -92,11 +93,16 @@ public final class RegionSelectionManager implements Listener {
 
     private void renderAllOutlines() {
         for (var entry : selections.entrySet()) {
-            Player player = plugin.getServer().getPlayer(entry.getKey());
-            if (player == null || !player.isOnline()) continue;
-            RegionSelection sel = entry.getValue();
-            if (player.getWorld() != sel.world()) continue;
-            renderOutline(player, sel);
+            try {
+                Player player = plugin.getServer().getPlayer(entry.getKey());
+                if (player == null || !player.isOnline()) continue;
+                RegionSelection sel = entry.getValue();
+                if (player.getWorld() != sel.world()) continue;
+                renderOutline(player, sel);
+            } catch (RuntimeException error) {
+                plugin.getLogger().log(Level.WARNING,
+                        "Region selection outline failed for " + entry.getKey(), error);
+            }
         }
     }
 

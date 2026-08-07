@@ -74,4 +74,23 @@ class DisplayChestListenerTest {
         assertEquals(0, world.getEntitiesByClass(org.bukkit.entity.ItemDisplay.class).size());
         MessageAssert.assertMessageSent(player, "Display chest removed!");
     }
+
+    @Test
+    void onInteract_DoesNotOverrideAnAlreadyCancelledProtectionEvent() {
+        PlayerMock player = server.addPlayer();
+        manager.toggleSetupMode(player.getUniqueId());
+
+        var world = server.addSimpleWorld("claimed");
+        var block = world.getBlockAt(0, 0, 0);
+        block.setType(Material.CHEST);
+        ((Chest) block.getState()).getInventory().addItem(new ItemStack(Material.EMERALD));
+
+        PlayerInteractEvent event = new PlayerInteractEvent(player, Action.RIGHT_CLICK_BLOCK,
+                null, block, null);
+        event.setCancelled(true);
+        listener.onPlayerInteract(event);
+
+        assertTrue(event.isCancelled());
+        assertTrue(world.getEntitiesByClass(org.bukkit.entity.ItemDisplay.class).isEmpty());
+    }
 }

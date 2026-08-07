@@ -224,14 +224,15 @@ public final class ProtectionListeners implements Listener {
         if (event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.CUSTOM) return;
         var loc = event.getLocation();
         var type = event.getEntityType();
-        if (protection.isEntityListed(loc, RegionFlag.DENY_MOB_SPAWN, type)) {
+        var applicable = protection.regionsAt(loc);
+        if (protection.isEntityListed(applicable, RegionFlag.DENY_MOB_SPAWN, type)) {
             event.setCancelled(true);
             return;
         }
-        if (protection.isEntityListed(loc, RegionFlag.ALLOW_MOB_SPAWN, type)) {
+        if (protection.isEntityListed(applicable, RegionFlag.ALLOW_MOB_SPAWN, type)) {
             return;
         }
-        if (!protection.isAllowed(loc, null, RegionFlag.MOB_SPAWNING)) {
+        if (!protection.isAllowed(applicable, loc, null, RegionFlag.MOB_SPAWNING)) {
             event.setCancelled(true);
         }
     }

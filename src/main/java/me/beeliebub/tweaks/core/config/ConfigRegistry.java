@@ -126,7 +126,9 @@ public final class ConfigRegistry {
                     // min/max here bound the valid MAP KEY (streak day 1-7, EconomyListener.MAX_STREAK),
                     // not a value - see ConfigValueEditor#mapPut's key-range check.
                     ConfigSetting.bounded("economy.streak-multipliers", "economy.streak-multipliers",
-                            "Streak Multipliers", EditorType.NUMBER_MAP, 1.0, 7.0)
+                            "Streak Multipliers", EditorType.NUMBER_MAP, 1.0, 7.0),
+                    ConfigSetting.bounded("lottery.reseed-amount", "lottery.reseed-amount",
+                            "Lottery Reseed Amount", EditorType.INT, 1, Integer.MAX_VALUE)
             )),
             new ConfigCategory("blocklog", "Block Log", List.of(
                     ConfigSetting.bounded("blocklog.retention-days", "blocklog.retention-days",

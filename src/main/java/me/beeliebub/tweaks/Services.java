@@ -11,6 +11,7 @@ import me.beeliebub.tweaks.minigames.blackjack.BlackjackListener;
 import me.beeliebub.tweaks.minigames.roulette.RouletteListener;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
+import me.beeliebub.tweaks.lottery.LotteryManager;
 import me.beeliebub.tweaks.permissions.PermissionManager;
 import me.beeliebub.tweaks.playeradmin.PlayerAdminManager;
 import me.beeliebub.tweaks.profiles.StorageManager;
@@ -71,6 +72,7 @@ public final class Services {
     Replant replant;
     BlackjackListener blackjackListener;
     RouletteListener rouletteListener;
+    LotteryManager lotteryManager;
 
     public void setStorageManager(StorageManager storageManager) {
         if (this.storageManager != null) throw new IllegalStateException("storageManager already published");
@@ -279,5 +281,15 @@ public final class Services {
     public RouletteListener rouletteListener() {
         if (rouletteListener == null) throw new IllegalStateException("rouletteListener not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
         return rouletteListener;
+    }
+
+    public void setLotteryManager(LotteryManager lotteryManager) {
+        if (this.lotteryManager != null) throw new IllegalStateException("lotteryManager already published");
+        this.lotteryManager = lotteryManager;
+    }
+
+    public LotteryManager lotteryManager() {
+        if (lotteryManager == null) throw new IllegalStateException("lotteryManager not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
+        return lotteryManager;
     }
 }

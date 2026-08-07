@@ -137,6 +137,8 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
 
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
+        if (event.isCancelled()) return;
+
         Player player = event.getPlayer();
         boolean isSetup = isSetupMode(player.getUniqueId());
         boolean isRemoval = isRemovalMode(player.getUniqueId());

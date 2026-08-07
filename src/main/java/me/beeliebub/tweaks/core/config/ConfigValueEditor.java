@@ -171,9 +171,15 @@ public final class ConfigValueEditor {
             String normalizedAction = action == null ? "" : action.toLowerCase(Locale.ROOT);
             if (normalizedAction.equals("add")) {
                 resourceHuntItems.addAllowedItem(mat);
+                if (resourceHuntItems.lastSaveFailed()) {
+                    return new EditResult.Invalid(Messages.COMMANDS.configResourceItemsSaveFailed());
+                }
                 return new EditResult.Ok(Messages.COMMANDS.configResourceItemAdded(mat.name().toLowerCase(Locale.ROOT)));
             } else if (normalizedAction.equals("remove")) {
                 resourceHuntItems.removeAllowedItem(mat);
+                if (resourceHuntItems.lastSaveFailed()) {
+                    return new EditResult.Invalid(Messages.COMMANDS.configResourceItemsSaveFailed());
+                }
                 return new EditResult.Ok(Messages.COMMANDS.configResourceItemRemoved(mat.name().toLowerCase(Locale.ROOT)));
             }
             return new EditResult.Invalid(Messages.COMMANDS.configResourceItemActionInvalid());
