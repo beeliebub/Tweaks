@@ -54,7 +54,8 @@ class ConfigValueEditorWorldProfileTest {
 
     @Test
     void addRejectsNewKeyThatIsSubstringOfExisting() {
-        // "jass:arch" is a substring of the bundled "jass:archive" entry.
+        // "jass:arch" is a substring of the bundled "jass:archive" entry, but is not a recognized
+        // dimension-suffix variant of it - stays rejected as a likely typo/ambiguity risk.
         EditResult result = editor.worldProfileAdd("jass:arch", "other", "Other", "RED");
 
         assertInstanceOf(EditResult.Invalid.class, result);
@@ -70,11 +71,44 @@ class ConfigValueEditorWorldProfileTest {
 
     @Test
     void addRejectsExistingKeyThatIsSubstringOfNewKey() {
-        // "jass:archive" (existing) is a substring of this new key.
+        // "jass:archive" (existing) is a substring of this new key, but "jass:archiveland" is not
+        // one of Bukkit's recognized per-dimension suffixes of it - stays rejected.
         EditResult result = editor.worldProfileAdd("jass:archiveland", "other", "Other", "RED");
 
         assertInstanceOf(EditResult.Invalid.class, result);
         assertTrue(table.entry("jass:archiveland").isEmpty());
+    }
+
+    @Test
+    void addAllowsNetherDimensionVariantOfExistingKey() {
+        // "jass:archive_nether" is exactly "jass:archive" (existing) with Bukkit's standard nether
+        // dimension suffix appended - the pattern the bundled jass:resource/jass:resource_nether
+        // pair itself uses, and must not be rejected as a collision.
+        EditResult result = editor.worldProfileAdd("jass:archive_nether", "other", "Other", "RED");
+
+        assertInstanceOf(EditResult.Ok.class, result);
+        assertTrue(table.entry("jass:archive_nether").isPresent());
+    }
+
+    @Test
+    void addAllowsTheEndDimensionVariantOfExistingKey() {
+        EditResult result = editor.worldProfileAdd("jass:archive_the_end", "other", "Other", "RED");
+
+        assertInstanceOf(EditResult.Ok.class, result);
+        assertTrue(table.entry("jass:archive_the_end").isPresent());
+    }
+
+    @Test
+    void addAllowsBaseKeyWhenDimensionVariantAlreadyExists() {
+        // The exemption is symmetric: registering a variant first, then its base key, must also
+        // not be rejected.
+        assertInstanceOf(EditResult.Ok.class,
+                editor.worldProfileAdd("jass:outpost_nether", "other", "Nether", "RED"));
+
+        EditResult result = editor.worldProfileAdd("jass:outpost", "other", "Outpost", "GREEN");
+
+        assertInstanceOf(EditResult.Ok.class, result);
+        assertTrue(table.entry("jass:outpost").isPresent());
     }
 
     @Test

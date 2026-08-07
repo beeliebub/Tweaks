@@ -384,7 +384,7 @@ public final class ConfigValueEditor {
                 return new EditResult.Invalid(Messages.CONFIG.worldProfileDuplicateKey(key));
             }
             for (String existing : worldProfileTable.worldKeysOrdered()) {
-                if (key.contains(existing) || existing.contains(key)) {
+                if (!isDimensionVariant(key, existing) && (key.contains(existing) || existing.contains(key))) {
                     return new EditResult.Invalid(Messages.CONFIG.worldProfileCollidesWith(key, existing));
                 }
             }
@@ -401,6 +401,26 @@ public final class ConfigValueEditor {
             worldProfileTable.putEntry(key, profile, label, color);
             return new EditResult.Ok(Messages.CONFIG.worldProfileAdded(key, profile, label, colorName));
         });
+    }
+
+    private static final List<String> DIMENSION_SUFFIXES = List.of("_nether", "_the_end");
+
+    /**
+     * True when {@code a} and {@code b} are the same base world key with one of Bukkit's standard
+     * per-dimension suffixes appended to the other (e.g. {@code jass:resource} /
+     * {@code jass:resource_nether}) - the one substring relationship between two world keys that is
+     * expected and intentional rather than a likely admin typo, since Bukkit derives a world's
+     * nether/end dimension folder by appending exactly one of these two suffixes to its base name.
+     * Any other substring relationship stays rejected by the collision check above: an unrelated
+     * prefix/superstring pair (e.g. {@code jass:res} alongside {@code jass:resource}) would leave a
+     * currently-unregistered third world's key resolution silently dependent on list declaration
+     * order in {@link WorldProfileTable#profileFor}'s substring-fallback tier.
+     */
+    private static boolean isDimensionVariant(String a, String b) {
+        for (String suffix : DIMENSION_SUFFIXES) {
+            if (a.equals(b + suffix) || b.equals(a + suffix)) return true;
+        }
+        return false;
     }
 
     public EditResult worldProfileRemove(String worldKey) {
