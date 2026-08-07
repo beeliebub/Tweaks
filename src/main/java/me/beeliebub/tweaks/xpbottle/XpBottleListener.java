@@ -61,17 +61,28 @@ import java.util.logging.Level;
 // brew with no fresh placement has no brewer and is rejected.
 public class XpBottleListener implements Listener {
 
-    public static final int ORBS_PER_EMERALD = 1395;
-    public static final int ORBS_PER_EMERALD_BLOCK = ORBS_PER_EMERALD * 9;
-
     private final JavaPlugin plugin;
     private final XpBottle xpBottle;
     private final NamespacedKey brewerKey;
     private final NamespacedKey emeraldRecipeKey;
     private final NamespacedKey emeraldBlockRecipeKey;
+    // Read once at construction, not live: this value is baked into a registered PotionMix
+    // recipe at boot (see registerRecipes below), so changing it at runtime would desync the
+    // recipe's ratio from the charged cost. /tconfig writes config.yml and replies "applies on
+    // restart" — see xpbottle/CLAUDE.md and this plugin's ConfigRegistry entry.
+    private final int orbsPerEmerald;
+    private final int orbsPerEmeraldBlock;
 
     public XpBottleListener(JavaPlugin plugin) {
         this.plugin = plugin;
+        int configuredOrbs = plugin.getConfig().getInt("xpbottle.orbs-per-emerald", 1395);
+        if (configuredOrbs < 1) {
+            plugin.getLogger().warning("xpbottle.orbs-per-emerald configured as " + configuredOrbs
+                    + "; clamped to 1. This setting is baked into a boot-time brewing recipe, so"
+                    + " fixing it requires correcting config.yml and restarting the server.");
+        }
+        this.orbsPerEmerald = Math.max(1, configuredOrbs);
+        this.orbsPerEmeraldBlock = orbsPerEmerald * 9;
         this.xpBottle = new XpBottle(new NamespacedKey(plugin, "xp_bottle_orbs"));
         this.brewerKey = new NamespacedKey(plugin, "xp_bottle_brewer");
         this.emeraldRecipeKey = new NamespacedKey(plugin, "xp_bottle_emerald");
@@ -81,6 +92,14 @@ public class XpBottleListener implements Listener {
 
     public XpBottle xpBottle() {
         return xpBottle;
+    }
+
+    public int orbsPerEmerald() {
+        return orbsPerEmerald;
+    }
+
+    public int orbsPerEmeraldBlock() {
+        return orbsPerEmeraldBlock;
     }
 
     private ItemStack stackableTemplate(int orbs) {
@@ -96,13 +115,13 @@ public class XpBottleListener implements Listener {
         try {
             PotionMix emerald = new PotionMix(
                     emeraldRecipeKey,
-                    stackableTemplate(ORBS_PER_EMERALD),
+                    stackableTemplate(orbsPerEmerald),
                     new RecipeChoice.MaterialChoice(Material.GLASS_BOTTLE),
                     new RecipeChoice.MaterialChoice(Material.EMERALD)
             );
             PotionMix emeraldBlock = new PotionMix(
                     emeraldBlockRecipeKey,
-                    stackableTemplate(ORBS_PER_EMERALD_BLOCK),
+                    stackableTemplate(orbsPerEmeraldBlock),
                     new RecipeChoice.MaterialChoice(Material.GLASS_BOTTLE),
                     new RecipeChoice.MaterialChoice(Material.EMERALD_BLOCK)
             );
@@ -174,9 +193,9 @@ public class XpBottleListener implements Listener {
         if (ingredient == null || ingredient.isEmpty()) return;
         int costPerBottle;
         if (ingredient.getType() == Material.EMERALD) {
-            costPerBottle = ORBS_PER_EMERALD;
+            costPerBottle = orbsPerEmerald;
         } else if (ingredient.getType() == Material.EMERALD_BLOCK) {
-            costPerBottle = ORBS_PER_EMERALD_BLOCK;
+            costPerBottle = orbsPerEmeraldBlock;
         } else {
             return;
         }

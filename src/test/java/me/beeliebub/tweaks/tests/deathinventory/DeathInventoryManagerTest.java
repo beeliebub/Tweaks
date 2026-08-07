@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.tests.deathinventory;
 
 import me.beeliebub.tweaks.deathinventory.DeathInventoryManager;
 import org.bukkit.Material;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,6 +59,9 @@ class DeathInventoryManagerTest {
         org.bukkit.plugin.java.JavaPlugin mockPlugin =
                 Mockito.mock(org.bukkit.plugin.java.JavaPlugin.class);
         Mockito.when(mockPlugin.getDataFolder()).thenReturn(tempDataFolder.toFile());
+        // retention-days defaults to 30 via getInt's fallback since this bare YamlConfiguration
+        // carries no bundled config.yml defaults chain.
+        Mockito.when(mockPlugin.getConfig()).thenReturn(new YamlConfiguration());
 
         Logger logger = Logger.getLogger("DeathInventoryManagerTest-" + System.nanoTime());
         logger.setUseParentHandlers(false);

@@ -989,10 +989,11 @@ public final class RegionGUI {
     //
     // Re-checks RegionAuth.isOwnerOrAdmin here too, even though openUnclaimConfirmation already
     // checked it before showing this button's dialog: defense-in-depth against a stale dialog
-    // reference, matching the pattern applied to the manager-menu methods after a security review
-    // found a real gap there. Not yet exploitable (region ownership is currently immutable after
-    // claim — there's no transfer-ownership feature), but cheap insurance against one being added
-    // later without every unclaim entry point being re-audited.
+    // reference, matching the pattern applied to the manager-menu methods, which also re-check
+    // authorization independently rather than relying solely on the hub button's gate. Not yet
+    // exploitable (region ownership is currently immutable after claim — there's no
+    // transfer-ownership feature), but cheap insurance against one being added later without every
+    // unclaim entry point being re-audited.
     private static void handleUnclaim(Player player, Region region, ProtectionManager pm) {
         if (!RegionAuth.isOwnerOrAdmin(player, region)) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_UNCLAIM_AUTH));

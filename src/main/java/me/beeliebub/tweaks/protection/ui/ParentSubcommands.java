@@ -22,7 +22,7 @@ import java.util.List;
  * unparent ANY region on the server, not just their own — for {@code unsetparent} this had zero
  * geometric constraint either, and for legacy (bounds-null) regions {@code setparent} had none
  * either, since the containment/sibling-overlap checks in {@code ProtectionManager.setParent} only
- * run when both regions carry bounds. Found in a security review before public release.
+ * run when both regions carry bounds.
  */
 final class ParentSubcommands {
 

@@ -34,7 +34,6 @@ import java.util.regex.Pattern;
 // Additionally, a copy-pasteable Java code snippet is generated for use in Paper plugins.
 public class GuiCopyCommand implements CommandExecutor, TabCompleter {
 
-    private static final int MAX_DISTANCE = 8;
     // Restrictive on purpose so we never write outside guicopies/ via the user-supplied name.
     private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9_.-]+");
 
@@ -49,6 +48,14 @@ public class GuiCopyCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    // Package-private so a config knob test can exercise the clamp/live-read behavior directly
+    // without widening visibility to public. The raycast this feeds accepts 1..64 (negative
+    // throws, an unbounded value is a needless per-call cost).
+    int maxDistance() {
+        int configured = plugin.getConfig().getInt("itemadmin.gui-copy.max-distance", 8);
+        return Math.max(1, Math.min(64, configured));
+    }
+
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
@@ -61,9 +68,10 @@ public class GuiCopyCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        Block target = player.getTargetBlockExact(MAX_DISTANCE);
+        int maxDistance = maxDistance();
+        Block target = player.getTargetBlockExact(maxDistance);
         if (target == null || !(target.getState() instanceof Chest chest)) {
-            player.sendMessage(Messages.COMMANDS.guiCopyRequiresChestTarget(MAX_DISTANCE));
+            player.sendMessage(Messages.COMMANDS.guiCopyRequiresChestTarget(maxDistance));
             return true;
         }
 

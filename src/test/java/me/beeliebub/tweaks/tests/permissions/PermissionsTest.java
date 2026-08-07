@@ -102,6 +102,21 @@ class PermissionsTest {
     }
 
     /**
+     * getCategories() must iterate in the declared order, since that order IS the order buttons
+     * appear in the permission GUI's category picker. Regression coverage for
+     * CATEGORY_DISPLAY_NAMES having been built from a {@code Map.of(...)} copy, whose iteration
+     * order is unspecified and randomized per JVM run — the GUI's category buttons silently
+     * reshuffled across server restarts.
+     */
+    @Test
+    void getCategoriesIteratesInDeclaredButtonOrder() {
+        assertEquals(
+                List.of("tools", "teleport", "minigames", "protection", "ranks", "bypass"),
+                List.copyOf(Permissions.getCategories().keySet()),
+                "getCategories() must iterate in declared button order");
+    }
+
+    /**
      * Every permission from getAllPermissions() must return a non-null category via
      * getCategory(), and that category key must exist in getCategories().
      */

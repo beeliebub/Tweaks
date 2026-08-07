@@ -28,18 +28,6 @@ import java.util.UUID;
  */
 public final class BlackjackSessionManager {
 
-    /**
-     * Auto-clear delay after a game finishes, in ticks (600 = 30 seconds).
-     * Players can bypass it by pressing the MIDDLE button immediately.
-     */
-    private static final long AUTO_CLEAR_TICKS = 600L;
-
-    /**
-     * How long a mid-hand game may be idle before the sweeper forcibly ends it.
-     * 10 minutes expressed in milliseconds.
-     */
-    public static final long INACTIVITY_TIMEOUT_MS = 10L * 60L * 1000L;
-
     /** How often the inactivity sweeper runs, in ticks (1200 = 60 seconds). */
     private static final long SWEEP_PERIOD_TICKS = 1200L;
 
@@ -243,7 +231,7 @@ public final class BlackjackSessionManager {
 
     /**
      * Settle the game, credit the payout/rakeback, display the outcome message, and schedule
-     * an auto-clear of card displays after {@link #AUTO_CLEAR_TICKS} ticks.
+     * an auto-clear of card displays after {@link #autoClearTicks()} ticks.
      * The player can cancel the timer early by pressing the MIDDLE button.
      */
     private void finish(Player player, Session session) {
@@ -294,8 +282,16 @@ public final class BlackjackSessionManager {
             if (current == session && session.waitingToClear) {
                 endSession(playerId);
             }
-        }, AUTO_CLEAR_TICKS).getTaskId();
+        }, autoClearTicks()).getTaskId();
         session.autoClearTaskId = taskId;
+    }
+
+    // Live read (no constructor-time caching) so a /tconfig edit to
+    // minigames.blackjack.auto-clear-seconds takes effect on the next hand that settles.
+    private long autoClearTicks() {
+        int seconds = plugin.getConfig().getInt("minigames.blackjack.auto-clear-seconds", 30);
+        if (seconds < 1) seconds = 30;
+        return seconds * 20L;
     }
 
     /** Pure result of settling a hand: amounts to credit and the player-facing summary. */
@@ -360,7 +356,7 @@ public final class BlackjackSessionManager {
 
     /**
      * Forcibly end every mid-hand session that has been idle for longer than
-     * {@link #INACTIVITY_TIMEOUT_MS}. The player loses their already-deducted bet
+     * {@link #inactivityTimeoutMillis()}. The player loses their already-deducted bet
      * — no payout is credited.
      *
      * <p>Only in-progress (not yet finished / not {@code waitingToClear}) sessions are
@@ -373,6 +369,7 @@ public final class BlackjackSessionManager {
      * @param now the current time in milliseconds (injected so tests can use a synthetic clock)
      */
     public void sweepInactiveSessions(long now) {
+        long timeoutMillis = inactivityTimeoutMillis();
         for (UUID playerId : new ArrayList<>(sessions.keySet())) {
             Session session = sessions.get(playerId);
             if (session == null) {
@@ -382,7 +379,7 @@ public final class BlackjackSessionManager {
             if (session.game.isFinished() || session.waitingToClear) {
                 continue;
             }
-            if (now - session.game.lastInteractionTime() > INACTIVITY_TIMEOUT_MS) {
+            if (now - session.game.lastInteractionTime() > timeoutMillis) {
                 int bet = session.game.bet();
                 endSession(playerId);
                 if (bet > 0) {
@@ -396,6 +393,23 @@ public final class BlackjackSessionManager {
                 }
             }
         }
+    }
+
+    /**
+     * Live read (no constructor-time caching) so a /tconfig edit to
+     * minigames.blackjack.inactivity-timeout-minutes takes effect on the next sweep. Floored at
+     * 1 minute — core/config/ConfigRegistry already enforces this at the /tconfig edit boundary,
+     * but a hand-edited config.yml value could still bypass it. Public (like the field it replaces)
+     * so {@code tests.minigames.blackjack.BlackjackInactivityTimeoutTest} can snapshot the same
+     * value the sweeper uses instead of duplicating the read.
+     *
+     * <p>Lowering this while sessions are in progress evicts any session already idle past the
+     * new threshold on the very next sweep, forfeiting that player's already-deducted bet.
+     */
+    public long inactivityTimeoutMillis() {
+        int minutes = plugin.getConfig().getInt("minigames.blackjack.inactivity-timeout-minutes", 10);
+        if (minutes < 1) minutes = 10;
+        return minutes * 60L * 1000L;
     }
 
     /** Called from {@link BlackjackListener#shutdown()} to guarantee no session outlives a stop. */

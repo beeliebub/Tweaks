@@ -88,11 +88,11 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
 
 ## World Profiles
 
-The server is divided into four **profiles**. Each profile has its own separate inventory, ender chest, and experience (levels + progress bar). When you travel between worlds that belong to different profiles, your items, ender chest contents, and XP are automatically saved and swapped. You'll see a yellow message confirming the switch:
+The server is divided into **profiles**. Each profile has its own separate inventory, ender chest, and experience (levels + progress bar). When you travel between worlds that belong to different profiles, your items, ender chest contents, and XP are automatically saved and swapped. You'll see a yellow message confirming the switch:
 
 > *Inventory profile switched to: standard*
 
-The four profiles are:
+By default, the four profiles are:
 
 | Profile | Worlds |
 |---|---|
@@ -100,6 +100,8 @@ The four profiles are:
 | **Standard** | The overworld, nether, and end (survival worlds) |
 | **Archive** | The archive world |
 | **Pi** | The pi world |
+
+Admins can add, remove, or modify world-key mappings at runtime — including registering entirely new profiles — via `/tconfig world-profiles <list\|add\|remove\|edit>` or the `/tconfig gui`'s "World Profiles" screen; see [Commands Reference](#commands-reference). A world key's *profile* can only be set when it's first added (renaming an existing entry's profile would orphan that world's already-stored inventory/ender-chest/XP data, so it's config-file-only after creation) — only its tab-list tag and color remain editable afterward.
 
 **What this means for you as a player:**
 
@@ -229,7 +231,7 @@ Breaks a **3x3 area** of blocks perpendicular to the face you mine. Mine the sid
 
 ### Lumberjack
 
-Chops down **entire trees** and **large mushrooms** at once. When you break a log or mushroom block, the enchantment finds all connected blocks (up to 256) and breaks them all in one swing.
+Chops down **entire trees** and **large mushrooms** at once. When you break a log or mushroom block, the enchantment finds all connected blocks (up to a configurable cap, default **256**, admin-configurable via `/tconfig enchantments`) and breaks them all in one swing.
 
 - **Trees**: only activates on actual trees — there must be at least one leaf block adjacent to the connected logs. This prevents it from tearing apart log-built structures. Supports Nether trees (Wart blocks/Shroomlight as leaves).
 - **Large mushrooms**: works on red and brown giant mushrooms. The connected set must include both stem and cap blocks, so isolated placed mushroom blocks are left alone.
@@ -263,15 +265,15 @@ The area scales up to **11x11** with quality variants — see [Tunneller & Effic
 
 ### Spawner Pickup
 
-Gives a **20% chance** to drop the spawner block when you mine a mob spawner. However, this comes with a cost: the tool tracks how many spawners it has successfully dropped. After **5 successful spawner pickups**, the tool breaks completely (regardless of remaining durability). The number of uses remaining is shown in the item's lore.
+Gives a configurable chance (default: **20%**, admin-configurable via `/tconfig enchantments`) to drop the spawner block when you mine a mob spawner. However, this comes with a cost: the tool tracks how many spawners it has successfully dropped. After a configurable number of successful pickups (default: **5**, also admin-configurable), the tool breaks completely (regardless of remaining durability). The number of uses remaining is shown in the item's lore.
 
 ### Egg Collector
 
-Gives a configurable chance (default: **0.5%**) to drop a **spawn egg** when you kill a mob. Like Spawner Pickup, the tool tracks successful egg drops and **breaks after 5**. Remaining uses are shown in the item's lore.
+Gives a configurable chance (default: **0.5%**) to drop a **spawn egg** when you kill a mob. Like Spawner Pickup, the tool tracks successful egg drops and breaks after a configurable number of uses (default: **5**, admin-configurable via `/tconfig enchantments`). Remaining uses are shown in the item's lore.
 
 If your tool also carries a **quality Looting** enchantment, the egg drop chance benefits from the same **re-roll capabilities** as standard mob loot. A Legendary Looting tool, for example, will re-roll the egg drop chance 5 additional times if the initial roll fails.
 
-Admins can blacklist specific mobs from ever rolling an egg via `/tconfig eggdrop disable <mob>`. Disabled mobs never drop an egg and never consume one of the tool's 5 uses. Use `/tconfig eggdrop enable <mob>` to lift the block. See [Spawn Egg Restrictions](#spawn-egg-restrictions) for the matching spawner-side block.
+Admins can blacklist specific mobs from ever rolling an egg via `/tconfig eggdrop disable <mob>`. Disabled mobs never drop an egg and never consume one of the tool's uses. Use `/tconfig eggdrop enable <mob>` to lift the block. See [Spawn Egg Restrictions](#spawn-egg-restrictions) for the matching spawner-side block.
 
 ### Enchantment Interactions
 
@@ -309,9 +311,9 @@ There are four quality tiers above common. Their effects depend on which enchant
 
 ### Rolling at the Enchanting Table
 
-Whenever you enchant an item at an enchanting table, each rolled enchantment that has a quality variant has a **10% chance** to be upgraded to a quality tier. If the upgrade triggers, the tier is rolled with the weights above (so legendary is genuinely rare — 1% of the 10% quality roll, or roughly 1 in 1,000 per applicable enchantment). The visual name and color of the resulting enchantment is determined by the data pack.
+Whenever you enchant an item at an enchanting table, each rolled enchantment that has a quality variant has a configurable chance (default **10%**, admin-configurable via `/tconfig enchantments`) to be upgraded to a quality tier. If the upgrade triggers, the tier is rolled with the weights above (so legendary is genuinely rare — 1% of the default 10% quality roll, or roughly 1 in 1,000 per applicable enchantment at default settings). The visual name and color of the resulting enchantment is determined by the data pack.
 
-This chance is **boosted to 50%** during a [Blood Moon](#blood-moon) event.
+This chance is boosted (default **50%**, also admin-configurable) during a [Blood Moon](#blood-moon) event.
 
 ### Fortune & Looting Re-Rolls
 
@@ -453,7 +455,7 @@ A tool is "protected" only when **all** of these are true:
 
 - It is a **diamond or netherite** sword, pickaxe, axe, shovel, or hoe.
 - It carries at least one **Epic** or **Legendary** quality enchantment (see [Enchantment Quality](#enchantment-quality)).
-- Its **remaining durability** is below your configured threshold (default: **100**).
+- Its **remaining durability** is below your configured threshold (default: **100**, admin-configurable via `/tconfig itemadmin`).
 
 While a tool is protected, the plugin cancels any action that would damage it — breaking blocks, attacking entities, and right-click actions like tilling, pathing, or stripping. You'll see a red action-bar warning showing the remaining durability and your current threshold:
 
@@ -559,12 +561,12 @@ When two of the player's groups share an ancestor in the inheritance graph, that
 ### XP Storage Bottles
 Store your experience levels for later use or trade by brewing **Experience Potions** in a brewing stand.
 
-**Brewing Recipes**:
+**Brewing Recipes** (the emerald value is admin-configurable via `/tconfig xpbottle`, default `1,395`; the emerald block value is always exactly 9x the emerald value; **changing this setting requires a server restart** since it's baked into the recipe at boot):
 
 | Ingredient | Bottle Type | Result | Stored XP |
 |---|---|---|---|
-| Emerald | Glass Bottle | Experience Potion | 1,395 orbs |
-| Emerald Block | Glass Bottle | Experience Potion | 12,555 orbs |
+| Emerald | Glass Bottle | Experience Potion | 1,395 orbs (default) |
+| Emerald Block | Glass Bottle | Experience Potion | 12,555 orbs (default) |
 
 **How it works**:
 
@@ -718,9 +720,9 @@ A lightweight chest-audit system: every time a player adds or removes items from
 
 **What you'll see**: each log entry shows the timestamp (server time), the player's name, an `+amount` (added) or `-amount` (removed) tag, and the item involved. Hover any item name for the full vanilla tooltip (enchants, lore, durability, custom data). Hover a player name to see their UUID. Logs are paginated 10 entries at a time with clickable `[<- Prev]` / `[Next ->]` buttons.
 
-**Storage**: logs are stored entirely in the chunk's persistent data container (PDC) — no extra files, no databases. Each chest's history is one compact byte array under that chunk's data, capped at **500 entries** per chest (the oldest are dropped first when the cap is hit).
+**Storage**: logs are stored entirely in the chunk's persistent data container (PDC) — no extra files, no databases. Each chest's history is one compact byte array under that chunk's data, capped at a configurable number of entries per chest (default **500**, admin-configurable via `/tconfig blocklog`; the oldest are dropped first when the cap is hit).
 
-**Retention**: when a chunk is loaded, any log entry older than **30 days** is pruned automatically. Empty chests (no entries left after pruning) drop their PDC key entirely so the chunk's data stays small.
+**Retention**: when a chunk is loaded, any log entry older than a configurable number of days (default **30**, admin-configurable via `/tconfig blocklog`) is pruned automatically. Empty chests (no entries left after pruning) drop their PDC key entirely so the chunk's data stays small.
 
 **Coverage limits**:
 - Hoppers, droppers, and other automation are **not** logged — only direct player interaction counts.
@@ -741,7 +743,7 @@ Alias: `/di`.
 
 **Restore behaviour**: slots are set one-by-one; the target's current inventory is overwritten slot-for-slot. Both admin and target player must be online to perform a restore. The target receives an in-chat notification.
 
-**Retention**: records older than **30 days** are deleted on plugin startup. Empty player directories are also pruned to keep the data folder tidy.
+**Retention**: records older than a configurable number of days (default **30**, admin-configurable via `/tconfig deathinventory`) are deleted on plugin startup. Empty player directories are also pruned to keep the data folder tidy.
 
 ### Display Chests
 
@@ -774,7 +776,7 @@ Edit the display name and lore of the item in your main hand. Both commands supp
 
 ### Chest GUI Copy
 
-Save the targeted chest's full contents to a YAML file under `plugins/Tweaks/guicopies/`. Look at a single or double chest within 8 blocks and run the command. The generated file includes:
+Save the targeted chest's full contents to a YAML file under `plugins/Tweaks/guicopies/`. Look at a single or double chest within a configurable distance (default **8** blocks, admin-configurable via `/tconfig itemadmin`, clamped to 1-64) and run the command. The generated file includes:
 - **Human Readable Data**: Each item's properties (material, name, lore, enchants) are stored in Bukkit's standard YAML format for easy inspection or manipulation.
 - **Zero-Data-Loss Base64**: Every item is also serialized to a Base64 string via `ItemStack.serializeAsBytes`, ensuring all NBT and PDC data is preserved.
 - **Java Code Snippet**: A comprehensive, paste-ready Java block that reconstructs the entire inventory. It includes a `buildItem` helper, handles MiniMessage for readable Adventure components, supports specialized ItemMeta (Potions, Books, Banners, etc.), and preserves all PersistentDataContainer (PDC) tags.
@@ -808,7 +810,7 @@ A rare server-wide event that turns the night crimson and supercharges enchantin
 
 **How it triggers**: At the start of every full-moon night in the overworld, the plugin rolls a **50% chance** to begin a Blood Moon. When it activates, the entire server sees a dark-red title, a chat broadcast, and an ominous wither sound. A **red boss bar** also appears at the top of the screen, counting down until the event ends at dawn.
 
-**What it does**: While a Blood Moon is active, the chance for an enchantment rolled at the enchanting table to become a [quality variant](#enchantment-quality) is boosted from **10% to 50%** per applicable enchantment. Tier weights (uncommon/rare/epic/legendary) still apply on top of that.
+**What it does**: While a Blood Moon is active, the chance for an enchantment rolled at the enchanting table to become a [quality variant](#enchantment-quality) is boosted (default 10% to 50%, both admin-configurable via `/tconfig enchantments`) per applicable enchantment. Tier weights (uncommon/rare/epic/legendary) still apply on top of that.
 
 **How it ends**: The Blood Moon fades automatically at the next dawn. **Sleeping is blocked** once the night's fate is rolled (at dusk), preventing players from skipping the event before it officially begins.
 
@@ -1144,11 +1146,19 @@ When an action occurs, the system checks rules in this order:
 | `/roulette createboard <min> <max>` | `tweaks.roulette.createboard` | Begin Roulette board setup; right-click a button/lever to finalize. |
 | `/roulette removeboard` | `tweaks.roulette.removeboard` | Begin Roulette board removal; right-click the board's spin control. |
 | `/house <balance\|add\|remove\|set\|pay>` | `tweaks.admin.house` | View or administer the server-wide casino house account. |
+| `/tconfig` / `/tconfig gui` | `tweaks.admin.config` | Open the admin config Dialog GUI (players only; console gets plain usage). |
+| `/tconfig list [category]` | `tweaks.admin.config` | Print every registered setting and its current value. |
 | `/tconfig max_homes <int>` | `tweaks.admin.config` | Set global max homes per player. |
 | `/tconfig max_chunks <int>` | `tweaks.admin.config` | Set global max chunk claims per player. |
+| `/tconfig egg_collector_drop_chance <0.0-100.0>` | `tweaks.admin.config` | Set the base Egg Collector drop chance. |
 | `/tconfig eggdrop <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable Egg Collector drops for a mob. |
 | `/tconfig spawneregg <disable\|enable> <mob>` | `tweaks.admin.config` | Disable/enable spawn egg usage on spawners. |
 | `/tconfig resourceitems <add\|remove> <item>` | `tweaks.admin.config` | Manage resource world item whitelist. |
+| `/tconfig world-profiles list` | `tweaks.admin.config` | List every world-key -> profile/tag/color mapping. |
+| `/tconfig world-profiles add <world-key> <profile> <label> <color>` | `tweaks.admin.config` | Register a new world-key mapping (profile is only settable here — see [World Profiles](#world-profiles)). |
+| `/tconfig world-profiles remove <world-key>` | `tweaks.admin.config` | Remove a world-key mapping (that world falls back to the default profile/tag). |
+| `/tconfig world-profiles edit <world-key> <label> <color>` | `tweaks.admin.config` | Change an existing mapping's tab-list tag/color (its profile cannot be changed). |
+| `/tconfig <path> <value>` | `tweaks.admin.config` | Generic setter for any other registered setting by its config.yml path, e.g. `protection.selection-tool <material>`, `fly-advancement <namespaced-key>`, `fly-worlds <add\|remove> <world>`, `disabled-end-portal-worlds <add\|remove> <world>`, `economy.daily-reward-base <amount>`, `economy.streak-multipliers <day 1-7> <multiplier>`, `blocklog.retention-days <days>`, `blocklog.max-entries-per-chest <n>`, `deathinventory.retention-days <days>`, `enchantments.spawner-pickup.drop-chance-percent <0.0-100.0>`, `enchantments.spawner-pickup.uses <n>`, `enchantments.egg-collector.uses <n>`, `enchantments.quality.chance-percent <0.0-100.0>`, `enchantments.quality.blood-moon-chance-percent <0.0-100.0>`, `enchantments.lumberjack.max-logs <n>`, `itemadmin.tool-protect.default-threshold <n>`, `itemadmin.tool-protect.warn-cooldown-ms <ms>`, `itemadmin.gui-copy.max-distance <1-64>`, `xpbottle.orbs-per-emerald <n>` (restart required). |
 | `/more` | `tweaks.admin.more` | Maximize the stack size of the held item. |
 | `/invsee <player>` | `tweaks.admin.invsee` | View and modify an online player's inventory. |
 | `/bloodmoon` | `tweaks.admin.bloodmoon` | Force-activate the Blood Moon event. |
@@ -1224,6 +1234,72 @@ When an action occurs, the system checks rules in this order:
 ## Configuration
 
 The plugin generates a `config.yml` on first startup. Custom enchantments require a server-side data pack to register the entries.
+
+On every startup, any key present in the bundled default `config.yml` but missing from your live file is automatically added back with its default value (an admin-modified value is never overwritten, and an explicit empty list you've saved stays empty — only a genuinely absent key is filled in).
+
+A growing set of settings — spanning General, Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, and Xp Bottle — is also editable at runtime without touching `config.yml` by hand, via `/tconfig`. Six have dedicated CLI forms (see the [Commands Reference](#commands-reference) table above); the rest use the generic `/tconfig <path> <value>` grammar. Run `/tconfig gui` in-game for a Dialog-based editor with the same categories, or `/tconfig list [category]` to print every registered setting and its current value from the console or in chat.
+
+The world-key -> profile/tag/color mapping (`world-profiles`, `world-profile-fallback`, `world-profile-sort-order`) is a separate, fully admin-editable list rather than a single scalar/list setting — see [World Profiles](#world-profiles) and the `/tconfig world-profiles ...` rows in [Commands Reference](#commands-reference) for add/remove/edit.
+
+Recently added via `/tconfig` (converted from previously-hardcoded values):
+
+```yaml
+protection:
+  claim-cost:
+    base: 10.0                   # first-chunk price; not retroactive to already-claimed regions
+    decay-rate: 1.1               # per-chunk geometric taper; must be >= 1.0
+    minimum-per-chunk: 1
+playeradmin:
+  afk-auto-minutes: 10           # idle time before auto-AFK
+  max-nick-length: 24            # new /nick calls only - doesn't retroactively re-check existing nicknames
+teleport:
+  tpa-timeout-seconds: 30
+  sethome-disabled-worlds:       # /sethome refused in these worlds
+    - "jass:resource"
+    - "jass:resource_nether"
+worldmanagement:
+  blood-moon-chance-percent: 50.0
+disabled-nether-portal-worlds:   # nether portals refused in these worlds
+  - "jass:resource"
+  - "jass:resource_nether"
+minigames:
+  blackjack:
+    inactivity-timeout-minutes: 10   # mid-hand idle games are force-ended and the bet forfeited
+    auto-clear-seconds: 30
+  roulette:
+    betting-window-seconds: 30
+    big-win-multiplier: 8            # payout multiple that triggers the server-wide big-win announcement
+    scan-radius: 16                  # baked into a board at registration; doesn't affect existing boards
+  resource-hunt:
+    default-reward-multiplier: 2.0   # restart required - read once at boot
+```
+
+```yaml
+blocklog:
+  retention-days: 30              # /logs entries older than this are pruned on chunk load
+  max-entries-per-chest: 500      # oldest entries dropped once a chest's log exceeds this
+deathinventory:
+  retention-days: 30              # saved death-inventory snapshots older than this are purged
+enchantments:
+  spawner-pickup:
+    drop-chance-percent: 20.0
+    uses: 5                       # tool breaks after this many successful pickups
+  egg-collector:
+    uses: 5
+  quality:
+    chance-percent: 10.0          # per-enchant roll chance for a quality variant
+    blood-moon-chance-percent: 50.0
+  lumberjack:
+    max-logs: 256                 # flood-fill area cap per tree/mushroom chopped
+itemadmin:
+  tool-protect:
+    default-threshold: 100        # durability floor below which protected tools can't be used
+    warn-cooldown-ms: 2000
+  gui-copy:
+    max-distance: 8               # /guicopy raycast distance, clamped 1-64
+xpbottle:
+  orbs-per-emerald: 1395          # restart required - baked into a boot-time brewing recipe
+```
 
 ```yaml
 # Maximum number of homes per player.

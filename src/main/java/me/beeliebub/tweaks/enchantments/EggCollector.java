@@ -32,7 +32,6 @@ import java.util.logging.Level;
 // The tool breaks after 5 successful egg drops, with remaining uses shown in lore.
 public class EggCollector implements Listener {
 
-    private static final int BREAK_AT = 5;
     private static final String LORE_PREFIX = "Egg Collector Uses Remaining: ";
     private static final String DISABLED_MOBS_KEY = "egg-collector-disabled-mobs";
 
@@ -68,6 +67,12 @@ public class EggCollector implements Listener {
             plugin.getLogger().warning("Egg-collector enchantment '" + raw + "' not found in registry; is the data pack loaded?");
         }
         return resolved;
+    }
+
+    // Package-private (not private) so a config knob test can exercise the clamp/live-read
+    // behavior directly without widening visibility to public.
+    int breakAt() {
+        return Math.max(1, plugin.getConfig().getInt("enchantments.egg-collector.uses", 5));
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -118,12 +123,13 @@ public class EggCollector implements Listener {
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
         int count = pdc.getOrDefault(counterKey, PersistentDataType.INTEGER, 0) + 1;
 
-        if (count >= BREAK_AT) {
+        int breakAt = breakAt();
+        if (count >= breakAt) {
             killer.getInventory().setItemInMainHand(null);
             killer.getWorld().playSound(killer.getLocation(), Sound.ENTITY_ITEM_BREAK, 1.0f, 1.0f);
         } else {
             pdc.set(counterKey, PersistentDataType.INTEGER, count);
-            updateUsesLore(meta, BREAK_AT - count);
+            updateUsesLore(meta, breakAt - count);
             tool.setItemMeta(meta);
         }
     }

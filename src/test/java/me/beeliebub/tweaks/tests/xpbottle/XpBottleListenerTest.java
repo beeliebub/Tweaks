@@ -47,6 +47,32 @@ class XpBottleListenerTest {
         MockBukkit.unmock();
     }
 
+    // ─── xpbottle.orbs-per-emerald (restart-required config knob) ────────────
+
+    @Test
+    void orbsPerEmeraldReadsConfiguredValueAtConstruction() {
+        plugin.getConfig().set("xpbottle.orbs-per-emerald", 2000);
+        XpBottleListener customListener = new XpBottleListener(plugin);
+        assertEquals(2000, customListener.orbsPerEmerald());
+        assertEquals(2000 * 9, customListener.orbsPerEmeraldBlock());
+    }
+
+    @Test
+    void orbsPerEmeraldIgnoresLiveEditsAfterConstruction() {
+        // Restart-required: this value is baked into a registered PotionMix recipe at boot, so
+        // an edit after construction must not affect the already-built listener.
+        plugin.getConfig().set("xpbottle.orbs-per-emerald", 999);
+        assertEquals(1395, listener.orbsPerEmerald(),
+                "Value is read once at construction; live edits require a restart");
+    }
+
+    @Test
+    void orbsPerEmeraldClampsBelowOneToOne() {
+        plugin.getConfig().set("xpbottle.orbs-per-emerald", 0);
+        XpBottleListener customListener = new XpBottleListener(plugin);
+        assertEquals(1, customListener.orbsPerEmerald());
+    }
+
     private BrewEvent mockBrewEvent(Block block, BrewerInventory inv) {
         BrewEvent event = mock(BrewEvent.class);
         when(event.getBlock()).thenReturn(block);
@@ -125,15 +151,15 @@ class XpBottleListenerTest {
         server.getScheduler().performOneTick();
 
         // XP consumed for both bottles
-        assertEquals(5000 - (2 * XpBottleListener.ORBS_PER_EMERALD), new ExperienceManager(player).getCurrentExp());
+        assertEquals(5000 - (2 * listener.orbsPerEmerald()), new ExperienceManager(player).getCurrentExp());
 
         // Bottles created with the exact orb count
         verify(inv).setItem(eq(0), argThat(item -> item != null
                 && listener.xpBottle().isXpBottle(item)
-                && listener.xpBottle().getStoredOrbs(item) == XpBottleListener.ORBS_PER_EMERALD));
+                && listener.xpBottle().getStoredOrbs(item) == listener.orbsPerEmerald()));
         verify(inv).setItem(eq(1), argThat(item -> item != null
                 && listener.xpBottle().isXpBottle(item)
-                && listener.xpBottle().getStoredOrbs(item) == XpBottleListener.ORBS_PER_EMERALD));
+                && listener.xpBottle().getStoredOrbs(item) == listener.orbsPerEmerald()));
 
         // Full brew consumes exactly 1 emerald: 1 in slot - 1 = empty slot
         verify(inv).setIngredient(isNull());
@@ -177,8 +203,8 @@ class XpBottleListenerTest {
         server.getPluginManager().callEvent(event);
         server.getScheduler().performOneTick();
 
-        // 3 bottles brewed -> 3 * ORBS_PER_EMERALD charged
-        assertEquals(10000 - (3 * XpBottleListener.ORBS_PER_EMERALD),
+        // 3 bottles brewed -> 3 * orbsPerEmerald() charged
+        assertEquals(10000 - (3 * listener.orbsPerEmerald()),
                 new ExperienceManager(player).getCurrentExp());
 
         // Slot left with exactly 4 emeralds — one consumed, four kept.
@@ -224,12 +250,12 @@ class XpBottleListenerTest {
         server.getScheduler().performOneTick();
 
         // XP consumed for only the brewed bottle
-        assertEquals(2000 - XpBottleListener.ORBS_PER_EMERALD, new ExperienceManager(player).getCurrentExp());
+        assertEquals(2000 - listener.orbsPerEmerald(), new ExperienceManager(player).getCurrentExp());
 
         // One XP bottle (with correct orbs), one glass bottle refund
         verify(inv).setItem(eq(0), argThat(item -> item != null
                 && listener.xpBottle().isXpBottle(item)
-                && listener.xpBottle().getStoredOrbs(item) == XpBottleListener.ORBS_PER_EMERALD));
+                && listener.xpBottle().getStoredOrbs(item) == listener.orbsPerEmerald()));
         verify(inv).setItem(eq(1), argThat(item -> item != null && item.getType() == Material.GLASS_BOTTLE));
 
         // Partial brew refunds ALL emeralds (no consumption), slot cleared.
@@ -278,7 +304,7 @@ class XpBottleListenerTest {
         server.getScheduler().performOneTick();
 
         // Exactly 1 bottle brewed -> 1395 XP charged
-        assertEquals(2000 - XpBottleListener.ORBS_PER_EMERALD,
+        assertEquals(2000 - listener.orbsPerEmerald(),
                 new ExperienceManager(player).getCurrentExp());
 
         // One XP bottle, two glass bottle refunds.
@@ -330,8 +356,8 @@ class XpBottleListenerTest {
         // Bottle stores the emerald-block orb value, not the emerald value.
         verify(inv).setItem(eq(0), argThat(item -> item != null
                 && listener.xpBottle().isXpBottle(item)
-                && listener.xpBottle().getStoredOrbs(item) == XpBottleListener.ORBS_PER_EMERALD_BLOCK));
-        assertEquals(50000 - XpBottleListener.ORBS_PER_EMERALD_BLOCK,
+                && listener.xpBottle().getStoredOrbs(item) == listener.orbsPerEmeraldBlock()));
+        assertEquals(50000 - listener.orbsPerEmeraldBlock(),
                 new ExperienceManager(player).getCurrentExp());
     }
 

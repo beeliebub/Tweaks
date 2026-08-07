@@ -67,8 +67,6 @@ import java.util.logging.Level;
  */
 public final class RouletteListener implements Listener {
 
-    private static final int DEFAULT_SCAN_RADIUS = 16;
-
     private final JavaPlugin plugin;
     private final RouletteBoardStore boardStore;
     private final RouletteRestPoseStore restPoseStore;
@@ -418,6 +416,11 @@ public final class RouletteListener implements Listener {
      * (fix the click, fix the build, or re-run with different bounds) without re-typing the whole
      * command — only a successful registration consumes the pending state for good.
      */
+    private int scanRadius() {
+        int radius = plugin.getConfig().getInt("minigames.roulette.scan-radius", 16);
+        return radius >= 1 ? radius : 16;
+    }
+
     private void handleBoardSetup(Player admin, Block clicked) {
         UUID adminId = admin.getUniqueId();
         PendingBoardSetup pending = pendingSetups.remove(adminId);
@@ -443,8 +446,12 @@ public final class RouletteListener implements Listener {
         }
 
         Location controlLoc = clicked.getLocation();
+        // Live read (no constructor-time caching), but the resulting radius is then baked into
+        // the persisted BoardEntry below - only affects boards registered AFTER a /tconfig edit,
+        // never a board's already-persisted scanRadius.
+        int scanRadius = scanRadius();
         RouletteSegmentScanner.ScanOutcome outcome =
-                RouletteSegmentScanner.scan(controlLoc, DEFAULT_SCAN_RADIUS, plugin);
+                RouletteSegmentScanner.scan(controlLoc, scanRadius, plugin);
         if (!outcome.isComplete()) {
             admin.sendMessage(Messages.MINIGAMES.rouletteBoardIncomplete(outcome.problems()));
             pendingSetups.put(adminId, pending);
@@ -454,7 +461,7 @@ public final class RouletteListener implements Listener {
         RouletteGeometry.Vec3 centre = outcome.wheelCentre();
         Location center = new Location(controlLoc.getWorld(), centre.x(), centre.y(), centre.z());
         RouletteBoardStore.BoardEntry entry = new RouletteBoardStore.BoardEntry(
-                center, pending.minBet(), pending.maxBet(), DEFAULT_SCAN_RADIUS, controlLoc, facing);
+                center, pending.minBet(), pending.maxBet(), scanRadius, controlLoc, facing);
 
         if (!boardStore.persistBoard(entry)) {
             admin.sendMessage(Messages.MINIGAMES.rouletteBoardAlreadyRegistered());

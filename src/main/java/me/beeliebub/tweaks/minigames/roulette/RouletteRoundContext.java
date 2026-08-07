@@ -30,6 +30,14 @@ final class RouletteRoundContext {
     long windowOpenedTick = -1L;
     int frame = 0;
 
+    /**
+     * The betting window length (in ticks), snapshotted from {@code minigames.roulette
+     * .betting-window-seconds} the instant this round's window opens, never re-read afterward. A
+     * live re-read here would desync an already-scheduled expiry task's actual delay from the
+     * countdown text shown to players if a /tconfig edit lands mid-round.
+     */
+    long bettingWindowTicks = -1L;
+
     /** Non-null only while a rotation animation is in flight this spin. */
     List<RouletteRestPoseStore.SegmentPose> restPoseSnapshot;
     RouletteRenderer.SpinPlan spinPlan;

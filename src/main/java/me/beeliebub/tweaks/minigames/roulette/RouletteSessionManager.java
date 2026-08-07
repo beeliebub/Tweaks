@@ -39,14 +39,9 @@ import java.util.random.RandomGenerator;
  */
 final class RouletteSessionManager {
 
-    private static final long BETTING_WINDOW_TICKS = 600L; // 30 seconds
     private static final int ROUND_BROADCAST_RADIUS = 32;
     private static final int STAKE_INDICATOR_RADIUS = 12;
     private static final long STAKE_INDICATOR_PERIOD = 20L;
-    /** A bettor's gross winnings reaching this multiple of their own wager triggers a server-wide
-     *  announcement. Compared against gross payout, not net win, to match the settlement message's
-     *  own gross-vs-gross framing. */
-    private static final long BIG_WIN_MULTIPLIER = 8L;
 
     private final JavaPlugin plugin;
     private final EconomyManager economyManager;
@@ -133,14 +128,35 @@ final class RouletteSessionManager {
         return stake >= minBet && stake <= maxBet;
     }
 
+    /** The hardcoded default for {@link #isBigWin(long, long)}'s 2-arg form and the fallback used
+     *  by {@link #bigWinMultiplier()} when {@code minigames.roulette.big-win-multiplier} is missing
+     *  or non-positive. */
+    private static final long DEFAULT_BIG_WIN_MULTIPLIER = 8L;
+
     /**
      * True if {@code payout} (already winnings only — see {@code RouletteRound.computeSettlement})
-     * reaches {@link #BIG_WIN_MULTIPLIER}x {@code wagered}. Pulled out as a pure predicate so the
-     * threshold itself is unit-testable without MockBukkit, mirroring {@link #withinBoardBounds}.
-     * {@code wagered <= 0} is never a big win (nothing was staked).
+     * reaches {@link #DEFAULT_BIG_WIN_MULTIPLIER}x {@code wagered}. Pulled out as a pure predicate
+     * so the threshold itself is unit-testable without MockBukkit, mirroring
+     * {@link #withinBoardBounds}. {@code wagered <= 0} is never a big win (nothing was staked).
+     * Production settlement uses the 3-arg overload with the live-config-driven multiplier instead
+     * — see {@link #bigWinMultiplier()}.
      */
     static boolean isBigWin(long wagered, long payout) {
-        return wagered > 0 && payout >= wagered * BIG_WIN_MULTIPLIER;
+        return isBigWin(wagered, payout, DEFAULT_BIG_WIN_MULTIPLIER);
+    }
+
+    static boolean isBigWin(long wagered, long payout, long multiplier) {
+        return wagered > 0 && payout >= wagered * multiplier;
+    }
+
+    // Live read (no constructor-time caching) so a /tconfig edit to
+    // minigames.roulette.big-win-multiplier takes effect on the next settlement. A non-positive
+    // multiplier would fire the celebration broadcast on every settlement, so it's rejected here
+    // defensively - core/config/ConfigRegistry already enforces a minimum of 1 at the /tconfig
+    // edit boundary, but a hand-edited config.yml value could still bypass it.
+    private long bigWinMultiplier() {
+        long multiplier = plugin.getConfig().getLong("minigames.roulette.big-win-multiplier", DEFAULT_BIG_WIN_MULTIPLIER);
+        return multiplier > 0 ? multiplier : DEFAULT_BIG_WIN_MULTIPLIER;
     }
 
     // ---- Bet placement -------------------------------------------------------------------
@@ -264,11 +280,23 @@ final class RouletteSessionManager {
     // ---- Betting window -------------------------------------------------------------------
 
     private void openWindow(RouletteBoardStore.BoardEntry board, RouletteRoundContext ctx) {
+        // Snapshotted into the round context (not re-read at expiry/countdown) so a /tconfig edit
+        // to minigames.roulette.betting-window-seconds mid-round can't desync the already-scheduled
+        // expiry task from the countdown text shown to players.
+        ctx.bettingWindowTicks = bettingWindowTicks();
         ctx.windowOpenedTick = Bukkit.getCurrentTick();
         ctx.windowTaskId = Bukkit.getScheduler()
-                .runTaskLater(plugin, () -> onWindowExpired(board, ctx), BETTING_WINDOW_TICKS)
+                .runTaskLater(plugin, () -> onWindowExpired(board, ctx), ctx.bettingWindowTicks)
                 .getTaskId();
-        broadcastNear(board, Messages.MINIGAMES.rouletteWindowOpened((int) (BETTING_WINDOW_TICKS / 20)));
+        broadcastNear(board, Messages.MINIGAMES.rouletteWindowOpened((int) (ctx.bettingWindowTicks / 20)));
+    }
+
+    // Live read (no constructor-time caching) so a /tconfig edit takes effect on the next window
+    // that opens; already-open windows keep their snapshotted length (see openWindow above).
+    private long bettingWindowTicks() {
+        int seconds = plugin.getConfig().getInt("minigames.roulette.betting-window-seconds", 30);
+        if (seconds < 1) seconds = 30;
+        return seconds * 20L;
     }
 
     private void onWindowExpired(RouletteBoardStore.BoardEntry board, RouletteRoundContext ctx) {
@@ -565,7 +593,7 @@ final class RouletteSessionManager {
             for (Map.Entry<UUID, RouletteRound.PlayerCredit> entry : settlement.credits().entrySet()) {
                 long wagered = wageredByPlayer.getOrDefault(entry.getKey(), 0L);
                 long payout = entry.getValue().payout();
-                if (isBigWin(wagered, payout)) {
+                if (isBigWin(wagered, payout, bigWinMultiplier())) {
                     announceBigWin(entry.getKey(), payout, pocket, colorName);
                 }
             }
@@ -573,7 +601,7 @@ final class RouletteSessionManager {
     }
 
     /**
-     * Server-wide celebration for a round settlement reaching {@link #BIG_WIN_MULTIPLIER}x the
+     * Server-wide celebration for a round settlement reaching {@link #bigWinMultiplier()}x the
      * bettor's own wager — gated behind {@code presentation} (see {@link #settleRound}'s only
      * caller) alongside every other cosmetic post-settlement broadcast, unlike the per-bettor
      * outcome message which always sends. {@code winnings} is the same settlement payout {@code
@@ -799,7 +827,7 @@ final class RouletteSessionManager {
 
         RouletteRoundContext ctx = contexts.get(board);
         if (ctx != null && ctx.round.state() == RouletteRound.State.BETTING) {
-            long remainingTicks = Math.max(0L, BETTING_WINDOW_TICKS - (Bukkit.getCurrentTick() - ctx.windowOpenedTick));
+            long remainingTicks = Math.max(0L, ctx.bettingWindowTicks - (Bukkit.getCurrentTick() - ctx.windowOpenedTick));
             int secondsRemaining = (int) (remainingTicks / 20);
             safeRender(() -> renderer.refreshStatus(board, Messages.MINIGAMES.rouletteSpinCountdown(secondsRemaining)),
                     board, "countdown refresh");

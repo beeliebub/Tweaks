@@ -24,7 +24,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * Inactivity-timeout tests for the Blackjack mid-hand idle eviction (Tweaks-edvw).
  *
  * <p>Rule: a mid-hand game that has been idle for longer than
- * {@link BlackjackSessionManager#INACTIVITY_TIMEOUT_MS} (10 minutes) is forcibly ended by
+ * {@link BlackjackSessionManager#inactivityTimeoutMillis()} (10 minutes by default, live-read from
+ * {@code minigames.blackjack.inactivity-timeout-minutes}) is forcibly ended by
  * {@link BlackjackSessionManager#sweepInactiveSessions(long)}. The already-deducted bet is
  * forfeited — no payout is credited.
  *
@@ -122,7 +123,7 @@ class BlackjackInactivityTimeoutTest {
     // ---- positive: session swept after 10 min idle --------------------------
 
     /**
-     * A game idle for longer than {@link BlackjackSessionManager#INACTIVITY_TIMEOUT_MS}
+     * A game idle for longer than {@link BlackjackSessionManager#inactivityTimeoutMillis()}
      * must be removed by {@link BlackjackSessionManager#sweepInactiveSessions(long)}, and
      * the player's balance must remain at its post-bet value (no payout credited).
      */
@@ -142,7 +143,7 @@ class BlackjackInactivityTimeoutTest {
 
         // Back-date: game has been idle for TIMEOUT + 1 second.
         long simulatedNow = System.currentTimeMillis();
-        long idleStart = simulatedNow - BlackjackSessionManager.INACTIVITY_TIMEOUT_MS - 1_000L;
+        long idleStart = simulatedNow - sessionManager.inactivityTimeoutMillis() - 1_000L;
         game.touchInteraction(idleStart);
 
         // sweepInactiveSessions: now - idleStart = TIMEOUT + 1000 ms > TIMEOUT → evict.
@@ -178,7 +179,7 @@ class BlackjackInactivityTimeoutTest {
         long simulatedNow = System.currentTimeMillis();
         game.touchInteraction(simulatedNow - 60_000L);
 
-        // Sweep: 60 000 ms idle < INACTIVITY_TIMEOUT_MS → must NOT evict.
+        // Sweep: 60 000 ms idle < inactivityTimeoutMillis() → must NOT evict.
         sessionManager.sweepInactiveSessions(simulatedNow);
 
         assertTrue(sessionManager.hasActiveGame(playerId),
@@ -210,7 +211,7 @@ class BlackjackInactivityTimeoutTest {
 
         // Back-date to simulate > 10 minutes of idle.
         long now = System.currentTimeMillis();
-        game.touchInteraction(now - BlackjackSessionManager.INACTIVITY_TIMEOUT_MS - 1_000L);
+        game.touchInteraction(now - sessionManager.inactivityTimeoutMillis() - 1_000L);
 
         // Sweep: game.isFinished() == true → sweeper must skip this session.
         sessionManager.sweepInactiveSessions(now);

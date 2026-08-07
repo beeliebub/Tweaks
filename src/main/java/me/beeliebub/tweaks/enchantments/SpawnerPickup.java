@@ -30,14 +30,14 @@ import java.util.logging.Level;
 // The tool breaks after 5 successful spawner pickups, with remaining uses shown in lore.
 public class SpawnerPickup implements Listener {
 
-    private static final double DROP_CHANCE = 0.20;
-    private static final int BREAK_AT = 5;
     private static final String LORE_PREFIX = "Spawner Uses Remaining: ";
 
+    private final Tweaks plugin;
     private final Enchantment enchantment;
     private final NamespacedKey counterKey;
 
     public SpawnerPickup(Tweaks plugin) {
+        this.plugin = plugin;
         String raw = plugin.getConfig().getString("spawner-pickup");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.counterKey = new NamespacedKey(plugin, "spawner_pickup_count");
@@ -64,6 +64,17 @@ public class SpawnerPickup implements Listener {
         return resolved;
     }
 
+    // Package-private (not private) so a config knob test can exercise the percent/clamp
+    // conversion directly without widening visibility to public.
+    double dropChance() {
+        double percent = plugin.getConfig().getDouble("enchantments.spawner-pickup.drop-chance-percent", 20.0);
+        return Math.max(0.0, Math.min(100.0, percent)) / 100.0;
+    }
+
+    int breakAt() {
+        return Math.max(1, plugin.getConfig().getInt("enchantments.spawner-pickup.uses", 5));
+    }
+
     @EventHandler(ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         if (enchantment == null) return;
@@ -75,7 +86,7 @@ public class SpawnerPickup implements Listener {
         ItemStack tool = player.getInventory().getItemInMainHand();
         if (tool.isEmpty() || !tool.containsEnchantment(enchantment)) return;
 
-        if (ThreadLocalRandom.current().nextDouble() >= DROP_CHANCE) return;
+        if (ThreadLocalRandom.current().nextDouble() >= dropChance()) return;
 
         block.getWorld().dropItemNaturally(block.getLocation(), new ItemStack(Material.SPAWNER));
 
@@ -84,12 +95,13 @@ public class SpawnerPickup implements Listener {
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
         int count = pdc.getOrDefault(counterKey, PersistentDataType.INTEGER, 0) + 1;
 
-        if (count >= BREAK_AT) {
+        int breakAt = breakAt();
+        if (count >= breakAt) {
             player.getInventory().setItemInMainHand(null);
             player.getWorld().playSound(player.getLocation(), Sound.ENTITY_ITEM_BREAK, 1.0f, 1.0f);
         } else {
             pdc.set(counterKey, PersistentDataType.INTEGER, count);
-            updateUsesLore(meta, BREAK_AT - count);
+            updateUsesLore(meta, breakAt - count);
             tool.setItemMeta(meta);
         }
     }

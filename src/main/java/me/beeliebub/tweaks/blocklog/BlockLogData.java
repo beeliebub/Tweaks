@@ -170,12 +170,18 @@ public final class BlockLogData {
     public static final class ChunkLogStore {
 
         private static final String KEY_PREFIX = "blocklog_";
-        public static final int MAX_ENTRIES_PER_CHEST = 500;
 
         private final Plugin plugin;
 
         public ChunkLogStore(Plugin plugin) {
             this.plugin = plugin;
+        }
+
+        // Package-private so BlockLogEntryCapConfigTest can exercise the clamp/live-read behavior
+        // directly, per this project's convention for members a test needs without widening
+        // visibility to public.
+        int maxEntriesPerChest() {
+            return Math.max(1, plugin.getConfig().getInt("blocklog.max-entries-per-chest", 500));
         }
 
         public NamespacedKey keyFor(Block block) {
@@ -197,8 +203,9 @@ public final class BlockLogData {
             byte[] existing = pdc.get(key, PersistentDataType.BYTE_ARRAY);
             List<ChestLogEntry> entries = existing == null ? new ArrayList<>() : Codec.decode(existing);
             entries.add(entry);
-            if (entries.size() > MAX_ENTRIES_PER_CHEST) {
-                entries = entries.subList(entries.size() - MAX_ENTRIES_PER_CHEST, entries.size());
+            int cap = maxEntriesPerChest();
+            if (entries.size() > cap) {
+                entries = entries.subList(entries.size() - cap, entries.size());
             }
             pdc.set(key, PersistentDataType.BYTE_ARRAY, Codec.encode(entries));
         }
@@ -210,8 +217,9 @@ public final class BlockLogData {
             byte[] existing = pdc.get(key, PersistentDataType.BYTE_ARRAY);
             List<ChestLogEntry> entries = existing == null ? new ArrayList<>() : Codec.decode(existing);
             entries.addAll(newEntries);
-            if (entries.size() > MAX_ENTRIES_PER_CHEST) {
-                entries = new ArrayList<>(entries.subList(entries.size() - MAX_ENTRIES_PER_CHEST, entries.size()));
+            int cap = maxEntriesPerChest();
+            if (entries.size() > cap) {
+                entries = new ArrayList<>(entries.subList(entries.size() - cap, entries.size()));
             }
             pdc.set(key, PersistentDataType.BYTE_ARRAY, Codec.encode(entries));
         }

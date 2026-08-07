@@ -25,16 +25,12 @@ public class SeparatorListener implements Listener {
 
     private final JavaPlugin plugin;
     private final StorageManager storage;
+    private final WorldProfileTable table;
 
-    // World keys mapped to inventory profile names
-    private static final String ARCHIVE_WORLD_KEY = "jass:archive";
-    private static final String LOBBY_WORLD_KEY = "jass:lobby";
-    private static final String PI_WORLD_KEY = "jass:pi";
-
-    private static final String PROFILE_ARCHIVE = "archive";
-    private static final String PROFILE_LOBBY = "lobby";
+    // The one profile name still referenced by code (not just data): the sentinel "currently
+    // active, never auto-zeroed" profile every migration step treats specially. Every other
+    // profile name is data now, owned by WorldProfileTable.
     private static final String PROFILE_STANDARD = "standard";
-    private static final String PROFILE_PI = "pi";
 
     // Ender chest data uses this prefix to distinguish from regular inventory data
     private static final String EC_PREFIX = "ec_";
@@ -43,30 +39,21 @@ public class SeparatorListener implements Listener {
     // Tracks players who just died so their empty inventory isn't saved over their real one
     private final Set<UUID> recentDeaths = ConcurrentHashMap.newKeySet();
 
-    public SeparatorListener(JavaPlugin plugin, StorageManager storage) {
+    public SeparatorListener(JavaPlugin plugin, StorageManager storage, WorldProfileTable table) {
         this.plugin = plugin;
         this.storage = storage;
+        this.table = table;
     }
 
-    private String getProfileForWorldKey(String worldKey) {
-        if (worldKey.contains(ARCHIVE_WORLD_KEY)) return PROFILE_ARCHIVE;
-        if (worldKey.contains(LOBBY_WORLD_KEY)) return PROFILE_LOBBY;
-        if (worldKey.contains(PI_WORLD_KEY)) return PROFILE_PI;
-        return PROFILE_STANDARD;
-    }
-
+    // Scans for ANY cached key under this prefix, independent of which profiles are currently
+    // configured in WorldProfileTable - see StorageManager#hasAnyCachedKeyWithPrefix's Javadoc for
+    // why this must not be table.knownProfiles()-driven (that set can shrink at runtime).
     private boolean hasEnderChestData(UUID player) {
-        return storage.getCachedInventory(player, EC_PREFIX + PROFILE_STANDARD) != null
-                || storage.getCachedInventory(player, EC_PREFIX + PROFILE_LOBBY) != null
-                || storage.getCachedInventory(player, EC_PREFIX + PROFILE_ARCHIVE) != null
-                || storage.getCachedInventory(player, EC_PREFIX + PROFILE_PI) != null;
+        return storage.hasAnyCachedKeyWithPrefix(player, EC_PREFIX);
     }
 
     private boolean hasExperienceData(UUID player) {
-        return storage.getCachedInventory(player, XP_PREFIX + PROFILE_STANDARD) != null
-                || storage.getCachedInventory(player, XP_PREFIX + PROFILE_LOBBY) != null
-                || storage.getCachedInventory(player, XP_PREFIX + PROFILE_ARCHIVE) != null
-                || storage.getCachedInventory(player, XP_PREFIX + PROFILE_PI) != null;
+        return storage.hasAnyCachedKeyWithPrefix(player, XP_PREFIX);
     }
 
     // One-time migration: copy existing ender chest contents into the standard profile slot
@@ -77,7 +64,7 @@ public class SeparatorListener implements Listener {
         ItemStack[] contents = player.getEnderChest().getContents();
         storage.cacheInventory(uuid, EC_PREFIX + PROFILE_STANDARD, InventoryUtil.toBase64(contents));
 
-        String profile = getProfileForWorldKey(player.getWorld().getKey().asString());
+        String profile = table.profileFor(player.getWorld().getKey().asString());
         if (!profile.equals(PROFILE_STANDARD)) {
             player.getEnderChest().clear();
         }
@@ -95,13 +82,15 @@ public class SeparatorListener implements Listener {
 
         // Always save current XP to the standard profile
         storage.cacheInventory(uuid, XP_PREFIX + PROFILE_STANDARD, xpData);
-        // Zero out all other profiles
-        storage.cacheInventory(uuid, XP_PREFIX + PROFILE_LOBBY, "0:0.0");
-        storage.cacheInventory(uuid, XP_PREFIX + PROFILE_ARCHIVE, "0:0.0");
-        storage.cacheInventory(uuid, XP_PREFIX + PROFILE_PI, "0:0.0");
+        // Zero out every other known profile (admin-added profiles included)
+        for (String profile : table.knownProfiles()) {
+            if (!profile.equals(PROFILE_STANDARD)) {
+                storage.cacheInventory(uuid, XP_PREFIX + profile, "0:0.0");
+            }
+        }
 
         // If player is not in standard profile, zero their current XP
-        String profile = getProfileForWorldKey(player.getWorld().getKey().asString());
+        String profile = table.profileFor(player.getWorld().getKey().asString());
         if (!profile.equals(PROFILE_STANDARD)) {
             player.setExp(0f);
             player.setLevel(0);
@@ -119,7 +108,7 @@ public class SeparatorListener implements Listener {
         UUID uuid = player.getUniqueId();
         recentDeaths.add(uuid);
 
-        String currentProfile = getProfileForWorldKey(player.getWorld().getKey().asString());
+        String currentProfile = table.profileFor(player.getWorld().getKey().asString());
         storage.cacheInventory(uuid, currentProfile, InventoryUtil.toBase64(new ItemStack[player.getInventory().getSize()]));
     }
 
@@ -151,7 +140,7 @@ public class SeparatorListener implements Listener {
 
         recentDeaths.remove(uuid);
 
-        String currentProfile = getProfileForWorldKey(player.getWorld().getKey().asString());
+        String currentProfile = table.profileFor(player.getWorld().getKey().asString());
 
         storage.cacheInventory(uuid, currentProfile, InventoryUtil.toBase64(player.getInventory().getContents()));
         storage.cacheInventory(uuid, EC_PREFIX + currentProfile, InventoryUtil.toBase64(player.getEnderChest().getContents()));
@@ -166,8 +155,8 @@ public class SeparatorListener implements Listener {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
 
-        String fromProfile = getProfileForWorldKey(event.getFrom().getKey().asString());
-        String toProfile = getProfileForWorldKey(player.getWorld().getKey().asString());
+        String fromProfile = table.profileFor(event.getFrom().getKey().asString());
+        String toProfile = table.profileFor(player.getWorld().getKey().asString());
 
         if (fromProfile.equals(toProfile)) return;
         boolean justDied = recentDeaths.remove(uuid);

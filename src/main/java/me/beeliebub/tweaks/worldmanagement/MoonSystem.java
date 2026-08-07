@@ -39,7 +39,6 @@ public class MoonSystem implements Listener, CommandExecutor {
     private static final long NIGHT_DURATION_TICKS = 11000L;
     private static final long DAY_LENGTH_TICKS = 24000L;
     private static final long POLL_INTERVAL_TICKS = 20L;
-    private static final double ACTIVATION_CHANCE = 0.50;
     private static final double TICKS_PER_MINUTE = 1200.0;
 
     private final Tweaks plugin;
@@ -187,6 +186,17 @@ public class MoonSystem implements Listener, CommandExecutor {
         return ForceResult.ACTIVATED;
     }
 
+    // Live read (no constructor-time caching) so a /tconfig edit to
+    // worldmanagement.blood-moon-chance-percent takes effect on the very next full-moon roll -
+    // matches WorldRuleListener's disabled-end-portal-worlds pattern. Clamped defensively in case
+    // of a hand-edited out-of-range value; core/config/ConfigValueEditor already bounds 0-100 at
+    // the /tconfig edit boundary.
+    private double activationChance() {
+        double percent = plugin.getConfig().getDouble("worldmanagement.blood-moon-chance-percent", 50.0);
+        if (Double.isNaN(percent) || Double.isInfinite(percent)) return 0.50;
+        return Math.max(0.0, Math.min(100.0, percent)) / 100.0;
+    }
+
     private void tick() {
         World world = pickReferenceWorld();
         if (world == null) return;
@@ -211,7 +221,7 @@ public class MoonSystem implements Listener, CommandExecutor {
         if (moonPhase == FULL_MOON_PHASE && dayTime >= ROLL_TICK && dayTime < DAY_LENGTH_TICKS
                 && currentDay != lastRolledDay) {
             lastRolledDay = currentDay;
-            if (ThreadLocalRandom.current().nextDouble() < ACTIVATION_CHANCE) {
+            if (ThreadLocalRandom.current().nextDouble() < activationChance()) {
                 scheduledDay = currentDay;
             }
         }

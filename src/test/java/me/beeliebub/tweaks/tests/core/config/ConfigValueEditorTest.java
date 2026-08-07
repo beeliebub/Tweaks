@@ -1,0 +1,156 @@
+package me.beeliebub.tweaks.tests.core.config;
+
+import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.core.config.ConfigRegistry;
+import me.beeliebub.tweaks.core.config.ConfigSetting;
+import me.beeliebub.tweaks.core.config.ConfigValueEditor;
+import me.beeliebub.tweaks.core.config.EditResult;
+import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
+import me.beeliebub.tweaks.profiles.WorldProfileTable;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockbukkit.mockbukkit.MockBukkit;
+import org.mockbukkit.mockbukkit.ServerMock;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+
+/**
+ * Exercises ConfigValueEditor directly - the unit-testable core both ConfigCommand (CLI) and
+ * ConfigGUI (Dialog, untestable under MockBukkit) delegate to. See core/config/CLAUDE.md.
+ */
+class ConfigValueEditorTest {
+
+    private ServerMock server;
+    private Tweaks plugin;
+    private ResourceHuntItems resourceHuntItems;
+    private ConfigValueEditor editor;
+
+    @BeforeEach
+    void setUp() {
+        server = MockBukkit.mock();
+        plugin = MockBukkit.load(Tweaks.class);
+        resourceHuntItems = mock(ResourceHuntItems.class);
+        editor = new ConfigValueEditor(plugin, resourceHuntItems, new WorldProfileTable(plugin));
+    }
+
+    @AfterEach
+    void tearDown() {
+        MockBukkit.unmock();
+    }
+
+    private static String plain(EditResult result) {
+        return PlainTextComponentSerializer.plainText().serialize(result.message());
+    }
+
+    // ------------------------------------------------------------ Legacy scalar (max-homes)
+
+    @Test
+    void legacyMaxHomesRejectsNonPositiveWithoutWriting() {
+        EditResult result = editor.setMaxHomes("0");
+
+        assertInstanceOf(EditResult.Invalid.class, result);
+        assertEquals(15, plugin.getConfig().getInt("max-homes")); // bundled default, unchanged
+    }
+
+    @Test
+    void legacyMaxHomesRejectsNonNumericWithoutWriting() {
+        EditResult result = editor.setMaxHomes("not-a-number");
+
+        assertInstanceOf(EditResult.Invalid.class, result);
+        assertEquals(15, plugin.getConfig().getInt("max-homes"));
+    }
+
+    @Test
+    void legacyMaxHomesAcceptsPositive() {
+        EditResult result = editor.setMaxHomes("7");
+
+        assertInstanceOf(EditResult.Ok.class, result);
+        assertEquals(7, plugin.getConfig().getInt("max-homes"));
+    }
+
+    // ------------------------------------------------------------ Generic scalar (percent)
+
+    @Test
+    void genericScalarRejectsOutOfRangeWithoutWriting() {
+        ConfigSetting setting = ConfigRegistry.byPath("egg-collector-drop-chance").orElseThrow();
+
+        EditResult result = editor.applyScalar(setting, "150");
+
+        assertInstanceOf(EditResult.Invalid.class, result);
+        assertEquals(0.5, plugin.getConfig().getDouble("egg-collector-drop-chance")); // bundled default
+    }
+
+    @Test
+    void genericScalarAcceptsInRange() {
+        ConfigSetting setting = ConfigRegistry.byPath("egg-collector-drop-chance").orElseThrow();
+
+        EditResult result = editor.applyScalar(setting, "42.0");
+
+        assertInstanceOf(EditResult.Ok.class, result);
+        assertEquals(42.0, plugin.getConfig().getDouble("egg-collector-drop-chance"));
+    }
+
+    @Test
+    void genericScalarDispatchesLegacyPathsToLegacyWording() {
+        // "max-homes" is a sentinel-free but legacy-wording path - applyScalar must route it to
+        // setMaxHomes rather than the generic engine, so the response wording stays pinned.
+        ConfigSetting setting = ConfigRegistry.byPath("max-homes").orElseThrow();
+
+        EditResult result = editor.applyScalar(setting, "9");
+
+        assertEquals(9, plugin.getConfig().getInt("max-homes"));
+        assertTrue(plain(result).contains("Max homes has been updated live to 9"));
+    }
+
+    // ------------------------------------------------------------ List add/remove idempotency
+
+    @Test
+    void mobListDisableIsIdempotent() {
+        editor.toggleEggDrop("disable", "zombie");
+        EditResult second = editor.toggleEggDrop("disable", "zombie");
+
+        assertEquals(1, plugin.getConfig().getStringList("egg-collector-disabled-mobs").size());
+        assertTrue(plain(second).toLowerCase().contains("already"));
+    }
+
+    @Test
+    void mobListEnableOnAbsentEntryIsIdempotent() {
+        EditResult result = editor.toggleEggDrop("enable", "zombie"); // never disabled
+
+        assertTrue(plugin.getConfig().getStringList("egg-collector-disabled-mobs").isEmpty());
+        assertTrue(plain(result).toLowerCase().contains("already"));
+    }
+
+    @Test
+    void mobListRejectsUnknownMobWithoutWriting() {
+        EditResult result = editor.toggleEggDrop("disable", "not_a_real_mob_xyz");
+
+        assertInstanceOf(EditResult.Invalid.class, result);
+        assertTrue(plugin.getConfig().getStringList("egg-collector-disabled-mobs").isEmpty());
+    }
+
+    @Test
+    void listAddAndListRemoveRouteMobListSentinelToToggle() {
+        ConfigSetting setting = ConfigRegistry.byPath(ConfigRegistry.EGGDROP_SENTINEL_PATH).orElseThrow();
+
+        editor.listAdd(setting, "zombie");
+        assertTrue(plugin.getConfig().getStringList("egg-collector-disabled-mobs").contains("zombie"));
+
+        editor.listRemove(setting, "zombie");
+        assertTrue(plugin.getConfig().getStringList("egg-collector-disabled-mobs").isEmpty());
+    }
+
+    @Test
+    void currentListValuesReflectsDisabledMobs() {
+        editor.toggleEggDrop("disable", "zombie");
+        editor.toggleEggDrop("disable", "creeper");
+
+        ConfigSetting setting = ConfigRegistry.byPath(ConfigRegistry.EGGDROP_SENTINEL_PATH).orElseThrow();
+        assertEquals(2, editor.currentListValues(setting).size());
+    }
+}

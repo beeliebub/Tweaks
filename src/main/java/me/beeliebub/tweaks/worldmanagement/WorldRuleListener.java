@@ -31,9 +31,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.Merchant;
 import org.bukkit.inventory.MerchantInventory;
 
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 // Consolidated world-rule listener. Previously: TrampleListener, PortalListener,
 // MobGriefListener, SpawnerEggListener, VillagerTradeListener. Each is a small
@@ -41,8 +39,6 @@ import java.util.Set;
 // bloat without coupling the rules.
 public class WorldRuleListener implements Listener {
 
-    private static final String RESOURCE_WORLD_KEY = "jass:resource";
-    private static final String RESOURCE_NETHER_WORLD_KEY = "jass:resource_nether";
     private static final String SPAWNER_EGG_CONFIG_KEY = "spawner-egg-disabled-mobs";
     private static final String SPAWN_EGG_SUFFIX = "_spawn_egg";
     private static final int COST_SLOT_A = 0;
@@ -50,15 +46,10 @@ public class WorldRuleListener implements Listener {
 
     private final Tweaks plugin;
     private final ProtectionManager protection;
-    private final Set<String> disabledEndWorlds;
 
     public WorldRuleListener(Tweaks plugin, ProtectionManager protection) {
         this.plugin = plugin;
         this.protection = protection;
-        this.disabledEndWorlds = new HashSet<>();
-        for (String world : plugin.getConfig().getStringList("disabled-end-portal-worlds")) {
-            disabledEndWorlds.add(world.toLowerCase());
-        }
     }
 
     // ─── Trample (was TrampleListener) ────────────────────────────────────────
@@ -88,15 +79,33 @@ public class WorldRuleListener implements Listener {
         String worldKey = event.getFrom().getWorld().getKey().asString().toLowerCase();
         PlayerTeleportEvent.TeleportCause cause = event.getCause();
 
-        if (cause == PlayerTeleportEvent.TeleportCause.END_PORTAL && disabledEndWorlds.contains(worldKey)) {
+        if (cause == PlayerTeleportEvent.TeleportCause.END_PORTAL && isEndPortalDisabled(worldKey)) {
             event.setCancelled(true);
             event.getPlayer().sendMessage(Component.text("The End is disabled in this world!", NamedTextColor.RED));
-        } else if (cause == PlayerTeleportEvent.TeleportCause.NETHER_PORTAL) {
-            if (RESOURCE_WORLD_KEY.equals(worldKey) || RESOURCE_NETHER_WORLD_KEY.equals(worldKey)) {
-                event.setCancelled(true);
-                event.getPlayer().sendMessage(Component.text("Nether portals do not work in this world.", NamedTextColor.RED));
-            }
+        } else if (cause == PlayerTeleportEvent.TeleportCause.NETHER_PORTAL && isNetherPortalDisabled(worldKey)) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(Component.text("Nether portals do not work in this world.", NamedTextColor.RED));
         }
+    }
+
+    // Live read (no constructor-time caching) so a /tconfig edit to disabled-end-portal-worlds
+    // takes effect immediately - matches the spawner-egg list's pattern below.
+    private boolean isEndPortalDisabled(String worldKey) {
+        for (String entry : plugin.getConfig().getStringList("disabled-end-portal-worlds")) {
+            if (entry.equalsIgnoreCase(worldKey)) return true;
+        }
+        return false;
+    }
+
+    // Live read, same pattern as isEndPortalDisabled - replaces the previously hardcoded
+    // RESOURCE_WORLD_KEY/RESOURCE_NETHER_WORLD_KEY pair (which already covered both keys here;
+    // the drift this config-migration fixes was in TeleportCommandManager's separate /sethome
+    // check, not this one - see teleport/CLAUDE.md).
+    private boolean isNetherPortalDisabled(String worldKey) {
+        for (String entry : plugin.getConfig().getStringList("disabled-nether-portal-worlds")) {
+            if (entry.equalsIgnoreCase(worldKey)) return true;
+        }
+        return false;
     }
 
     // ─── Mob griefing (was MobGriefListener) ──────────────────────────────────

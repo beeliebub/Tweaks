@@ -35,7 +35,6 @@ import org.bukkit.scheduler.BukkitTask;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -55,7 +54,6 @@ public class PlayerAdminManager implements Listener {
     // AFK
     // ------------------------------------------------------------
     private static final double AFK_EXIT_DISTANCE_SQ = 1.0;
-    private static final long AFK_AUTO_MILLIS = 10L * 60L * 1000L;
     private static final long AFK_CHECK_PERIOD_TICKS = 20L * 30L;
 
     private final Map<UUID, Location> afkLocations = new HashMap<>();
@@ -70,17 +68,17 @@ public class PlayerAdminManager implements Listener {
     // ------------------------------------------------------------
     // Fly
     // ------------------------------------------------------------
-    private final NamespacedKey flyAdvancementKey; // nullable when config string is invalid
     private final NamespacedKey flyKey;
-    private final Set<String> defaultFlyWorlds = new HashSet<>();
     private final java.util.Map<java.util.UUID, Boolean> flyingStates = new java.util.concurrent.ConcurrentHashMap<>();
+    // Dedupes the invalid-fly-advancement warning below so a persistently bad config value logs
+    // once per distinct bad string instead of once per canFly() check.
+    private String lastWarnedInvalidFlyAdvancement;
 
     // ------------------------------------------------------------
     // Nick
     // ------------------------------------------------------------
     private static final LegacyComponentSerializer NICK_COLOR_SERIALIZER =
             LegacyComponentSerializer.builder().character('&').hexColors().build();
-    private static final int MAX_NICK_LENGTH = 24;
     private final NamespacedKey nickKey;
     private final Set<UUID> nickPendingRemovals = ConcurrentHashMap.newKeySet();
     private final File nickPendingFile;
@@ -103,13 +101,6 @@ public class PlayerAdminManager implements Listener {
         this.flyKey = new NamespacedKey(plugin, "fly_enabled");
         this.nickKey = new NamespacedKey(plugin, "nickname");
         this.nickPendingFile = new File(plugin.getDataFolder(), "nick-removals.yml");
-
-        String advancementName = plugin.getConfig().getString("fly-advancement", "jass:test");
-        this.flyAdvancementKey = NamespacedKey.fromString(advancementName);
-
-        for (String world : plugin.getConfig().getStringList("fly-worlds")) {
-            defaultFlyWorlds.add(world.toLowerCase());
-        }
 
         loadNickPendingRemovals();
         initTrailEffects();
@@ -166,26 +157,50 @@ public class PlayerAdminManager implements Listener {
 
     private void checkAfkIdle() {
         long now = System.currentTimeMillis();
+        long afkAutoMillis = afkAutoMillis();
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (isAfk(player)) continue;
             Long last = lastMovementMs.get(player.getUniqueId());
             if (last == null) continue;
-            if (now - last >= AFK_AUTO_MILLIS) {
+            if (now - last >= afkAutoMillis) {
                 enterAfk(player);
             }
         }
+    }
+
+    // Live read (no constructor-time caching) so a /tconfig edit to playeradmin.afk-auto-minutes
+    // takes effect on the next AFK_CHECK_PERIOD_TICKS sweep - matches fly-worlds' pattern below.
+    // core/config/ConfigRegistry enforces a minimum of 1 minute (the check period's own 30-second
+    // granularity means anything below 1 minute couldn't be honored precisely anyway).
+    private long afkAutoMillis() {
+        int minutes = plugin.getConfig().getInt("playeradmin.afk-auto-minutes", 10);
+        if (minutes < 1) minutes = 10;
+        return minutes * 60L * 1000L;
     }
 
     // ============================================================
     // Fly
     // ============================================================
 
+    // Live read (no constructor-time caching) so a /tconfig edit to fly-worlds takes effect
+    // immediately - matches WorldRuleListener's spawner-egg-list pattern.
     private boolean isDefaultFlyWorld(String worldKey) {
-        return defaultFlyWorlds.contains(worldKey.toLowerCase());
+        for (String world : plugin.getConfig().getStringList("fly-worlds")) {
+            if (world.equalsIgnoreCase(worldKey)) return true;
+        }
+        return false;
     }
 
     private boolean hasFlyAdvancement(Player player) {
-        if (flyAdvancementKey == null) return false;
+        String advancementName = plugin.getConfig().getString("fly-advancement", "jass:test");
+        NamespacedKey flyAdvancementKey = NamespacedKey.fromString(advancementName);
+        if (flyAdvancementKey == null) {
+            if (!java.util.Objects.equals(advancementName, lastWarnedInvalidFlyAdvancement)) {
+                plugin.getLogger().warning("fly-advancement '" + advancementName + "' is not a valid namespaced key; flight-by-advancement is disabled until it's corrected.");
+                lastWarnedInvalidFlyAdvancement = advancementName;
+            }
+            return false;
+        }
         Advancement advancement = Bukkit.getAdvancement(flyAdvancementKey);
         if (advancement == null) return false;
         return player.getAdvancementProgress(advancement).isDone();
@@ -214,7 +229,11 @@ public class PlayerAdminManager implements Listener {
     // ============================================================
 
     public NamespacedKey nickKey() { return nickKey; }
-    int maxNickLength() { return MAX_NICK_LENGTH; }
+
+    // Live read (no constructor-time caching) so a /tconfig edit to playeradmin.max-nick-length
+    // takes effect on the next /nick call. Only gates new /nick calls - an existing nickname
+    // stored in a player's PDC is never retroactively re-validated or truncated.
+    int maxNickLength() { return plugin.getConfig().getInt("playeradmin.max-nick-length", 24); }
     LegacyComponentSerializer nickColorSerializer() { return NICK_COLOR_SERIALIZER; }
 
     static String stripNickColorCodes(String input) {

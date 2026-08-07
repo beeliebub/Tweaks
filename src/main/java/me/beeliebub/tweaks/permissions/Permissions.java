@@ -22,7 +22,9 @@ public final class Permissions {
     public static final String ADMIN_NICK = "tweaks.admin.nick";
 
     /**
-     * Allows modifying plugin configurations via commands and GUI.
+     * Allows modifying plugin configurations via commands and GUI. The single gate for every
+     * runtime-editable plugin setting exposed through {@code /tconfig} (CLI and Dialog GUI alike) —
+     * no per-category or per-setting permission exists.
      */
     public static final String ADMIN_CONFIG = "tweaks.admin.config";
 
@@ -226,15 +228,21 @@ public final class Permissions {
     /**
      * Display name used in the category picker dialog for each category key.
      * Iteration order is the order buttons appear in the category list.
+     *
+     * <p>Populated with ordered {@code put} calls rather than {@code Map.of(...)}: {@code Map.of}
+     * has unspecified iteration order that is randomized per JVM run, so copying one into a
+     * {@link LinkedHashMap} captures an arbitrary order that changes across restarts.
      */
-    private static final LinkedHashMap<String, String> CATEGORY_DISPLAY_NAMES = new LinkedHashMap<>(Map.of(
-            "tools",      "Admin & Tools",
-            "teleport",   "Teleportation",
-            "minigames",  "Minigames",
-            "protection", "Protection",
-            "ranks",      "Ranks",
-            "bypass",     "Bypasses"
-    ));
+    private static final LinkedHashMap<String, String> CATEGORY_DISPLAY_NAMES = new LinkedHashMap<>();
+
+    static {
+        CATEGORY_DISPLAY_NAMES.put("tools",      "Admin & Tools");
+        CATEGORY_DISPLAY_NAMES.put("teleport",   "Teleportation");
+        CATEGORY_DISPLAY_NAMES.put("minigames",  "Minigames");
+        CATEGORY_DISPLAY_NAMES.put("protection", "Protection");
+        CATEGORY_DISPLAY_NAMES.put("ranks",      "Ranks");
+        CATEGORY_DISPLAY_NAMES.put("bypass",     "Bypasses");
+    }
 
     /**
      * Explicit mapping from each permission string to its category key.

@@ -6,7 +6,8 @@ import me.beeliebub.tweaks.Tweaks;
 /**
  * Tier:      1 - foundation state
  * Publishes: storageManager (read by minigames' ResourceWorldListener at tier 2, and by
- *            teleport's TeleportCommandManager at tier 3)
+ *            teleport's TeleportCommandManager at tier 3); worldProfileTable (read by tab's
+ *            TabBootstrap and core's CoreBootstrap, both tier 3)
  */
 public final class ProfilesBootstrap {
 
@@ -16,6 +17,10 @@ public final class ProfilesBootstrap {
         StorageManager storageManager = new StorageManager(plugin);
         services.setStorageManager(storageManager);
 
-        plugin.getServer().getPluginManager().registerEvents(new SeparatorListener(plugin, storageManager), plugin);
+        WorldProfileTable worldProfileTable = new WorldProfileTable(plugin);
+        services.setWorldProfileTable(worldProfileTable);
+
+        plugin.getServer().getPluginManager().registerEvents(
+                new SeparatorListener(plugin, storageManager, worldProfileTable), plugin);
     }
 }

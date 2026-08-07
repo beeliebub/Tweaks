@@ -123,6 +123,11 @@ public class ResourceHuntItems {
         return allowedItems.contains(material);
     }
 
+    /** Read-only snapshot of the whitelist, for admin listing (e.g. {@code /tconfig}'s GUI). */
+    public Set<Material> getAllowedItems() {
+        return Collections.unmodifiableSet(allowedItems);
+    }
+
     public void addAllowedItem(Material material) {
         if (allowedItems.add(material)) {
             saveList();

@@ -4,6 +4,7 @@ import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.core.ConfigCommand;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import me.beeliebub.tweaks.permissions.Permissions;
+import me.beeliebub.tweaks.profiles.WorldProfileTable;
 import me.beeliebub.tweaks.tests.MessageAssert;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Material;
@@ -33,7 +34,7 @@ class ConfigCommandTest {
         server = MockBukkit.mock();
         plugin = MockBukkit.load(Tweaks.class);
         resourceHuntItems = mock(ResourceHuntItems.class);
-        configCommand = new ConfigCommand(plugin, resourceHuntItems);
+        configCommand = new ConfigCommand(plugin, resourceHuntItems, new WorldProfileTable(plugin));
     }
 
     @AfterEach
@@ -110,5 +111,44 @@ class ConfigCommandTest {
         configCommand.onCommand(player, bukkitCmd, "config", new String[]{"resourceitems", "remove", "diamond_ore"});
         verify(resourceHuntItems).removeAllowedItem(Material.DIAMOND_ORE);
         MessageAssert.assertMessageSent(player, "Removed 'diamond_ore'");
+    }
+
+    // ------------------------------------------------------------ world-profiles CLI dispatch
+
+    @Test
+    void worldProfilesAddRequiresAllFourArgs() {
+        PlayerMock player = server.addPlayer();
+        player.nextComponentMessage();
+        player.addAttachment(plugin, Permissions.ADMIN_CONFIG, true);
+
+        configCommand.onCommand(player, bukkitCmd, "config", new String[]{"world-profiles", "add", "jass:test"});
+        MessageAssert.assertMessageSent(player, "Usage:");
+    }
+
+    @Test
+    void worldProfilesAddThenListThenRemove() {
+        PlayerMock player = server.addPlayer();
+        player.nextComponentMessage();
+        player.addAttachment(plugin, Permissions.ADMIN_CONFIG, true);
+
+        configCommand.onCommand(player, bukkitCmd, "config",
+                new String[]{"world-profiles", "add", "jass:test", "testprofile", "Test", "AQUA"});
+        MessageAssert.assertMessageSent(player, "Added 'jass:test'");
+
+        configCommand.onCommand(player, bukkitCmd, "config", new String[]{"world-profiles", "list"});
+        MessageAssert.assertMessageSent(player, "jass:test");
+
+        configCommand.onCommand(player, bukkitCmd, "config", new String[]{"world-profiles", "remove", "jass:test"});
+        MessageAssert.assertMessageSent(player, "Removed 'jass:test'");
+    }
+
+    @Test
+    void worldProfilesRemoveUnknownKeyIsInvalid() {
+        PlayerMock player = server.addPlayer();
+        player.nextComponentMessage();
+        player.addAttachment(plugin, Permissions.ADMIN_CONFIG, true);
+
+        configCommand.onCommand(player, bukkitCmd, "config", new String[]{"world-profiles", "remove", "jass:doesnotexist"});
+        MessageAssert.assertMessageSent(player, "not mapped");
     }
 }

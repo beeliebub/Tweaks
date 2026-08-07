@@ -1,0 +1,517 @@
+package me.beeliebub.tweaks.core.config;
+
+import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
+import me.beeliebub.tweaks.profiles.WorldProfileEntry;
+import me.beeliebub.tweaks.profiles.WorldProfileTable;
+import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.function.Supplier;
+import java.util.logging.Level;
+
+/**
+ * Pure parse/validate/write core for every {@code /tconfig} mutation. Both {@code ConfigCommand}
+ * (CLI) and {@code ConfigGUI} (Dialog) call into this class rather than touching
+ * {@code plugin.getConfig()} directly themselves - it has no Dialog import so it stays
+ * constructible and unit-testable without MockBukkit's Dialog boundary (see this package's
+ * CLAUDE.md).
+ *
+ * <p>The six pre-existing legacy CLI forms (max_homes, max_chunks, egg_collector_drop_chance,
+ * eggdrop, spawneregg, resourceitems) keep dedicated methods reproducing their exact historical
+ * response wording via {@code Messages.COMMANDS} - a wording change there is a behavior-visible
+ * regression pinned by {@code ConfigCommandTest}. Every setting a later phase of the
+ * config-migration plan adds goes through the generic engine below ({@link #applyScalar},
+ * {@link #listAdd}, {@link #listRemove}, {@link #mapPut}) and {@code Messages.CONFIG} instead.
+ * {@link #listAdd}/{@link #listRemove} route the three sentinel-path settings back to the legacy
+ * toggle/delegate methods so the registry (and therefore the GUI) can still present them uniformly.
+ *
+ * <p>Every public mutation method is wrapped by {@link #guarded}: unlike the CLI (Bukkit's command
+ * dispatcher wraps {@code onCommand} in its own try/catch), a {@code DialogAction.customClick}
+ * callback has no such backstop anywhere in this codebase, so an unexpected exception here (e.g. a
+ * Dialog text-input field submitted empty - {@code Double.parseDouble(null)} throws
+ * {@code NullPointerException}, not {@code NumberFormatException}) would otherwise fail invisibly
+ * inside the callback instead of reaching the player and the log.
+ */
+public final class ConfigValueEditor {
+
+    private static final String EGG_DROP_DISABLED_KEY = "egg-collector-disabled-mobs";
+    private static final String SPAWNER_EGG_DISABLED_KEY = "spawner-egg-disabled-mobs";
+    private static final String SPAWN_EGG_SUFFIX = "_spawn_egg";
+
+    private final Tweaks plugin;
+    private final ResourceHuntItems resourceHuntItems;
+    private final WorldProfileTable worldProfileTable;
+
+    public ConfigValueEditor(Tweaks plugin, ResourceHuntItems resourceHuntItems, WorldProfileTable worldProfileTable) {
+        this.plugin = plugin;
+        this.resourceHuntItems = resourceHuntItems;
+        this.worldProfileTable = worldProfileTable;
+    }
+
+    private EditResult guarded(Supplier<EditResult> action) {
+        try {
+            return action.get();
+        } catch (RuntimeException e) {
+            plugin.getLogger().log(Level.SEVERE, "Unexpected error handling a /tconfig edit.", e);
+            return new EditResult.Invalid(Messages.CONFIG.unexpectedError());
+        }
+    }
+
+    // ------------------------------------------------------------ Legacy (verbatim wording)
+
+    public EditResult setMaxHomes(String rawValue) {
+        return guarded(() -> {
+            int newMax;
+            try {
+                newMax = Integer.parseInt(rawValue);
+            } catch (NumberFormatException e) {
+                return new EditResult.Invalid(Messages.invalidNumber());
+            }
+            if (newMax <= 0) {
+                return new EditResult.Invalid(Messages.COMMANDS.configMaxHomesMustBePositive());
+            }
+            plugin.getConfig().set("max-homes", newMax);
+            plugin.saveConfig();
+            return new EditResult.Ok(Messages.COMMANDS.configMaxHomesUpdated(newMax));
+        });
+    }
+
+    public EditResult setMaxChunks(String rawValue) {
+        return guarded(() -> {
+            int newMax;
+            try {
+                newMax = Integer.parseInt(rawValue);
+            } catch (NumberFormatException e) {
+                return new EditResult.Invalid(Messages.invalidNumber());
+            }
+            if (newMax < 1) {
+                return new EditResult.Invalid(Messages.COMMANDS.configMaxChunksMustBePositive());
+            }
+            plugin.getConfig().set("max_chunks", newMax);
+            plugin.saveConfig();
+            return new EditResult.Ok(Messages.COMMANDS.configMaxChunksUpdated(newMax));
+        });
+    }
+
+    public EditResult setEggCollectorDropChance(String rawValue) {
+        return guarded(() -> {
+            double chance;
+            try {
+                chance = Double.parseDouble(rawValue);
+            } catch (NumberFormatException | NullPointerException e) {
+                return new EditResult.Invalid(Messages.invalidDecimal());
+            }
+            if (chance < 0.0 || chance > 100.0) {
+                return new EditResult.Invalid(Messages.COMMANDS.configEggDropChanceRange());
+            }
+            plugin.getConfig().set("egg-collector-drop-chance", chance);
+            plugin.saveConfig();
+            return new EditResult.Ok(Messages.COMMANDS.configEggDropChanceUpdated(chance));
+        });
+    }
+
+    public EditResult toggleEggDrop(String action, String rawMob) {
+        return guarded(() -> toggleMobList(action, rawMob, EGG_DROP_DISABLED_KEY, false));
+    }
+
+    public EditResult toggleSpawnerEgg(String action, String rawMob) {
+        return guarded(() -> toggleMobList(action, rawMob, SPAWNER_EGG_DISABLED_KEY, true));
+    }
+
+    private EditResult toggleMobList(String action, String rawMob, String configKey, boolean spawnerEggFeature) {
+        if (action == null || rawMob == null) {
+            return new EditResult.Invalid(Messages.COMMANDS.configMobToggleActionInvalid());
+        }
+        String normalizedAction = action.toLowerCase(Locale.ROOT);
+        if (!normalizedAction.equals("disable") && !normalizedAction.equals("enable")) {
+            return new EditResult.Invalid(Messages.COMMANDS.configMobToggleActionInvalid());
+        }
+
+        String mob = normalizeMob(rawMob);
+        if (Material.matchMaterial(mob + SPAWN_EGG_SUFFIX) == null) {
+            return new EditResult.Invalid(Messages.COMMANDS.configMobUnknown(rawMob));
+        }
+
+        // getStringList returns an empty list when the key is missing; the set() call below
+        // creates the section automatically, so admins never need to touch config.yml by hand.
+        List<String> list = new ArrayList<>(plugin.getConfig().getStringList(configKey));
+        boolean changed;
+        if (normalizedAction.equals("disable")) {
+            if (list.stream().anyMatch(s -> s.equalsIgnoreCase(mob))) {
+                changed = false;
+            } else {
+                list.add(mob);
+                changed = true;
+            }
+        } else {
+            changed = list.removeIf(s -> s.equalsIgnoreCase(mob));
+        }
+
+        plugin.getConfig().set(configKey, list);
+        plugin.saveConfig();
+
+        return new EditResult.Ok(Messages.COMMANDS.configMobToggleResult(
+                spawnerEggFeature, mob, normalizedAction.equals("disable"), changed));
+    }
+
+    public EditResult resourceItems(String action, String rawMaterial) {
+        return guarded(() -> {
+            Material mat = rawMaterial == null ? null : Material.matchMaterial(rawMaterial);
+            if (mat == null) {
+                return new EditResult.Invalid(Messages.COMMANDS.configUnknownMaterial(String.valueOf(rawMaterial)));
+            }
+
+            String normalizedAction = action == null ? "" : action.toLowerCase(Locale.ROOT);
+            if (normalizedAction.equals("add")) {
+                resourceHuntItems.addAllowedItem(mat);
+                return new EditResult.Ok(Messages.COMMANDS.configResourceItemAdded(mat.name().toLowerCase(Locale.ROOT)));
+            } else if (normalizedAction.equals("remove")) {
+                resourceHuntItems.removeAllowedItem(mat);
+                return new EditResult.Ok(Messages.COMMANDS.configResourceItemRemoved(mat.name().toLowerCase(Locale.ROOT)));
+            }
+            return new EditResult.Invalid(Messages.COMMANDS.configResourceItemActionInvalid());
+        });
+    }
+
+    private static String normalizeMob(String raw) {
+        String mob = raw.toLowerCase(Locale.ROOT);
+        if (mob.startsWith("minecraft:")) mob = mob.substring("minecraft:".length());
+        return mob;
+    }
+
+    // ------------------------------------------------------------ Generic engine (future settings)
+
+    /** Applies a scalar edit, dispatching to legacy wording for the three settings that demand it. */
+    public EditResult applyScalar(ConfigSetting setting, String rawValue) {
+        return switch (setting.path()) {
+            case "max-homes" -> setMaxHomes(rawValue);
+            case "max_chunks" -> setMaxChunks(rawValue);
+            case "egg-collector-drop-chance" -> setEggCollectorDropChance(rawValue);
+            default -> guarded(() -> setScalarGeneric(setting, rawValue));
+        };
+    }
+
+    private EditResult setScalarGeneric(ConfigSetting setting, String rawValue) {
+        return switch (setting.type()) {
+            case INT -> setBoundedNumber(setting, rawValue, true);
+            case LONG -> setLong(setting, rawValue);
+            case DOUBLE, PERCENT -> setBoundedNumber(setting, rawValue, false);
+            case BOOLEAN -> setBoolean(setting, rawValue);
+            case MATERIAL -> setMaterial(setting, rawValue);
+            case NAMESPACED_KEY -> setNamespacedKey(setting, rawValue);
+            default -> new EditResult.Invalid(Messages.CONFIG.notAScalarSetting(setting.displayName()));
+        };
+    }
+
+    private EditResult setBoundedNumber(ConfigSetting setting, String rawValue, boolean integral) {
+        double parsed;
+        try {
+            parsed = Double.parseDouble(rawValue);
+        } catch (NumberFormatException | NullPointerException e) {
+            return new EditResult.Invalid(integral ? Messages.invalidNumber() : Messages.invalidDecimal());
+        }
+        if (Double.isNaN(parsed) || Double.isInfinite(parsed) || outOfBounds(setting, parsed)) {
+            return new EditResult.Invalid(Messages.CONFIG.outOfRange(setting.displayName(), setting.min(), setting.max()));
+        }
+        Object value = integral ? (int) parsed : parsed;
+        plugin.getConfig().set(setting.path(), value);
+        plugin.saveConfig();
+        return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), String.valueOf(value)));
+    }
+
+    private EditResult setLong(ConfigSetting setting, String rawValue) {
+        long parsed;
+        try {
+            parsed = Long.parseLong(rawValue);
+        } catch (NumberFormatException e) {
+            return new EditResult.Invalid(Messages.invalidNumber());
+        }
+        if (outOfBounds(setting, parsed)) {
+            return new EditResult.Invalid(Messages.CONFIG.outOfRange(setting.displayName(), setting.min(), setting.max()));
+        }
+        plugin.getConfig().set(setting.path(), parsed);
+        plugin.saveConfig();
+        return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), String.valueOf(parsed)));
+    }
+
+    private static boolean outOfBounds(ConfigSetting setting, double value) {
+        return (setting.min() != null && value < setting.min()) || (setting.max() != null && value > setting.max());
+    }
+
+    private EditResult setBoolean(ConfigSetting setting, String rawValue) {
+        if (!"true".equalsIgnoreCase(rawValue) && !"false".equalsIgnoreCase(rawValue)) {
+            return new EditResult.Invalid(Messages.CONFIG.invalidBoolean());
+        }
+        boolean value = Boolean.parseBoolean(rawValue);
+        plugin.getConfig().set(setting.path(), value);
+        plugin.saveConfig();
+        return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), String.valueOf(value)));
+    }
+
+    private static final String PROTECTION_SELECTION_TOOL_PATH = "protection.selection-tool";
+
+    private EditResult setMaterial(ConfigSetting setting, String rawValue) {
+        Material mat = rawValue == null ? null : Material.matchMaterial(rawValue);
+        // A MATERIAL setting always represents an item a player holds/interacts with, never a
+        // block-only or non-item material - Material#isItem() is Paper's own check for "has an
+        // item form," but AIR/CAVE_AIR/VOID_AIR all report isItem() == true (an empty ItemStack
+        // is legal) despite not being holdable, so isAir() must be excluded separately.
+        if (mat == null || mat.isAir() || !mat.isItem()) {
+            return new EditResult.Invalid(Messages.COMMANDS.configUnknownMaterial(String.valueOf(rawValue)));
+        }
+        plugin.getConfig().set(setting.path(), mat.name());
+        plugin.saveConfig();
+        // protection.selection-tool is also cached live in Services (the one overwritable field -
+        // see its Javadoc) so ProtectionListeners' wand check doesn't need its own live re-read.
+        if (setting.path().equals(PROTECTION_SELECTION_TOOL_PATH)) {
+            plugin.setProtectionSelectionTool(mat);
+        }
+        return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), mat.name()));
+    }
+
+    private EditResult setNamespacedKey(ConfigSetting setting, String rawValue) {
+        NamespacedKey key = rawValue == null ? null : NamespacedKey.fromString(rawValue.toLowerCase(Locale.ROOT));
+        if (key == null) {
+            return new EditResult.Invalid(Messages.CONFIG.invalidNamespacedKey(String.valueOf(rawValue)));
+        }
+        plugin.getConfig().set(setting.path(), key.toString());
+        plugin.saveConfig();
+        return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), key.toString()));
+    }
+
+    public EditResult listAdd(ConfigSetting setting, String rawValue) {
+        if (setting.path().equals(ConfigRegistry.EGGDROP_SENTINEL_PATH)) return toggleEggDrop("disable", rawValue);
+        if (setting.path().equals(ConfigRegistry.SPAWNEREGG_SENTINEL_PATH)) return toggleSpawnerEgg("disable", rawValue);
+        if (setting.path().equals(ConfigRegistry.RESOURCEITEMS_SENTINEL_PATH)) return resourceItems("add", rawValue);
+        return guarded(() -> mutateStringList(setting, rawValue, true));
+    }
+
+    public EditResult listRemove(ConfigSetting setting, String rawValue) {
+        if (setting.path().equals(ConfigRegistry.EGGDROP_SENTINEL_PATH)) return toggleEggDrop("enable", rawValue);
+        if (setting.path().equals(ConfigRegistry.SPAWNEREGG_SENTINEL_PATH)) return toggleSpawnerEgg("enable", rawValue);
+        if (setting.path().equals(ConfigRegistry.RESOURCEITEMS_SENTINEL_PATH)) return resourceItems("remove", rawValue);
+        return guarded(() -> mutateStringList(setting, rawValue, false));
+    }
+
+    private EditResult mutateStringList(ConfigSetting setting, String rawValue, boolean adding) {
+        if (rawValue == null) {
+            return new EditResult.Invalid(Messages.CONFIG.notAScalarSetting(setting.displayName()));
+        }
+        boolean lowercase = setting.type() == EditorType.WORLD_KEY_LIST;
+        String value = lowercase ? rawValue.toLowerCase(Locale.ROOT) : rawValue;
+
+        List<String> list = new ArrayList<>(plugin.getConfig().getStringList(setting.path()));
+        boolean changed;
+        if (adding) {
+            changed = list.stream().noneMatch(s -> s.equalsIgnoreCase(value));
+            if (changed) list.add(value);
+        } else {
+            changed = list.removeIf(s -> s.equalsIgnoreCase(value));
+        }
+
+        plugin.getConfig().set(setting.path(), list);
+        plugin.saveConfig();
+        return new EditResult.Ok(adding
+                ? Messages.CONFIG.listEntryAdded(setting.displayName(), value, changed)
+                : Messages.CONFIG.listEntryRemoved(setting.displayName(), value, changed));
+    }
+
+    public EditResult mapPut(ConfigSetting setting, String rawKey, String rawValue) {
+        return guarded(() -> {
+            if (setting.type() != EditorType.NUMBER_MAP) {
+                return new EditResult.Invalid(Messages.CONFIG.notAMapSetting(setting.displayName()));
+            }
+            // ConfigurationSection#set treats '.' as a path separator - an unsanitized key
+            // containing one would silently create a nested section instead of one flat map
+            // entry, while this method's own confirmation message would still echo it back as
+            // if it were written flat. Reject rather than silently diverge from what's on disk.
+            if (rawKey == null || rawKey.isBlank() || rawKey.contains(".")) {
+                return new EditResult.Invalid(Messages.CONFIG.invalidMapKey(String.valueOf(rawKey)));
+            }
+            // For NUMBER_MAP settings, min()/max() bound the valid *key* (e.g. streak day 1-7),
+            // not a value - reusing the same bounds fields the scalar path uses for value bounds.
+            if (setting.min() != null || setting.max() != null) {
+                double keyAsNumber;
+                try {
+                    keyAsNumber = Double.parseDouble(rawKey);
+                } catch (NumberFormatException e) {
+                    return new EditResult.Invalid(Messages.CONFIG.outOfRange(setting.displayName(), setting.min(), setting.max()));
+                }
+                if (outOfBounds(setting, keyAsNumber)) {
+                    return new EditResult.Invalid(Messages.CONFIG.outOfRange(setting.displayName(), setting.min(), setting.max()));
+                }
+            }
+            double value;
+            try {
+                value = Double.parseDouble(rawValue);
+            } catch (NumberFormatException | NullPointerException e) {
+                return new EditResult.Invalid(Messages.invalidDecimal());
+            }
+            // Mirrors setBoundedNumber's finite check - a NaN/Infinite value here (e.g.
+            // economy.streak-multipliers) would otherwise flow straight into balance math and
+            // permanently poison a player's balance to NaN/Infinity.
+            if (Double.isNaN(value) || Double.isInfinite(value)) {
+                return new EditResult.Invalid(Messages.invalidDecimal());
+            }
+            plugin.getConfig().set(setting.path() + "." + rawKey, value);
+            plugin.saveConfig();
+            return new EditResult.Ok(Messages.CONFIG.mapEntryUpdated(setting.displayName(), rawKey, value));
+        });
+    }
+
+    // ------------------------------------------------------------ world-profiles (special-cased,
+    // like eggdrop/spawneregg/resourceitems - not a ConfigRegistry entry. See core/config/CLAUDE.md.)
+
+    /** Adds a brand-new world-key entry. Profile is specified up front - there's no existing data to orphan for a key that never existed. */
+    public EditResult worldProfileAdd(String worldKey, String profile, String label, String colorName) {
+        return guarded(() -> {
+            // NamespacedKey.fromString both validates the real Bukkit world-key charset
+            // ([a-z0-9._-]+:[a-z0-9._/-]+) and normalizes case - an unrestricted worldKey could
+            // otherwise carry characters with no legitimate use here.
+            NamespacedKey parsedKey = worldKey == null ? null : NamespacedKey.fromString(worldKey.toLowerCase(Locale.ROOT));
+            if (parsedKey == null) {
+                return new EditResult.Invalid(Messages.CONFIG.worldProfileInvalidWorldKey());
+            }
+            String key = parsedKey.toString();
+            if (worldProfileTable.entry(key).isPresent()) {
+                return new EditResult.Invalid(Messages.CONFIG.worldProfileDuplicateKey(key));
+            }
+            for (String existing : worldProfileTable.worldKeysOrdered()) {
+                if (key.contains(existing) || existing.contains(key)) {
+                    return new EditResult.Invalid(Messages.CONFIG.worldProfileCollidesWith(key, existing));
+                }
+            }
+            if (profile == null || profile.isBlank() || profile.contains(".")) {
+                return new EditResult.Invalid(Messages.CONFIG.worldProfileInvalidProfile());
+            }
+            if (label == null || label.isBlank() || label.contains("[") || label.contains("]") || label.contains(".")) {
+                return new EditResult.Invalid(Messages.CONFIG.worldProfileInvalidLabel());
+            }
+            NamedTextColor color = parseColor(colorName);
+            if (color == null) {
+                return new EditResult.Invalid(Messages.CONFIG.worldProfileInvalidColor(String.valueOf(colorName)));
+            }
+            worldProfileTable.putEntry(key, profile, label, color);
+            return new EditResult.Ok(Messages.CONFIG.worldProfileAdded(key, profile, label, colorName));
+        });
+    }
+
+    public EditResult worldProfileRemove(String worldKey) {
+        return guarded(() -> {
+            if (worldKey == null || worldKey.isBlank()) {
+                return new EditResult.Invalid(Messages.CONFIG.worldProfileInvalidWorldKey());
+            }
+            String key = worldKey.toLowerCase(Locale.ROOT);
+            if (worldProfileTable.entry(key).isEmpty()) {
+                return new EditResult.Invalid(Messages.CONFIG.worldProfileNotFound(key));
+            }
+            worldProfileTable.removeEntry(key);
+            return new EditResult.Ok(Messages.CONFIG.worldProfileRemoved(key));
+        });
+    }
+
+    /** Edits only tag/color of an existing entry - this method has no profile parameter at all, so renaming an entry's profile (and orphaning its ec_/xp_ storage keys) is structurally impossible here. */
+    public EditResult worldProfileEdit(String worldKey, String label, String colorName) {
+        return guarded(() -> {
+            if (worldKey == null || worldKey.isBlank()) {
+                return new EditResult.Invalid(Messages.CONFIG.worldProfileInvalidWorldKey());
+            }
+            String key = worldKey.toLowerCase(Locale.ROOT);
+            if (worldProfileTable.entry(key).isEmpty()) {
+                return new EditResult.Invalid(Messages.CONFIG.worldProfileNotFound(key));
+            }
+            if (label == null || label.isBlank() || label.contains("[") || label.contains("]") || label.contains(".")) {
+                return new EditResult.Invalid(Messages.CONFIG.worldProfileInvalidLabel());
+            }
+            NamedTextColor color = parseColor(colorName);
+            if (color == null) {
+                return new EditResult.Invalid(Messages.CONFIG.worldProfileInvalidColor(String.valueOf(colorName)));
+            }
+            worldProfileTable.updateDisplay(key, label, color);
+            return new EditResult.Ok(Messages.CONFIG.worldProfileUpdated(key));
+        });
+    }
+
+    private static NamedTextColor parseColor(String raw) {
+        if (raw == null) return null;
+        return NamedTextColor.NAMES.value(raw.toLowerCase(Locale.ROOT));
+    }
+
+    public List<String> worldProfileKeys() {
+        return worldProfileTable.worldKeysOrdered();
+    }
+
+    public List<String> worldProfileKnownProfiles() {
+        return worldProfileTable.knownProfilesSorted();
+    }
+
+    public String worldProfileEntryDisplay(String worldKey) {
+        Optional<WorldProfileEntry> entry = worldProfileTable.entry(worldKey);
+        if (entry.isEmpty()) return "";
+        WorldProfileEntry e = entry.get();
+        String colorName = NamedTextColor.NAMES.key(e.color());
+        // Includes profile - it's only settable at add-time (config-file-only afterward), so this
+        // is the only place an admin can see which profile an existing world key is mapped to
+        // without opening config.yml by hand.
+        return e.worldKey() + " -> profile '" + e.profile() + "', [" + e.tagText() + "] ("
+                + (colorName == null ? "" : colorName) + ")";
+    }
+
+    // ------------------------------------------------------------ Read helpers (GUI display)
+
+    public String currentValueDisplay(ConfigSetting setting) {
+        return switch (setting.type()) {
+            case STRING_LIST, WORLD_KEY_LIST, MOB_LIST, MATERIAL_LIST -> String.join(", ", currentListValues(setting));
+            case NUMBER_MAP -> {
+                var section = plugin.getConfig().getConfigurationSection(setting.path());
+                yield section == null ? "" : String.join(", ", section.getKeys(false));
+            }
+            default -> String.valueOf(plugin.getConfig().get(setting.path()));
+        };
+    }
+
+    /** Sorted {@code key -> "key: value"} display rows for a NUMBER_MAP setting's GUI screen. */
+    public List<String> currentMapEntryLabels(ConfigSetting setting) {
+        var section = plugin.getConfig().getConfigurationSection(setting.path());
+        if (section == null) return List.of();
+        return section.getKeys(false).stream()
+                .sorted()
+                .map(key -> key + ": " + section.getDouble(key))
+                .toList();
+    }
+
+    /** The raw sorted keys backing {@link #currentMapEntryLabels}, for building edit callbacks. */
+    public List<String> currentMapKeys(ConfigSetting setting) {
+        var section = plugin.getConfig().getConfigurationSection(setting.path());
+        return section == null ? List.of() : section.getKeys(false).stream().sorted().toList();
+    }
+
+    /** A single NUMBER_MAP entry's current value, for the per-entry edit screen's body text. */
+    public String currentMapEntryValue(ConfigSetting setting, String key) {
+        var section = plugin.getConfig().getConfigurationSection(setting.path());
+        return section == null ? "" : String.valueOf(section.getDouble(key));
+    }
+
+    public List<String> currentListValues(ConfigSetting setting) {
+        if (setting.path().equals(ConfigRegistry.RESOURCEITEMS_SENTINEL_PATH)) {
+            return resourceHuntItems.getAllowedItems().stream()
+                    .map(m -> m.name().toLowerCase(Locale.ROOT))
+                    .sorted()
+                    .toList();
+        }
+        if (setting.path().equals(ConfigRegistry.EGGDROP_SENTINEL_PATH)) {
+            return plugin.getConfig().getStringList(EGG_DROP_DISABLED_KEY).stream().sorted().toList();
+        }
+        if (setting.path().equals(ConfigRegistry.SPAWNEREGG_SENTINEL_PATH)) {
+            return plugin.getConfig().getStringList(SPAWNER_EGG_DISABLED_KEY).stream().sorted().toList();
+        }
+        return plugin.getConfig().getStringList(setting.path()).stream().sorted().toList();
+    }
+}

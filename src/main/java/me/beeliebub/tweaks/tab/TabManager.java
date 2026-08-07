@@ -4,6 +4,7 @@ import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.economy.BalanceCommand;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.playeradmin.PlayerAdminManager;
+import me.beeliebub.tweaks.profiles.WorldProfileTable;
 import me.beeliebub.tweaks.ranks.RankManager;
 import me.beeliebub.tweaks.utils.ColorUtil;
 import net.kyori.adventure.text.Component;
@@ -21,7 +22,6 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
-import java.util.Map;
 import java.util.UUID;
 
 // Single source of truth for the tab-list display name and scoreboard team ordering.
@@ -34,33 +34,6 @@ public class TabManager implements Listener {
     // Tab-list constants (moved from PlayerAdminManager)
     // ------------------------------------------------------------
     private static final Component AFK_SUFFIX = Component.text(" [AFK]", NamedTextColor.RED);
-    private static final String ARCHIVE_WORLD_KEY = "jass:archive";
-    private static final String LOBBY_WORLD_KEY   = "jass:lobby";
-    private static final String PI_WORLD_KEY      = "jass:pi";
-
-    private static final String PROFILE_LOBBY    = "lobby";
-    private static final String PROFILE_STANDARD = "standard";
-    private static final String PROFILE_ARCHIVE  = "archive";
-    private static final String PROFILE_PI       = "pi";
-
-    private static final Map<String, String> TAB_SORT_KEYS = Map.of(
-            PROFILE_LOBBY,    "a",
-            PROFILE_STANDARD, "b",
-            PROFILE_ARCHIVE,  "c",
-            PROFILE_PI,       "d"
-    );
-
-    private static final Component FALLBACK_TAG = Component.text("[Survival] ", NamedTextColor.GREEN);
-    private static final Map<String, Component> WORLD_TAGS = Map.of(
-            LOBBY_WORLD_KEY,        Component.text("[Lobby] ",    NamedTextColor.AQUA),
-            ARCHIVE_WORLD_KEY,      Component.text("[Archive] ",  NamedTextColor.GOLD),
-            PI_WORLD_KEY,           Component.text("[Pi] ",       NamedTextColor.LIGHT_PURPLE),
-            "minecraft:overworld",  Component.text("[Survival] ", NamedTextColor.GREEN),
-            "minecraft:the_nether", Component.text("[Nether] ",   NamedTextColor.LIGHT_PURPLE),
-            "minecraft:the_end",    Component.text("[End] ",      NamedTextColor.DARK_PURPLE),
-            "jass:resource",        Component.text("[Resource] ", NamedTextColor.AQUA),
-            "jass:resource_nether", Component.text("[Resource] ", NamedTextColor.AQUA)
-    );
 
     // ------------------------------------------------------------
     // Dependencies
@@ -69,13 +42,15 @@ public class TabManager implements Listener {
     private final EconomyManager economyManager;
     private final RankManager rankManager;
     private final PlayerAdminManager playerAdminManager;
+    private final WorldProfileTable worldProfileTable;
 
     public TabManager(Tweaks plugin, EconomyManager economyManager, RankManager rankManager,
-                      PlayerAdminManager playerAdminManager) {
+                      PlayerAdminManager playerAdminManager, WorldProfileTable worldProfileTable) {
         this.scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
         this.economyManager = economyManager;
         this.rankManager = rankManager;
         this.playerAdminManager = playerAdminManager;
+        this.worldProfileTable = worldProfileTable;
     }
 
     // ============================================================
@@ -90,7 +65,7 @@ public class TabManager implements Listener {
     public void refreshTab(Player player) {
         UUID uuid = player.getUniqueId();
         String worldKey = player.getWorld().getKey().asString();
-        Component tag = WORLD_TAGS.getOrDefault(worldKey, FALLBACK_TAG);
+        Component tag = worldProfileTable.tagFor(worldKey);
 
         // World prefix (e.g. "[Survival] ").
         Component name = tag;
@@ -134,7 +109,7 @@ public class TabManager implements Listener {
      * Must be called on the main thread.
      */
     public void assignTeam(Player player) {
-        String profile = getProfileForWorldKey(player.getWorld().getKey().asString());
+        String profile = worldProfileTable.profileFor(player.getWorld().getKey().asString());
         Team current = scoreboard.getPlayerTeam(player);
         if (current != null) {
             if (current.getName().equals(teamName(profile))) return;
@@ -161,15 +136,8 @@ public class TabManager implements Listener {
     // Team helpers (moved from PlayerAdminManager)
     // ============================================================
 
-    private String getProfileForWorldKey(String worldKey) {
-        if (worldKey.equalsIgnoreCase(ARCHIVE_WORLD_KEY)) return PROFILE_ARCHIVE;
-        if (worldKey.equalsIgnoreCase(LOBBY_WORLD_KEY))   return PROFILE_LOBBY;
-        if (worldKey.equalsIgnoreCase(PI_WORLD_KEY))      return PROFILE_PI;
-        return PROFILE_STANDARD;
-    }
-
     private String teamName(String profile) {
-        return "tab_" + TAB_SORT_KEYS.getOrDefault(profile, "b");
+        return "tab_" + worldProfileTable.sortKeyFor(profile);
     }
 
     private Team getOrCreateTeam(String profile) {

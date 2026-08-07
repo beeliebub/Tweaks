@@ -27,13 +27,18 @@ commands:
   nv:
     description: Toggle night vision.
   tconfig:
-    description: Update plugin config options.
+    description: Update plugin config options, or open the admin config GUI.
     usage: |
+      /tconfig gui
+      /tconfig list [category]
       /tconfig max_homes <int>
       /tconfig max_chunks <int>
       /tconfig egg_collector_drop_chance <0.0-100.0>
       /tconfig eggdrop <disable|enable> <mob>
       /tconfig spawneregg <disable|enable> <mob>
+      /tconfig resourceitems <add|remove> <item>
+      /tconfig world-profiles <list|add|remove|edit>
+      /tconfig <path> <value>
     aliases: [tweaksconfig]
   nick:
     description: Set or remove your nickname

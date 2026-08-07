@@ -215,4 +215,18 @@ public class StorageManager {
         return data != null ? data.get(profile) : null;
     }
 
+    // Used by SeparatorListener's one-time-migration gate: checking against the *currently
+    // configured* profile set (WorldProfileTable#knownProfiles) would regress if an admin later
+    // removes a world-profiles entry that was the last one referencing a profile a player already
+    // has real ec_/xp_ data under - this key scan is independent of what's currently configured, so
+    // a profile's data, once cached, is never "forgotten" by this check.
+    public boolean hasAnyCachedKeyWithPrefix(UUID player, String prefix) {
+        Map<String, String> data = inventoryCache.get(player);
+        if (data == null) return false;
+        for (String key : data.keySet()) {
+            if (key.startsWith(prefix)) return true;
+        }
+        return false;
+    }
+
 }

@@ -7,6 +7,12 @@ max-homes: 15
 # falls back to REDSTONE if the name doesn't resolve.
 protection:
   selection-tool: STONE_AXE
+  # Claim pricing formula: base * decay-rate^(chunks already owned), floored at minimum-per-chunk.
+  # Not retroactive - only affects claims priced after a change.
+  claim-cost:
+    base: 10.0
+    decay-rate: 1.1
+    minimum-per-chunk: 1
 
 # Maximum number of chunks a single player may own through the purchase system.
 max_chunks: 200
@@ -134,3 +140,129 @@ ranks:
   8:  { name: "VIII", cost: 125000.0, multiplier: 0.08, rakeback: 0.08 }
   9:  { name: "IX",   cost: 200000.0, multiplier: 0.09, rakeback: 0.09 }
   10: { name: "X",    cost: 350000.0, multiplier: 0.10, rakeback: 0.10 }
+
+# The following keys are not yet read by any live code - added here now
+# so the config-defaulting reconciliation mechanism (Tweaks#reconcileConfigDefaults) has one
+# consistent set of bundled defaults to reconcile against, rather than touching config.yml again
+# in each later phase. Each key's default equals today's hardcoded Java constant.
+blocklog:
+  retention-days: 30
+  max-entries-per-chest: 500
+
+deathinventory:
+  retention-days: 30
+
+enchantments:
+  spawner-pickup:
+    drop-chance-percent: 20.0
+    uses: 5
+  egg-collector:
+    uses: 5
+  quality:
+    chance-percent: 10.0
+    blood-moon-chance-percent: 50.0
+  lumberjack:
+    max-logs: 256
+
+itemadmin:
+  tool-protect:
+    default-threshold: 100
+    warn-cooldown-ms: 2000
+  gui-copy:
+    max-distance: 8
+
+xpbottle:
+  # Restart-required: also baked into a registered brewing recipe at boot.
+  orbs-per-emerald: 1395
+
+minigames:
+  blackjack:
+    inactivity-timeout-minutes: 10
+    auto-clear-seconds: 30
+  roulette:
+    betting-window-seconds: 30
+    big-win-multiplier: 8
+    scan-radius: 16
+  resource-hunt:
+    default-reward-multiplier: 2.0
+
+playeradmin:
+  afk-auto-minutes: 10
+  max-nick-length: 24
+
+teleport:
+  tpa-timeout-seconds: 30
+  sethome-disabled-worlds:
+    - "jass:resource"
+    - "jass:resource_nether"
+
+worldmanagement:
+  blood-moon-chance-percent: 50.0
+
+# Worlds where the nether portal is disabled.
+disabled-nether-portal-worlds:
+  - "jass:resource"
+  - "jass:resource_nether"
+
+# World-key -> inventory/XP profile + tab-list display mapping, replacing what used to be hardcoded
+# in profiles/SeparatorListener and tab/TabManager. Owned exclusively by profiles/WorldProfileTable
+# - admin-editable via `/tconfig world-profiles <list|add|remove|edit>` or the /tconfig gui.
+#
+# Stored as a LIST (not a map keyed by world-key) deliberately: Tweaks#reconcileConfigDefaults'
+# sticky copyDefaults(true) union-merges a live section's child keys with this bundled default on
+# every read, so a keyed map would silently resurrect a removed default entry on the next reload. A
+# list is replaced atomically, avoiding that.
+#
+# IMPORTANT: a world key's `profile` here is NOT safely renameable after the fact - "profile" is a
+# literal prefix of the ec_<profile>/xp_<profile> storage keys StorageManager persists player data
+# under (see profiles/CLAUDE.md). Changing an existing entry's profile orphans that world's already-
+# stored inventories/ender chests/XP with no migration path. `/tconfig world-profiles edit` only
+# ever touches tag/color for this reason - only a brand-new `add` may specify a profile.
+world-profiles:
+  - world: "jass:lobby"
+    profile: lobby
+    tag: "Lobby"
+    color: AQUA
+  - world: "jass:archive"
+    profile: archive
+    tag: "Archive"
+    color: GOLD
+  - world: "jass:pi"
+    profile: pi
+    tag: "Pi"
+    color: LIGHT_PURPLE
+  - world: "minecraft:overworld"
+    profile: standard
+    tag: "Survival"
+    color: GREEN
+  - world: "minecraft:the_nether"
+    profile: standard
+    tag: "Nether"
+    color: LIGHT_PURPLE
+  - world: "minecraft:the_end"
+    profile: standard
+    tag: "End"
+    color: DARK_PURPLE
+  - world: "jass:resource"
+    profile: standard
+    tag: "Resource"
+    color: AQUA
+  - world: "jass:resource_nether"
+    profile: standard
+    tag: "Resource"
+    color: AQUA
+
+# Applied to any world key not matched (exactly or by substring) above. Always present - removing
+# every world-profiles entry is legal and simply routes every world through this fallback.
+world-profile-fallback:
+  profile: standard
+  tag: "Survival"
+  color: GREEN
+
+# Scoreboard-team sort order (tab_<key>) per profile. A profile missing here still works - it just
+# sorts after every profile listed here, in an unspecified but stable order.
+world-profile-sort-order:
+  lobby: a
+  standard: b
+  archive: c
+  pi: d

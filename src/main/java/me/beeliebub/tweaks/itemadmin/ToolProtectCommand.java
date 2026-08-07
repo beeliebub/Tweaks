@@ -39,9 +39,6 @@ import java.util.concurrent.ConcurrentHashMap;
 // enchantment so common gear isn't affected.
 public class ToolProtectCommand implements CommandExecutor, TabCompleter, Listener {
 
-    private static final int DEFAULT_THRESHOLD = 100;
-    private static final long WARN_COOLDOWN_MS = 2000L;
-
     private static final Set<Material> PROTECTED_TOOLS = EnumSet.of(
             Material.DIAMOND_SWORD, Material.NETHERITE_SWORD,
             Material.DIAMOND_PICKAXE, Material.NETHERITE_PICKAXE,
@@ -50,15 +47,27 @@ public class ToolProtectCommand implements CommandExecutor, TabCompleter, Listen
             Material.DIAMOND_HOE, Material.NETHERITE_HOE
     );
 
+    private final JavaPlugin plugin;
     private final NamespacedKey enabledKey;
     private final NamespacedKey thresholdKey;
     private final QualityRegistry qualityRegistry;
     private final Map<UUID, Long> lastWarnAt = new ConcurrentHashMap<>();
 
     public ToolProtectCommand(JavaPlugin plugin, QualityRegistry qualityRegistry) {
+        this.plugin = plugin;
         this.enabledKey = new NamespacedKey(plugin, "toolprotect_enabled");
         this.thresholdKey = new NamespacedKey(plugin, "toolprotect_threshold");
         this.qualityRegistry = qualityRegistry;
+    }
+
+    // Package-private so a config knob test can exercise the clamp/live-read behavior directly
+    // without widening visibility to public.
+    int defaultThreshold() {
+        return Math.max(1, plugin.getConfig().getInt("itemadmin.tool-protect.default-threshold", 100));
+    }
+
+    long warnCooldownMs() {
+        return Math.max(0, plugin.getConfig().getLong("itemadmin.tool-protect.warn-cooldown-ms", 2000L));
     }
 
     @Override
@@ -182,7 +191,7 @@ public class ToolProtectCommand implements CommandExecutor, TabCompleter, Listen
     private void warn(Player player, ItemStack tool) {
         long now = System.currentTimeMillis();
         Long previous = lastWarnAt.get(player.getUniqueId());
-        if (previous != null && now - previous < WARN_COOLDOWN_MS) return;
+        if (previous != null && now - previous < warnCooldownMs()) return;
         lastWarnAt.put(player.getUniqueId(), now);
 
         ItemMeta meta = tool.getItemMeta();
@@ -197,7 +206,7 @@ public class ToolProtectCommand implements CommandExecutor, TabCompleter, Listen
             return prefixFilter(List.of("on", "off", "durability"), args[0]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("durability")) {
-            return prefixFilter(List.of(Integer.toString(DEFAULT_THRESHOLD)), args[1]);
+            return prefixFilter(List.of(Integer.toString(defaultThreshold())), args[1]);
         }
         return List.of();
     }
@@ -221,7 +230,7 @@ public class ToolProtectCommand implements CommandExecutor, TabCompleter, Listen
 
     private int getThreshold(Player player) {
         Integer t = player.getPersistentDataContainer().get(thresholdKey, PersistentDataType.INTEGER);
-        return t != null ? t : DEFAULT_THRESHOLD;
+        return t != null ? t : defaultThreshold();
     }
 
     private void setThreshold(Player player, int value) {

@@ -525,7 +525,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 gray("The tab list uses a unified display format:"),
                 yellow("[World][Rank] Name [$Balance] [AFK]"),
                 aqua("World Tags:"),
-                white("[Lobby], [Survival], [Nether], [End], [Resource], [Archive], [Pi]."),
+                white("A bracketed tag per world (default: [Lobby], [Survival], [Nether], [End], [Resource], [Archive], [Pi]) - admin-configurable, see /tconfig world-profiles list."),
                 white("Rank names show your current rank in gold brackets."),
                 white("Balance hides if you've toggled it off via /bal hide."),
                 red("AFK players show a red [AFK] suffix."),
@@ -534,11 +534,9 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
 
         articles.add(new HelpArticle("profiles", "World Profiles", List.of(
                 gray("Per-profile inventory, ender chest, and XP."),
-                aqua("Profiles:"),
-                white("Lobby (jass:lobby)."),
-                white("Standard (overworld, nether, end)."),
-                white("Archive (jass:archive)."),
-                white("Pi (jass:pi)."),
+                aqua("Default profiles:"),
+                white("Lobby, Standard (overworld/nether/end), Archive, Pi."),
+                gray("Admins can add/remove/edit world-key mappings live - see /tconfig world-profiles list for the current set."),
                 yellow("Items and XP swap automatically on world change.")
         ), Material.PAINTING, 22, ColorUtil.HELP_GRAD_WORLD_PROFILES, List.of("spawn", "tablist")));
 
@@ -613,12 +611,17 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
 
         articles.add(new HelpArticle("config_admin", "Config Tools (Admin)", List.of(
                 gray("Manage plugin configuration at runtime."),
+                cmd("/tconfig gui", "Open the admin config GUI (players only)."),
+                cmd("/tconfig list [category]", "Print every setting and its current value."),
                 cmd("/tconfig max_homes <int>", "Set global max homes per player."),
                 cmd("/tconfig max_chunks <int>", "Set global max chunk claims per player."),
                 cmd("/tconfig egg_collector_drop_chance <%>", "Set base egg drop chance."),
                 cmd("/tconfig eggdrop <disable|enable> <mob>", "Toggle drops for specific mobs."),
                 cmd("/tconfig spawneregg <disable|enable> <mob>", "Toggle spawner-egg usage for mobs."),
                 cmd("/tconfig resourceitems <add|remove> <item>", "Manage resource world allowed items."),
+                cmd("/tconfig world-profiles <list|add|remove|edit>", "Manage world-key -> profile/tag/color mappings (see /help profiles)."),
+                cmd("/tconfig <path> <value>", "Generic setter for any other registered setting (Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Xp Bottle categories)."),
+                white("Ranks: /ranks edit  ·  Permissions: /tprm  ·  Whack: /whack"),
                 red("Permission: tweaks.admin.config.")
         ), Material.COMMAND_BLOCK, 41, ColorUtil.HELP_GRAD_ITEM_TOOLS,
                 List.of("blocklog", "item_admin"), Permissions.ADMIN_CONFIG));

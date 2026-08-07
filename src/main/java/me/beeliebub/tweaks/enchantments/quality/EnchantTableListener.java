@@ -10,6 +10,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.enchantment.EnchantItemEvent;
+import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -22,15 +23,26 @@ import java.util.concurrent.ThreadLocalRandom;
 // while a Blood Moon event is active.
 public class EnchantTableListener implements Listener {
 
-    private static final double QUALITY_CHANCE = 0.10;
-    private static final double BLOOD_MOON_QUALITY_CHANCE = 0.50;
-
+    private final Plugin plugin;
     private final QualityRegistry registry;
     private final MoonSystem bloodMoon;
 
-    public EnchantTableListener(QualityRegistry registry, MoonSystem bloodMoon) {
+    public EnchantTableListener(Plugin plugin, QualityRegistry registry, MoonSystem bloodMoon) {
+        this.plugin = plugin;
         this.registry = registry;
         this.bloodMoon = bloodMoon;
+    }
+
+    // Package-private (not private) so a config knob test can exercise the percent conversion
+    // directly without widening visibility to public.
+    double qualityChance() {
+        double percent = plugin.getConfig().getDouble("enchantments.quality.chance-percent", 10.0);
+        return Math.max(0.0, Math.min(100.0, percent)) / 100.0;
+    }
+
+    double bloodMoonQualityChance() {
+        double percent = plugin.getConfig().getDouble("enchantments.quality.blood-moon-chance-percent", 50.0);
+        return Math.max(0.0, Math.min(100.0, percent)) / 100.0;
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -39,7 +51,7 @@ public class EnchantTableListener implements Listener {
         List<Enchantment> toRemove = new ArrayList<>();
         Map<Enchantment, Integer> toAdd = new HashMap<>();
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        double chance = bloodMoon.isActive() ? BLOOD_MOON_QUALITY_CHANCE : QUALITY_CHANCE;
+        double chance = bloodMoon.isActive() ? bloodMoonQualityChance() : qualityChance();
 
         for (var entry : enchantsToAdd.entrySet()) {
             Enchantment enchant = entry.getKey();

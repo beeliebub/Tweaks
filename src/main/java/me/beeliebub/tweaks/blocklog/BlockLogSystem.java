@@ -58,16 +58,17 @@ import java.util.concurrent.TimeUnit;
 // the chunk-load prune listener, and the /logs command + punch-to-view inspector.
 public final class BlockLogSystem implements CommandExecutor, Listener {
 
-    static final long RETENTION_MILLIS = TimeUnit.DAYS.toMillis(30);
     private static final int ENTRIES_PER_PAGE = 10;
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    private final Plugin plugin;
     private final ChunkLogStore store;
     // (player UUID, anchor key) -> snapshot. See diff strategy notes in blocklog/CLAUDE.md.
     private final Map<SnapshotKey, ItemStack[]> snapshots = new HashMap<>();
     private final Set<UUID> inspectors = new HashSet<>();
 
     public BlockLogSystem(Plugin plugin) {
+        this.plugin = plugin;
         this.store = new ChunkLogStore(plugin);
     }
 
@@ -225,8 +226,16 @@ public final class BlockLogSystem implements CommandExecutor, Listener {
 
     @EventHandler
     public void onChunkLoad(ChunkLoadEvent event) {
-        long cutoff = System.currentTimeMillis() - RETENTION_MILLIS;
+        long cutoff = System.currentTimeMillis() - retentionMillis();
         pruneChunk(event.getChunk(), cutoff);
+    }
+
+    // Package-private (not private) so BlockLogRetentionConfigTest can exercise the clamp/live-read
+    // behavior directly, per this project's convention for members a test needs without widening
+    // visibility to public (see the root CLAUDE.md's "Test Layout" section).
+    long retentionMillis() {
+        int days = Math.max(1, plugin.getConfig().getInt("blocklog.retention-days", 30));
+        return TimeUnit.DAYS.toMillis(days);
     }
 
     // ============================================================

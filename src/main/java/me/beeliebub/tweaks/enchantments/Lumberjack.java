@@ -34,7 +34,6 @@ import java.util.logging.Level;
 // and requires an adjacent leaf (trees) or both stem and cap blocks (mushrooms).
 public class Lumberjack implements Listener {
 
-    private static final int MAX_LOGS = 256;
     private static final Set<Material> MUSHROOM_BLOCKS = Set.of(
             Material.MUSHROOM_STEM,
             Material.RED_MUSHROOM_BLOCK,
@@ -46,6 +45,7 @@ public class Lumberjack implements Listener {
             Material.SHROOMLIGHT
     );
 
+    private final Tweaks plugin;
     private final Enchantment enchantment;
     private final Telekinesis telekinesis;
     private final QualityRegistry qualityRegistry;
@@ -53,6 +53,7 @@ public class Lumberjack implements Listener {
 
     public Lumberjack(Tweaks plugin, Telekinesis telekinesis, QualityRegistry qualityRegistry,
                       FortuneQualityListener fortuneQuality) {
+        this.plugin = plugin;
         String raw = plugin.getConfig().getString("lumberjack");
         this.enchantment = resolveEnchantment(plugin, raw);
         this.telekinesis = telekinesis;
@@ -64,8 +65,14 @@ public class Lumberjack implements Listener {
         return enchantment;
     }
 
+    // Package-private (not private) so a config knob test can exercise the clamp/live-read
+    // behavior directly without widening visibility to public.
+    int maxLogs() {
+        return Math.max(1, plugin.getConfig().getInt("enchantments.lumberjack.max-logs", 256));
+    }
+
     public Set<Block> collectConnectedLogs(Block start, Material logType) {
-        return findConnected(start, Set.of(logType));
+        return findConnected(start, Set.of(logType), maxLogs());
     }
 
     private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
@@ -108,8 +115,9 @@ public class Lumberjack implements Listener {
         ItemStack tool = player.getInventory().getItemInMainHand();
         if (tool.isEmpty() || !tool.containsEnchantment(enchantment)) return;
 
-        Set<Block> blocks = findConnected(origin, validTypes);
-        if (blocks.size() > MAX_LOGS) return;
+        int limit = maxLogs();
+        Set<Block> blocks = findConnected(origin, validTypes, limit);
+        if (blocks.size() > limit) return;
         if (blocks.size() <= 1) return;
         if (isMushroom) {
             if (!isGiantMushroom(blocks)) return;
@@ -190,14 +198,14 @@ public class Lumberjack implements Listener {
     }
 
     // Flood-fill search for all matching blocks connected in a 3x3x3 neighborhood
-    private Set<Block> findConnected(Block start, Set<Material> validTypes) {
+    private Set<Block> findConnected(Block start, Set<Material> validTypes, int maxLogs) {
         Set<Block> blocks = new HashSet<>();
         Deque<Block> queue = new ArrayDeque<>();
         queue.add(start);
         blocks.add(start);
 
         while (!queue.isEmpty()) {
-            if (blocks.size() > MAX_LOGS) return blocks;
+            if (blocks.size() > maxLogs) return blocks;
             Block current = queue.poll();
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dy = -1; dy <= 1; dy++) {

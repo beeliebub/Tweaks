@@ -62,7 +62,7 @@ public final class EnchantmentsBootstrap {
         plugin.getServer().getPluginManager().registerEvents(new DisenchantingBundle(plugin, qualityRegistry, spawnerPickup, eggCollector), plugin);
 
         // Quality Enchantment Listeners
-        plugin.getServer().getPluginManager().registerEvents(new EnchantTableListener(qualityRegistry, services.moonSystem()), plugin);
+        plugin.getServer().getPluginManager().registerEvents(new EnchantTableListener(plugin, qualityRegistry, services.moonSystem()), plugin);
         plugin.getServer().getPluginManager().registerEvents(fortuneQuality, plugin);
         plugin.getServer().getPluginManager().registerEvents(silkTouchQuality, plugin);
         plugin.getServer().getPluginManager().registerEvents(new LootingQualityListener(qualityRegistry), plugin);

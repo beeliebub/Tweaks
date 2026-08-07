@@ -17,7 +17,6 @@ import java.util.Set;
 
 /** Loads and validates the resource_hunt.yml target pools without owning runtime session state. */
 final class ResourceHuntConfigLoader {
-    private static final double DEFAULT_MULTIPLIER = 2.0;
     private static final String OVERWORLD_SECTION = "overworld";
     private static final String NETHER_SECTION = "nether";
     private static final Set<ResourceHunt.Category> ENTITY_CATEGORIES =
@@ -28,9 +27,14 @@ final class ResourceHuntConfigLoader {
             EnumSet.of(ResourceHunt.Category.BARTER);
 
     private final Tweaks plugin;
+    // Read once at construction, not per-target - ResourceHunt is only ever constructed at boot
+    // (MinigamesBootstrap, tier 2), so this is a restart-required setting like
+    // xpbottle.orbs-per-emerald, not a live re-read.
+    private final double defaultMultiplier;
 
     ResourceHuntConfigLoader(Tweaks plugin) {
         this.plugin = plugin;
+        this.defaultMultiplier = plugin.getConfig().getDouble("minigames.resource-hunt.default-reward-multiplier", 2.0);
     }
 
     Map<String, List<ResourceHuntTarget.Definition>> loadAllEntries() {
@@ -87,12 +91,12 @@ final class ResourceHuntConfigLoader {
         Object raw = entry.getValue();
         if (raw instanceof Number number) {
             amount = number.intValue();
-            multiplier = DEFAULT_MULTIPLIER;
+            multiplier = defaultMultiplier;
         } else if (raw instanceof String string) {
             String[] parts = string.split(":", 2);
             try {
                 amount = Integer.parseInt(parts[0].trim());
-                multiplier = parts.length >= 2 ? Double.parseDouble(parts[1].trim()) : DEFAULT_MULTIPLIER;
+                multiplier = parts.length >= 2 ? Double.parseDouble(parts[1].trim()) : defaultMultiplier;
             } catch (NumberFormatException exception) {
                 plugin.getLogger().warning("resource_hunt.yml (" + location + "): '" + targetKey
                         + "' has invalid value '" + string + "', skipped.");

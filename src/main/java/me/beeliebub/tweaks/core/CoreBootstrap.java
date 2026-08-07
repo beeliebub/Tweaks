@@ -5,7 +5,7 @@ import me.beeliebub.tweaks.Tweaks;
 
 /**
  * Tier:  3 - player-facing infra
- * Reads: resourceHuntItems (tier 2, ConfigCommand)
+ * Reads: resourceHuntItems (tier 2), worldProfileTable (tier 1) - both for ConfigCommand
  */
 public final class CoreBootstrap {
 
@@ -17,7 +17,7 @@ public final class CoreBootstrap {
         plugin.getCommand("help").setTabCompleter(helpSystem);
         plugin.getServer().getPluginManager().registerEvents(helpSystem, plugin);
 
-        ConfigCommand configCommand = new ConfigCommand(plugin, services.resourceHuntItems());
+        ConfigCommand configCommand = new ConfigCommand(plugin, services.resourceHuntItems(), services.worldProfileTable());
         plugin.getCommand("tconfig").setExecutor(configCommand);
         plugin.getCommand("tconfig").setTabCompleter(configCommand);
     }

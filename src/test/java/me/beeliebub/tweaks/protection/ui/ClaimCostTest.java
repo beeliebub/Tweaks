@@ -42,14 +42,14 @@ class ClaimCostTest {
     @Test
     void computeClaimCost_25Chunks_Equals89() {
         // The canonical 5x5 = 89 assertion that pins the pricing formula.
-        assertEquals(89, ClaimSubcommand.computeClaimCost(25),
+        assertEquals(89, ClaimSubcommand.computeClaimCost(25, ClaimPricing.DEFAULT),
                 "A 5x5 (25-chunk) claim must cost exactly 89 Resource Rupees");
     }
 
     @Test
     void computeClaimCost_SingleChunk_Equals10() {
         // Base price: first chunk costs floor(10 / 1.1^0) = floor(10) = 10.
-        assertEquals(10, ClaimSubcommand.computeClaimCost(1),
+        assertEquals(10, ClaimSubcommand.computeClaimCost(1, ClaimPricing.DEFAULT),
                 "A single-chunk claim must cost exactly 10 Resource Rupees");
     }
 
@@ -58,8 +58,8 @@ class ClaimCostTest {
         // At large N the geometric taper would naturally reach 0; max(1, ...) keeps it at 1.
         // Test the invariant: total cost for 200 chunks is positive, and the marginal cost
         // from chunk 199 to chunk 200 is at least 1 (the floor is held).
-        int cost200 = ClaimSubcommand.computeClaimCost(200);
-        int cost199 = ClaimSubcommand.computeClaimCost(199);
+        int cost200 = ClaimSubcommand.computeClaimCost(200, ClaimPricing.DEFAULT);
+        int cost199 = ClaimSubcommand.computeClaimCost(199, ClaimPricing.DEFAULT);
 
         assertTrue(cost200 > 0,
                 "computeClaimCost(200) must be positive (max(1,...) floor applies)");

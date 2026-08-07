@@ -14,9 +14,9 @@ public final class TeleportBootstrap {
     public static void register(Tweaks plugin, Services services) {
         // Teleportation: /home /sethome /delhome /homes /warp /setwarp /delwarp /warps
         // /spawn /back /tpa /tpahere /tpaccept /tpdeny - all routed through one manager.
-        int maxHomes = plugin.getConfig().getInt("max-homes", 3);
+        // max-homes is read live at the /sethome check site, not cached here.
         TeleportCommandManager teleportManager = new TeleportCommandManager(
-                plugin, services.storageManager(), services.resourceHuntItems(), maxHomes);
+                plugin, services.storageManager(), services.resourceHuntItems());
         for (String label : new String[]{"home", "sethome", "delhome", "homes",
                                           "warp", "setwarp", "delwarp", "warps",
                                           "spawn", "back",

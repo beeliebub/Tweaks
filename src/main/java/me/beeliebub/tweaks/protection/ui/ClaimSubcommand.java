@@ -27,9 +27,13 @@ import java.util.List;
  *       nothing. Their region is stored with cost = 0 so no refund is issued on unclaim either.</li>
  *   <li>Non-admins must (a) own &lt; {@code max_chunks} (config) chunks already, and (b) hold
  *       {@code PROTECTION_PURCHASEABLE}. Both checks run before payment.</li>
- *   <li>Cost = &Sigma; N=1..chunks of max(1, floor(10 / 1.1^(N - 1))). The max(1, ...) floor
- *       guarantees every chunk costs at least 1 Resource Rupee even at extreme scale. Canonical
- *       verification: 5x5 = 25 chunks -&gt; cost = 89.</li>
+ *   <li>Cost = &Sigma; N=1..chunks of max(minimumPerChunk, floor(base / decayRate^(N - 1))), where
+ *       {@code base}/{@code decayRate}/{@code minimumPerChunk} come from {@link ClaimPricing},
+ *       read live from {@code protection.claim-cost} on every claim (not retroactive — repricing
+ *       via {@code /tconfig} never touches an already-claimed region's stored cost). The floor
+ *       guarantees every chunk costs at least {@code minimumPerChunk} Resource Rupees even at
+ *       extreme scale. Canonical verification with {@link ClaimPricing#DEFAULT}: 5x5 = 25 chunks
+ *       -&gt; cost = 89.</li>
  *   <li>{@code InventoryUtil.deductResourceRupees} handles payment atomically; failure aborts the
  *       claim before {@code tryClaim} runs.</li>
  *   <li>On success, the calculated cost is stamped onto the new {@code Region} via
@@ -103,7 +107,7 @@ final class ClaimSubcommand implements RegionSubcommand {
                 player.sendMessage(Messages.noPermission());
                 return;
             }
-            cost = computeClaimCost(chunks);
+            cost = computeClaimCost(chunks, ClaimPricing.from(ctx.plugin.getConfig()));
             if (!InventoryUtil.deductResourceRupees(player, cost)) {
                 int balance = InventoryUtil.getResourceRupeeBalance(player);
                 player.sendMessage(Messages.PROTECTION.claimUnaffordable(cost, balance));
@@ -158,23 +162,37 @@ final class ClaimSubcommand implements RegionSubcommand {
         return Collections.emptyList();
     }
 
-    // Compute the Resource Rupee price of an N-chunk claim. Per-chunk cost
-    // tapers geometrically: the first chunk costs 10, each subsequent chunk
-    // costs floor(10 / 1.1^(N - 1)) but never less than 1. The floor on 1 is
-    // deliberate — it keeps "tax" non-zero at extreme scale so megaclaims still
-    // cost something, and it's the property the canonical 5x5 = 89 test pins
-    // down.
+    // Compute the Resource Rupee price of an N-chunk claim. Per-chunk cost tapers
+    // geometrically: the first chunk costs pricing.base(), each subsequent chunk costs
+    // floor(base / decayRate^(N - 1)) but never less than minimumPerChunk. The floor is
+    // deliberate — it keeps "tax" non-zero at extreme scale so megaclaims still cost
+    // something, and with ClaimPricing.DEFAULT it's the property the canonical 5x5 = 89
+    // test pins down.
+    //
+    // Accumulates in `long`, not `int`: base/minimumPerChunk are only bounded above by
+    // Double.MAX_VALUE/Integer.MAX_VALUE at the /tconfig edit boundary (core/config/ConfigRegistry
+    // has no upper cap tying them to max_chunks), so a single admin-set extreme value - e.g.
+    // minimum-per-chunk near 2^30 on a multi-chunk claim - would otherwise overflow a plain `int`
+    // accumulator and wrap around to a small or even negative total, letting a claim go through for
+    // free. The final result is clamped to Integer.MAX_VALUE rather than allowed to overflow the
+    // int this method returns.
     //
     // Package-visible (not private) so ClaimCostTest can call it directly instead of via
     // reflection on the old private ProtectionCommand.computeClaimCost.
-    static int computeClaimCost(int chunks) {
+    static int computeClaimCost(int chunks, ClaimPricing pricing) {
         if (chunks <= 0) return 0;
-        int total = 0;
+        long total = 0L;
         for (int n = 1; n <= chunks; n++) {
-            int perChunk = (int) Math.floor(10.0 / Math.pow(1.1, n - 1));
-            if (perChunk < 1) perChunk = 1;
+            // Math.floor + a double->long narrowing cast saturates at Long.MAX_VALUE for an
+            // out-of-range double (JLS 5.1.3) rather than wrapping, so perChunk itself is safe;
+            // only the running total needed the int -> long widening above.
+            long perChunk = (long) Math.floor(pricing.base() / Math.pow(pricing.decayRate(), n - 1));
+            if (perChunk < pricing.minimumPerChunk()) perChunk = pricing.minimumPerChunk();
             total += perChunk;
+            if (total >= Integer.MAX_VALUE) {
+                return Integer.MAX_VALUE;
+            }
         }
-        return total;
+        return (int) total;
     }
 }

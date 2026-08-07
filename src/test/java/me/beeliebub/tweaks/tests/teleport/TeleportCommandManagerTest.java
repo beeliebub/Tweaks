@@ -15,6 +15,7 @@ import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
@@ -43,6 +44,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -54,10 +56,17 @@ import static org.mockito.Mockito.*;
 class TeleportCommandManagerTest {
 
     // Pure-Mockito test bed shared by the simple per-label nests. Doesn't touch MockBukkit.
+    // max-homes is read live from plugin.getConfig() rather than cached at construction, so this
+    // stubs the config lookup instead of passing maxHomes into the constructor.
     private static TeleportCommandManager simpleManager(StorageManager storage, int maxHomes) {
         JavaPlugin plugin = mock(JavaPlugin.class);
         when(plugin.getName()).thenReturn("tweaks");
-        return new TeleportCommandManager(plugin, storage, mock(ResourceHuntItems.class), maxHomes);
+        FileConfiguration config = mock(FileConfiguration.class);
+        when(plugin.getConfig()).thenReturn(config);
+        when(config.getInt(eq("max-homes"), anyInt())).thenReturn(maxHomes);
+        when(config.getStringList("teleport.sethome-disabled-worlds"))
+                .thenReturn(List.of("jass:resource", "jass:resource_nether"));
+        return new TeleportCommandManager(plugin, storage, mock(ResourceHuntItems.class));
     }
 
     private static Player playerWithUuid(UUID uuid) {
@@ -549,7 +558,7 @@ class TeleportCommandManagerTest {
         @BeforeEach void setUp() {
             server = MockBukkit.mock();
             plugin = MockBukkit.load(Tweaks.class);
-            mgr = new TeleportCommandManager(plugin, mock(StorageManager.class), mock(ResourceHuntItems.class), 3);
+            mgr = new TeleportCommandManager(plugin, mock(StorageManager.class), mock(ResourceHuntItems.class));
             backKey = new NamespacedKey(plugin, "back_location");
         }
 
@@ -618,7 +627,7 @@ class TeleportCommandManagerTest {
         @BeforeEach void setUp() {
             server = MockBukkit.mock();
             plugin = MockBukkit.load(Tweaks.class);
-            mgr = new TeleportCommandManager(plugin, mock(StorageManager.class), mock(ResourceHuntItems.class), 3);
+            mgr = new TeleportCommandManager(plugin, mock(StorageManager.class), mock(ResourceHuntItems.class));
         }
 
         @AfterEach void tearDown() {

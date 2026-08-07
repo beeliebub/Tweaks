@@ -15,7 +15,6 @@ import java.util.UUID;
 public final class DeathInventoryManager {
 
     private static final int SLOT_COUNT = 41; // 36 main + 4 armor + 1 offhand
-    private static final long MAX_AGE_MS = 30L * 24 * 60 * 60 * 1000; // 30 days
 
     private final JavaPlugin plugin;
     private final File baseDir;
@@ -78,9 +77,17 @@ public final class DeathInventoryManager {
         return new File(playerDir(playerUuid), id + ".yml");
     }
 
-    // Deletes files older than 30 days and removes now-empty UUID directories.
+    // Package-private so DeathInventoryRetentionConfigTest can exercise the clamp/live-read
+    // behavior directly, per this project's convention for members a test needs without widening
+    // visibility to public.
+    long maxAgeMillis() {
+        long days = Math.max(1, plugin.getConfig().getInt("deathinventory.retention-days", 30));
+        return days * 24L * 60 * 60 * 1000;
+    }
+
+    // Deletes files older than the configured retention and removes now-empty UUID directories.
     public void purgeOldEntries() {
-        long cutoff = System.currentTimeMillis() - MAX_AGE_MS;
+        long cutoff = System.currentTimeMillis() - maxAgeMillis();
         File[] uuidDirs = baseDir.listFiles(File::isDirectory);
         if (uuidDirs == null) return;
         for (File uuidDir : uuidDirs) {

@@ -54,6 +54,9 @@ public final class Messages {
     /** Player-feedback factories for world-profile inventory separation. */
     public static final ProfileMessages PROFILES = new ProfileMessages();
 
+    /** Player-feedback factories and dialog copy for the {@code /tconfig} generic settings engine and GUI. */
+    public static final ConfigMessages CONFIG = new ConfigMessages();
+
     // ---------------------------------------------------------------- Permissions
 
     /**

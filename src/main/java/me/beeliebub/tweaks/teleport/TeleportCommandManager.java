@@ -48,27 +48,22 @@ import java.util.stream.Collectors;
 // /home, /sethome, /delhome, /homes, /warp, /setwarp, /delwarp, /warps,
 // /spawn, /back, /tpa, /tpahere, /tpaccept, /tpdeny.
 //
-// /sethome refuses to record homes inside the resource world (hardcoded jass:resource),
+// /sethome refuses to record homes in any world listed under teleport.sethome-disabled-worlds,
 // and /back / /tpa enforce the resource-world item safety check on entry.
 public class TeleportCommandManager implements CommandExecutor, TabCompleter, Listener {
-
-    private static final String DISABLED_HOME_WORLD_KEY = "jass:resource";
-    private static final int TPA_TIMEOUT_SECONDS = 30;
 
     private final JavaPlugin plugin;
     private final StorageManager storage;
     private final ResourceHuntItems resourceHuntItems;
-    private final int maxHomes;
 
     private NamespacedKey backKey;
     private final Map<UUID, TpaRequest> tpaRequests = new HashMap<>();
 
     public TeleportCommandManager(JavaPlugin plugin, StorageManager storage,
-                                  ResourceHuntItems resourceHuntItems, int maxHomes) {
+                                  ResourceHuntItems resourceHuntItems) {
         this.plugin = plugin;
         this.storage = storage;
         this.resourceHuntItems = resourceHuntItems;
-        this.maxHomes = maxHomes;
     }
 
     // Lazy so unit tests that only exercise unrelated commands can mock the plugin without
@@ -176,7 +171,7 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
             return true;
         }
 
-        if (DISABLED_HOME_WORLD_KEY.equals(player.getWorld().getKey().asString().toLowerCase())) {
+        if (isSethomeDisabledWorld(player.getWorld().getKey().asString().toLowerCase())) {
             player.sendMessage(Messages.TELEPORT.setHomeWorldDenied());
             return true;
         }
@@ -196,6 +191,9 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
         }
 
         if (targetUUID.equals(player.getUniqueId()) && !player.hasPermission(Permissions.BYPASS_HOMES)) {
+            // Live read (no constructor-time caching) so a /tconfig edit to max-homes takes
+            // effect immediately.
+            int maxHomes = plugin.getConfig().getInt("max-homes", 15);
             if (storage.getHomeCount(targetUUID) >= maxHomes && storage.getHome(targetUUID, homeName).isEmpty()) {
                 player.sendMessage(Messages.TELEPORT.setHomeMaximumReached(maxHomes));
                 return true;
@@ -205,6 +203,17 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
         storage.setHome(targetUUID, homeName, Point.fromLocation(player.getLocation()));
         player.sendMessage(Messages.TELEPORT.setHomeSuccess(homeName));
         return true;
+    }
+
+    // Live read (no constructor-time caching) so a /tconfig edit to teleport.sethome-disabled-worlds
+    // takes effect immediately - matches WorldRuleListener's disabled-portal-worlds pattern.
+    // Replaces the previously hardcoded DISABLED_HOME_WORLD_KEY, which only ever covered
+    // jass:resource despite teleport/CLAUDE.md claiming both resource world keys were blocked.
+    private boolean isSethomeDisabledWorld(String worldKey) {
+        for (String entry : plugin.getConfig().getStringList("teleport.sethome-disabled-worlds")) {
+            if (entry.equalsIgnoreCase(worldKey)) return true;
+        }
+        return false;
     }
 
     private boolean handleDelHome(CommandSender sender, String[] args) {
@@ -563,6 +572,10 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
         TpaRequest existing = tpaRequests.remove(target.getUniqueId());
         if (existing != null) existing.cancel();
 
+        // Snapshotted once per request (not re-read inside the scheduled task) so the timeout the
+        // player was told and the timeout actually scheduled always agree, even if a /tconfig edit
+        // lands while this request is pending.
+        int timeoutSeconds = tpaTimeoutSeconds();
         BukkitTask expiryTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             TpaRequest expired = tpaRequests.remove(target.getUniqueId());
             if (expired != null) {
@@ -575,11 +588,11 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
                     tgtPlayer.sendMessage(Messages.TELEPORT.tpaRequestExpiredFrom(player.getName()));
                 }
             }
-        }, TPA_TIMEOUT_SECONDS * 20L);
+        }, timeoutSeconds * 20L);
 
         tpaRequests.put(target.getUniqueId(),
                 new TpaRequest(player.getUniqueId(), target.getUniqueId(), here, expiryTask));
-        player.sendMessage(Messages.TELEPORT.tpaRequestSent(target.getName(), TPA_TIMEOUT_SECONDS));
+        player.sendMessage(Messages.TELEPORT.tpaRequestSent(target.getName(), timeoutSeconds));
 
         target.sendMessage(Messages.TELEPORT.tpaRequestDescription(player.getName(), here));
         target.sendMessage(Messages.TELEPORT.tpaRequestControls());
@@ -655,6 +668,12 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
             requester.sendMessage(Messages.TELEPORT.tpaDeniedBy(player.getName()));
         }
         return true;
+    }
+
+    // Live read (no constructor-time caching) so a /tconfig edit to teleport.tpa-timeout-seconds
+    // takes effect on the next /tpa request; already-pending requests keep their snapshotted value.
+    private int tpaTimeoutSeconds() {
+        return plugin.getConfig().getInt("teleport.tpa-timeout-seconds", 30);
     }
 
     private List<String> completeOnlinePlayersExceptSelf(CommandSender sender, String[] args) {

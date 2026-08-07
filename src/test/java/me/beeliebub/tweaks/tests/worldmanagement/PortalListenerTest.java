@@ -29,6 +29,8 @@ class PortalListenerTest {
         when(plugin.getConfig()).thenReturn(config);
         when(config.getStringList("disabled-end-portal-worlds"))
                 .thenReturn(List.of("jass:archive", "jass:resource"));
+        when(config.getStringList("disabled-nether-portal-worlds"))
+                .thenReturn(List.of("jass:resource", "jass:resource_nether"));
     }
 
     private PlayerPortalEvent eventFromWorld(String namespace, String key, TeleportCause cause) {
@@ -89,7 +91,7 @@ class PortalListenerTest {
     @Test
     void worldKeyMatchingIsCaseInsensitive() {
         WorldRuleListener listener = new WorldRuleListener(plugin, mock(ProtectionManager.class));
-        // The constructor lowercases entries; the listener also lowercases the world key.
+        // onPortal lowercases the world key and compares case-insensitively against the live list.
         PlayerPortalEvent event = eventFromWorld("JASS", "ARCHIVE", TeleportCause.END_PORTAL);
         listener.onPortal(event);
         verify(event).setCancelled(true);

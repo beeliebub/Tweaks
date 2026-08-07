@@ -14,6 +14,7 @@ import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import me.beeliebub.tweaks.permissions.PermissionManager;
 import me.beeliebub.tweaks.playeradmin.PlayerAdminManager;
 import me.beeliebub.tweaks.profiles.StorageManager;
+import me.beeliebub.tweaks.profiles.WorldProfileTable;
 import me.beeliebub.tweaks.protection.region.PendingStampsStore;
 import me.beeliebub.tweaks.protection.region.ProtectionManager;
 import me.beeliebub.tweaks.protection.ui.RegionSelectionManager;
@@ -50,6 +51,7 @@ import org.bukkit.Material;
 public final class Services {
 
     StorageManager storageManager;
+    WorldProfileTable worldProfileTable;
     EconomyManager economyManager;
     HouseAccount houseAccount;
     HousePaymentService housePaymentService;
@@ -78,6 +80,16 @@ public final class Services {
     public StorageManager storageManager() {
         if (storageManager == null) throw new IllegalStateException("storageManager not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
         return storageManager;
+    }
+
+    public void setWorldProfileTable(WorldProfileTable worldProfileTable) {
+        if (this.worldProfileTable != null) throw new IllegalStateException("worldProfileTable already published");
+        this.worldProfileTable = worldProfileTable;
+    }
+
+    public WorldProfileTable worldProfileTable() {
+        if (worldProfileTable == null) throw new IllegalStateException("worldProfileTable not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
+        return worldProfileTable;
     }
 
     public void setEconomyManager(EconomyManager economyManager) {

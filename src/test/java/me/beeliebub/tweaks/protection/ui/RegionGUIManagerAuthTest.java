@@ -25,13 +25,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Regression coverage for a CRITICAL finding from a pre-release security review: the "Edit Managers"
- * menu ({@link RegionGUI#openManagersMenu}/{@code handleRemoveManager}/
- * {@code handleRemoveManagerGroup}/{@code openAddManagerDialog}/{@code handleAddManagerSubmission})
- * had no owner-only gate, even though its own tooltip says "(owner only)" and the CLI equivalent
- * ({@code MembershipSubcommands.manager()}) correctly requires {@link RegionAuth#isOwnerOrAdmin}.
- * A plain region manager could promote/demote other managers through the GUI — something the CLI
- * explicitly forbids.
+ * Coverage for the "Edit Managers" menu's owner-only gate
+ * ({@link RegionGUI#openManagersMenu}/{@code handleRemoveManager}/
+ * {@code handleRemoveManagerGroup}/{@code openAddManagerDialog}/{@code handleAddManagerSubmission}):
+ * each of these must require {@link RegionAuth#isOwnerOrAdmin}, matching the tooltip's own
+ * "(owner only)" label and the CLI equivalent ({@code MembershipSubcommands.manager()}). Without
+ * that gate, a plain region manager could promote/demote other managers through the GUI —
+ * something the CLI explicitly forbids.
  *
  * <p>These tests only exercise the DENIAL path for a non-owner, non-admin manager. The authorized
  * path is not covered here because it proceeds to build a Paper {@code Dialog}, which MockBukkit
