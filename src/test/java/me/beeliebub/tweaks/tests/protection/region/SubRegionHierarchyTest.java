@@ -84,7 +84,7 @@ class SubRegionHierarchyTest {
     @Test
     void setParentNoChangeWhenAlreadyAtRequestedParent() {
         putRegion("parent", PARENT_OWNER, List.of(), Map.of(), null);
-        putRegion("child", CHILD_OWNER, List.of(), Map.of(), "parent");
+        putRegion("child", PARENT_OWNER, List.of(), Map.of(), "parent");
         assertEquals(ProtectionManager.SetParentResult.NO_CHANGE,
                 mgr.setParent("child", "parent"));
     }
@@ -97,7 +97,7 @@ class SubRegionHierarchyTest {
         mgr.regions().put("child", new Region("child", CHILD_OWNER, List.of(OUTSIDER), rules));
 
         assertEquals(ProtectionManager.SetParentResult.OK,
-                mgr.setParent("child", "parent"));
+                mgr.setParent("child", "parent", true));
 
         Region updated = mgr.regions().get("child");
         assertEquals("parent", updated.parentId());

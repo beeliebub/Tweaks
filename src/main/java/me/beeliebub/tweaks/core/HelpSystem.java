@@ -899,12 +899,13 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/region removemanager <name> <player|group:name>", "Remove a manager."),
                 cmd("/region setparent <child> <parent>", "Create a sub-region relationship."),
                 aqua("Roles:"),
-                white("- Owner: Full control, can unclaim or transfer."),
+                white("- Owner: Full control, can unclaim and manage the hierarchy."),
                 white("- Manager: Can edit flags and members. Cannot edit the manager list."),
                 white("- Member: Build access; lowest priority for flags."),
                 aqua("Hierarchy:"),
                 white("- Sub-region flags override their parent(s)."),
                 white("- Priority: GROUP > OWNER > MANAGER > MEMBER > DEFAULT."),
+                white("- Nesting requires owning both regions; non-admin child and parent owners must match."),
                 white("- Membership is independent at each level."),
                 yellow("Aliases: /rg am, /rg rm, /rg aman, /rg rman"),
                 red("Requires permission: " + Permissions.PROTECTION_MEMBER + ".")
@@ -953,11 +954,11 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 Permissions.PROTECTION_INFO));
 
         articles.add(new HelpArticle("protection_unclaim", "Unclaim", List.of(
-                gray("Logically delete a region and its hierarchy links."),
-                cmd("/region unclaim <name>", "Remove a region."),
+                gray("Permanently remove a region and all of its sub-regions."),
+                cmd("/region unclaim <name>", "Remove a region and cascade through its sub-regions."),
                 aqua("Notes:"),
-                white("- If it has children, they become root-level regions."),
-                white("- Pointers are purged from chunk PDC as players visit."),
+                white("- Each destroyed region is refunded to its own owner when online."),
+                white("- Deleted region files are archived and stale chunk pointers are cleaned lazily."),
                 yellow("Alias: /rg unclaim"),
                 red("Requires permission: " + Permissions.PROTECTION_UNCLAIM + ".")
         ), Material.BARRIER, 34, ColorUtil.HELP_GRAD_PROTECTION_UNCLAIM,
@@ -990,6 +991,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/balance set <player> <amount>", "Set a player's balance."),
                 cmd("/balance add <player> <amount>", "Grant funds."),
                 cmd("/balance remove <player> <amount>", "Deduct funds."),
+                white("Balance changes that cannot be represented exactly are rejected without changing the balance."),
                 red("Permission: tweaks.admin.balance.")
         ), Material.EMERALD, 22, ColorUtil.HELP_GRAD_ECONOMY, List.of("daily_rewards", "ranks", "lottery")));
 
@@ -1001,6 +1003,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/lottery draw", "Draw one eligible winner and pay the current pot."),
                 cmd("/lottery entries", "List the current entrant pool."),
                 cmd("/lottery baseline <amount>", "Set the growth baseline."),
+                white("If payment is abandoned, entries and baseline stay unchanged. A retained payment resumes on the next startup; a stuck payment needs House reconciliation."),
                 red("Admin permission: " + Permissions.LOTTERY_ADMIN + ".")
         ), Material.CHEST, 21, ColorUtil.HELP_GRAD_ECONOMY, List.of("house", "balance")));
 

@@ -25,7 +25,8 @@ import java.util.stream.Stream;
 // Reads every regions/**/<id>.yml file on plugin enable and deserializes into
 // the in-memory Region cache. Recursive so admins can shard regions across
 // subdirectories (e.g. regions/players/, regions/admin/) without the loader
-// caring about layout.
+// caring about layout. The reserved regions/_deleted/ archive is retained for
+// manual recovery but is never loaded.
 //
 // Boundary code on purpose: validates everything the YAML claims because the
 // files are admin-editable and may contain typos, missing fields, or bad
@@ -80,6 +81,7 @@ public final class RegionLoader {
         try (Stream<Path> walk = Files.walk(regionsDir.toPath())) {
             files = walk
                     .filter(Files::isRegularFile)
+                    .filter(path -> !isArchivePath(regionsDir.toPath(), path))
                     .filter(p -> p.getFileName().toString().toLowerCase().endsWith(".yml"))
                     .toList();
         } catch (IOException e) {
@@ -102,6 +104,12 @@ public final class RegionLoader {
             }
         }
         return loaded;
+    }
+
+    private static boolean isArchivePath(Path regionsDir, Path path) {
+        Path relative = regionsDir.relativize(path);
+        return relative.getNameCount() > 0
+                && RegionWriter.ARCHIVE_DIR.equals(relative.getName(0).toString());
     }
 
     private Region parse(File file) {

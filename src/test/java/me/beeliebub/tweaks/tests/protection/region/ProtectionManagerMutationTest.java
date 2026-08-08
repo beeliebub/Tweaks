@@ -31,14 +31,15 @@ class ProtectionManagerMutationTest {
 
     @Test
     void unclaimRemovesFromCacheAndMarksOrphan() {
-        assertTrue(mgr.unclaim("home"));
+        assertEquals(ProtectionManager.UnclaimResult.OK, mgr.unclaim("home").result());
         assertFalse(mgr.regions().containsKey("home"));
         assertTrue(mgr.orphanedRegions().contains("home"));
     }
 
     @Test
     void unclaimUnknownRegionReturnsFalse() {
-        assertFalse(mgr.unclaim("ghost"));
+        assertEquals(ProtectionManager.UnclaimResult.UNKNOWN_REGION,
+                mgr.unclaim("ghost").result());
         assertTrue(mgr.orphanedRegions().isEmpty());
     }
 

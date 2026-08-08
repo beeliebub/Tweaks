@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.minigames.blackjack;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.economy.BalanceMutationResult;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
 import me.beeliebub.tweaks.lottery.LotteryManager;
@@ -141,12 +142,26 @@ public final class BlackjackSessionManager {
                 player.sendMessage(Messages.MINIGAMES.blackjackCannotAfford(bet, (long) balance));
                 return;
             }
-            economyManager.removeBalance(playerId, bet);
+            BalanceMutationResult debit;
+            try {
+                debit = economyManager.removeBalance(playerId, bet);
+            } catch (RuntimeException error) {
+                plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                        "Blackjack bet debit for " + player.getName() + " ($" + bet
+                                + ") raised after an uncertain mutation; the game was not started."
+                                + " Verify the player's balance before manual reconciliation.", error);
+                player.sendMessage(Messages.MINIGAMES.blackjackStartFailed(false));
+                return;
+            }
+            if (debit == BalanceMutationResult.REJECTED_UNREPRESENTABLE) {
+                player.sendMessage(Messages.MINIGAMES.blackjackBalanceUnrepresentable());
+                return;
+            }
         }
         boolean started = startGame(player, bet, tableCenter, table.facing(), table.backColor());
         if (!started) {
             if (bet > 0) {
-                economyManager.addBalance(playerId, bet);
+                creditOrRouteToHouse(playerId, player.getName(), bet, "failed-game refund");
             }
             player.sendMessage(Messages.MINIGAMES.blackjackStartFailed(bet > 0));
         }
@@ -253,10 +268,10 @@ public final class BlackjackSessionManager {
         Settlement settlement = computeSettlement(game.result(), game.bet(), game.payout(), rakebackRate);
 
         if (settlement.payoutAmount() > 0) {
-            economyManager.addBalance(player.getUniqueId(), settlement.payoutAmount());
+            creditOrRouteToHouse(player.getUniqueId(), player.getName(), settlement.payoutAmount(), "payout");
         }
         if (settlement.rakebackAmount() > 0) {
-            economyManager.addBalance(player.getUniqueId(), settlement.rakebackAmount());
+            creditOrRouteToHouse(player.getUniqueId(), player.getName(), settlement.rakebackAmount(), "rakeback");
         }
         if (settlement.houseWinnings() > 0) {
             houseAccount.credit(settlement.houseWinnings());
@@ -411,6 +426,34 @@ public final class BlackjackSessionManager {
         } catch (RuntimeException e) {
             plugin.getLogger().log(java.util.logging.Level.WARNING,
                     "Blackjack lottery entry failed after " + source + " for " + playerId, e);
+        }
+    }
+
+    void creditOrRouteToHouse(UUID playerId, String playerIdentity, long amount, String purpose) {
+        try {
+            if (economyManager.addBalance(playerId, amount) == BalanceMutationResult.APPLIED) return;
+        } catch (RuntimeException error) {
+            plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                    "Blackjack " + purpose + " credit of $" + amount + " for " + playerIdentity
+                            + " (" + playerId + ") raised after an uncertain mutation; verify the"
+                            + " player's balance before manual reconciliation.", error);
+            return;
+        }
+        try {
+            if (houseAccount.credit(amount)) {
+                plugin.getLogger().severe("Blackjack " + purpose + " of $" + amount + " for "
+                        + playerIdentity + " (" + playerId + ") could not be represented; "
+                        + "the amount was routed to the House for manual reconciliation.");
+            } else {
+                plugin.getLogger().severe("Blackjack " + purpose + " of $" + amount + " for "
+                        + playerIdentity + " (" + playerId + ") could not be represented, and the "
+                        + "House fallback overflowed; the amount is unrecoverable by this code path.");
+            }
+        } catch (RuntimeException error) {
+            plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                    "Blackjack " + purpose + " of $" + amount + " for " + playerIdentity + " ("
+                            + playerId + ") could not be represented, and the House fallback failed; "
+                            + "manual reconciliation is required.", error);
         }
     }
 

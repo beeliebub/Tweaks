@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.tests.economy;
 
 import me.beeliebub.tweaks.economy.EconomyManager;
+import me.beeliebub.tweaks.economy.BalanceMutationResult;
 import me.beeliebub.tweaks.economy.HousePaymentResult;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -16,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -100,7 +102,7 @@ class EconomyManagerReceiptTest {
     @Test
     void nonFiniteBalanceRejectsThePayment() throws Exception {
         UUID id = UUID.randomUUID();
-        economy.setBalance(id, Double.NaN);
+        writeBalance(id, Double.NaN);
 
         assertEquals(HousePaymentResult.REJECTED_UNREPRESENTABLE, economy.applyHousePayment(id, "pay-1", 100).get());
     }
@@ -110,8 +112,47 @@ class EconomyManagerReceiptTest {
         UUID id = UUID.randomUUID();
         // 2^53: the largest integral double every whole-dollar amount below it can still exactly
         // add to. Adding 1 here cannot change the value by exactly 1 in double arithmetic.
-        economy.setBalance(id, Math.pow(2, 53));
+        writeBalance(id, Math.pow(2, 53));
 
         assertEquals(HousePaymentResult.REJECTED_UNREPRESENTABLE, economy.applyHousePayment(id, "pay-1", 1).get());
+    }
+
+    @Test
+    void balanceMutatorsRejectNonFiniteStoredBalanceWithoutWriting() throws Exception {
+        UUID id = UUID.randomUUID();
+        writeBalance(id, Double.NaN);
+
+        assertEquals(BalanceMutationResult.REJECTED_UNREPRESENTABLE, economy.addBalance(id, 1));
+        assertEquals(BalanceMutationResult.REJECTED_UNREPRESENTABLE, economy.setBalance(id, 10));
+        assertEquals(BalanceMutationResult.REJECTED_UNREPRESENTABLE, economy.removeBalance(id, 1));
+        assertTrue(Double.isNaN(economy.getBalance(id)));
+
+        ForkJoinPool.commonPool().awaitQuiescence(2, TimeUnit.SECONDS);
+        assertTrue(Double.isNaN(YamlConfiguration.loadConfiguration(
+                new File(dataFolder, "players/" + id + ".yml")).getDouble("balance")));
+    }
+
+    @Test
+    void balanceMutatorsRejectPrecisionLimitWhenChangeCannotBeRepresented() throws Exception {
+        UUID id = UUID.randomUUID();
+        double ceiling = Math.pow(2, 53);
+        writeBalance(id, ceiling);
+
+        assertEquals(BalanceMutationResult.REJECTED_UNREPRESENTABLE, economy.addBalance(id, 1));
+        assertEquals(BalanceMutationResult.APPLIED, economy.removeBalance(id, 1));
+        assertEquals(BalanceMutationResult.REJECTED_UNREPRESENTABLE, economy.setBalance(id, 1e300));
+        assertEquals(ceiling - 1, economy.getBalance(id));
+
+        ForkJoinPool.commonPool().awaitQuiescence(2, TimeUnit.SECONDS);
+        assertEquals(ceiling - 1, YamlConfiguration.loadConfiguration(
+                new File(dataFolder, "players/" + id + ".yml")).getDouble("balance"));
+    }
+
+    private void writeBalance(UUID id, double balance) throws Exception {
+        File file = new File(dataFolder, "players/" + id + ".yml");
+        file.getParentFile().mkdirs();
+        YamlConfiguration seed = new YamlConfiguration();
+        seed.set("balance", balance);
+        seed.save(file);
     }
 }

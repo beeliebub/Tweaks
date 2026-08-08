@@ -11,6 +11,7 @@ import me.beeliebub.tweaks.protection.ui.RegionSelectionManager;
 import org.bukkit.Material;
 
 import java.io.File;
+import java.util.List;
 import java.util.logging.Level;
 
 /**
@@ -19,11 +20,15 @@ import java.util.logging.Level;
  *            pendingStampsStore (onDisable only)
  * Ordering:  RegionWriter is attached to ProtectionManager only after RegionLoader has
  *            finished populating the region cache, so the initial load never triggers a
- *            spurious write. ProtectionManager's constructor builds its own region-pointers
- *            NamespacedKey eagerly, so it is always ready before RegionLoader.load reads/writes
- *            chunk PDC through it. pendingStampsStore/regionSelectionManager are published to
- *            Services only after their load()/start() calls return, so "published" and "fully
- *            initialized" stay the same fact for onDisable()'s null-guards.
+ *            spurious write; legacy migration remains immediately after that attachment.
+ *            Pending stamps are loaded and reconciled against the live region cache before
+ *            the periodic task starts. ProtectionManager's constructor builds its own
+ *            region-pointers NamespacedKey eagerly, so it is always ready before
+ *            RegionLoader.load reads/writes chunk PDC through it. pendingStampsStore and
+ *            regionSelectionManager are published to Services only after their load()/start()
+ *            calls return, so "published" and "fully initialized" stay the same fact for
+ *            onDisable()'s null-guards. The orphan set is passed into PendingStampsStore so
+ *            known-dead region pointers remain durable across restarts.
  */
 public final class ProtectionBootstrap {
 
@@ -55,8 +60,34 @@ public final class ProtectionBootstrap {
             }
         }
 
-        PendingStampsStore pendingStampsStore = new PendingStampsStore(plugin, plugin.getDataFolder(), protectionManager.pendingStamps());
+        if (plugin.getServer().getWorlds().stream()
+                .anyMatch(world -> "_deleted".equals(world.getName()))) {
+            plugin.getLogger().warning("A loaded world is named _deleted; region archiving for that world will collide with the archive directory");
+        }
+
+        List<String> crossOwner = protectionManager.auditCrossOwnerHierarchies();
+        if (!crossOwner.isEmpty()) {
+            int shown = Math.min(20, crossOwner.size());
+            String details = String.join(", ", crossOwner.subList(0, shown));
+            if (crossOwner.size() > shown) {
+                details += ", +" + (crossOwner.size() - shown) + " more";
+            }
+            plugin.getLogger().info("Sub-regions whose owner differs from their parent's ("
+                    + crossOwner.size() + "): " + details
+                    + " — unclaiming a parent refunds each sub-region to its own owner");
+        }
+
+        PendingStampsStore pendingStampsStore = new PendingStampsStore(
+                plugin,
+                plugin.getDataFolder(),
+                protectionManager.pendingStamps(),
+                protectionManager.orphanedRegions());
         pendingStampsStore.load();
+        int pruned = protectionManager.reconcilePendingStamps();
+        if (pruned > 0) {
+            plugin.getLogger().info("Pruned " + pruned
+                    + " pending chunk stamp(s) referencing regions that no longer exist");
+        }
         pendingStampsStore.start(20L * 60 * 5); // snapshot every 5 minutes
         services.setPendingStampsStore(pendingStampsStore);
 

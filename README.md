@@ -631,13 +631,19 @@ When you join, you'll see a message like:
 | `/house add\|remove\|set <amount>` | Adjust the casino house account. Admin permission required. |
 | `/house pay <player> <amount>` | Transfer house funds to an online or known offline player. Admin permission required. |
 
+Balance mutations reject non-finite or inexact values instead of silently rounding them. A casino
+stake that cannot be debited exactly is refused; a rejected payout, rakeback, or refund is routed
+to the House account and logged for recovery.
+
 #### Lottery
 
 The server-wide lottery grows from House-account growth since the previous draw. A player enters
 after a settled blackjack loss or inactivity forfeiture, or when their roulette round ends net
 negative. Entries are one-per-player and offline entrants remain eligible. The pot is paid from the
-House through the durable house-payment journal; a draw that pays the entire House reseeds it to the
-configured positive amount (default `$10,000`).
+House through a durable payment intent and house-payment journal; an unpaid draw keeps its entries
+and baseline, while an in-flight payment resumes from its retained House debit on the next startup.
+Only a committed draw removes the recorded entrants, so entries added during payment remain. A draw
+that pays the entire House reseeds it to the configured positive amount (default `$10,000`).
 
 | Command | What it does |
 |---|---|
@@ -856,7 +862,7 @@ This is entirely admin-managed — see the [admin commands](#admin-commands) sec
 
 ### Blackjack
 
-An in-world casino game played at physical tables using 3D card models. Supports both **Player-versus-Dealer** and head-to-head **Player-versus-Player** modes.
+An in-world **Player-versus-Dealer** casino game played at physical tables using 3D card models.
 
 **Requirement**: Players must have the **`dqc.cards`** resource pack enabled to see the 3D card models.
 
@@ -869,6 +875,8 @@ The standard casino experience. Play against an automated dealer at tables with 
 - **Rules**: Standard 52-card deck (reshuffled every game); Dealer stands on all 17s; Blackjack pays 3:2.
 - **Dealer Mannequin**: A 'LimeLush' visual mannequin appears on the dealer side at game end. It celebrates on dealer wins and performs a death animation on player wins.
 - **Rakeback**: Losing hands grant a small percentage of the bet back, based on your [Rank](#ranks).
+- **Balance safety**: A stake that cannot be represented exactly is refused; rejected payouts or
+  rakeback are routed to the House account for recovery rather than discarded.
 - **Free/Practice Tables**: Admins can create tables with **bet 0** (use `free` or `0` as the bet argument). These tables display **"Bet: FREE"** on the hologram, perform no currency transfers, and skip rakeback entirely — ideal for learning the game.
 
 #### General Mechanics
@@ -898,6 +906,8 @@ An in-world roulette wheel — a real physical build the server team constructed
 - **Sticky stake**: Set your wager once with `/roulette stake <amount>`, then every segment you click wagers that amount. Multiple bets in the same round are allowed and stack — including clicking more than one physical segment of the same dozen, which places two independent bets.
 - **Shared round**: The first bet on an idle board opens a **30-second** betting window for everyone nearby — there's no host and no spin button for players. Once the window closes, the wheel spins, a ball orbits and settles into the winning pocket, and the round settles automatically.
 - **Bets are final**: There is no un-betting, no refund on quitting mid-round, and winnings are still credited to your balance even if you log off before the wheel stops.
+- **Balance safety**: A stake that cannot be represented exactly is refused; rejected winnings,
+  rakeback, or shutdown refunds are routed to the House account for recovery rather than discarded.
 - **Settlement summary**: Your personal result message shows the amount wagered and the amount actually won (winnings only, not your returned stake) — e.g. a $100 stake winning at 36:1 shows wagered $100, won $3,600.
 - **Big win announcements**: If your winnings reach 8x your wager, the whole server is notified.
 - **House balance**: A hologram over each wheel shows the single server-wide house balance — the same account Blackjack's losses feed.
@@ -1025,8 +1035,8 @@ Territory is claimed in **full-chunk increments**.
 Regions support multiple roles and hierarchical parenting.
 
 - **Roles**:
-  - **Owner**: Full control. Can unclaim, transfer ownership, and manage managers/members.
-  - **Manager**: Delegated control. Can edit flags and add/remove members. Cannot edit the manager list, unclaim, or transfer ownership — those require the owner (or an admin).
+  - **Owner**: Full control. Can unclaim and manage managers/members.
+  - **Manager**: Delegated control. Can edit flags and add/remove members. Cannot edit the manager list or unclaim — those require the owner (or an admin).
   - **Member**: Build access. Can bypass most protection flags (e.g. they can always build/break).
 - **Group Membership**: Instead of individual players, you can grant roles to entire permission groups (e.g. `builders`). All members of the group automatically gain the role's privileges.
 - **Sub-regions**: You can nest one region inside another using `/region setparent <child> <parent>`.
@@ -1034,6 +1044,8 @@ Regions support multiple roles and hierarchical parenting.
   - Sub-region flags **override** their parent's flags.
   - **Containment**: A sub-region must be fully contained within its parent's boundaries.
   - **Sibling Separation**: A sub-region cannot overlap another sub-region belonging to the same parent.
+  - **Ownership**: A sub-region must share its parent's owner, and nesting requires owning both regions (or being an admin).
+  - **Cascade Unclaim**: Unclaiming a region permanently deletes all of its sub-regions and refunds each region to its own owner.
   - Membership is independent; being a member of a parent does not automatically make you a member of its children.
 
 ### Advanced Flags & Targeting
@@ -1144,7 +1156,7 @@ When an action occurs, the system checks rules in this order:
 | `/ranks edit` | `tweaks.admin.ranks` | Open the visual rank editor. |
 | `/rank set <player> <rank_id/name>` | `tweaks.admin.rank.set` | Manually assign a player's rank. |
 | `/region claim <name>` | `tweaks.protection.purchaseable` | Claim territory using wand selection. |
-| `/region unclaim <name>` | `tweaks.protection.unclaim` | Remove a region claim. Alias: `/rg unclaim`. |
+| `/region unclaim <name>` | `tweaks.protection.unclaim` | Remove a region claim and permanently delete its sub-regions, refunding each owner. Alias: `/rg unclaim`. |
 | `/region info [name]` | `tweaks.protection.info` | Show region details. Alias: `/rg i`. |
 | `/region select <name>` | `tweaks.protection.info` | Restore wand selection to match a region. |
 | `/region clear` | — | Drop the current wand selection. |
@@ -1155,7 +1167,7 @@ When an action occurs, the system checks rules in this order:
 | `/region removemanager <r> <p|group:name>` | `tweaks.protection.member` | Remove a manager from a region. Alias: `/rg rman`. |
 | `/region flag [name] <f> <v...>` | `tweaks.protection.flag` | Set a targeted boolean or material flag. |
 | `/region unflag <r> <f> [t]` | `tweaks.protection.flag` | Remove a targeted flag rule or material list. |
-| `/region setparent <c> <p>` | `tweaks.protection.purchaseable` | Nest a region inside another. |
+| `/region setparent <c> <p>` | `tweaks.protection.purchaseable` | Nest a region inside another; you must own both regions unless admin. |
 | `/region unsetparent <c>` | `tweaks.protection.purchaseable` | Remove region parenting. |
 | `/region gui [name]` | `tweaks.protection.info` | Open the dialog dashboard for a region. |
 | `/blackjack createtable <bet> [hexColor]` | `tweaks.blackjack.createtable` | Create button-linked Blackjack tables. |

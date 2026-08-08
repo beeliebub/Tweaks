@@ -70,17 +70,71 @@ public final class HousePaymentService {
             return CompletableFuture.completedFuture(HousePayOutcome.NOT_READY);
         }
 
-        CompletableFuture<HousePayOutcome> future = houseAccount.beginPayment(paymentId, recipient, amount)
-                .thenCompose(begin -> begin == HouseBeginPaymentOutcome.INSUFFICIENT_FUNDS
-                        ? CompletableFuture.completedFuture(HousePayOutcome.INSUFFICIENT_FUNDS)
-                        : resolvePayment(paymentId, recipient, amount))
-                .exceptionally(error -> {
-                    plugin.getLogger().log(Level.SEVERE, "House payment " + paymentId + " failed unexpectedly; "
-                            + "any debit already recorded is retained for replay on next startup", error);
-                    return HousePayOutcome.FAILED;
-                });
-        trackInFlight(paymentId, future);
+        CompletableFuture<HousePayOutcome> future = inFlight.computeIfAbsent(paymentId,
+                ignored -> startPayment(paymentId, recipient, amount));
+        future.whenComplete((value, error) -> inFlight.remove(paymentId, future));
         return future;
+    }
+
+    /** Resumes a retained debit without entering the debit path a second time. */
+    public CompletableFuture<HousePayOutcome> resumePendingPayment(String paymentId, UUID recipient, long amount) {
+        Objects.requireNonNull(paymentId, "paymentId");
+        Objects.requireNonNull(recipient, "recipient");
+        if (paymentId.isBlank()) throw new IllegalArgumentException("paymentId must not be blank");
+        if (amount <= 0) throw new IllegalArgumentException("amount must be positive");
+        if (!ready.get()) return CompletableFuture.completedFuture(HousePayOutcome.NOT_READY);
+
+        HouseJournalEntry entry = houseAccount.pendingPayments().get(paymentId);
+        if (entry == null) return CompletableFuture.completedFuture(HousePayOutcome.FAILED);
+        CompletableFuture<HousePayOutcome> future = inFlight.computeIfAbsent(paymentId,
+                ignored -> startRetainedPayment(paymentId, recipient, amount, entry));
+        future.whenComplete((value, error) -> inFlight.remove(paymentId, future));
+        return future;
+    }
+
+    private CompletableFuture<HousePayOutcome> startPayment(String paymentId, UUID recipient, long amount) {
+        HouseJournalEntry existing = houseAccount.pendingPayments().get(paymentId);
+        CompletableFuture<HousePayOutcome> payment;
+        if (existing != null) {
+            if (!existing.recipient().equals(recipient) || existing.amount() != amount) {
+                payment = houseAccount.markNeedsReconciliation(paymentId).thenApply(ignored -> {
+                    plugin.getLogger().severe("House payment " + paymentId
+                            + " was requested with details that differ from its retained journal entry");
+                    return HousePayOutcome.NEEDS_RECONCILIATION;
+                });
+            } else {
+                payment = resolvePayment(paymentId, recipient, amount);
+            }
+        } else {
+            payment = houseAccount.beginPayment(paymentId, recipient, amount)
+                    .thenCompose(begin -> begin == HouseBeginPaymentOutcome.INSUFFICIENT_FUNDS
+                            ? CompletableFuture.completedFuture(HousePayOutcome.INSUFFICIENT_FUNDS)
+                            : resolvePayment(paymentId, recipient, amount));
+        }
+        return payment.exceptionally(error -> {
+            plugin.getLogger().log(Level.SEVERE, "House payment " + paymentId + " failed unexpectedly; "
+                    + "any debit already recorded is retained for replay on next startup", error);
+            return HousePayOutcome.FAILED;
+        });
+    }
+
+    private CompletableFuture<HousePayOutcome> startRetainedPayment(String paymentId, UUID recipient,
+                                                                      long amount, HouseJournalEntry entry) {
+        CompletableFuture<HousePayOutcome> payment;
+        if (!entry.recipient().equals(recipient) || entry.amount() != amount) {
+            payment = houseAccount.markNeedsReconciliation(paymentId).thenApply(ignored -> {
+                plugin.getLogger().severe("House payment " + paymentId
+                        + " was requested with details that differ from its retained journal entry");
+                return HousePayOutcome.NEEDS_RECONCILIATION;
+            });
+        } else {
+            payment = resolvePayment(paymentId, recipient, amount);
+        }
+        return payment.exceptionally(error -> {
+            plugin.getLogger().log(Level.SEVERE, "Replay of house payment " + paymentId
+                    + " failed; the retained debit remains for a later retry", error);
+            return HousePayOutcome.FAILED;
+        });
     }
 
     /**
@@ -118,13 +172,14 @@ public final class HousePaymentService {
     private CompletableFuture<HousePayOutcome> replayOne(String paymentId, HouseJournalEntry entry) {
         plugin.getLogger().warning("Replaying house payment " + paymentId + " -> " + entry.recipient()
                 + " (" + entry.amount() + ")");
-        CompletableFuture<HousePayOutcome> future = resolvePayment(paymentId, entry.recipient(), entry.amount())
-                .exceptionally(error -> {
-                    plugin.getLogger().log(Level.SEVERE, "Replay of house payment " + paymentId + " failed; "
-                            + "will be retried on next startup", error);
-                    return HousePayOutcome.FAILED;
-                });
-        trackInFlight(paymentId, future);
+        CompletableFuture<HousePayOutcome> future = inFlight.computeIfAbsent(paymentId, ignored ->
+                resolvePayment(paymentId, entry.recipient(), entry.amount())
+                        .exceptionally(error -> {
+                            plugin.getLogger().log(Level.SEVERE, "Replay of house payment " + paymentId + " failed; "
+                                    + "will be retried on next startup", error);
+                            return HousePayOutcome.FAILED;
+                        }));
+        future.whenComplete((value, error) -> inFlight.remove(paymentId, future));
         return future;
     }
 
@@ -154,11 +209,6 @@ public final class HousePaymentService {
                 yield CompletableFuture.completedFuture(HousePayOutcome.WRITE_FAILED_RETAINED);
             }
         };
-    }
-
-    private void trackInFlight(String paymentId, CompletableFuture<HousePayOutcome> future) {
-        inFlight.put(paymentId, future);
-        future.whenComplete((v, err) -> inFlight.remove(paymentId));
     }
 
     /** Rejects any new payment submitted after this call. Does not affect payments already in flight. */

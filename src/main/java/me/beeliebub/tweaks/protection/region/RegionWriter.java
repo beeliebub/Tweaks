@@ -7,6 +7,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
@@ -14,25 +15,29 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 // Async, atomic YAML writer for Regions. The loader already accepts the schema
 // we emit here; this is the inverse direction so claim/mutation state survives
-// a server restart.
+// a server restart. Unclaimed files are moved into the reserved _deleted
+// archive and tombstoned so queued writes cannot recreate them.
 //
-// Layout: each region writes to <regionsDir>/<id>.yml at the top level. The
-// loader walks subdirectories so admin-organized files (regions/players/*.yml
-// etc.) keep loading; we just don't auto-shard new claims into them. Admins
-// can move files around between sessions without breaking anything.
+// Layout: world-tagged regions write to <regionsDir>/<world>/<id>.yml, while
+// legacy null-world regions retain their existing flat or administrator-chosen
+// location. The loader walks those locations but never loads _deleted.
 //
 // Atomic write discipline mirrors PendingStampsStore: serialize to <id>.tmp,
 // then Files.move(... ATOMIC_MOVE). A crash mid-write leaves either the old
 // file intact or an orphan .tmp the next write naturally overwrites.
 public final class RegionWriter {
 
+    static final String ARCHIVE_DIR = "_deleted";
+
     private final Tweaks plugin;
     private final File regionsDir;
     private final Object writeLock = new Object();
+    private final Set<String> tombstoned = ConcurrentHashMap.newKeySet();
 
     public RegionWriter(Tweaks plugin, File regionsDir) {
         this.plugin = plugin;
@@ -55,6 +60,7 @@ public final class RegionWriter {
     public void writeNow(Region region) throws IOException {
         if (region == null) return;
         synchronized (writeLock) {
+            if (tombstoned.contains(ProtectionManager.keyOf(region))) return;
             if (!regionsDir.exists() && !regionsDir.mkdirs()) {
                 throw new IOException("Could not create regions directory " + regionsDir);
             }
@@ -69,12 +75,59 @@ public final class RegionWriter {
             serialize(yaml, region);
             yaml.save(tmp);
 
-            Files.move(
-                    tmp.toPath(),
-                    target.toPath(),
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING
-            );
+            moveIntoPlace(tmp, target);
+        }
+    }
+
+    public void archive(Region region) throws IOException {
+        if (region == null) return;
+        synchronized (writeLock) {
+            String cacheKey = ProtectionManager.keyOf(region);
+            tombstoned.add(cacheKey);
+
+            File source = locate(region);
+            File tmp = new File(source.getParentFile(), source.getName() + ".tmp");
+            if (tmp.exists() && !tmp.delete()) {
+                if (plugin != null && plugin.getLogger() != null) {
+                    plugin.getLogger().warning("Could not delete stale region temporary file " + tmp);
+                }
+            }
+            if (!source.exists()) return;
+
+            String worldSegment = region.worldName() == null || region.worldName().isEmpty()
+                    ? "_legacy" : region.worldName();
+            File archiveDir = new File(new File(regionsDir, ARCHIVE_DIR), worldSegment);
+            if (!archiveDir.exists() && !archiveDir.mkdirs()) {
+                throw new IOException("Could not create region archive directory " + archiveDir);
+            }
+
+            long timestamp = System.currentTimeMillis();
+            File destination = new File(archiveDir, region.id() + "-" + timestamp + ".yml");
+            for (int suffix = 1; destination.exists() && suffix <= 100; suffix++) {
+                destination = new File(archiveDir,
+                        region.id() + "-" + timestamp + "-" + suffix + ".yml");
+            }
+            if (destination.exists()) {
+                throw new IOException("Could not allocate archive path for region " + region.id());
+            }
+
+            moveIntoPlace(source, destination);
+        }
+    }
+
+    private static void moveIntoPlace(File source, File destination) throws IOException {
+        try {
+            Files.move(source.toPath(), destination.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(source.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    public void untombstone(String cacheKey) {
+        if (cacheKey == null) return;
+        synchronized (writeLock) {
+            tombstoned.remove(cacheKey);
         }
     }
 
@@ -114,6 +167,7 @@ public final class RegionWriter {
         if (children == null) return null;
         for (File child : children) {
             if (child.isDirectory()) {
+                if (dir.equals(regionsDir) && ARCHIVE_DIR.equals(child.getName())) continue;
                 File hit = findExisting(child, fileName);
                 if (hit != null) return hit;
             } else if (child.getName().equalsIgnoreCase(fileName)) {

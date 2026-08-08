@@ -130,6 +130,19 @@ public final class ProtectionMessages {
                 .append(Component.text(".", NamedTextColor.GREEN));
     }
 
+    /** Renders the cascade unclaim confirmation with yellow region and refund counts. */
+    public Component unclaimCascade(String name, int destroyedCount, int totalRefunded) {
+        return Component.text("Unclaimed region ", NamedTextColor.GREEN)
+                .append(Component.text("'" + name + "'", NamedTextColor.YELLOW))
+                .append(Component.text(" and ", NamedTextColor.GREEN))
+                .append(Component.text(destroyedCount, NamedTextColor.YELLOW))
+                .append(Component.text(" sub-region" + (destroyedCount == 1 ? "" : "s")
+                        + ". Refunded ", NamedTextColor.GREEN))
+                .append(Component.text(totalRefunded, NamedTextColor.YELLOW))
+                .append(Component.text(" Resource Rupee" + (totalRefunded == 1 ? "" : "s") + ".",
+                        NamedTextColor.GREEN));
+    }
+
     /** Preserves the offline-refund warning's yellow values and red emphasis. */
     public Component unclaimOfflineRefund(String name, int refund) {
         return Component.text("Unclaimed region ", NamedTextColor.GREEN)
@@ -203,7 +216,9 @@ public final class ProtectionMessages {
         UNCLAIM_OWNER_ONLY("Only the region owner can unclaim '%s'.", NamedTextColor.RED),
         UNCLAIM_REFUNDED("Unclaimed region '%s'. Refunded %s Resource Rupee%s to %s.", NamedTextColor.GREEN),
         UNCLAIM_OFFLINE_REFUND("Unclaimed region '%s'. %s Resource Rupee%s were owed, but the owner is offline — refund was NOT issued.", NamedTextColor.GREEN),
-        UNCLAIM_SUCCESS("Unclaimed region '%s'. Pointer cleanup will run lazily.", NamedTextColor.GREEN),
+        UNCLAIM_SUCCESS("Unclaimed region '%s'.", NamedTextColor.GREEN),
+        UNCLAIM_PERSISTENCE_FAILED("Could not remove region '%s' from disk — nothing was unclaimed and no refund was issued. Tell an admin to check the server log.", NamedTextColor.RED),
+        UNCLAIM_CASCADE_WARNING("This region has %s sub-region(s). Unclaiming it will permanently delete them too.", NamedTextColor.RED),
 
         GUI_CONSOLE_NAME_REQUIRED("Console must supply a region name: /region gui <name>.", NamedTextColor.RED),
         GUI_ONLY_PLAYERS("Only players can open the region dialog.", NamedTextColor.RED),
@@ -232,6 +247,8 @@ public final class ProtectionMessages {
         PARENT_OTHER_WORLD("Refused — child and parent are in different worlds.", NamedTextColor.RED),
         PARENT_NOT_CONTAINED("Refused — child region is not fully contained inside its parent's bounds.", NamedTextColor.RED),
         PARENT_SIBLING_OVERLAP("Refused — child would overlap another sub-region of the same parent.", NamedTextColor.RED),
+        PARENT_DIFFERENT_OWNER("Refused — a sub-region must have the same owner as its parent.", NamedTextColor.RED),
+        PARENT_TARGET_AUTH("You must own the parent region (or be an admin) to nest a region inside it.", NamedTextColor.RED),
 
         INFO_CONSOLE_NAME_REQUIRED("Console must supply a region name: /region info <name>.", NamedTextColor.RED),
         INFO_WILDERNESS("You are standing in wilderness — no region claimed here.", NamedTextColor.YELLOW),
@@ -418,6 +435,7 @@ public final class ProtectionMessages {
         GUI_RETURN_NO_CHANGES("Return without changes.", NamedTextColor.GRAY),
         GUI_UNCLAIM_TITLE("Unclaim '%s'?", NamedTextColor.RED, true),
         GUI_UNCLAIM_BODY("Are you absolutely sure you want to unclaim this region? This cannot be undone.", NamedTextColor.GRAY),
+        GUI_UNCLAIM_BODY_CASCADE("This region has %s sub-region(s). They will ALSO be permanently deleted, and their owners refunded. This cannot be undone.", NamedTextColor.RED),
         GUI_PREV_PAGE("◀ Prev Page", NamedTextColor.GREEN, true),
         GUI_NEXT_PAGE("Next Page ▶", NamedTextColor.GREEN, true),
         GUI_PAGE("Page %s of %s", NamedTextColor.GRAY),

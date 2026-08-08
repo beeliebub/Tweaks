@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.minigames.roulette;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.economy.BalanceMutationResult;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
 import me.beeliebub.tweaks.lottery.LotteryManager;
@@ -250,11 +251,24 @@ final class RouletteSessionManager {
         }
 
         boolean opening = target.round.state() == RouletteRound.State.IDLE;
-        economyManager.removeBalance(playerId, stake);
+        BalanceMutationResult debit;
+        try {
+            debit = economyManager.removeBalance(playerId, stake);
+        } catch (RuntimeException error) {
+            plugin.getLogger().log(Level.SEVERE, "Roulette debit of $" + stake + " for "
+                    + player.getName() + " raised after an uncertain mutation; no bet was recorded."
+                    + " Verify the player's balance before manual reconciliation.", error);
+            player.sendMessage(Messages.MINIGAMES.rouletteBetRejected());
+            return;
+        }
+        if (debit == BalanceMutationResult.REJECTED_UNREPRESENTABLE) {
+            player.sendMessage(Messages.MINIGAMES.rouletteBalanceUnrepresentable());
+            return;
+        }
         if (!target.round.placeBet(bet)) {
             // Unreachable in practice — canPlace just passed with no yield point in between — but
             // never silently keep a debit that has no matching ledger entry.
-            economyManager.addBalance(playerId, stake);
+            creditOrRouteToHouse(playerId, stake, "place-bet refund", board);
             plugin.getLogger().severe("Roulette: placeBet rejected a bet canPlace had just accepted "
                     + "for " + player.getName() + " on board at " + board.center());
             player.sendMessage(Messages.MINIGAMES.rouletteBetRejected());
@@ -534,15 +548,15 @@ final class RouletteSessionManager {
                 RouletteRound.computeSettlement(bets, pocket, Map.copyOf(ctx.rakebackRates));
 
         for (Map.Entry<UUID, RouletteRound.PlayerCredit> entry : settlement.credits().entrySet()) {
-            UUID playerId = entry.getKey();
-            RouletteRound.PlayerCredit credit = entry.getValue();
-            try {
-                if (credit.payout() > 0) {
-                    economyManager.addBalance(playerId, credit.payout());
-                }
-                if (credit.rakeback() > 0) {
-                    economyManager.addBalance(playerId, credit.rakeback());
-                }
+                UUID playerId = entry.getKey();
+                RouletteRound.PlayerCredit credit = entry.getValue();
+                try {
+                    if (credit.payout() > 0) {
+                        creditOrRouteToHouse(playerId, credit.payout(), "payout", board);
+                    }
+                    if (credit.rakeback() > 0) {
+                        creditOrRouteToHouse(playerId, credit.rakeback(), "rakeback", board);
+                    }
             } catch (RuntimeException e) {
                 // Do not assert the player was NOT paid: EconomyManager#addBalance mutates the
                 // in-memory balance and schedules the disk write BEFORE its trailing tab-refresh
@@ -745,7 +759,7 @@ final class RouletteSessionManager {
     private void refundRound(RouletteRoundContext ctx) {
         for (RouletteBet bet : ctx.round.bets()) {
             try {
-                economyManager.addBalance(bet.player(), bet.amount());
+                creditOrRouteToHouse(bet.player(), bet.amount(), "shutdown refund", ctx.board);
             } catch (RuntimeException e) {
                 // Same caveat as the settlement credit loop above: addBalance mutates the balance
                 // before its trailing tab-refresh call can throw, so this exception does not prove
@@ -755,6 +769,37 @@ final class RouletteSessionManager {
                         + "an exception — the refund may have partially or fully applied despite "
                         + "the error. Verify this player's balance before manually re-crediting.", e);
             }
+        }
+    }
+
+    void creditOrRouteToHouse(UUID playerId, long amount, String purpose,
+                              RouletteBoardStore.BoardEntry board) {
+        try {
+            if (economyManager.addBalance(playerId, amount) == BalanceMutationResult.APPLIED) return;
+        } catch (RuntimeException error) {
+            plugin.getLogger().log(Level.SEVERE, "Roulette " + purpose + " credit of $" + amount
+                    + " for " + playerId + " on board at " + board.center()
+                    + " raised after an uncertain mutation; verify the player's balance before"
+                    + " manual reconciliation.", error);
+            return;
+        }
+        try {
+            if (houseAccount.credit(amount)) {
+                plugin.getLogger().severe("Roulette " + purpose + " of $" + amount + " for "
+                        + playerId + " on board at " + board.center()
+                        + " could not be represented; the amount was routed to the House for "
+                        + "manual reconciliation.");
+            } else {
+                plugin.getLogger().severe("Roulette " + purpose + " of $" + amount + " for "
+                        + playerId + " on board at " + board.center()
+                        + " could not be represented, and the House fallback overflowed; the "
+                        + "amount is unrecoverable by this code path.");
+            }
+        } catch (RuntimeException error) {
+            plugin.getLogger().log(Level.SEVERE, "Roulette " + purpose + " of $" + amount + " for "
+                    + playerId + " on board at " + board.center()
+                    + " could not be represented, and the House fallback failed; manual "
+                    + "reconciliation is required.", error);
         }
     }
 

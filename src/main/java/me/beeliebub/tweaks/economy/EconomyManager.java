@@ -16,12 +16,14 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.function.Consumer;
 import java.util.logging.Level;
 
 // Handles async YAML persistence for per-player economy/ranks data.
 // Each player is cached in memory and saved to disk asynchronously via utils/YamlStore.
 public class EconomyManager {
+
+    /** Largest whole-dollar value that can be safely combined with another whole-dollar amount. */
+    public static final long MAX_EXACT_DOUBLE_INTEGER = 1L << 53;
 
     private final JavaPlugin plugin;
     private final YamlStore playerStore;
@@ -92,22 +94,16 @@ public class EconomyManager {
         return data != null ? data.balance : 0.0D;
     }
 
-    public void setBalance(UUID player, double balance) {
-        PlayerData data = mutate(player, holder -> holder.balance = balance);
-        writeAsync(player, data);
-        refreshTabFor(player);
+    public BalanceMutationResult setBalance(UUID player, double balance) {
+        return mutateBalance(player, balance, (current, ignored) -> balance, "set");
     }
 
-    public void addBalance(UUID player, double amount) {
-        PlayerData data = mutate(player, holder -> holder.balance += amount);
-        writeAsync(player, data);
-        refreshTabFor(player);
+    public BalanceMutationResult addBalance(UUID player, double amount) {
+        return mutateBalance(player, amount, (current, delta) -> current + delta, "add");
     }
 
-    public void removeBalance(UUID player, double amount) {
-        PlayerData data = mutate(player, holder -> holder.balance -= amount);
-        writeAsync(player, data);
-        refreshTabFor(player);
+    public BalanceMutationResult removeBalance(UUID player, double amount) {
+        return mutateBalance(player, -amount, (current, delta) -> current + delta, "remove");
     }
 
     /**
@@ -172,11 +168,9 @@ public class EconomyManager {
         if (existingReceipt != null) {
             return existingReceipt == amount ? HousePaymentResult.ALREADY_APPLIED : HousePaymentResult.REJECTED_MISMATCH;
         }
-        if (!Double.isFinite(data.balance)) {
-            return HousePaymentResult.REJECTED_UNREPRESENTABLE;
-        }
-        double next = data.balance + (double) amount;
-        if (!Double.isFinite(next) || next - data.balance != (double) amount) {
+        double delta = amount;
+        double next = data.balance + delta;
+        if (!isRepresentableMutation(data.balance, delta, next)) {
             return HousePaymentResult.REJECTED_UNREPRESENTABLE;
         }
         Map<String, Long> receipts = new HashMap<>(data.receipts);
@@ -247,12 +241,50 @@ public class EconomyManager {
         return cache.computeIfAbsent(player, this::readFromDisk);
     }
 
-    // Atomically read-modify-write a single field on the cached holder. Routing balance mutation
-    // through ConcurrentHashMap#compute (rather than the plain get-then-mutate the other setters
-    // use) makes it mutually exclusive, per key, with applyHousePayment's own compute — without
-    // this, a same-tick addBalance racing a house-payment credit could silently overwrite the
-    // credit and its receipt (lost update).
-    private PlayerData mutate(UUID player, Consumer<PlayerData> mutator) {
+    // Atomically read-modify-write a balance field. Routing balance mutation through
+    // ConcurrentHashMap#compute makes it mutually exclusive, per key, with applyHousePayment's
+    // own compute, so a same-tick mutation cannot overwrite a durable payment credit.
+    private BalanceMutationResult mutateBalance(UUID player, double requestedDelta,
+                                                BalanceMutation mutation, String operation) {
+        Objects.requireNonNull(player, "player");
+        BalanceMutationResult[] result = {BalanceMutationResult.REJECTED_UNREPRESENTABLE};
+        PlayerData data = cache.compute(player, (uuid, existing) -> {
+            PlayerData holder = existing != null ? existing : readFromDisk(uuid);
+            double next = mutation.next(holder.balance, requestedDelta);
+            double requestedChange = "set".equals(operation) ? next - holder.balance : requestedDelta;
+            if (!isRepresentableMutation(holder.balance, requestedChange, next)) {
+                return holder;
+            }
+            holder.balance = next;
+            result[0] = BalanceMutationResult.APPLIED;
+            return holder;
+        });
+        if (result[0] == BalanceMutationResult.REJECTED_UNREPRESENTABLE) {
+            plugin.getLogger().warning("Rejected balance " + operation + " for " + player
+                    + " amount " + requestedDelta + ": the balance cannot represent the mutation exactly");
+            return result[0];
+        }
+        writeAsync(player, data);
+        refreshTabFor(player);
+        return result[0];
+    }
+
+    private static boolean isRepresentableMutation(double current, double delta, double next) {
+        return Double.isFinite(current)
+                && Double.isFinite(delta)
+                && Double.isFinite(next)
+                && Math.abs(next) <= MAX_EXACT_DOUBLE_INTEGER
+                && next - current == delta;
+    }
+
+    @FunctionalInterface
+    private interface BalanceMutation {
+        double next(double current, double requestedDelta);
+    }
+
+    // Non-balance setters use the simpler get-then-mutate shape because they do not participate in
+    // the payment credit's balance read-modify-write operation.
+    private PlayerData mutate(UUID player, java.util.function.Consumer<PlayerData> mutator) {
         return cache.compute(player, (uuid, existing) -> {
             PlayerData holder = existing != null ? existing : readFromDisk(uuid);
             mutator.accept(holder);

@@ -919,7 +919,22 @@ public final class RegionGUI {
             openSubRegionsMenu(player, region, pm, permissionManager);
             return;
         }
-        reportSetParentResult(player, region, pm, permissionManager, trimmed, pm.setParent(region.id(), trimmed));
+        Region parent = pm.byName(player.getWorld(), trimmed);
+        if (parent == null) {
+            parent = pm.byNameAnyWorld(trimmed);
+        }
+        if (parent == null) {
+            player.sendMessage(Messages.PROTECTION.text(Text.PARENT_UNKNOWN, trimmed));
+            openSubRegionsMenu(player, region, pm, permissionManager);
+            return;
+        }
+        if (!RegionAuth.isOwnerOrAdmin(player, parent)) {
+            player.sendMessage(Messages.PROTECTION.text(Text.PARENT_TARGET_AUTH));
+            openSubRegionsMenu(player, region, pm, permissionManager);
+            return;
+        }
+        reportSetParentResult(player, region, pm, permissionManager, trimmed,
+                pm.setParent(region.id(), trimmed, RegionAuth.isAdmin(player)));
     }
 
     private static void reportSetParentResult(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager,
@@ -940,6 +955,7 @@ public final class RegionGUI {
             case SELF_REFERENCE -> player.sendMessage(Messages.PROTECTION.text(Text.PARENT_SELF));
             case CYCLE -> player.sendMessage(Messages.PROTECTION.text(Text.PARENT_CYCLE));
             case DIFFERENT_WORLDS -> player.sendMessage(Messages.PROTECTION.text(Text.PARENT_OTHER_WORLD));
+            case DIFFERENT_OWNER -> player.sendMessage(Messages.PROTECTION.text(Text.PARENT_DIFFERENT_OWNER));
             case NOT_CONTAINED_IN_PARENT -> player.sendMessage(Messages.PROTECTION.text(
                     Text.PARENT_NOT_CONTAINED));
             case OVERLAPS_SIBLING -> player.sendMessage(Messages.PROTECTION.text(
@@ -971,10 +987,19 @@ public final class RegionGUI {
                 Messages.PROTECTION.text(Text.GUI_RETURN_NO_CHANGES),
                 p -> openRegionHub(p, fresh, pm, permissionManager));
 
+        List<DialogBody> body = new ArrayList<>();
+        body.add(DialogBody.plainMessage(
+                Messages.PROTECTION.text(Text.GUI_UNCLAIM_BODY)
+                        .decoration(TextDecoration.ITALIC, false)));
+        int descendantCount = pm.descendantsOf(fresh.id()).size();
+        if (descendantCount > 0) {
+            body.add(DialogBody.plainMessage(
+                    Messages.PROTECTION.text(Text.GUI_UNCLAIM_BODY_CASCADE, descendantCount)
+                            .decoration(TextDecoration.ITALIC, false)));
+        }
+
         DialogBase base = DialogBase.builder(Messages.PROTECTION.title(Text.GUI_UNCLAIM_TITLE, fresh.id()))
-                .body(List.of(DialogBody.plainMessage(
-                        Messages.PROTECTION.text(Text.GUI_UNCLAIM_BODY)
-                                .decoration(TextDecoration.ITALIC, false))))
+                .body(body)
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -983,17 +1008,9 @@ public final class RegionGUI {
         player.showDialog(dialog);
     }
 
-    // Routes through the same refund logic as CLI `/region unclaim` — this previously called
-    // pm.unclaim(...) directly with zero currency refund, while the CLI path always correctly
-    // refunded the claim cost. See UnclaimSubcommand's class Javadoc.
-    //
-    // Re-checks RegionAuth.isOwnerOrAdmin here too, even though openUnclaimConfirmation already
-    // checked it before showing this button's dialog: defense-in-depth against a stale dialog
-    // reference, matching the pattern applied to the manager-menu methods, which also re-check
-    // authorization independently rather than relying solely on the hub button's gate. Not yet
-    // exploitable (region ownership is currently immutable after claim — there's no
-    // transfer-ownership feature), but cheap insurance against one being added later without every
-    // unclaim entry point being re-audited.
+    // Keep the GUI confirmation on the same cascade-and-refund path as the CLI command.
+    // Re-check authorization when the callback runs so a stale dialog cannot bypass the
+    // owner/admin gate.
     private static void handleUnclaim(Player player, Region region, ProtectionManager pm) {
         if (!RegionAuth.isOwnerOrAdmin(player, region)) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_UNCLAIM_AUTH));

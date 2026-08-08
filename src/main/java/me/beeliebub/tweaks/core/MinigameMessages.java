@@ -364,6 +364,12 @@ public final class MinigameMessages {
         return Messages.MM.deserialize("<red>You cannot afford a bet of $" + bet + ". Your balance is $" + balance + ".</red>");
     }
 
+    /** Explains that a Blackjack balance cannot represent the requested stake exactly. */
+    public Component blackjackBalanceUnrepresentable() {
+        return Messages.MM.deserialize("<red>Your balance is too large to represent this Blackjack stake exactly. "
+                + "Ask an administrator to adjust it before playing.</red>");
+    }
+
     /** Explains that a Blackjack game could not start and whether its bet was refunded. */
     public Component blackjackStartFailed(boolean refunded) {
         return Messages.MM.deserialize("<red>Could not start a Blackjack game here."
@@ -606,6 +612,12 @@ public final class MinigameMessages {
     public Component rouletteInsufficientFunds(int stake, long balance) {
         return Messages.MM.deserialize("<red>You cannot afford a stake of $" + stake
                 + ". Your balance is $" + balance + ".</red>");
+    }
+
+    /** Explains that a Roulette balance cannot represent the requested stake exactly. */
+    public Component rouletteBalanceUnrepresentable() {
+        return Messages.MM.deserialize("<red>Your balance is too large to represent this Roulette stake exactly. "
+                + "Ask an administrator to adjust it before betting.</red>");
     }
 
     /** Explains that a bet was rejected by this round's cumulative exposure guard. */

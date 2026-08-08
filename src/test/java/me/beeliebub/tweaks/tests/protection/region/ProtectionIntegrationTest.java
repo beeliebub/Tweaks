@@ -109,7 +109,8 @@ class ProtectionIntegrationTest {
                 EnumSet.noneOf(RegionFlag.class));
         protection.regions().put("home", region);
 
-        assertTrue(protection.unclaim("home"));
+        assertEquals(ProtectionManager.UnclaimResult.OK,
+                protection.unclaim("home").result());
         assertFalse(protection.regions().containsKey("home"));
         assertTrue(protection.orphanedRegions().contains("home"));
     }
@@ -225,7 +226,8 @@ class ProtectionIntegrationTest {
         // Materialise the per-world global, then verify unclaim refuses it.
         Region global = protection.globalRegion(world);
         assertNotNull(global);
-        assertFalse(protection.unclaim(ProtectionManager.GLOBAL_REGION_ID));
+        assertEquals(ProtectionManager.UnclaimResult.GLOBAL_DENIED,
+                protection.unclaim(ProtectionManager.GLOBAL_REGION_ID).result());
         assertSame(global, protection.globalRegion(world));
         assertTrue(protection.regions().containsKey(world.getName() + ":"
                 + ProtectionManager.GLOBAL_REGION_ID));

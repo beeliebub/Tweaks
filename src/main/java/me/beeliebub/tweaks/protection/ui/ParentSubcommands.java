@@ -14,15 +14,11 @@ import java.util.List;
 /**
  * The hierarchy subcommands: {@code setparent}, {@code unsetparent}.
  *
- * <p><b>Owner/admin-gated (fixed):</b> both handlers resolve the child region and require
- * {@link RegionAuth#isOwnerOrAdmin} before calling {@code ProtectionManager.setParent} — mirroring
- * {@code RegionGUI.openSubRegionsMenu}'s existing gate on the same action. Previously these were
- * gated only by the flat {@code PROTECTION_PURCHASEABLE} permission (the same one granted to every
- * claiming player), with no ownership check at all: any player holding it could reparent or
- * unparent ANY region on the server, not just their own — for {@code unsetparent} this had zero
- * geometric constraint either, and for legacy (bounds-null) regions {@code setparent} had none
- * either, since the containment/sibling-overlap checks in {@code ProtectionManager.setParent} only
- * run when both regions carry bounds.
+ * <p>Both handlers resolve the child region and require {@link RegionAuth#isOwnerOrAdmin} before
+ * calling {@code ProtectionManager.setParent}. {@code setparent} additionally requires ownership
+ * of the target parent; managers of the parent do not qualify. The manager enforces equal child and
+ * parent ownership by default, while admins may pass an explicit cross-owner override for intentional
+ * server-owned-parent layouts. Legacy regions without bounds remain exempt from geometry checks.
  */
 final class ParentSubcommands {
 
@@ -51,7 +47,17 @@ final class ParentSubcommands {
                 sender.sendMessage(Messages.PROTECTION.text(Text.PARENT_EDIT_AUTH));
                 return;
             }
-            reportParentResult(sender, child, parent, ctx.protection.setParent(child, parent));
+            Region parentRegion = ctx.resolveRegion(sender, parent);
+            if (parentRegion == null) {
+                sender.sendMessage(Messages.PROTECTION.text(Text.PARENT_UNKNOWN, parent));
+                return;
+            }
+            if (!RegionAuth.isOwnerOrAdmin(sender, parentRegion)) {
+                sender.sendMessage(Messages.PROTECTION.text(Text.PARENT_TARGET_AUTH));
+                return;
+            }
+            reportParentResult(sender, child, parent,
+                    ctx.protection.setParent(child, parent, RegionAuth.isAdmin(sender)));
         }
 
         @Override
@@ -110,6 +116,7 @@ final class ParentSubcommands {
             case SELF_REFERENCE -> Messages.PROTECTION.text(Text.PARENT_SELF);
             case CYCLE -> Messages.PROTECTION.text(Text.PARENT_CYCLE);
             case DIFFERENT_WORLDS -> Messages.PROTECTION.text(Text.PARENT_OTHER_WORLD);
+            case DIFFERENT_OWNER -> Messages.PROTECTION.text(Text.PARENT_DIFFERENT_OWNER);
             case NOT_CONTAINED_IN_PARENT -> Messages.PROTECTION.text(Text.PARENT_NOT_CONTAINED);
             case OVERLAPS_SIBLING -> Messages.PROTECTION.text(Text.PARENT_SIBLING_OVERLAP);
         };

@@ -17,6 +17,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.logging.Level;
 
 /** Legacy command surface for lottery information and administration. */
 public final class LotteryCommand implements CommandExecutor, TabCompleter {
@@ -56,7 +57,7 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
     }
 
     private void showInfo(CommandSender sender, String[] args) {
-        if (args.length != 1) {
+        if (args.length > 1 || (args.length == 1 && !args[0].equalsIgnoreCase("info"))) {
             sender.sendMessage(Messages.LOTTERY.usage());
             return;
         }
@@ -106,8 +107,14 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Messages.LOTTERY.baselineInvalid(args[1]));
             return;
         }
-        manager.setBaseline(baseline).thenAccept(success -> deliver(sender,
-                success ? Messages.LOTTERY.baselineUpdated(baseline) : Messages.LOTTERY.loading()));
+        manager.setBaseline(baseline).whenComplete((success, error) -> {
+            if (error != null) {
+                plugin.getLogger().log(Level.SEVERE, "Lottery baseline update failed", error);
+                deliver(sender, Messages.LOTTERY.baselineFailed());
+            } else {
+                deliver(sender, success ? Messages.LOTTERY.baselineUpdated(baseline) : Messages.LOTTERY.loading());
+            }
+        });
     }
 
     private void draw(CommandSender sender, String[] args) {
@@ -123,7 +130,14 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Messages.LOTTERY.paymentLoading());
             return;
         }
-        manager.draw().thenAccept(result -> deliverDraw(sender, result));
+        manager.draw().whenComplete((result, error) -> {
+            if (error != null) {
+                plugin.getLogger().log(Level.SEVERE, "Lottery draw failed before its outcome was known", error);
+                deliver(sender, Messages.LOTTERY.drawFailed());
+                return;
+            }
+            deliverDraw(sender, result);
+        });
     }
 
     private void deliverDraw(CommandSender sender, LotteryManager.DrawResult result) {
@@ -135,8 +149,14 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(Messages.LOTTERY.drawInFlight());
             } else if (result instanceof LotteryManager.DrawResult.Refused refused) {
                 sender.sendMessage(Messages.LOTTERY.drawRefused(refused.reason()));
-            } else if (result instanceof LotteryManager.DrawResult.PaymentFailed failed) {
-                sender.sendMessage(Messages.LOTTERY.paymentFailed(failed.outcome().name()));
+            } else if (result instanceof LotteryManager.DrawResult.PaymentAbandoned abandoned) {
+                sender.sendMessage(Messages.LOTTERY.paymentAbandoned(abandoned.outcome().name(),
+                        abandoned.entrantCount()));
+                Bukkit.broadcast(Messages.LOTTERY.paymentAbandonedBroadcast(abandoned.entrantCount()));
+            } else if (result instanceof LotteryManager.DrawResult.PaymentPending pending) {
+                sender.sendMessage(Messages.LOTTERY.paymentPending(pending.paymentId(), pending.outcome().name()));
+            } else if (result instanceof LotteryManager.DrawResult.PaymentStuck stuck) {
+                sender.sendMessage(Messages.LOTTERY.paymentStuck(stuck.paymentId()));
             } else if (result instanceof LotteryManager.DrawResult.Awarded awarded) {
                 OfflinePlayer winner = Bukkit.getOfflinePlayer(awarded.winner());
                 String name = winner.getName() == null ? awarded.winner().toString() : winner.getName();

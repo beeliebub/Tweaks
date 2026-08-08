@@ -53,12 +53,20 @@ public final class LotteryMessages {
         return red("Baseline must be a non-negative whole number: " + input);
     }
 
+    public Component baselineFailed() {
+        return red("The lottery baseline could not be saved. Check the server log before trying again.");
+    }
+
     public Component drawInFlight() {
         return yellow("A lottery draw is already in progress.");
     }
 
     public Component drawNotReady() {
         return loading();
+    }
+
+    public Component drawFailed() {
+        return red("The lottery draw could not be completed. Check the server log before trying again.");
     }
 
     public Component drawRefused(LotteryMath.RefusalReason reason) {
@@ -71,8 +79,24 @@ public final class LotteryMessages {
         };
     }
 
-    public Component paymentFailed(String outcome) {
-        return red("The lottery draw was recorded but payment did not settle: " + outcome + ". It will retry automatically.");
+    public Component paymentAbandoned(String outcome, int entrantCount) {
+        return yellow("The lottery draw was abandoned (" + outcome + "): no money moved, and all "
+                + entrantCount + " entries were kept. It is safe to draw again.");
+    }
+
+    public Component paymentAbandonedBroadcast(int entrantCount) {
+        return Component.text("Lottery draw abandoned: no money moved and its " + entrantCount
+                + " entries were kept. It is safe to draw again.", NamedTextColor.YELLOW);
+    }
+
+    public Component paymentPending(String paymentId, String outcome) {
+        return yellow("The lottery draw was recorded under payment " + paymentId + " (" + outcome
+                + "): the payment remains unresolved and will be checked on the next server start.");
+    }
+
+    public Component paymentStuck(String paymentId) {
+        return red("The lottery draw needs manual reconciliation for payment " + paymentId
+                + ". The draw state was retained.");
     }
 
     public Component winner(String name, long amount) {

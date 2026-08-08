@@ -14,7 +14,9 @@ import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
+import java.io.File;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -93,6 +95,39 @@ class RouletteEndRoundTest {
 
         assertEquals(1000.0, economyManager.getBalance(playerId), 1e-9,
                 "shutdown mid-BETTING must refund the full wager");
+    }
+
+    @Test
+    void rejectedShutdownRefundIsRoutedToTheHouse() throws Exception {
+        HouseAccount house = new HouseAccount(plugin);
+        house.whenLoaded().get(5, TimeUnit.SECONDS);
+        RouletteBoardStore boardStore = new RouletteBoardStore(plugin);
+        RouletteRestPoseStore restPoseStore = new RouletteRestPoseStore(plugin);
+        RouletteRenderer renderer = new RouletteRenderer(plugin, house, restPoseStore);
+        RouletteSessionManager sessions = new RouletteSessionManager(
+                plugin, economyManager, house, plugin.getRankManager(), boardStore, renderer, restPoseStore);
+        PlayerMock player = server.addPlayer();
+        UUID playerId = player.getUniqueId();
+        economyManager.setBalance(playerId, 1000.0);
+
+        sessions.setStake(playerId, STAKE);
+        sessions.handleSegmentClick(player, straightUpRef(7));
+        seedBalance(playerId, Double.NaN);
+
+        sessions.shutdown();
+
+        assertEquals(100L, house.balance(), "an unrepresentable refund must remain recoverable in House");
+    }
+
+    private void seedBalance(UUID playerId, double balance) throws Exception {
+        economyManager.unloadAndSavePlayer(playerId);
+        economyManager.saveAll().get(5, TimeUnit.SECONDS);
+        File file = new File(plugin.getDataFolder(), "players/" + playerId + ".yml");
+        org.bukkit.configuration.file.YamlConfiguration config =
+                org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(file);
+        config.set("balance", balance);
+        config.save(file);
+        economyManager.loadPlayer(playerId);
     }
 
     @Test

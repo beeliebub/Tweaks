@@ -201,6 +201,23 @@ class BalanceCommandTest {
         MessageAssert.assertMessageSent(admin, "Invalid amount");
     }
 
+    @Test
+    void adminAddReportsUnrepresentableStoredBalance() {
+        PlayerMock admin = server.addPlayer();
+        PlayerMock target = server.addPlayer();
+        drainMessages(admin);
+        drainMessages(target);
+
+        admin.addAttachment(plugin, Permissions.ADMIN_BALANCE, true);
+        em.setBalance(target.getUniqueId(), Math.pow(2, 53));
+
+        cmd.onCommand(admin, bukkitCmd, "balance",
+                new String[]{"add", target.getName(), "1"});
+
+        assertEquals(Math.pow(2, 53), em.getBalance(target.getUniqueId()));
+        MessageAssert.assertMessageSent(admin, "cannot represent");
+    }
+
     // ---- Helpers ------------------------------------------------------------
 
     /** Drain all pending messages from the player's message queue. */

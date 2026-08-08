@@ -3,17 +3,21 @@ package me.beeliebub.tweaks.tests.protection;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.protection.ProtectionListeners;
 import me.beeliebub.tweaks.protection.region.ProtectionManager;
+import me.beeliebub.tweaks.protection.region.Region;
 import me.beeliebub.tweaks.protection.ui.RegionSelectionManager;
 import org.bukkit.Chunk;
 import org.bukkit.NamespacedKey;
+import org.bukkit.World;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -153,6 +157,42 @@ class ChunkListenerTest {
     @Test
     void noPendingNoOrphansLeavesChunkUntouched() {
         Chunk chunk = chunkAt(1L, List.of("existing"));
+
+        listener.onChunkLoad(eventFor(chunk));
+
+        verify(chunk.getPersistentDataContainer(), never())
+                .set(any(NamespacedKey.class), any(), any());
+        verify(chunk.getPersistentDataContainer(), never()).remove(any(NamespacedKey.class));
+    }
+
+    @Test
+    void stripsLiveRegionPointerWhenChunkFallsOutsideItsBounds() {
+        World world = mock(World.class);
+        when(world.getName()).thenReturn("world");
+        protection.regions().put("world:live", new Region(
+                "live", UUID.randomUUID(), List.of(), Map.of(), Map.of(), null,
+                new Region.RegionBounds(0, 0, 0, 0), "world"));
+        Chunk outOfBounds = chunkAt(6L, List.of("live"));
+        when(outOfBounds.getWorld()).thenReturn(world);
+        when(outOfBounds.getX()).thenReturn(1);
+        when(outOfBounds.getZ()).thenReturn(0);
+
+        listener.onChunkLoad(eventFor(outOfBounds));
+
+        verify(outOfBounds.getPersistentDataContainer()).remove(any(NamespacedKey.class));
+
+        Chunk inBounds = chunkAt(0L, List.of("live"));
+        when(inBounds.getWorld()).thenReturn(world);
+        when(inBounds.getX()).thenReturn(0);
+        when(inBounds.getZ()).thenReturn(0);
+        listener.onChunkLoad(eventFor(inBounds));
+        verify(inBounds.getPersistentDataContainer(), never()).set(any(NamespacedKey.class), any(), any());
+        verify(inBounds.getPersistentDataContainer(), never()).remove(any(NamespacedKey.class));
+    }
+
+    @Test
+    void preservesUnresolvedNonOrphanPointerForRecovery() {
+        Chunk chunk = chunkAt(12L, List.of("unparseable"));
 
         listener.onChunkLoad(eventFor(chunk));
 

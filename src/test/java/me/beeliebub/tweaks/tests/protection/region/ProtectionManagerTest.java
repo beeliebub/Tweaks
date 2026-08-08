@@ -123,7 +123,8 @@ class ProtectionManagerTest {
         ProtectionManager mgr = new ProtectionManager(mock(Tweaks.class));
         World w = mockWorld("alpha");
         mgr.globalRegion(w); // ensure it exists in the cache
-        assertFalse(mgr.unclaim(ProtectionManager.GLOBAL_REGION_ID));
+        assertEquals(ProtectionManager.UnclaimResult.GLOBAL_DENIED,
+                mgr.unclaim(ProtectionManager.GLOBAL_REGION_ID).result());
         // The per-world global must still be in the cache after the rejected unclaim.
         assertNotNull(mgr.globalRegion(w));
         assertFalse(mgr.orphanedRegions().contains(ProtectionManager.GLOBAL_REGION_ID));

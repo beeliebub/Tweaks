@@ -146,6 +146,13 @@ public final class Messages {
                 .append(Component.text(formattedNewBalance, NamedTextColor.YELLOW));
     }
 
+    /** Explains that a balance mutation was rejected because the stored value cannot represent it exactly. */
+    public static Component balanceMutationRejected(String targetName, String operation, String formattedAmount) {
+        return Component.text("Could not " + operation + " " + formattedAmount + " for ", NamedTextColor.RED)
+                .append(Component.text(targetName, NamedTextColor.GOLD))
+                .append(Component.text(" because that balance cannot represent the change exactly.", NamedTextColor.RED));
+    }
+
     /** Explains that a sender cannot view another player's balance. */
     public static Component balanceViewOtherNoPermission() {
         return Component.text("You don't have permission to view other players' balances.", NamedTextColor.RED);
@@ -233,9 +240,9 @@ public final class Messages {
                 NamedTextColor.RED);
     }
 
-    /** Explains that a debit succeeded but the credit could not be confirmed durable, and will auto-retry. */
+    /** Explains that a debit succeeded but the credit could not be confirmed durable. */
     public static Component housePaymentRetrying() {
-        return Component.text("The house was charged but the credit could not be confirmed; it will retry automatically on next restart.",
+        return Component.text("The house was charged but the credit could not be confirmed; the payment is retained for replay on the next restart.",
                 NamedTextColor.RED);
     }
 

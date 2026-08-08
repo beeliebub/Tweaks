@@ -44,7 +44,8 @@ class ConcurrencyTest {
         ConcurrentHashMap<Long, java.util.Set<String>> stamps = new ConcurrentHashMap<>();
         Tweaks plugin = mock(Tweaks.class);
         when(plugin.getLogger()).thenReturn(Logger.getLogger("concurrency"));
-        PendingStampsStore store = new PendingStampsStore(plugin, tmp.toFile(), stamps);
+        PendingStampsStore store = new PendingStampsStore(
+                plugin, tmp.toFile(), stamps, ConcurrentHashMap.newKeySet());
 
         AtomicReference<Throwable> failure = new AtomicReference<>();
         final int writesPerThread = 2000;
@@ -89,7 +90,8 @@ class ConcurrencyTest {
         // then verify the file round-trips back into a populated cache.
         store.writeNow();
         ConcurrentHashMap<Long, java.util.Set<String>> reloaded = new ConcurrentHashMap<>();
-        new PendingStampsStore(plugin, tmp.toFile(), reloaded).load();
+        new PendingStampsStore(
+                plugin, tmp.toFile(), reloaded, ConcurrentHashMap.newKeySet()).load();
         assertEquals(3 * writesPerThread, reloaded.size(),
                 "every concurrent insert must be in the final snapshot");
     }

@@ -69,7 +69,9 @@ class UnclaimRefundTest {
         assertEquals(0, InventoryUtil.getResourceRupeeBalance(owner),
                 "player starts with zero Resource Rupees");
 
-        UnclaimSubcommand.unclaimWithRefund(owner, protection, region);
+        ProtectionManager.UnclaimOutcome outcome =
+                UnclaimSubcommand.unclaimWithRefund(owner, protection, region);
+        assertEquals(ProtectionManager.UnclaimResult.OK, outcome.result());
 
         int balance = InventoryUtil.getResourceRupeeBalance(owner);
         assertTrue(balance >= 89,
@@ -104,7 +106,9 @@ class UnclaimRefundTest {
         // Bukkit.getPlayer(ownerId), which is null since that player has never joined.
         ConsoleCommandSender console = mock(ConsoleCommandSender.class);
 
-        UnclaimSubcommand.unclaimWithRefund(console, protection, region);
+        ProtectionManager.UnclaimOutcome outcome =
+                UnclaimSubcommand.unclaimWithRefund(console, protection, region);
+        assertEquals(ProtectionManager.UnclaimResult.OK, outcome.result());
 
         assertFalse(protection.regions().containsKey("ghost"),
                 "ghost region must be removed from cache even when owner is offline");
@@ -137,7 +141,9 @@ class UnclaimRefundTest {
         int balanceBefore = InventoryUtil.getResourceRupeeBalance(owner);
         assertEquals(0, balanceBefore, "owner starts with zero balance");
 
-        UnclaimSubcommand.unclaimWithRefund(owner, protection, region);
+        ProtectionManager.UnclaimOutcome outcome =
+                UnclaimSubcommand.unclaimWithRefund(owner, protection, region);
+        assertEquals(ProtectionManager.UnclaimResult.OK, outcome.result());
 
         int balanceAfter = InventoryUtil.getResourceRupeeBalance(owner);
         assertEquals(0, balanceAfter,

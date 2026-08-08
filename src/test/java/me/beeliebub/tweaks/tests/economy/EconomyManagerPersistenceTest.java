@@ -146,6 +146,8 @@ class EconomyManagerPersistenceTest {
         File playersDir = new File(dataFolder, "players");
         assertTrue(playersDir.isDirectory() || playersDir.mkdirs());
         File blocked = new File(playersDir, id + ".yml");
+        economy.saveAll().get(5, TimeUnit.SECONDS);
+        if (blocked.exists()) assertTrue(blocked.delete());
         assertTrue(blocked.mkdirs());
 
         var future = economy.saveAll();

@@ -20,8 +20,6 @@ import java.util.logging.Level;
 /** Administrative command surface for the server-wide casino house account. */
 public final class HouseCommand implements CommandExecutor, TabCompleter {
 
-    private static final long MAX_EXACT_DOUBLE_INTEGER = 1L << 53;
-
     private final JavaPlugin plugin;
     private final HouseAccount houseAccount;
     private final HousePaymentService housePaymentService;
@@ -223,7 +221,7 @@ public final class HouseCommand implements CommandExecutor, TabCompleter {
     private Long parsePositiveAmount(CommandSender sender, String input) {
         try {
             long amount = Long.parseLong(input);
-            if (amount <= 0 || amount > MAX_EXACT_DOUBLE_INTEGER) {
+            if (amount <= 0 || amount > EconomyManager.MAX_EXACT_DOUBLE_INTEGER) {
                 sender.sendMessage(Messages.houseInvalidAmount(input));
                 return null;
             }

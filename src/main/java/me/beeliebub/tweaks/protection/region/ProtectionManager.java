@@ -11,18 +11,22 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
 
 // Central holder for the two in-memory caches that back the hybrid protection
 // architecture. Keeping them on a single owner simplifies lifecycle (load on
@@ -299,6 +303,7 @@ public final class ProtectionManager {
                 .withBounds(region.bounds() == null ? bounds : region.bounds())
                 .withWorld(region.worldName() == null ? worldName : region.worldName());
         regions.put(keyOf(stamped), stamped);
+        onClaimed(stamped);
         if (writer != null) {
             writer.queue(stamped);
         }
@@ -330,6 +335,7 @@ public final class ProtectionManager {
                 .withBounds(region.bounds() == null ? bounds : region.bounds())
                 .withWorld(region.worldName() == null ? world.getName() : region.worldName());
         regions.put(keyOf(stamped), stamped);
+        onClaimed(stamped);
         if (writer != null) {
             writer.queue(stamped);
         }
@@ -339,6 +345,11 @@ public final class ProtectionManager {
         }
         claimLazy(world, keys, stamped.id());
         return CompletableFuture.completedFuture(null);
+    }
+
+    private void onClaimed(Region region) {
+        orphanedRegions.remove(region.id());
+        if (writer != null) writer.untombstone(keyOf(region));
     }
 
     private static boolean boundsIntersect(Region.RegionBounds a, Region.RegionBounds b) {
@@ -402,9 +413,9 @@ public final class ProtectionManager {
     // ------------------------------------------------------------------
 
     // O(1) resolution of a location to its applicable Regions: read the
-    // chunk's PDC pointer list, map each id through the regions cache,
-    // and drop any orphans (id that no longer has a live Region — those
-    // get physically purged on the next ChunkLoadEvent).
+    // chunk's PDC pointer list and map each id through the regions cache.
+    // Bounds validation keeps stale live pointers inert, while unresolved
+    // pointers are left for chunk-load cleanup. This method never writes PDC.
     public List<Region> regionsAt(Location loc) {
         Chunk chunk = loc.getChunk();
         List<String> ids = PDCUtil.read(chunk, regionPointersKey);
@@ -415,7 +426,11 @@ public final class ProtectionManager {
             // World-aware lookup so a per-world region named the same as another
             // world's region resolves to the correct one for this chunk.
             Region r = byName(world, id);
-            if (r != null) resolved.add(r);
+            if (r == null) continue;
+            // A pointer can outlive the claim that placed it. Bounds validation
+            // keeps that stale pointer inert while preserving legacy null bounds.
+            if (r.bounds() != null && !r.bounds().contains(chunk.getX(), chunk.getZ())) continue;
+            resolved.add(r);
         }
         return resolved;
     }
@@ -757,19 +772,142 @@ public final class ProtectionManager {
     //
     // Region is immutable, so every change to ownership/members/flags
     // builds a fresh Region and atomically replaces the cache entry.
-    // Unclaim is logical-only: the id is moved to orphanedRegions so the
-    // ChunkLoadEvent listener can strip the dead pointer when the chunk
-    // next loads (Edge Case 4 — avoids the 1000-chunk getChunkAtAsync
-    // flood that synchronous physical deletion would cause).
+    // Unclaim archives YAML synchronously before changing the cache. PDC
+    // pointer removal remains lazy so a large claim does not trigger a flood
+    // of asynchronous chunk loads; chunk-load cleanup removes those pointers.
+    // ChunkLoadEvent cleanup strips stale pointers when their chunks load.
     // ------------------------------------------------------------------
 
-    public boolean unclaim(String id) {
-        if (GLOBAL_REGION_ID.equals(id)) return false;
-        Region r = byNameAnyWorld(id);
-        if (r == null) return false;
-        regions.remove(keyOf(r));
-        orphanedRegions.add(r.id());
-        return true;
+    public enum UnclaimResult { OK, UNKNOWN_REGION, GLOBAL_DENIED, PERSISTENCE_FAILED }
+
+    /** Destruction order is deepest descendant first, with the target last. */
+    public record UnclaimOutcome(UnclaimResult result, List<Region> destroyed) {}
+
+    public List<Region> descendantsOf(String id) {
+        Region root = byNameAnyWorld(id);
+        if (root == null || GLOBAL_REGION_ID.equals(root.id())) return List.of();
+        Map<String, List<Region>> byParent = childrenByParent();
+        List<Region> descendants = new ArrayList<>();
+        Set<String> visited = new HashSet<>();
+        visited.add(keyOf(root));
+        collectDescendants(root, byParent, visited, descendants);
+        return List.copyOf(descendants);
+    }
+
+    private Map<String, List<Region>> childrenByParent() {
+        Map<String, List<Region>> byParent = new HashMap<>();
+        for (Region region : regions.values()) {
+            if (GLOBAL_REGION_ID.equals(region.id()) || !region.hasParent()) continue;
+            byParent.computeIfAbsent(region.parentId(), ignored -> new ArrayList<>()).add(region);
+        }
+        return byParent;
+    }
+
+    private void collectDescendants(Region parent, Map<String, List<Region>> byParent,
+                                    Set<String> visited, List<Region> output) {
+        for (Region child : childrenOf(parent, byParent)) {
+            String childKey = keyOf(child);
+            if (!visited.add(childKey)) continue;
+            collectDescendants(child, byParent, visited, output);
+            output.add(child);
+        }
+    }
+
+    private List<Region> childrenOf(Region parent, Map<String, List<Region>> byParent) {
+        List<Region> candidates = byParent.get(parent.id());
+        if (candidates == null || candidates.isEmpty()) return List.of();
+        List<Region> children = new ArrayList<>(candidates.size());
+        for (Region child : candidates) {
+            if (Objects.equals(child.worldName(), parent.worldName())) children.add(child);
+        }
+        return children;
+    }
+
+    public List<String> auditCrossOwnerHierarchies() {
+        Map<String, List<Region>> byParent = childrenByParent();
+        List<String> crossOwner = new ArrayList<>();
+        for (Region parent : regions.values()) {
+            if (GLOBAL_REGION_ID.equals(parent.id())) continue;
+            for (Region child : childrenOf(parent, byParent)) {
+                if (!Objects.equals(child.owner(), parent.owner())) {
+                    crossOwner.add(child.id() + " -> " + parent.id());
+                }
+            }
+        }
+        return List.copyOf(crossOwner);
+    }
+
+    public UnclaimOutcome unclaim(String id) {
+        if (GLOBAL_REGION_ID.equals(id)) return new UnclaimOutcome(UnclaimResult.GLOBAL_DENIED, List.of());
+        Region root = byNameAnyWorld(id);
+        if (root == null) return new UnclaimOutcome(UnclaimResult.UNKNOWN_REGION, List.of());
+
+        List<Region> targets = new ArrayList<>(descendantsOf(id));
+        targets.add(root);
+        if (writer != null) {
+            List<Region> archived = new ArrayList<>(targets.size());
+            for (Region target : targets) {
+                try {
+                    writer.archive(target);
+                    archived.add(target);
+                } catch (IOException e) {
+                    writer.untombstone(keyOf(target));
+                    logPersistenceFailure("Failed to archive region '" + target.id()
+                            + "' during unclaim", e);
+                    rollbackArchives(archived);
+                    return new UnclaimOutcome(UnclaimResult.PERSISTENCE_FAILED, List.of());
+                }
+            }
+        }
+
+        for (Region target : targets) {
+            regions.remove(keyOf(target), target);
+            orphanedRegions.add(target.id());
+            purgePendingStamps(target.id());
+        }
+        return new UnclaimOutcome(UnclaimResult.OK, List.copyOf(targets));
+    }
+
+    private void rollbackArchives(List<Region> archived) {
+        for (Region region : archived) {
+            try {
+                writer.untombstone(keyOf(region));
+                writer.writeNow(region);
+            } catch (IOException rollbackFailure) {
+                logPersistenceFailure("Failed to restore region '" + region.id()
+                        + "' after an unclaim archive failure", rollbackFailure);
+            }
+        }
+    }
+
+    private void logPersistenceFailure(String message, IOException failure) {
+        if (plugin != null && plugin.getLogger() != null) {
+            plugin.getLogger().log(Level.SEVERE, message, failure);
+        }
+    }
+
+    private void purgePendingStamps(String regionId) {
+        pendingStamps.entrySet().removeIf(entry -> {
+            Set<String> ids = entry.getValue();
+            ids.remove(regionId);
+            return ids.isEmpty();
+        });
+    }
+
+    public int reconcilePendingStamps() {
+        Set<String> pruned = new HashSet<>();
+        for (Map.Entry<Long, Set<String>> entry : pendingStamps.entrySet()) {
+            entry.getValue().removeIf(regionId -> {
+                if (byNameAnyWorld(regionId) != null) return false;
+                orphanedRegions.add(regionId);
+                pruned.add(regionId);
+                return true;
+            });
+        }
+        pendingStamps.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+        // pendingStamps is keyed by chunk key and carries no world component, so
+        // liveness necessarily means that no world has a region with this id.
+        return pruned.size();
     }
 
     public boolean addMember(String id, UUID member) {
@@ -937,6 +1075,7 @@ public final class ProtectionManager {
         CYCLE,
         NO_CHANGE,
         DIFFERENT_WORLDS,
+        DIFFERENT_OWNER,
         NOT_CONTAINED_IN_PARENT,
         OVERLAPS_SIBLING
     }
@@ -949,6 +1088,10 @@ public final class ProtectionManager {
     // Returns a discriminated result so the command layer can produce a
     // specific error message without re-walking the cache.
     public SetParentResult setParent(String childId, String newParentId) {
+        return setParent(childId, newParentId, false);
+    }
+
+    public SetParentResult setParent(String childId, String newParentId, boolean allowCrossOwner) {
         // Global region is the implicit root for wilderness; it cannot be
         // re-parented onto another region, and from a user perspective it
         // does not "exist" as a normal claim.
@@ -962,6 +1105,12 @@ public final class ProtectionManager {
             Region parent = byNameAnyWorld(normalized);
             if (parent == null) return SetParentResult.UNKNOWN_PARENT;
             if (wouldCreateCycle(childId, normalized)) return SetParentResult.CYCLE;
+            // Parent ownership is a hierarchy invariant. The caller supplies
+            // an explicit administrative override for intentional mixed-owner
+            // layouts; this layer does not perform permission checks.
+            if (!allowCrossOwner && !Objects.equals(child.owner(), parent.owner())) {
+                return SetParentResult.DIFFERENT_OWNER;
+            }
 
             // Geometry checks only run when both regions have bounds + world
             // recorded — legacy claims (loaded before those fields existed)
@@ -979,6 +1128,7 @@ public final class ProtectionManager {
                 for (Region sibling : regions.values()) {
                     if (sibling.id().equals(childId)) continue;
                     if (!normalized.equals(sibling.parentId())) continue;
+                    if (!Objects.equals(sibling.worldName(), parent.worldName())) continue;
                     if (sibling.bounds() == null) continue;
                     if (boundsIntersect(child.bounds(), sibling.bounds())) {
                         return SetParentResult.OVERLAPS_SIBLING;

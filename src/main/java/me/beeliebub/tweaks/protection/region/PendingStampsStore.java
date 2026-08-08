@@ -18,7 +18,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
-// Atomic, crash-safe disk persistence for the lazy-stamp pending map.
+// Atomic, crash-safe disk persistence for the lazy-stamp pending map and the
+// orphaned-region set. Both belong in one file because they are loaded,
+// snapshotted, and flushed by the same lifecycle.
 //
 // Why atomic-move instead of a direct overwrite: if power is lost mid-write,
 // a direct overwrite leaves a zero-byte or partially-written file that fails
@@ -36,20 +38,36 @@ public final class PendingStampsStore {
     private static final String YAML_FILE = "pending_stamps.yml";
     private static final String TMP_FILE = "pending_stamps.tmp";
     private static final String STAMPS_KEY = "stamps";
+    private static final String ORPHANS_KEY = "orphans";
+    private static final int MAX_PERSISTED_ORPHANS = 5_000;
 
     private final Tweaks plugin;
     private final File yamlFile;
     private final File tmpFile;
     private final ConcurrentHashMap<Long, Set<String>> stamps;
+    private final Set<String> orphanedRegions;
     private final Object writeLock = new Object();
 
+    private boolean orphanCapWarningLogged;
     private BukkitTask task;
 
-    public PendingStampsStore(Tweaks plugin, File dataFolder, ConcurrentHashMap<Long, Set<String>> stamps) {
+    public PendingStampsStore(Tweaks plugin, File dataFolder,
+                             ConcurrentHashMap<Long, Set<String>> stamps,
+                             Set<String> orphanedRegions) {
         this.plugin = plugin;
         this.yamlFile = new File(dataFolder, YAML_FILE);
         this.tmpFile = new File(dataFolder, TMP_FILE);
         this.stamps = stamps;
+        this.orphanedRegions = orphanedRegions;
+    }
+
+    /**
+     * Compatibility constructor for callers that do not yet expose the live
+     * orphan set. New lifecycle wiring should use the four-argument form.
+     */
+    public PendingStampsStore(Tweaks plugin, File dataFolder,
+                             ConcurrentHashMap<Long, Set<String>> stamps) {
+        this(plugin, dataFolder, stamps, ConcurrentHashMap.newKeySet());
     }
 
     // Synchronously read pending_stamps.yml on plugin enable. Also evicts any
@@ -62,6 +80,8 @@ public final class PendingStampsStore {
         if (!yamlFile.exists()) return;
 
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(yamlFile);
+        orphanedRegions.addAll(yaml.getStringList(ORPHANS_KEY));
+
         ConfigurationSection section = yaml.getConfigurationSection(STAMPS_KEY);
         if (section == null) return;
 
@@ -90,8 +110,24 @@ public final class PendingStampsStore {
         for (Map.Entry<Long, Set<String>> e : stamps.entrySet()) {
             snapshot.put(e.getKey(), new ArrayList<>(e.getValue()));
         }
+        // Keep the live set complete for the current process; only the durable
+        // snapshot is capped. Any omitted pointer is inert because region
+        // resolution validates bounds before applying protection.
+        List<String> orphanSnapshot = new ArrayList<>(orphanedRegions);
+        boolean orphanSnapshotTruncated = orphanSnapshot.size() > MAX_PERSISTED_ORPHANS;
+        if (orphanSnapshotTruncated) {
+            orphanSnapshot = new ArrayList<>(
+                    orphanSnapshot.subList(0, MAX_PERSISTED_ORPHANS));
+        }
 
         synchronized (writeLock) {
+            if (orphanSnapshotTruncated && !orphanCapWarningLogged) {
+                plugin.getLogger().warning("pending_stamps orphan list exceeds "
+                        + MAX_PERSISTED_ORPHANS + " entries; persisting only the first "
+                        + MAX_PERSISTED_ORPHANS);
+                orphanCapWarningLogged = true;
+            }
+
             File parent = yamlFile.getParentFile();
             if (parent != null && !parent.exists() && !parent.mkdirs()) {
                 throw new IOException("Could not create parent directory " + parent);
@@ -102,6 +138,7 @@ public final class PendingStampsStore {
             for (Map.Entry<Long, List<String>> e : snapshot.entrySet()) {
                 section.set(String.valueOf(e.getKey()), e.getValue());
             }
+            yaml.set(ORPHANS_KEY, orphanSnapshot);
             yaml.save(tmpFile);
 
             Files.move(

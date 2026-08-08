@@ -29,6 +29,7 @@ public final class LotteryManager {
     private static final String ENTRANTS_KEY = "entrants";
     private static final String PENDING_KEY = "pending_award";
     private static final long DEFAULT_RESEED_AMOUNT = 10_000L;
+    private static final int MAX_REPLAY_ATTEMPTS = 3;
 
     private final Tweaks plugin;
     private final HouseAccount houseAccount;
@@ -140,8 +141,45 @@ public final class LotteryManager {
                 reseedTo = section.getLong("reseed_to");
                 if (reseedTo < 1) throw new IllegalArgumentException("pending_award reseed_to must be positive");
             }
+            List<UUID> awardEntrants = new ArrayList<>();
+            if (section.contains("entrants")) {
+                if (!section.isList("entrants")) {
+                    throw new IllegalArgumentException("pending_award entrants must be a list");
+                }
+                for (Object raw : section.getList("entrants")) {
+                    if (!(raw instanceof String value)) {
+                        throw new IllegalArgumentException("pending_award entrant is not a UUID string");
+                    }
+                    try {
+                        awardEntrants.add(UUID.fromString(value));
+                    } catch (IllegalArgumentException error) {
+                        throw new IllegalArgumentException("pending_award entrant is not a valid UUID", error);
+                    }
+                }
+            }
+            Long newBaseline = null;
+            if (section.contains("new_baseline")) {
+                if (!section.isLong("new_baseline") && !section.isInt("new_baseline")) {
+                    throw new IllegalArgumentException("pending_award new_baseline must be integral");
+                }
+                newBaseline = section.getLong("new_baseline");
+                if (newBaseline < 0) {
+                    throw new IllegalArgumentException("pending_award new_baseline must not be negative");
+                }
+            }
+            int attempts = 0;
+            if (section.contains("attempts")) {
+                if (!section.isInt("attempts") && !section.isLong("attempts")) {
+                    throw new IllegalArgumentException("pending_award attempts must be integral");
+                }
+                long parsedAttempts = section.getLong("attempts");
+                if (parsedAttempts < 0 || parsedAttempts > Integer.MAX_VALUE) {
+                    throw new IllegalArgumentException("pending_award attempts is out of range");
+                }
+                attempts = (int) parsedAttempts;
+            }
             parsedPending = new PendingAward(section.getString("payment_id"), winner, amount,
-                    reseedTo, section.getLong("created_at"));
+                    reseedTo, section.getLong("created_at"), List.copyOf(awardEntrants), newBaseline, attempts);
         }
         return new ParsedState(parsedBaseline, parsedEntrants, parsedPending);
     }
@@ -191,8 +229,15 @@ public final class LotteryManager {
         if (value < 0) throw new IllegalArgumentException("baseline must not be negative");
         synchronized (stateLock) {
             if (!isLoaded()) return CompletableFuture.completedFuture(false);
+            long previous = baseline;
             baseline = value;
-            return persistSnapshot().thenApply(ignored -> true);
+            return persistSnapshot().handle((ignored, error) -> {
+                if (error == null) return true;
+                synchronized (stateLock) {
+                    if (baseline == value) baseline = previous;
+                }
+                throw new java.util.concurrent.CompletionException(error);
+            });
         }
     }
 
@@ -209,6 +254,12 @@ public final class LotteryManager {
         try {
             DrawContext context;
             synchronized (stateLock) {
+                if (pendingAward != null) {
+                    drawInFlight.set(false);
+                    return CompletableFuture.completedFuture(DrawResult.paymentPending(
+                            pendingAward.paymentId(), pendingAward.winner(), pendingAward.amount(),
+                            HousePayOutcome.FAILED));
+                }
                 List<UUID> snapshot = List.copyOf(entrants);
                 LotteryMath.PotOutcome outcome = LotteryMath.calculate(snapshot.size(), houseAccount.balance(),
                         baseline, reseedAmount());
@@ -219,11 +270,10 @@ public final class LotteryManager {
                 LotteryMath.PotOutcome.Payable payable = (LotteryMath.PotOutcome.Payable) outcome;
                 UUID winner = snapshot.get(random.nextInt(snapshot.size()));
                 PendingAward award = new PendingAward(UUID.randomUUID().toString(), winner, payable.pot(),
-                        payable.capBound() ? payable.newHouseBalance() : null, System.currentTimeMillis());
-                entrants.clear();
-                baseline = payable.newBaseline();
+                        payable.capBound() ? payable.newHouseBalance() : null, System.currentTimeMillis(),
+                        snapshot, payable.newBaseline(), 0);
                 pendingAward = award;
-                context = new DrawContext(award, payable);
+                context = new DrawContext(award);
             }
 
             return persistSnapshot()
@@ -238,20 +288,24 @@ public final class LotteryManager {
     }
 
     private CompletableFuture<DrawResult> finishAward(DrawContext context, HousePayOutcome payment) {
-        if (payment != HousePayOutcome.SUCCESS) {
-            return CompletableFuture.completedFuture(DrawResult.paymentFailed(context.award().winner(),
-                    context.award().amount(), payment));
-        }
-        CompletableFuture<Void> reseed = CompletableFuture.completedFuture(null);
-        if (context.payable().capBound()) {
-            long reseedTo = context.payable().newHouseBalance();
-            houseAccount.set(reseedTo);
-            plugin.getLogger().info("Lottery paid a 100% draw; reseeding the House to $" + reseedTo);
-            reseed = houseAccount.flush();
-        }
-        return reseed.thenCompose(ignored -> clearPendingAward())
-                .thenApply(ignored -> DrawResult.awarded(context.award().winner(), context.award().amount(),
-                        context.payable().capBound()));
+        return switch (classify(payment)) {
+            case SETTLED -> commitAward(context.award(), false)
+                    .thenApply(ignored -> DrawResult.awarded(context.award().winner(), context.award().amount(),
+                            context.award().reseedTo() != null));
+            case ABANDONED -> abandonAward(context.award())
+                    .thenApply(ignored -> DrawResult.paymentAbandoned(context.award().winner(),
+                            context.award().amount(), payment, context.award().entrants().size()));
+            case PENDING -> CompletableFuture.completedFuture(DrawResult.paymentPending(
+                    context.award().paymentId(), context.award().winner(), context.award().amount(), payment));
+            case STUCK -> {
+                plugin.getLogger().severe("Lottery award " + context.award().paymentId() + " for "
+                        + context.award().winner() + " ($" + context.award().amount()
+                        + ") needs manual reconciliation; retaining the committed draw state.");
+                yield commitAward(context.award(), false)
+                        .thenApply(ignored -> DrawResult.paymentStuck(context.award().paymentId(),
+                                context.award().winner(), context.award().amount()));
+            }
+        };
     }
 
     private CompletableFuture<Void> replayPendingAward() {
@@ -260,33 +314,126 @@ public final class LotteryManager {
             award = pendingAward;
         }
         if (award == null) return CompletableFuture.completedFuture(null);
+        return replayAwardOnce(award).handle((ignored, error) -> {
+            if (error == null) return CompletableFuture.<Void>completedFuture(null);
+            return handleReplayFailure(award, error);
+        }).thenCompose(future -> future);
+    }
+
+    private CompletableFuture<Void> replayAwardOnce(PendingAward award) {
         return economyManager.hasHousePaymentReceipt(award.winner(), award.paymentId())
-                .thenCompose(receipt -> receipt
-                        ? finishReplayedAward(award)
-                        : housePaymentService.pay(award.paymentId(), award.winner(), award.amount())
-                                .thenCompose(payment -> {
-                                    if (payment != HousePayOutcome.SUCCESS) {
-                                        return failedFuture(new IllegalStateException(
-                                                "Lottery award replay did not settle: " + payment));
-                                    }
-                                    return finishReplayedAward(award);
-                                }));
+                .thenCompose(receipt -> {
+                    boolean retainedDebit = houseAccount.pendingPayments().containsKey(award.paymentId());
+                    if (!retainedDebit && receipt) return finishReplayedAward(award, HousePayOutcome.SUCCESS);
+                    if (!retainedDebit) {
+                        plugin.getLogger().warning("Lottery award " + award.paymentId() + " for "
+                                + award.winner() + " ($" + award.amount()
+                                + ") has no receipt or retained House debit; abandoning it without re-paying.");
+                        return abandonAward(award);
+                    }
+                    return housePaymentService.resumePendingPayment(award.paymentId(), award.winner(), award.amount())
+                            .thenCompose(payment -> finishReplayedAward(award, payment));
+                });
     }
 
-    private CompletableFuture<Void> finishReplayedAward(PendingAward award) {
-        if (award.reseedTo() != null && houseAccount.balance() < award.reseedTo()) {
-            plugin.getLogger().warning("Lottery replay is reasserting House reseed to $" + award.reseedTo());
-            houseAccount.set(award.reseedTo());
-            return houseAccount.flush().thenCompose(ignored -> clearPendingAward());
-        }
-        return clearPendingAward();
+    private CompletableFuture<Void> finishReplayedAward(PendingAward award, HousePayOutcome payment) {
+        return switch (classify(payment)) {
+            case SETTLED -> commitAward(award, false);
+            case ABANDONED -> {
+                plugin.getLogger().warning("Lottery award replay for " + award.winner() + " ($"
+                        + award.amount() + ") resolved as " + payment + "; entries and baseline were kept.");
+                yield abandonAward(award);
+            }
+            case PENDING -> CompletableFuture.completedFuture(null);
+            case STUCK -> {
+                plugin.getLogger().severe("Lottery award " + award.paymentId() + " for "
+                        + award.winner() + " ($" + award.amount()
+                        + ") needs manual reconciliation; retaining the committed draw state.");
+                yield commitAward(award, false);
+            }
+        };
     }
 
-    private CompletableFuture<Void> clearPendingAward() {
+    private CompletableFuture<Void> handleReplayFailure(PendingAward award, Throwable error) {
+        PendingAward current;
         synchronized (stateLock) {
-            pendingAward = null;
-            return persistSnapshot();
+            current = pendingAward;
         }
+        if (current == null || !current.paymentId().equals(award.paymentId())) {
+            return CompletableFuture.completedFuture(null);
+        }
+        int attempts = current.attempts() + 1;
+        if (attempts >= MAX_REPLAY_ATTEMPTS) {
+            plugin.getLogger().log(Level.SEVERE, "Lottery award " + current.paymentId() + " for "
+                    + current.winner() + " ($" + current.amount()
+                    + ") could not be resolved after " + attempts
+                    + " indeterminate recovery attempts; abandoning the lottery record while leaving "
+                    + "any House journal entry untouched.", error);
+            return abandonAward(current);
+        }
+        PendingAward retried = current.withAttempts(attempts);
+        synchronized (stateLock) {
+            pendingAward = retried;
+        }
+        return persistSnapshot().handle((ignored, persistError) -> {
+            if (persistError != null) {
+                plugin.getLogger().log(Level.WARNING, "Lottery recovery attempt counter could not be persisted for "
+                        + retried.paymentId(), persistError);
+            }
+            return null;
+        });
+    }
+
+    private CompletableFuture<Void> abandonAward(PendingAward award) {
+        synchronized (stateLock) {
+            if (pendingAward == null || !pendingAward.paymentId().equals(award.paymentId())) {
+                return CompletableFuture.completedFuture(null);
+            }
+            pendingAward = null;
+        }
+        return persistSnapshot().handle((ignored, error) -> {
+            if (error == null) return null;
+            synchronized (stateLock) {
+                if (pendingAward == null) pendingAward = award;
+            }
+            throw new java.util.concurrent.CompletionException(error);
+        });
+    }
+
+    private CompletableFuture<Void> commitAward(PendingAward award, boolean retainPending) {
+        CompletableFuture<Void> reseed = CompletableFuture.completedFuture(null);
+        if (award.reseedTo() != null && houseAccount.balance() < award.reseedTo()) {
+            long reseedTo = award.reseedTo();
+            houseAccount.set(reseedTo);
+            plugin.getLogger().info("Lottery paid a 100% draw; reseeding the House to $" + reseedTo);
+            reseed = houseAccount.flush();
+        }
+        return reseed.thenCompose(ignored -> {
+            Snapshot previous;
+            synchronized (stateLock) {
+                previous = new Snapshot(baseline, new ArrayList<>(entrants), pendingAward);
+                entrants.removeAll(award.entrants());
+                if (award.newBaseline() != null) baseline = award.newBaseline();
+                if (!retainPending) pendingAward = null;
+            }
+            return persistSnapshot().handle((ignoredSnapshot, error) -> {
+                if (error == null) return null;
+                synchronized (stateLock) {
+                    // Preserve entries added while the award was in flight. Only restore the
+                    // recorded entrants and the fields this award owns; an admin baseline edit
+                    // or a new entrant must not be lost while the failed write is unwinding.
+                    entrants.addAll(previous.entrants());
+                    if (award.newBaseline() == null || baseline == award.newBaseline()) {
+                        baseline = previous.baseline();
+                    }
+                    if (pendingAward == null
+                            || pendingAward.paymentId().equals(award.paymentId())) {
+                        pendingAward = previous.pendingAward();
+                    }
+                }
+                throw new java.util.concurrent.CompletionException(error);
+            });
+        });
     }
 
     private CompletableFuture<Void> persistSnapshot() {
@@ -305,6 +452,11 @@ public final class LotteryManager {
                 section.set("amount", award.amount());
                 if (award.reseedTo() != null) section.set("reseed_to", award.reseedTo());
                 section.set("created_at", award.createdAt());
+                if (!award.entrants().isEmpty()) {
+                    section.set("entrants", award.entrants().stream().map(UUID::toString).toList());
+                }
+                if (award.newBaseline() != null) section.set("new_baseline", award.newBaseline());
+                section.set("attempts", award.attempts());
             }
         });
     }
@@ -331,14 +483,36 @@ public final class LotteryManager {
     private record Snapshot(long baseline, List<UUID> entrants, PendingAward pendingAward) {
     }
 
-    private record DrawContext(PendingAward award, LotteryMath.PotOutcome.Payable payable) {
+    private record DrawContext(PendingAward award) {
     }
 
-    private record PendingAward(String paymentId, UUID winner, long amount, Long reseedTo, long createdAt) {
+    private record PendingAward(String paymentId, UUID winner, long amount, Long reseedTo, long createdAt,
+                                List<UUID> entrants, Long newBaseline, int attempts) {
+        PendingAward {
+            entrants = List.copyOf(entrants);
+        }
+
+        PendingAward withAttempts(int nextAttempts) {
+            return new PendingAward(paymentId, winner, amount, reseedTo, createdAt,
+                    entrants, newBaseline, nextAttempts);
+        }
+    }
+
+    private enum PaymentDisposition { SETTLED, ABANDONED, PENDING, STUCK }
+
+    private static PaymentDisposition classify(HousePayOutcome outcome) {
+        return switch (outcome) {
+            case SUCCESS -> PaymentDisposition.SETTLED;
+            case INSUFFICIENT_FUNDS, NOT_READY, SHUTTING_DOWN, UNREPRESENTABLE_REFUNDED ->
+                    PaymentDisposition.ABANDONED;
+            case WRITE_FAILED_RETAINED, FAILED -> PaymentDisposition.PENDING;
+            case NEEDS_RECONCILIATION -> PaymentDisposition.STUCK;
+        };
     }
 
     public sealed interface DrawResult permits DrawResult.NotReady, DrawResult.InFlight,
-            DrawResult.Refused, DrawResult.Awarded, DrawResult.PaymentFailed {
+            DrawResult.Refused, DrawResult.Awarded, DrawResult.PaymentAbandoned,
+            DrawResult.PaymentPending, DrawResult.PaymentStuck {
         record NotReady() implements DrawResult {
         }
 
@@ -351,7 +525,15 @@ public final class LotteryManager {
         record Awarded(UUID winner, long amount, boolean capBound) implements DrawResult {
         }
 
-        record PaymentFailed(UUID winner, long amount, HousePayOutcome outcome) implements DrawResult {
+        record PaymentAbandoned(UUID winner, long amount, HousePayOutcome outcome, int entrantCount)
+                implements DrawResult {
+        }
+
+        record PaymentPending(String paymentId, UUID winner, long amount, HousePayOutcome outcome)
+                implements DrawResult {
+        }
+
+        record PaymentStuck(String paymentId, UUID winner, long amount) implements DrawResult {
         }
 
         static NotReady notReady() { return new NotReady(); }
@@ -364,8 +546,16 @@ public final class LotteryManager {
             return new Awarded(winner, amount, capBound);
         }
 
-        static PaymentFailed paymentFailed(UUID winner, long amount, HousePayOutcome outcome) {
-            return new PaymentFailed(winner, amount, outcome);
+        static PaymentAbandoned paymentAbandoned(UUID winner, long amount, HousePayOutcome outcome, int entrantCount) {
+            return new PaymentAbandoned(winner, amount, outcome, entrantCount);
+        }
+
+        static PaymentPending paymentPending(String paymentId, UUID winner, long amount, HousePayOutcome outcome) {
+            return new PaymentPending(paymentId, winner, amount, outcome);
+        }
+
+        static PaymentStuck paymentStuck(String paymentId, UUID winner, long amount) {
+            return new PaymentStuck(paymentId, winner, amount);
         }
     }
 }

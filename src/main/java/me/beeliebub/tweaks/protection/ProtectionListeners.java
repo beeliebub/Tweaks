@@ -87,14 +87,25 @@ public final class ProtectionListeners implements Listener {
         }
 
         Set<String> orphaned = protection.orphanedRegions();
-        if (orphaned.isEmpty()) return;
-
         List<String> current = PDCUtil.read(chunk, protection.regionPointersKey());
         if (current.isEmpty()) return;
 
         Set<String> deadOnThisChunk = null;
         for (String id : current) {
             if (orphaned.contains(id)) {
+                if (deadOnThisChunk == null) deadOnThisChunk = new HashSet<>();
+                deadOnThisChunk.add(id);
+                continue;
+            }
+
+            var region = protection.byName(chunk.getWorld(), id);
+            if (region == null) {
+                // An unresolved id may belong to a malformed or temporarily unloaded
+                // region; preserve its pointer so a later reload can recover it.
+                continue;
+            }
+
+            if (region.bounds() != null && !region.bounds().contains(chunk.getX(), chunk.getZ())) {
                 if (deadOnThisChunk == null) deadOnThisChunk = new HashSet<>();
                 deadOnThisChunk.add(id);
             }

@@ -135,4 +135,17 @@ class HousePaymentServiceTest {
         service.replayPendingPayments().get();
         assertEquals(100.0D, economyManager.getBalance(recipient));
     }
+
+    @Test
+    void resumePendingPaymentDoesNotDebitTheHouseAgain() throws Exception {
+        makeReady();
+        houseAccount.credit(500);
+        UUID recipient = UUID.randomUUID();
+        houseAccount.beginPayment("retained-pay", recipient, 100).get();
+
+        assertEquals(HousePayOutcome.SUCCESS,
+                service.resumePendingPayment("retained-pay", recipient, 100).get());
+        assertEquals(400L, houseAccount.balance());
+        assertEquals(100.0D, economyManager.getBalance(recipient));
+    }
 }

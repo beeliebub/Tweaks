@@ -66,6 +66,18 @@ class LotteryMathTest {
     }
 
     @Test
+    void reproducesTheFailedDrawIncidentAndItsArmedFollowUp() {
+        LotteryMath.PotOutcome.Payable failedDraw = payable(2, 114_130, 69_420);
+        assertEquals(73_505, failedDraw.pot());
+        assertEquals(40_625, failedDraw.newBaseline());
+        assertEquals(false, failedDraw.capBound());
+
+        LotteryMath.PotOutcome.Payable followUp = payable(1, 114_130, 40_625);
+        assertEquals(114_130, followUp.pot());
+        assertEquals(true, followUp.capBound());
+    }
+
+    @Test
     void ASubFullDrawBelowTheReseedAmountDoesNotReseedUntilTheNextCap() {
         LotteryMath.PotOutcome.Payable first = payable(1, 1_500, 1_000);
         assertEquals(750, first.pot());

@@ -99,13 +99,19 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
                 // Ensure the player's data is in cache even if they are offline,
                 // so the write is not a blind first-touch with stale defaults.
                 economyManager.loadPlayer(targetId);
-                switch (sub) {
+                BalanceMutationResult mutation = switch (sub) {
                     case "set" -> economyManager.setBalance(targetId, amount);
                     case "add" -> economyManager.addBalance(targetId, amount);
                     case "remove" -> economyManager.removeBalance(targetId, amount);
+                    default -> throw new IllegalStateException("Unexpected balance operation: " + sub);
+                };
+                String targetName = target.getName() != null ? target.getName() : args[1];
+                if (mutation == BalanceMutationResult.REJECTED_UNREPRESENTABLE) {
+                    sender.sendMessage(Messages.balanceMutationRejected(targetName, sub, formatBalance(amount)));
+                    return;
                 }
                 sender.sendMessage(Messages.balanceMutationSuccess(
-                        target.getName() != null ? target.getName() : args[1],
+                        targetName,
                         sub,
                         formatBalance(amount),
                         formatBalance(economyManager.getBalance(targetId))));

@@ -86,8 +86,13 @@ public record Region(
             if (minChunkX > maxChunkX || minChunkZ > maxChunkZ) {
                 throw new IllegalArgumentException(
                         "Bounds min must be <= max: x[" + minChunkX + ".." + maxChunkX
-                                + "] z[" + minChunkZ + ".." + maxChunkZ + "]");
+                        + "] z[" + minChunkZ + ".." + maxChunkZ + "]");
             }
+        }
+
+        public boolean contains(int chunkX, int chunkZ) {
+            return chunkX >= minChunkX && chunkX <= maxChunkX
+                    && chunkZ >= minChunkZ && chunkZ <= maxChunkZ;
         }
     }
 
