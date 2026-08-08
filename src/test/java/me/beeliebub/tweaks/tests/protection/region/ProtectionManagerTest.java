@@ -61,9 +61,10 @@ class ProtectionManagerTest {
         ids.add("home");
         ids.add("admin_zone");
 
-        mgr.pendingStamps().put(42L, ids);
+        String key = ProtectionManager.stampKey("alpha", 42L);
+        mgr.pendingStamps().put(key, ids);
 
-        Set<String> stored = mgr.pendingStamps().get(42L);
+        Set<String> stored = mgr.pendingStamps().get(key);
         assertEquals(Set.of("home", "admin_zone"), stored);
     }
 

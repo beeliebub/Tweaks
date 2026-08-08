@@ -47,8 +47,12 @@ public final class ProtectionBootstrap {
         }
 
         File regionsDir = new File(plugin.getDataFolder(), "regions");
-        new RegionLoader(plugin.getLogger()).load(regionsDir, protectionManager.regions());
-        protectionManager.setWriter(new RegionWriter(plugin, regionsDir));
+        RegionLoader.LoadResult loadResult = new RegionLoader(plugin.getLogger())
+                .loadWithReport(regionsDir, protectionManager.regions());
+        plugin.getLogger().info("Loaded " + loadResult.loaded() + " region(s); skipped "
+                + loadResult.skipped() + "; non-conforming names " + loadResult.nonConformingNames());
+        RegionWriter regionWriter = new RegionWriter(plugin, regionsDir);
+        protectionManager.setWriter(regionWriter);
 
         // Per-world refactor migration: regions saved before the world field
         // existed get assigned to the primary loaded world (overworld) so they
@@ -58,6 +62,10 @@ public final class ProtectionBootstrap {
             if (migrated > 0) {
                 plugin.getLogger().info("Migrated " + migrated + " legacy region(s) to default world");
             }
+        }
+
+        for (org.bukkit.World world : plugin.getServer().getWorlds()) {
+            protectionManager.globalRegion(world);
         }
 
         if (plugin.getServer().getWorlds().stream()
@@ -81,7 +89,8 @@ public final class ProtectionBootstrap {
                 plugin,
                 plugin.getDataFolder(),
                 protectionManager.pendingStamps(),
-                protectionManager.orphanedRegions());
+                protectionManager.orphanedRegions(),
+                protectionManager.regions());
         pendingStampsStore.load();
         int pruned = protectionManager.reconcilePendingStamps();
         if (pruned > 0) {
@@ -89,6 +98,7 @@ public final class ProtectionBootstrap {
                     + " pending chunk stamp(s) referencing regions that no longer exist");
         }
         pendingStampsStore.start(20L * 60 * 5); // snapshot every 5 minutes
+        regionWriter.startRetry(20L * 60 * 5);
         services.setPendingStampsStore(pendingStampsStore);
 
         RegionSelectionManager regionSelectionManager = new RegionSelectionManager(plugin);
@@ -104,7 +114,13 @@ public final class ProtectionBootstrap {
     }
 
     /** Takes both instances directly — see {@code EconomyBootstrap.shutdown}'s Javadoc for why. */
-    public static void shutdown(Tweaks plugin, PendingStampsStore pendingStampsStore, RegionSelectionManager regionSelectionManager) {
+    public static void shutdown(Tweaks plugin, RegionWriter regionWriter,
+                                PendingStampsStore pendingStampsStore,
+                                RegionSelectionManager regionSelectionManager) {
+        if (regionWriter != null) {
+            regionWriter.stopRetry();
+            regionWriter.flushNow(5_000L);
+        }
         if (pendingStampsStore != null) {
             pendingStampsStore.stop();
             try {

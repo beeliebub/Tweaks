@@ -858,6 +858,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
 
         articles.add(new HelpArticle("protection_purchaseable", "Claim", List.of(
                 gray("Mark a rectangle of chunks as your protected territory."),
+                white("Region names are 1-32 lowercase letters, digits, '_' or '-'; input is normalized."),
                 cmd("/region claim <name>", "Claim the current wand selection."),
                 cmd("/region wand", "Get the selection tool (Stone Axe)."),
                 aqua("Workflow:"),
@@ -877,7 +878,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
 
         articles.add(new HelpArticle("protection_info", "Region Info", List.of(
                 gray("View details about regions at your location or by name."),
-                cmd("/region info [name]", "Show details for a specific region."),
+                cmd("/region info [name] [world]", "Show details for a specific region."),
                 cmd("/rg i", "Quick info for where you are standing."),
                 cmd("/region select <name>", "Restore selection boundaries from a region."),
                 aqua("Displays:"),
@@ -893,11 +894,12 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
 
         articles.add(new HelpArticle("protection_members", "Members & Hierarchy", List.of(
                 gray("Manage who can build and how sub-regions interact."),
-                cmd("/region addmember <name> <player|group:name>", "Add a member (player or group)."),
-                cmd("/region removemember <name> <player|group:name>", "Remove a member."),
-                cmd("/region addmanager <name> <player|group:name>", "Add a manager."),
-                cmd("/region removemanager <name> <player|group:name>", "Remove a manager."),
-                cmd("/region setparent <child> <parent>", "Create a sub-region relationship."),
+                cmd("/region addmember <name> <player|group:name> [world]", "Add a member (player or group)."),
+                cmd("/region removemember <name> <player|group:name> [world]", "Remove a member."),
+                cmd("/region addmanager <name> <player|group:name> [world]", "Add a manager."),
+                cmd("/region removemanager <name> <player|group:name> [world]", "Remove a manager."),
+                cmd("/region setparent <child> <parent> [world]", "Create a sub-region relationship."),
+                cmd("/region unsetparent <child> [world]", "Remove a sub-region relationship."),
                 aqua("Roles:"),
                 white("- Owner: Full control, can unclaim and manage the hierarchy."),
                 white("- Manager: Can edit flags and members. Cannot edit the manager list."),
@@ -915,7 +917,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
 
         articles.add(new HelpArticle("protection_flags", "Precision Flags", List.of(
                 gray("Control actions within regions with targeted rules."),
-                cmd("/region flag <name> <flag> <value...> [target]", "Set a flag rule."),
+                cmd("/region flag <name> <flag> <value...> [target] [world]", "Set a flag rule."),
                 aqua("Flag Types:"),
                 white("- Boolean (BLOCK_BREAK, PVP, MOB_SPAWNING, INVINCIBILITY, ENTRY)."),
                 white("- Material (ALLOW_BLOCK_BREAK, etc.): use block list."),
@@ -938,7 +940,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         articles.add(new HelpArticle("protection_gui", "Region GUI", List.of(
                 gray("Manage a region through a clickable Paper Dialog instead of typing flag CLI."),
                 cmd("/region gui", "Open the dialog for the region you're standing in."),
-                cmd("/region gui <name>", "Open the dialog for a specific region."),
+                cmd("/region gui <name> [world]", "Open the dialog for a specific region."),
                 aqua("Access:"),
                 white("- Owners and managers can open their own regions."),
                 white("- Admins with " + Permissions.PROTECTION_ADMIN + " can open any region."),
@@ -955,7 +957,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
 
         articles.add(new HelpArticle("protection_unclaim", "Unclaim", List.of(
                 gray("Permanently remove a region and all of its sub-regions."),
-                cmd("/region unclaim <name>", "Remove a region and cascade through its sub-regions."),
+                cmd("/region unclaim <name> [world]", "Remove a region and cascade through its sub-regions."),
                 aqua("Notes:"),
                 white("- Each destroyed region is refunded to its own owner when online."),
                 white("- Deleted region files are archived and stale chunk pointers are cleaned lazily."),

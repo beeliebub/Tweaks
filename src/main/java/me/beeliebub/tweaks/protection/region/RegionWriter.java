@@ -15,8 +15,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
+import java.util.logging.Logger;
+import org.bukkit.scheduler.BukkitTask;
 
 // Async, atomic YAML writer for Regions. The loader already accepts the schema
 // we emit here; this is the inverse direction so claim/mutation state survives
@@ -38,6 +43,15 @@ public final class RegionWriter {
     private final File regionsDir;
     private final Object writeLock = new Object();
     private final Set<String> tombstoned = ConcurrentHashMap.newKeySet();
+    private final ConcurrentHashMap<String, CompletableFuture<Void>> writeChains = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Region> latestSnapshots = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Region> failedWrites = new ConcurrentHashMap<>();
+    private BukkitTask retryTask;
+
+    private Logger logger() {
+        Logger logger = plugin == null ? null : plugin.getLogger();
+        return logger == null ? Logger.getLogger(RegionWriter.class.getName()) : logger;
+    }
 
     public RegionWriter(Tweaks plugin, File regionsDir) {
         this.plugin = plugin;
@@ -47,14 +61,42 @@ public final class RegionWriter {
     // Enqueue a write on the async scheduler. Caller-thread agnostic; safe to
     // invoke from event handlers without blocking the tick loop on disk I/O.
     public void queue(Region region) {
+        queueInternal(region, false);
+    }
+
+    public void queueLegacyMigration(Region region) {
+        queueInternal(region, true);
+    }
+
+    private void queueInternal(Region region, boolean archiveLegacySource) {
+        if (region == null) return;
+        String key = ProtectionManager.keyOf(region);
+        latestSnapshots.put(key, region);
+        CompletableFuture<Void> previous = writeChains.getOrDefault(key,
+                CompletableFuture.completedFuture(null));
+        CompletableFuture<Void> current = previous.handle((ignored, failure) -> null)
+                .thenCompose(ignored -> submitAsync(region, archiveLegacySource));
+        writeChains.put(key, current);
+        current.whenComplete((ignored, failure) -> writeChains.remove(key, current));
+    }
+
+    private CompletableFuture<Void> submitAsync(Region region, boolean archiveLegacySource) {
+        CompletableFuture<Void> result = new CompletableFuture<>();
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            String key = ProtectionManager.keyOf(region);
             try {
                 writeNow(region);
+                if (archiveLegacySource) archiveLegacySource(region);
+                failedWrites.remove(key);
+                result.complete(null);
             } catch (IOException e) {
-                plugin.getLogger().log(Level.WARNING,
-                        "Failed to write region '" + region.id() + "'; will retry on next mutation", e);
+                failedWrites.put(key, latestSnapshots.getOrDefault(key, region));
+                logger().log(Level.WARNING,
+                        "Failed to write region '" + region.id() + "'; it remains queued for retry", e);
+                result.complete(null);
             }
         });
+        return result;
     }
 
     public void writeNow(Region region) throws IOException {
@@ -64,11 +106,12 @@ public final class RegionWriter {
             if (!regionsDir.exists() && !regionsDir.mkdirs()) {
                 throw new IOException("Could not create regions directory " + regionsDir);
             }
-            File target = locate(region);
+            File target = contained(locate(region), region.id());
             File parent = target.getParentFile();
             if (parent != null && !parent.exists() && !parent.mkdirs()) {
                 throw new IOException("Could not create region parent directory " + parent);
             }
+            ensureExactTarget(parent, target, region.id());
             File tmp = new File(parent, target.getName() + ".tmp");
 
             YamlConfiguration yaml = new YamlConfiguration();
@@ -85,27 +128,31 @@ public final class RegionWriter {
             String cacheKey = ProtectionManager.keyOf(region);
             tombstoned.add(cacheKey);
 
-            File source = locate(region);
+            File source = contained(locate(region), region.id());
+            ensureExactTarget(source.getParentFile(), source, region.id());
             File tmp = new File(source.getParentFile(), source.getName() + ".tmp");
             if (tmp.exists() && !tmp.delete()) {
-                if (plugin != null && plugin.getLogger() != null) {
-                    plugin.getLogger().warning("Could not delete stale region temporary file " + tmp);
-                }
+                logger().warning("Could not delete stale region temporary file " + tmp);
             }
-            if (!source.exists()) return;
+            if (!source.exists()) {
+                logger().warning("No region file to archive for '" + region.id()
+                        + "' at " + source);
+                return;
+            }
 
             String worldSegment = region.worldName() == null || region.worldName().isEmpty()
                     ? "_legacy" : region.worldName();
-            File archiveDir = new File(new File(regionsDir, ARCHIVE_DIR), worldSegment);
+            File archiveDir = contained(new File(new File(regionsDir, ARCHIVE_DIR), worldSegment), region.id());
             if (!archiveDir.exists() && !archiveDir.mkdirs()) {
                 throw new IOException("Could not create region archive directory " + archiveDir);
             }
 
             long timestamp = System.currentTimeMillis();
-            File destination = new File(archiveDir, region.id() + "-" + timestamp + ".yml");
+            File destination = contained(new File(archiveDir,
+                    region.id() + "-" + timestamp + ".yml"), region.id());
             for (int suffix = 1; destination.exists() && suffix <= 100; suffix++) {
-                destination = new File(archiveDir,
-                        region.id() + "-" + timestamp + "-" + suffix + ".yml");
+                destination = contained(new File(archiveDir,
+                        region.id() + "-" + timestamp + "-" + suffix + ".yml"), region.id());
             }
             if (destination.exists()) {
                 throw new IOException("Could not allocate archive path for region " + region.id());
@@ -140,19 +187,19 @@ public final class RegionWriter {
     // Crucially, world-tagged regions NEVER fall back to a file outside their
     // own world subdirectory — otherwise saving a same-name region from a
     // different world would overwrite the wrong file.
-    private File locate(Region region) {
+    private File locate(Region region) throws IOException {
         String id = region.id();
         String worldName = region.worldName();
         if (worldName == null || worldName.isEmpty()) {
             File flat = new File(regionsDir, id + ".yml");
-            if (flat.exists()) return flat;
-            File existing = findExisting(regionsDir, id + ".yml");
+            File existing = findDirectFile(regionsDir, id + ".yml");
             return existing != null ? existing : flat;
         }
         // World-tagged: only resolve inside the world's own subdir.
-        File worldDir = new File(regionsDir, worldName);
+        File worldDir = contained(new File(regionsDir, worldName), id);
         File preferred = new File(worldDir, id + ".yml");
-        if (preferred.exists()) return preferred;
+        File exact = findDirectFile(worldDir, id + ".yml");
+        if (exact != null) return exact;
         File nested = findExistingUnder(worldDir, id + ".yml");
         return nested != null ? nested : preferred;
     }
@@ -170,11 +217,103 @@ public final class RegionWriter {
                 if (dir.equals(regionsDir) && ARCHIVE_DIR.equals(child.getName())) continue;
                 File hit = findExisting(child, fileName);
                 if (hit != null) return hit;
-            } else if (child.getName().equalsIgnoreCase(fileName)) {
+            } else if (child.getName().equals(fileName)) {
                 return child;
             }
         }
         return null;
+    }
+
+    private File findDirectFile(File dir, String fileName) {
+        if (!dir.exists() || !dir.isDirectory()) return null;
+        File[] children = dir.listFiles();
+        if (children == null) return null;
+        for (File child : children) {
+            if (child.isFile() && child.getName().equals(fileName)) return child;
+        }
+        return null;
+    }
+
+    private void ensureExactTarget(File parent, File target, String regionId) throws IOException {
+        if (parent == null || !parent.isDirectory()) return;
+        File[] children = parent.listFiles();
+        if (children == null) return;
+        for (File child : children) {
+            if (child.isFile() && child.getName().equalsIgnoreCase(target.getName())
+                    && !child.getName().equals(target.getName())) {
+                throw new IOException("Region '" + regionId + "' conflicts with differently-cased file " + child);
+            }
+        }
+    }
+
+    private File contained(File candidate, String regionId) throws IOException {
+        java.nio.file.Path root = regionsDir.toPath().toAbsolutePath().normalize();
+        java.nio.file.Path path = candidate.toPath().toAbsolutePath().normalize();
+        if (!path.startsWith(root)) {
+            throw new IOException("Region '" + regionId + "' resolved outside " + root);
+        }
+        return path.toFile();
+    }
+
+    private void archiveLegacySource(Region region) throws IOException {
+        File source = findDirectFile(regionsDir, region.id() + ".yml");
+        if (source == null || !source.exists()) return;
+        File archiveDir = new File(new File(regionsDir, ARCHIVE_DIR), "_legacy");
+        if (!archiveDir.exists() && !archiveDir.mkdirs()) {
+            throw new IOException("Could not create legacy region archive directory " + archiveDir);
+        }
+        File destination = contained(new File(archiveDir,
+                region.id() + "-" + System.currentTimeMillis() + ".yml"), region.id());
+        moveIntoPlace(source, destination);
+    }
+
+    public void startRetry(long periodTicks) {
+        if (retryTask != null) return;
+        retryTask = plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin,
+                () -> {
+                    for (Region region : failedWrites.values()) queue(region);
+                }, periodTicks, periodTicks);
+    }
+
+    public void stopRetry() {
+        if (retryTask != null) {
+            retryTask.cancel();
+            retryTask = null;
+        }
+    }
+
+    public void flushNow(long timeoutMillis) {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(0L, timeoutMillis));
+        waitForWrites(deadline);
+        for (Region region : List.copyOf(failedWrites.values())) {
+            try {
+                writeNow(latestSnapshots.getOrDefault(ProtectionManager.keyOf(region), region));
+                failedWrites.remove(ProtectionManager.keyOf(region));
+            } catch (IOException e) {
+                logger().log(Level.SEVERE,
+                        "Final region write failed for '" + region.id() + "'", e);
+            }
+        }
+        waitForWrites(deadline);
+        if (!failedWrites.isEmpty()) {
+            logger().severe("Regions still failed after final flush: "
+                    + failedWrites.values().stream().map(Region::id).distinct().toList());
+        }
+    }
+
+    private void waitForWrites(long deadline) {
+        for (CompletableFuture<Void> future : List.copyOf(writeChains.values())) {
+            long remaining = deadline - System.nanoTime();
+            if (remaining <= 0) return;
+            try {
+                future.get(remaining, TimeUnit.NANOSECONDS);
+            } catch (TimeoutException e) {
+                return;
+            } catch (Exception ignored) {
+                // Individual write failures are recorded by submitAsync; shutdown continues
+                // so the remaining regions still receive their final attempt.
+            }
+        }
     }
 
     private static void serialize(YamlConfiguration yaml, Region region) {

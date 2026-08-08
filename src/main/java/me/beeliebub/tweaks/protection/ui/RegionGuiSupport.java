@@ -120,7 +120,7 @@ final class RegionGuiSupport {
                 if (fresh != null) return fresh;
             }
         }
-        return protectionManager.byNameAnyWorld(stale.id());
+        return stale.worldName() == null ? protectionManager.byName(null, stale.id()) : null;
     }
 
     static World worldOf(Region region) {

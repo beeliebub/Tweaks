@@ -79,7 +79,8 @@ class RegionGroupSupportTest {
                     REGION, OWNER, List.of(), EnumSet.noneOf(RegionFlag.class)));
             protection.addManager(REGION, MANAGER);
 
-            ctx = new RegionCommandContext(mock(Tweaks.class), protection, mock(RegionSelectionManager.class));
+            ctx = new RegionCommandContext(mock(Tweaks.class), protection, mock(RegionSelectionManager.class))
+                    .legacyBareLookup();
 
             // Console sender: !(sender instanceof Player) → isOwnerManagerOrAdmin returns true.
             consoleSender = mock(CommandSender.class);

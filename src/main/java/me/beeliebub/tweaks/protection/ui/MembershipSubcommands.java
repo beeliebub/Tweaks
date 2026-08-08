@@ -8,6 +8,7 @@ import me.beeliebub.tweaks.protection.region.Region;
 import me.beeliebub.tweaks.utils.OfflinePlayerResolver;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.World;
 import org.bukkit.command.CommandSender;
 
 import java.util.ArrayList;
@@ -31,6 +32,7 @@ final class MembershipSubcommands {
         @Override public String name() { return add ? "addmember" : "removemember"; }
         @Override public List<String> aliases() { return List.of(add ? "am" : "rm"); }
         @Override public String permission() { return Permissions.PROTECTION_MEMBER; }
+        @Override public int minArgs() { return 2; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(
                     Messages.PROTECTION.value(Text.USAGE_MEMBER_SYNTAX, name()),
@@ -58,6 +60,7 @@ final class MembershipSubcommands {
         @Override public String name() { return add ? "addmanager" : "removemanager"; }
         @Override public List<String> aliases() { return List.of(add ? "aman" : "rman"); }
         @Override public String permission() { return Permissions.PROTECTION_MEMBER; }
+        @Override public int minArgs() { return 2; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(
                     Messages.PROTECTION.value(Text.USAGE_MANAGER_SYNTAX, name()),
@@ -85,15 +88,17 @@ final class MembershipSubcommands {
         String name = args[0];
         String target = args[1];
 
+        if (!ctx.requireNamedRegionWorld(sender, args)) return;
         Region region = ctx.resolveRegion(sender, name);
         if (region == null) {
             sender.sendMessage(Messages.PROTECTION.text(Text.REGION_NOT_FOUND, name));
             return;
         }
-        if (!RegionAuth.isOwnerManagerOrAdmin(sender, region, ctx.protection)) {
+        if (!RegionAuth.isOwnerManagerOrAdmin(ctx, sender, region)) {
             sender.sendMessage(Messages.PROTECTION.text(Text.MEMBER_EDIT_AUTH));
             return;
         }
+        World scopeWorld = ctx.scopeWorld(sender);
 
         if (target.toLowerCase(Locale.ROOT).startsWith("group:")) {
             String groupName = target.substring("group:".length()).trim();
@@ -112,9 +117,11 @@ final class MembershipSubcommands {
             if (add && "default".equalsIgnoreCase(groupName)) {
                 sender.sendMessage(Messages.PROTECTION.text(Text.MEMBER_GROUP_DEFAULT_WARNING, name));
             }
-            boolean ok = add
-                    ? ctx.protection.addMemberGroup(name, groupName)
-                    : ctx.protection.removeMemberGroup(name, groupName);
+            boolean ok = scopeWorld == null
+                    ? (add ? ctx.protection.addMemberGroup(name, groupName)
+                           : ctx.protection.removeMemberGroup(name, groupName))
+                    : (add ? ctx.protection.addMemberGroup(scopeWorld, name, groupName)
+                           : ctx.protection.removeMemberGroup(scopeWorld, name, groupName));
             if (!ok) {
                 sender.sendMessage(Messages.PROTECTION.text(add
                         ? Text.MEMBER_GROUP_DUPLICATE : Text.MEMBER_GROUP_MISSING, groupName, name));
@@ -126,9 +133,11 @@ final class MembershipSubcommands {
         }
 
         resolveTarget(ctx, sender, target, offlineTarget -> {
-            boolean ok = add
-                    ? ctx.protection.addMember(name, offlineTarget.getUniqueId())
-                    : ctx.protection.removeMember(name, offlineTarget.getUniqueId());
+            boolean ok = scopeWorld == null
+                    ? (add ? ctx.protection.addMember(name, offlineTarget.getUniqueId())
+                           : ctx.protection.removeMember(name, offlineTarget.getUniqueId()))
+                    : (add ? ctx.protection.addMember(scopeWorld, name, offlineTarget.getUniqueId())
+                           : ctx.protection.removeMember(scopeWorld, name, offlineTarget.getUniqueId()));
             if (!ok) {
                 sender.sendMessage(Messages.PROTECTION.text(add
                         ? Text.MEMBER_ADD_FAILED : Text.MEMBER_REMOVE_FAILED));
@@ -140,7 +149,7 @@ final class MembershipSubcommands {
     }
 
     // /region addmanager|removemanager — owner-only by design. The owner-only check now
-    // routes through RegionAuth.isOwnerOrAdmin instead of the old inline reimplementation
+    // routes through RegionAuth.isOwnerOrAdmin instead of a second inline admin/owner check.
     // (`!(sender instanceof Player) || sender.hasPermission(PROTECTION_ADMIN)`, then a manual
     // owner check) — the two were behaviorally identical, so this is pure de-duplication.
     @SuppressWarnings("deprecation")
@@ -154,10 +163,11 @@ final class MembershipSubcommands {
             return;
         }
 
-        if (!RegionAuth.isOwnerOrAdmin(sender, region)) {
+        if (!RegionAuth.isOwnerOrAdmin(ctx, sender, region)) {
             sender.sendMessage(Messages.PROTECTION.text(Text.MANAGER_EDIT_AUTH));
             return;
         }
+        World scopeWorld = ctx.scopeWorld(sender);
 
         if (target.toLowerCase(Locale.ROOT).startsWith("group:")) {
             String groupName = target.substring("group:".length()).trim();
@@ -175,9 +185,11 @@ final class MembershipSubcommands {
             if (add && "default".equalsIgnoreCase(groupName)) {
                 sender.sendMessage(Messages.PROTECTION.text(Text.MANAGER_GROUP_DEFAULT_WARNING, name));
             }
-            boolean ok = add
-                    ? ctx.protection.addManagerGroup(name, groupName)
-                    : ctx.protection.removeManagerGroup(name, groupName);
+            boolean ok = scopeWorld == null
+                    ? (add ? ctx.protection.addManagerGroup(name, groupName)
+                           : ctx.protection.removeManagerGroup(name, groupName))
+                    : (add ? ctx.protection.addManagerGroup(scopeWorld, name, groupName)
+                           : ctx.protection.removeManagerGroup(scopeWorld, name, groupName));
             if (!ok) {
                 sender.sendMessage(Messages.PROTECTION.text(add
                         ? Text.MANAGER_GROUP_DUPLICATE : Text.MANAGER_GROUP_MISSING, groupName, name));
@@ -194,9 +206,11 @@ final class MembershipSubcommands {
                 return;
             }
 
-            boolean ok = add
-                    ? ctx.protection.addManager(name, offlineTarget.getUniqueId())
-                    : ctx.protection.removeManager(name, offlineTarget.getUniqueId());
+            boolean ok = scopeWorld == null
+                    ? (add ? ctx.protection.addManager(name, offlineTarget.getUniqueId())
+                           : ctx.protection.removeManager(name, offlineTarget.getUniqueId()))
+                    : (add ? ctx.protection.addManager(scopeWorld, name, offlineTarget.getUniqueId())
+                           : ctx.protection.removeManager(scopeWorld, name, offlineTarget.getUniqueId()));
             if (!ok) {
                 sender.sendMessage(Messages.PROTECTION.text(add
                         ? Text.MANAGER_ADD_FAILED : Text.MANAGER_REMOVE_FAILED));
@@ -244,14 +258,15 @@ final class MembershipSubcommands {
         if (rawArgs.length == 3) {
             String partial = rawArgs[2];
             String prefix = partial.toLowerCase(Locale.ROOT);
+            World scopeWorld = ctx.scopeWorld(sender);
             if (membersOfRegion) {
-                List<String> out = new ArrayList<>(ctx.regionMemberNames(rawArgs[1], prefix));
-                out.addAll(ctx.regionGroupSuggestions(rawArgs[1], prefix, /*managers=*/false));
+                List<String> out = new ArrayList<>(ctx.regionMemberNames(scopeWorld, rawArgs[1], prefix));
+                out.addAll(ctx.regionGroupSuggestions(scopeWorld, rawArgs[1], prefix, /*managers=*/false));
                 return out;
             }
             if (managersOfRegion) {
-                List<String> out = new ArrayList<>(ctx.regionManagerNames(rawArgs[1], prefix));
-                out.addAll(ctx.regionGroupSuggestions(rawArgs[1], prefix, /*managers=*/true));
+                List<String> out = new ArrayList<>(ctx.regionManagerNames(scopeWorld, rawArgs[1], prefix));
+                out.addAll(ctx.regionGroupSuggestions(scopeWorld, rawArgs[1], prefix, /*managers=*/true));
                 return out;
             }
             List<String> out = new ArrayList<>(RegionCommandContext.onlinePlayerNames(prefix));

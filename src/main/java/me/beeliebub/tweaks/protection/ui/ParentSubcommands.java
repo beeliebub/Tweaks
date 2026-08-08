@@ -27,6 +27,7 @@ final class ParentSubcommands {
     static final class SetParent implements RegionSubcommand {
         @Override public String name() { return "setparent"; }
         @Override public String permission() { return Permissions.PROTECTION_PURCHASEABLE; }
+        @Override public int minArgs() { return 2; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_SET_PARENT_SYNTAX),
                     Messages.PROTECTION.value(Text.USAGE_SET_PARENT_DESCRIPTION),
@@ -38,12 +39,13 @@ final class ParentSubcommands {
             if (args.length < 2) { ctx.showUsage(sender, this); return; }
             String child = args[0];
             String parent = args[1];
+            if (!ctx.requireNamedRegionWorld(sender, args)) return;
             Region childRegion = ctx.resolveRegion(sender, child);
             if (childRegion == null) {
                 sender.sendMessage(Messages.PROTECTION.text(Text.REGION_NOT_FOUND, child));
                 return;
             }
-            if (!RegionAuth.isOwnerOrAdmin(sender, childRegion)) {
+            if (!RegionAuth.isOwnerOrAdmin(ctx, sender, childRegion)) {
                 sender.sendMessage(Messages.PROTECTION.text(Text.PARENT_EDIT_AUTH));
                 return;
             }
@@ -52,12 +54,15 @@ final class ParentSubcommands {
                 sender.sendMessage(Messages.PROTECTION.text(Text.PARENT_UNKNOWN, parent));
                 return;
             }
-            if (!RegionAuth.isOwnerOrAdmin(sender, parentRegion)) {
+            if (!RegionAuth.isOwnerOrAdmin(ctx, sender, parentRegion)) {
                 sender.sendMessage(Messages.PROTECTION.text(Text.PARENT_TARGET_AUTH));
                 return;
             }
-            reportParentResult(sender, child, parent,
-                    ctx.protection.setParent(child, parent, RegionAuth.isAdmin(sender)));
+            ProtectionManager.SetParentResult result = ctx.scopeWorld(sender) == null
+                    ? ctx.protection.setParent(child, parent, RegionAuth.isAdmin(ctx, sender))
+                    : ctx.protection.setParent(ctx.scopeWorld(sender), child, parent,
+                            RegionAuth.isAdmin(ctx, sender));
+            reportParentResult(sender, child, parent, result);
         }
 
         @Override
@@ -72,6 +77,7 @@ final class ParentSubcommands {
     static final class UnsetParent implements RegionSubcommand {
         @Override public String name() { return "unsetparent"; }
         @Override public String permission() { return Permissions.PROTECTION_PURCHASEABLE; }
+        @Override public int minArgs() { return 1; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_UNSET_PARENT_SYNTAX),
                     Messages.PROTECTION.value(Text.USAGE_UNSET_PARENT_DESCRIPTION),
@@ -82,16 +88,21 @@ final class ParentSubcommands {
         public void execute(RegionCommandContext ctx, CommandSender sender, String[] args) {
             if (args.length < 1) { ctx.showUsage(sender, this); return; }
             String child = args[0];
+            if (!ctx.requireNamedRegionWorld(sender, args)) return;
             Region childRegion = ctx.resolveRegion(sender, child);
             if (childRegion == null) {
                 sender.sendMessage(Messages.PROTECTION.text(Text.REGION_NOT_FOUND, child));
                 return;
             }
-            if (!RegionAuth.isOwnerOrAdmin(sender, childRegion)) {
+            if (!RegionAuth.isOwnerOrAdmin(ctx, sender, childRegion)) {
                 sender.sendMessage(Messages.PROTECTION.text(Text.PARENT_EDIT_AUTH));
                 return;
             }
-            reportParentResult(sender, child, null, ctx.protection.setParent(child, null));
+            ProtectionManager.SetParentResult result = ctx.scopeWorld(sender) == null
+                    ? ctx.protection.setParent(child, null, RegionAuth.isAdmin(ctx, sender))
+                    : ctx.protection.setParent(ctx.scopeWorld(sender), child, null,
+                            RegionAuth.isAdmin(ctx, sender));
+            reportParentResult(sender, child, null, result);
         }
 
         @Override

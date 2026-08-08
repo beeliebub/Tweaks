@@ -13,15 +13,12 @@ import org.bukkit.World;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -59,13 +56,15 @@ public final class ProtectionManager {
     // Owns the exact concurrent caches exposed by this stable public facade.
     // No copying wrapper is involved: event and chunk-load paths retain their
     // original lock-free map instances and atomic mutation semantics.
-    private final RegionRegistry registry = new RegionRegistry();
+    private final RegionRegistry registry;
+    private final RegionFlagResolver flagResolver;
+    private final RegionMutators mutators;
 
     // Local aliases preserve the manager's existing hot-path implementation
     // while RegionRegistry remains the sole creator and owner of these maps.
-    private final ConcurrentHashMap<String, Region> regions = registry.regions();
-    private final ConcurrentHashMap<Long, Set<String>> pendingStamps = registry.pendingStamps();
-    private final Set<String> orphanedRegions = registry.orphanedRegions();
+    private final ConcurrentHashMap<String, Region> regions;
+    private final ConcurrentHashMap<String, Set<String>> pendingStamps;
+    private final Set<String> orphanedRegions;
 
     private final Tweaks plugin;
     private RegionWriter writer;
@@ -90,6 +89,12 @@ public final class ProtectionManager {
 
     public ProtectionManager(Tweaks plugin) {
         this.plugin = plugin;
+        this.registry = new RegionRegistry(plugin == null ? null : plugin.getLogger());
+        this.flagResolver = new RegionFlagResolver(this);
+        this.mutators = new RegionMutators(this);
+        this.regions = registry.regions();
+        this.pendingStamps = registry.pendingStamps();
+        this.orphanedRegions = registry.orphanedRegions();
         this.regionPointersKey = new NamespacedKey("tweaks", "region_pointers");
         // Global regions are now per-world (keyed by "<worldName>:__global__") and
         // lazily seeded on first access via globalRegion(World). Setting a flag on
@@ -129,6 +134,10 @@ public final class ProtectionManager {
     // wiring completes; mutators no-op the disk write when null.
     public void setWriter(RegionWriter writer) {
         this.writer = writer;
+    }
+
+    public RegionWriter writer() {
+        return writer;
     }
 
     public Tweaks plugin() {
@@ -187,6 +196,10 @@ public final class ProtectionManager {
         return RegionRegistry.keyOf(region);
     }
 
+    public static String stampKey(String worldName, long chunkKey) {
+        return RegionRegistry.stampKey(worldName, chunkKey);
+    }
+
     // World-aware lookup: returns the region named `id` in the specified world,
     // falling back to a plain-keyed legacy region if no world-tagged match is
     // found. Pass world=null to skip the composite-key probe (legacy-only).
@@ -211,24 +224,11 @@ public final class ProtectionManager {
     // successful load to upgrade old YAML on first launch under the new layout.
     public int migrateLegacyRegions(String defaultWorldName) {
         if (defaultWorldName == null || defaultWorldName.isEmpty()) return 0;
-        int migrated = registry.migrateLegacyRegions(defaultWorldName,
-                writer == null ? null : writer::queue);
-        for (var e : new ArrayList<>(regions.entrySet())) {
-            String key = e.getKey();
-            Region r = e.getValue();
-            // Global is intentionally world-less — it applies everywhere.
-            if (GLOBAL_REGION_ID.equals(r.id())) continue;
-            if (r.worldName() != null) continue;
-            Region updated = r.withWorld(defaultWorldName);
-            regions.remove(key);
-            regions.put(keyOf(updated), updated);
-            if (writer != null) writer.queue(updated);
-            migrated++;
-        }
-        return migrated;
+        return registry.migrateLegacyRegions(defaultWorldName,
+                writer == null ? null : writer::queueLegacyMigration);
     }
 
-    public ConcurrentHashMap<Long, Set<String>> pendingStamps() {
+    public ConcurrentHashMap<String, Set<String>> pendingStamps() {
         return registry.pendingStamps();
     }
 
@@ -348,7 +348,7 @@ public final class ProtectionManager {
     }
 
     private void onClaimed(Region region) {
-        orphanedRegions.remove(region.id());
+        orphanedRegions.remove(keyOf(region));
         if (writer != null) writer.untombstone(keyOf(region));
     }
 
@@ -390,7 +390,7 @@ public final class ProtectionManager {
     private void claimLazy(World world, long[] keys, String regionId) {
         for (long key : keys) {
             pendingStamps
-                    .computeIfAbsent(key, k -> ConcurrentHashMap.newKeySet())
+                    .computeIfAbsent(RegionRegistry.stampKey(world.getName(), key), k -> ConcurrentHashMap.newKeySet())
                     .add(regionId);
         }
         // Chunks already loaded at claim time will not fire a ChunkLoadEvent,
@@ -402,8 +402,10 @@ public final class ProtectionManager {
             if (world.isChunkLoaded(cx, cz)) {
                 Chunk chunk = world.getChunkAt(cx, cz);
                 PDCUtil.append(chunk, regionId, regionPointersKey);
-                Set<String> pending = pendingStamps.get(key);
+                String stampKey = RegionRegistry.stampKey(world.getName(), key);
+                Set<String> pending = pendingStamps.get(stampKey);
                 if (pending != null) pending.remove(regionId);
+                if (pending != null && pending.isEmpty()) pendingStamps.remove(stampKey, pending);
             }
         }
     }
@@ -460,85 +462,12 @@ public final class ProtectionManager {
     // Pass actor=null for actor-less events (TNT, creeper, etc.) — then only
     // the DEFAULT target can permit the action.
     public boolean isAllowed(Location loc, UUID actor, RegionFlag flag) {
-        List<Region> applicable = regionsAt(loc);
-        if (applicable.isEmpty()) {
-            applicable = globalAsFallback(loc.getWorld());
-            if (applicable.isEmpty()) return true;
-        }
-
-        return isAllowed(applicable, loc, actor, flag);
+        return flagResolver.isAllowed(loc, actor, flag);
     }
 
     /** Evaluates a previously resolved region list without repeating the chunk-pointer lookup. */
     public boolean isAllowed(List<Region> applicable, Location loc, UUID actor, RegionFlag flag) {
-        if (applicable.isEmpty()) {
-            applicable = globalAsFallback(loc.getWorld());
-            if (applicable.isEmpty()) return true;
-        }
-
-        Set<String> groups = (actor == null) ? Set.of() : groupsOf(actor);
-        List<Region> leaves = leavesOf(applicable);
-
-        for (Region leaf : leaves) {
-            Optional<Boolean> resolved = resolveAcrossChain(leaf, flag, actor, groups);
-            if (resolved.isPresent()) {
-                if (!resolved.get()) return false;
-                continue;
-            }
-
-            // No rule anywhere in this chain: members of the leaf may act,
-            // non-members (and null-actor events) may not. Preserves
-            // pre-refactor behavior at the most specific scope.
-            //
-            // The wilderness/global region has no membership concept, so
-            // silent flags fall back to "allow" — this preserves vanilla
-            // permissive behaviour in unclaimed chunks until an admin
-            // explicitly restricts a flag on the global region.
-            if (isGlobal(leaf)) continue;
-            if (actor != null && leaf.isMember(actor, groups)) continue;
-            return false;
-        }
-        return true;
-    }
-
-    // Filter `applicable` down to leaves: regions not referenced as parentId
-    // by any other region in the same set. A region whose parent is NOT in
-    // the set is still a leaf (the parent is just unrelated/absent at this
-    // location).
-    private List<Region> leavesOf(List<Region> applicable) {
-        if (applicable.size() == 1) return applicable;
-        Set<String> referenced = new HashSet<>();
-        for (Region r : applicable) {
-            if (r.hasParent()) referenced.add(r.parentId());
-        }
-        List<Region> leaves = new ArrayList<>(applicable.size());
-        for (Region r : applicable) {
-            if (!referenced.contains(r.id())) leaves.add(r);
-        }
-        // Defensive: if every region in the set is referenced as someone's
-        // parent (impossible with a well-formed DAG but guard against a cycle
-        // that slipped past setParent's validation), fall back to the input
-        // so we never silently lose protection.
-        return leaves.isEmpty() ? applicable : leaves;
-    }
-
-    // Walk leaf -> parent -> grandparent until a Region#resolveFlag hit, or
-    // the chain runs out / cycles. Re-evaluates role/membership at each link
-    // because a player can be a member of the child but not the parent
-    // (or vice versa).
-    private Optional<Boolean> resolveAcrossChain(
-            Region start, RegionFlag flag, UUID actor, Set<String> groups) {
-        Set<String> visited = new LinkedHashSet<>();
-        Region cursor = start;
-        while (cursor != null && visited.add(cursor.id())) {
-            boolean isOwner = actor != null && cursor.isOwner(actor);
-            boolean isManager = actor != null && cursor.isManager(actor, groups);
-            boolean isMember = actor != null && cursor.isMember(actor, groups);
-            Optional<Boolean> resolved = cursor.resolveFlag(flag, isOwner, isManager, isMember, groups);
-            if (resolved.isPresent()) return resolved;
-            cursor = cursor.hasParent() ? regions.get(cursor.parentId()) : null;
-        }
-        return Optional.empty();
+        return flagResolver.isAllowed(applicable, loc, actor, flag);
     }
 
     // Material-aware variant of isAllowed for block-break and block-place
@@ -551,57 +480,7 @@ public final class ProtectionManager {
     // the leaf (members allowed, non-members blocked). All leaves must permit.
     public boolean isBlockActionAllowed(
             Location loc, UUID actor, Material material, RegionFlag baseFlag) {
-        if (baseFlag != RegionFlag.BLOCK_BREAK && baseFlag != RegionFlag.BLOCK_PLACE) {
-            throw new IllegalArgumentException(
-                    "isBlockActionAllowed requires BLOCK_BREAK or BLOCK_PLACE, got " + baseFlag);
-        }
-        List<Region> applicable = regionsAt(loc);
-        if (applicable.isEmpty()) {
-            applicable = globalAsFallback(loc.getWorld());
-            if (applicable.isEmpty()) return true;
-        }
-
-        RegionFlag denyFlag = (baseFlag == RegionFlag.BLOCK_BREAK)
-                ? RegionFlag.DENY_BLOCK_BREAK : RegionFlag.DENY_BLOCK_PLACE;
-        RegionFlag allowFlag = (baseFlag == RegionFlag.BLOCK_BREAK)
-                ? RegionFlag.ALLOW_BLOCK_BREAK : RegionFlag.ALLOW_BLOCK_PLACE;
-
-        Set<String> groups = (actor == null) ? Set.of() : groupsOf(actor);
-        List<Region> leaves = leavesOf(applicable);
-
-        for (Region leaf : leaves) {
-            Optional<Boolean> resolved = resolveBlockActionChain(
-                    leaf, baseFlag, denyFlag, allowFlag, material, actor, groups);
-            if (resolved.isPresent()) {
-                if (!resolved.get()) return false;
-                continue;
-            }
-            // Same wilderness-permissive semantic as isAllowed.
-            if (isGlobal(leaf)) continue;
-            if (actor != null && leaf.isMember(actor, groups)) continue;
-            return false;
-        }
-        return true;
-    }
-
-    private Optional<Boolean> resolveBlockActionChain(
-            Region start, RegionFlag baseFlag, RegionFlag denyFlag, RegionFlag allowFlag,
-            Material material, UUID actor, Set<String> groups) {
-        Set<String> visited = new LinkedHashSet<>();
-        Region cursor = start;
-        while (cursor != null && visited.add(cursor.id())) {
-            Optional<Boolean> matVerdict = cursor.resolveMaterial(denyFlag, allowFlag, material);
-            if (matVerdict.isPresent()) return matVerdict;
-
-            boolean isOwner = actor != null && cursor.isOwner(actor);
-            boolean isManager = actor != null && cursor.isManager(actor, groups);
-            boolean isMember = actor != null && cursor.isMember(actor, groups);
-            Optional<Boolean> boolVerdict = cursor.resolveFlag(baseFlag, isOwner, isManager, isMember, groups);
-            if (boolVerdict.isPresent()) return boolVerdict;
-
-            cursor = cursor.hasParent() ? regions.get(cursor.parentId()) : null;
-        }
-        return Optional.empty();
+        return flagResolver.isBlockActionAllowed(loc, actor, material, baseFlag);
     }
 
     // World-aware resolution for mutators. Per-world globals are addressed by
@@ -611,105 +490,42 @@ public final class ProtectionManager {
         if (GLOBAL_REGION_ID.equals(id)) {
             return globalRegion(world);
         }
-        if (world != null) {
-            Region scoped = byName(world, id);
-            if (scoped != null) return scoped;
-        }
+        if (world != null) return byName(world, id);
         return byNameAnyWorld(id);
     }
 
     // -- Material flag mutators ---------------------------------------------
 
     public boolean setMaterials(String id, RegionFlag flag, Set<Material> materials) {
-        return setMaterialsResolved(byNameAnyWorld(id), flag, materials);
+        return mutators.setMaterials(null, id, flag, materials);
     }
 
     public boolean setMaterials(World world, String id, RegionFlag flag, Set<Material> materials) {
-        return setMaterialsResolved(resolveForMutation(world, id), flag, materials);
-    }
-
-    private boolean setMaterialsResolved(Region r, RegionFlag flag, Set<Material> materials) {
-        if (r == null) return false;
-        if (!flag.isMaterialFlag()) {
-            throw new IllegalArgumentException("Not a material-list flag: " + flag);
-        }
-        Set<Material> current = r.materialsFor(flag);
-        Set<Material> normalized = (materials == null || materials.isEmpty())
-                ? Set.of()
-                : EnumSet.copyOf(materials);
-        if (current.equals(normalized)) return false;
-        Region updated = r.withMaterials(flag, normalized);
-        regions.put(keyOf(updated), updated);
-        if (writer != null) writer.queue(updated);
-        return true;
+        return mutators.setMaterials(world, id, flag, materials);
     }
 
     public boolean addMaterials(String id, RegionFlag flag, Set<Material> materials) {
-        return addMaterialsResolved(byNameAnyWorld(id), flag, materials);
+        return mutators.addMaterials(null, id, flag, materials);
     }
 
     public boolean addMaterials(World world, String id, RegionFlag flag, Set<Material> materials) {
-        return addMaterialsResolved(resolveForMutation(world, id), flag, materials);
-    }
-
-    private boolean addMaterialsResolved(Region r, RegionFlag flag, Set<Material> materials) {
-        if (r == null || materials == null || materials.isEmpty()) return false;
-        if (!flag.isMaterialFlag()) {
-            throw new IllegalArgumentException("Not a material-list flag: " + flag);
-        }
-        EnumSet<Material> merged = EnumSet.noneOf(Material.class);
-        merged.addAll(r.materialsFor(flag));
-        boolean changed = merged.addAll(materials);
-        if (!changed) return false;
-        Region updated = r.withMaterials(flag, merged);
-        regions.put(keyOf(updated), updated);
-        if (writer != null) writer.queue(updated);
-        return true;
+        return mutators.addMaterials(world, id, flag, materials);
     }
 
     public boolean removeMaterials(String id, RegionFlag flag, Set<Material> materials) {
-        return removeMaterialsResolved(byNameAnyWorld(id), flag, materials);
+        return mutators.removeMaterials(null, id, flag, materials);
     }
 
     public boolean removeMaterials(World world, String id, RegionFlag flag, Set<Material> materials) {
-        return removeMaterialsResolved(resolveForMutation(world, id), flag, materials);
-    }
-
-    private boolean removeMaterialsResolved(Region r, RegionFlag flag, Set<Material> materials) {
-        if (r == null || materials == null || materials.isEmpty()) return false;
-        if (!flag.isMaterialFlag()) {
-            throw new IllegalArgumentException("Not a material-list flag: " + flag);
-        }
-        Set<Material> current = r.materialsFor(flag);
-        if (current.isEmpty()) return false;
-        EnumSet<Material> reduced = EnumSet.noneOf(Material.class);
-        reduced.addAll(current);
-        boolean changed = reduced.removeAll(materials);
-        if (!changed) return false;
-        Region updated = r.withMaterials(flag, reduced);
-        regions.put(keyOf(updated), updated);
-        if (writer != null) writer.queue(updated);
-        return true;
+        return mutators.removeMaterials(world, id, flag, materials);
     }
 
     public boolean clearMaterials(String id, RegionFlag flag) {
-        return clearMaterialsResolved(byNameAnyWorld(id), flag);
+        return mutators.clearMaterials(null, id, flag);
     }
 
     public boolean clearMaterials(World world, String id, RegionFlag flag) {
-        return clearMaterialsResolved(resolveForMutation(world, id), flag);
-    }
-
-    private boolean clearMaterialsResolved(Region r, RegionFlag flag) {
-        if (r == null) return false;
-        if (!flag.isMaterialFlag()) {
-            throw new IllegalArgumentException("Not a material-list flag: " + flag);
-        }
-        if (r.materialsFor(flag).isEmpty()) return false;
-        Region updated = r.withMaterials(flag, Set.of());
-        regions.put(keyOf(updated), updated);
-        if (writer != null) writer.queue(updated);
-        return true;
+        return mutators.clearMaterials(world, id, flag);
     }
 
     // Stricter variant of isAllowed used by listeners that enforce vanilla
@@ -720,20 +536,7 @@ public final class ProtectionManager {
     // "don't grief" default holds everywhere except where an admin has
     // explicitly written the override.
     public boolean isExplicitlyAllowed(Location loc, UUID actor, RegionFlag flag) {
-        List<Region> applicable = regionsAt(loc);
-        if (applicable.isEmpty()) {
-            applicable = globalAsFallback(loc.getWorld());
-            if (applicable.isEmpty()) return false;
-        }
-
-        Set<String> groups = (actor == null) ? Set.of() : groupsOf(actor);
-        List<Region> leaves = leavesOf(applicable);
-
-        for (Region leaf : leaves) {
-            Optional<Boolean> resolved = resolveAcrossChain(leaf, flag, actor, groups);
-            if (resolved.isEmpty() || !resolved.get()) return false;
-        }
-        return true;
+        return flagResolver.isExplicitlyAllowed(loc, actor, flag);
     }
 
     // Look up the actor's permission groups. Returns an empty set when no
@@ -785,6 +588,15 @@ public final class ProtectionManager {
 
     public List<Region> descendantsOf(String id) {
         Region root = byNameAnyWorld(id);
+        return descendantsOfRoot(root);
+    }
+
+    public List<Region> descendantsOf(World world, String id) {
+        Region root = resolveForMutation(world, id);
+        return descendantsOfRoot(root);
+    }
+
+    private List<Region> descendantsOfRoot(Region root) {
         if (root == null || GLOBAL_REGION_ID.equals(root.id())) return List.of();
         Map<String, List<Region>> byParent = childrenByParent();
         List<Region> descendants = new ArrayList<>();
@@ -840,9 +652,19 @@ public final class ProtectionManager {
     public UnclaimOutcome unclaim(String id) {
         if (GLOBAL_REGION_ID.equals(id)) return new UnclaimOutcome(UnclaimResult.GLOBAL_DENIED, List.of());
         Region root = byNameAnyWorld(id);
+        return unclaimResolved(root, id);
+    }
+
+    public UnclaimOutcome unclaim(World world, String id) {
+        if (GLOBAL_REGION_ID.equals(id)) return new UnclaimOutcome(UnclaimResult.GLOBAL_DENIED, List.of());
+        Region root = resolveForMutation(world, id);
+        return unclaimResolved(root, id);
+    }
+
+    private UnclaimOutcome unclaimResolved(Region root, String id) {
         if (root == null) return new UnclaimOutcome(UnclaimResult.UNKNOWN_REGION, List.of());
 
-        List<Region> targets = new ArrayList<>(descendantsOf(id));
+        List<Region> targets = new ArrayList<>(descendantsOfRoot(root));
         targets.add(root);
         if (writer != null) {
             List<Region> archived = new ArrayList<>(targets.size());
@@ -862,8 +684,8 @@ public final class ProtectionManager {
 
         for (Region target : targets) {
             regions.remove(keyOf(target), target);
-            orphanedRegions.add(target.id());
-            purgePendingStamps(target.id());
+            orphanedRegions.add(keyOf(target));
+            purgePendingStamps(target);
         }
         return new UnclaimOutcome(UnclaimResult.OK, List.copyOf(targets));
     }
@@ -886,8 +708,14 @@ public final class ProtectionManager {
         }
     }
 
-    private void purgePendingStamps(String regionId) {
+    private void purgePendingStamps(Region target) {
+        String regionId = target.id();
+        String worldName = target.worldName();
         pendingStamps.entrySet().removeIf(entry -> {
+            String stampKey = entry.getKey();
+            int separator = stampKey.lastIndexOf(':');
+            if (worldName != null && (separator <= 0
+                    || !worldName.equals(stampKey.substring(0, separator)))) return false;
             Set<String> ids = entry.getValue();
             ids.remove(regionId);
             return ids.isEmpty();
@@ -896,58 +724,55 @@ public final class ProtectionManager {
 
     public int reconcilePendingStamps() {
         Set<String> pruned = new HashSet<>();
-        for (Map.Entry<Long, Set<String>> entry : pendingStamps.entrySet()) {
+        for (Map.Entry<String, Set<String>> entry : pendingStamps.entrySet()) {
+            int separator = entry.getKey().lastIndexOf(':');
+            if (separator <= 0) {
+                pendingStamps.remove(entry.getKey(), entry.getValue());
+                continue;
+            }
+            String worldName = entry.getKey().substring(0, separator);
             entry.getValue().removeIf(regionId -> {
-                if (byNameAnyWorld(regionId) != null) return false;
-                orphanedRegions.add(regionId);
-                pruned.add(regionId);
+                if (regions.containsKey(keyOf(worldName, regionId))) return false;
+                String orphanKey = keyOf(worldName, regionId);
+                orphanedRegions.add(orphanKey);
+                pruned.add(orphanKey);
                 return true;
             });
         }
         pendingStamps.entrySet().removeIf(entry -> entry.getValue().isEmpty());
-        // pendingStamps is keyed by chunk key and carries no world component, so
-        // liveness necessarily means that no world has a region with this id.
         return pruned.size();
     }
 
     public boolean addMember(String id, UUID member) {
-        Region r = byNameAnyWorld(id);
-        if (r == null || r.members().contains(member)) return false;
-        List<UUID> newMembers = new ArrayList<>(r.members());
-        newMembers.add(member);
-        Region updated = r.withMembers(newMembers);
-        regions.put(keyOf(updated), updated);
-        if (writer != null) writer.queue(updated);
-        return true;
+        return mutators.addMember(null, id, member);
+    }
+
+    public boolean addMember(World world, String id, UUID member) {
+        return mutators.addMember(world, id, member);
     }
 
     public boolean removeMember(String id, UUID member) {
-        Region r = byNameAnyWorld(id);
-        if (r == null || !r.members().contains(member)) return false;
-        List<UUID> newMembers = new ArrayList<>(r.members());
-        newMembers.remove(member);
-        Region updated = r.withMembers(newMembers);
-        regions.put(keyOf(updated), updated);
-        if (writer != null) writer.queue(updated);
-        return true;
+        return mutators.removeMember(null, id, member);
+    }
+
+    public boolean removeMember(World world, String id, UUID member) {
+        return mutators.removeMember(world, id, member);
     }
 
     public boolean addManager(String id, UUID manager) {
-        Region r = byNameAnyWorld(id);
-        if (r == null || manager == null || r.managers().contains(manager)) return false;
-        Region updated = r.addManager(manager);
-        regions.put(keyOf(updated), updated);
-        if (writer != null) writer.queue(updated);
-        return true;
+        return mutators.addManager(null, id, manager);
+    }
+
+    public boolean addManager(World world, String id, UUID manager) {
+        return mutators.addManager(world, id, manager);
     }
 
     public boolean removeManager(String id, UUID manager) {
-        Region r = byNameAnyWorld(id);
-        if (r == null || manager == null || !r.managers().contains(manager)) return false;
-        Region updated = r.removeManager(manager);
-        regions.put(keyOf(updated), updated);
-        if (writer != null) writer.queue(updated);
-        return true;
+        return mutators.removeManager(null, id, manager);
+    }
+
+    public boolean removeManager(World world, String id, UUID manager) {
+        return mutators.removeManager(world, id, manager);
     }
 
     // -- Member/manager GROUP mutators --------------------------------------
@@ -961,43 +786,35 @@ public final class ProtectionManager {
     // lowercase by the Region copy methods, so any casing is accepted.
 
     public boolean addMemberGroup(String id, String group) {
-        Region r = byNameAnyWorld(id);
-        if (r == null || group == null || group.isBlank()) return false;
-        Region updated = r.addMemberGroup(group);
-        if (updated == r) return false;
-        regions.put(keyOf(updated), updated);
-        if (writer != null) writer.queue(updated);
-        return true;
+        return mutators.addMemberGroup(null, id, group);
+    }
+
+    public boolean addMemberGroup(World world, String id, String group) {
+        return mutators.addMemberGroup(world, id, group);
     }
 
     public boolean removeMemberGroup(String id, String group) {
-        Region r = byNameAnyWorld(id);
-        if (r == null || group == null) return false;
-        Region updated = r.removeMemberGroup(group);
-        if (updated == r) return false;
-        regions.put(keyOf(updated), updated);
-        if (writer != null) writer.queue(updated);
-        return true;
+        return mutators.removeMemberGroup(null, id, group);
+    }
+
+    public boolean removeMemberGroup(World world, String id, String group) {
+        return mutators.removeMemberGroup(world, id, group);
     }
 
     public boolean addManagerGroup(String id, String group) {
-        Region r = byNameAnyWorld(id);
-        if (r == null || group == null || group.isBlank()) return false;
-        Region updated = r.addManagerGroup(group);
-        if (updated == r) return false;
-        regions.put(keyOf(updated), updated);
-        if (writer != null) writer.queue(updated);
-        return true;
+        return mutators.addManagerGroup(null, id, group);
+    }
+
+    public boolean addManagerGroup(World world, String id, String group) {
+        return mutators.addManagerGroup(world, id, group);
     }
 
     public boolean removeManagerGroup(String id, String group) {
-        Region r = byNameAnyWorld(id);
-        if (r == null || group == null) return false;
-        Region updated = r.removeManagerGroup(group);
-        if (updated == r) return false;
-        regions.put(keyOf(updated), updated);
-        if (writer != null) writer.queue(updated);
-        return true;
+        return mutators.removeManagerGroup(null, id, group);
+    }
+
+    public boolean removeManagerGroup(World world, String id, String group) {
+        return mutators.removeManagerGroup(world, id, group);
     }
 
     // Entity-list resolution for CreatureSpawnEvent gating. Returns true if any
@@ -1005,64 +822,31 @@ public final class ProtectionManager {
     // ProtectionListener#onCreatureSpawn to evaluate DENY_MOB_SPAWN /
     // ALLOW_MOB_SPAWN before falling back to the boolean MOB_SPAWNING rule.
     public boolean isEntityListed(Location loc, RegionFlag flag, org.bukkit.entity.EntityType type) {
-        if (!flag.isEntityFlag()) return false;
-        return isEntityListed(regionsAt(loc), flag, type);
+        return flagResolver.isEntityListed(loc, flag, type);
     }
 
     /** Checks an already-resolved region list without performing another chunk lookup. */
     public boolean isEntityListed(List<Region> applicable, RegionFlag flag,
                                   org.bukkit.entity.EntityType type) {
-        if (!flag.isEntityFlag()) return false;
-        for (Region r : applicable) {
-            if (r.entitiesFor(flag).contains(type)) return true;
-        }
-        return false;
+        return flagResolver.isEntityListed(applicable, flag, type);
     }
 
     // -- Entity-list mutators -----------------------------------------------
 
     public boolean setEntities(String id, RegionFlag flag, Set<org.bukkit.entity.EntityType> entities) {
-        return setEntitiesResolved(byNameAnyWorld(id), flag, entities);
+        return mutators.setEntities(null, id, flag, entities);
     }
 
     public boolean setEntities(World world, String id, RegionFlag flag, Set<org.bukkit.entity.EntityType> entities) {
-        return setEntitiesResolved(resolveForMutation(world, id), flag, entities);
-    }
-
-    private boolean setEntitiesResolved(Region r, RegionFlag flag, Set<org.bukkit.entity.EntityType> entities) {
-        if (r == null) return false;
-        if (!flag.isEntityFlag()) {
-            throw new IllegalArgumentException("Not an entity-list flag: " + flag);
-        }
-        Set<org.bukkit.entity.EntityType> current = r.entitiesFor(flag);
-        Set<org.bukkit.entity.EntityType> normalized = (entities == null || entities.isEmpty())
-                ? Set.of()
-                : EnumSet.copyOf(entities);
-        if (current.equals(normalized)) return false;
-        Region updated = r.withEntities(flag, normalized);
-        regions.put(keyOf(updated), updated);
-        if (writer != null) writer.queue(updated);
-        return true;
+        return mutators.setEntities(world, id, flag, entities);
     }
 
     public boolean clearEntities(String id, RegionFlag flag) {
-        return clearEntitiesResolved(byNameAnyWorld(id), flag);
+        return mutators.clearEntities(null, id, flag);
     }
 
     public boolean clearEntities(World world, String id, RegionFlag flag) {
-        return clearEntitiesResolved(resolveForMutation(world, id), flag);
-    }
-
-    private boolean clearEntitiesResolved(Region r, RegionFlag flag) {
-        if (r == null) return false;
-        if (!flag.isEntityFlag()) {
-            throw new IllegalArgumentException("Not an entity-list flag: " + flag);
-        }
-        if (r.entitiesFor(flag).isEmpty()) return false;
-        Region updated = r.withEntities(flag, Set.of());
-        regions.put(keyOf(updated), updated);
-        if (writer != null) writer.queue(updated);
-        return true;
+        return mutators.clearEntities(world, id, flag);
     }
 
     // -- Hierarchy ----------------------------------------------------------
@@ -1097,14 +881,28 @@ public final class ProtectionManager {
         // does not "exist" as a normal claim.
         if (GLOBAL_REGION_ID.equals(childId)) return SetParentResult.UNKNOWN_CHILD;
         Region child = byNameAnyWorld(childId);
+        return setParentResolved(child, child == null || newParentId == null
+                ? null : byNameAnyWorld(newParentId), childId, newParentId, allowCrossOwner);
+    }
+
+    public SetParentResult setParent(World world, String childId, String newParentId,
+                                     boolean allowCrossOwner) {
+        if (GLOBAL_REGION_ID.equals(childId)) return SetParentResult.UNKNOWN_CHILD;
+        Region child = resolveForMutation(world, childId);
+        Region parent = newParentId == null ? null : resolveForMutation(world, newParentId);
+        return setParentResolved(child, parent, childId, newParentId, allowCrossOwner);
+    }
+
+    private SetParentResult setParentResolved(Region child, Region parent,
+                                               String childId, String newParentId,
+                                               boolean allowCrossOwner) {
         if (child == null) return SetParentResult.UNKNOWN_CHILD;
 
         String normalized = (newParentId == null || newParentId.isBlank()) ? null : newParentId;
         if (normalized != null) {
             if (normalized.equals(childId)) return SetParentResult.SELF_REFERENCE;
-            Region parent = byNameAnyWorld(normalized);
             if (parent == null) return SetParentResult.UNKNOWN_PARENT;
-            if (wouldCreateCycle(childId, normalized)) return SetParentResult.CYCLE;
+            if (wouldCreateCycle(child.worldName(), childId, normalized)) return SetParentResult.CYCLE;
             // Parent ownership is a hierarchy invariant. The caller supplies
             // an explicit administrative override for intentional mixed-owner
             // layouts; this layer does not perform permission checks.
@@ -1149,11 +947,17 @@ public final class ProtectionManager {
     }
 
     private boolean wouldCreateCycle(String childId, String candidateParentId) {
+        return wouldCreateCycle(null, childId, candidateParentId);
+    }
+
+    private boolean wouldCreateCycle(String worldName, String childId, String candidateParentId) {
         Set<String> visited = new HashSet<>();
         String cursor = candidateParentId;
         while (cursor != null && visited.add(cursor)) {
             if (cursor.equals(childId)) return true;
-            Region step = byNameAnyWorld(cursor);
+            Region step = worldName == null ? byNameAnyWorld(cursor)
+                    : regions.get(RegionRegistry.keyOf(worldName, cursor));
+            if (step == null && worldName != null) step = regions.get(cursor);
             if (step == null) return false;
             cursor = step.parentId();
         }

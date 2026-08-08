@@ -48,7 +48,10 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Messages.PROTECTION.text(Text.COMMAND_PERMISSION, handler.name()));
             return true;
         }
-        handler.execute(ctx, sender, popFirst(args));
+        String[] popped = popFirst(args);
+        RegionWorldArgument.Result scoped = RegionWorldArgument.strip(ctx, sender, handler, popped);
+        RegionCommandContext invocation = scoped.world() == null ? ctx : ctx.withScope(scoped.world());
+        handler.execute(invocation, sender, scoped.args());
         return true;
     }
 
@@ -78,6 +81,15 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
         if (handler.permission() != null && !ctx.hasPerm(sender, handler.permission())) {
             return Collections.emptyList();
         }
-        return handler.tabComplete(ctx, sender, args);
+        List<String> suggestions = new java.util.ArrayList<>(handler.tabComplete(ctx, sender, args));
+        if (ctx.hasPerm(sender, me.beeliebub.tweaks.permissions.Permissions.PROTECTION_ADMIN)
+                && args.length - 1 > handler.minArgs()) {
+            String prefix = args[args.length - 1].toLowerCase(Locale.ROOT);
+            for (org.bukkit.World world : org.bukkit.Bukkit.getWorlds()) {
+                if (world.getName().toLowerCase(Locale.ROOT).startsWith(prefix)
+                        && !suggestions.contains(world.getName())) suggestions.add(world.getName());
+            }
+        }
+        return suggestions;
     }
 }

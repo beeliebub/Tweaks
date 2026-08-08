@@ -34,13 +34,14 @@ class ProtectionManagerClaimTest {
         ProtectionManager mgr = new ProtectionManager(mock(Tweaks.class));
         Region r = region("home");
         World world = mock(World.class);
+        when(world.getName()).thenReturn("world");
         Chunk c = fakeChunk();
         when(world.getChunkAtAsync(anyInt(), anyInt(), anyBoolean()))
                 .thenReturn(CompletableFuture.completedFuture(c));
 
         mgr.claim(r, world, 0, 0, 15, 15);
 
-        Region cached = mgr.regions().get("home");
+        Region cached = mgr.regions().get("world:home");
         assertNotNull(cached);
         assertEquals(r.id(), cached.id());
         assertEquals(r.owner(), cached.owner());
@@ -50,13 +51,14 @@ class ProtectionManagerClaimTest {
     void claimStampsBoundsFromClaimBox() {
         ProtectionManager mgr = new ProtectionManager(mock(Tweaks.class));
         World world = mock(World.class);
+        when(world.getName()).thenReturn("world");
         when(world.getChunkAtAsync(anyInt(), anyInt(), anyBoolean()))
                 .thenAnswer(inv -> CompletableFuture.completedFuture(fakeChunk()));
 
         // Block-AABB (0,0)-(31,47) spans chunks x=[0,1], z=[0,2].
         mgr.claim(region("plot"), world, 0, 0, 31, 47);
 
-        Region.RegionBounds bounds = mgr.regions().get("plot").bounds();
+        Region.RegionBounds bounds = mgr.regions().get("world:plot").bounds();
         assertNotNull(bounds);
         assertEquals(0, bounds.minChunkX());
         assertEquals(0, bounds.minChunkZ());
@@ -68,13 +70,14 @@ class ProtectionManagerClaimTest {
     void claimNormalizesReversedClaimBox() {
         ProtectionManager mgr = new ProtectionManager(mock(Tweaks.class));
         World world = mock(World.class);
+        when(world.getName()).thenReturn("world");
         when(world.getChunkAtAsync(anyInt(), anyInt(), anyBoolean()))
                 .thenAnswer(inv -> CompletableFuture.completedFuture(fakeChunk()));
 
         // Pass max coords first; bounds should still come out min < max.
         mgr.claim(region("plot"), world, 47, 31, 0, 0);
 
-        Region.RegionBounds bounds = mgr.regions().get("plot").bounds();
+        Region.RegionBounds bounds = mgr.regions().get("world:plot").bounds();
         assertNotNull(bounds);
         assertEquals(0, bounds.minChunkX());
         assertEquals(0, bounds.minChunkZ());
@@ -87,6 +90,7 @@ class ProtectionManagerClaimTest {
         Tweaks plugin = mock(Tweaks.class);
         ProtectionManager mgr = new ProtectionManager(plugin);
         World world = mock(World.class);
+        when(world.getName()).thenReturn("world");
         List<Chunk> spawned = new ArrayList<>();
         when(world.getChunkAtAsync(anyInt(), anyInt(), anyBoolean())).thenAnswer(inv -> {
             Chunk c = fakeChunk();
@@ -114,6 +118,7 @@ class ProtectionManagerClaimTest {
     void largeClaimUsesLazyPathAndPopulatesPendingStamps() {
         ProtectionManager mgr = new ProtectionManager(mock(Tweaks.class));
         World world = mock(World.class);
+        when(world.getName()).thenReturn("world");
 
         // 1 x 6 chunks = 6 chunks, just over the threshold -> lazy
         CompletableFuture<Void> done = mgr.claim(region("admin"), world, 0, 0, 15, 95);
@@ -124,7 +129,7 @@ class ProtectionManagerClaimTest {
         long[] expected = GeometryUtil.chunkKeysInBox(0, 0, 15, 95);
         assertEquals(expected.length, mgr.pendingStamps().size());
         for (long k : expected) {
-            assertTrue(mgr.pendingStamps().get(k).contains("admin"),
+            assertTrue(mgr.pendingStamps().get(ProtectionManager.stampKey("world", k)).contains("admin"),
                     "every expected chunk key must hold the region pointer");
         }
     }
@@ -133,6 +138,7 @@ class ProtectionManagerClaimTest {
     void thresholdIsInclusiveAtFive() {
         ProtectionManager mgr = new ProtectionManager(mock(Tweaks.class));
         World world = mock(World.class);
+        when(world.getName()).thenReturn("world");
         when(world.getChunkAtAsync(anyInt(), anyInt(), anyBoolean()))
                 .thenAnswer(inv -> CompletableFuture.completedFuture(fakeChunk()));
 
@@ -147,12 +153,14 @@ class ProtectionManagerClaimTest {
     void lazyPathMergesMultipleClaimsOntoTheSameChunk() {
         ProtectionManager mgr = new ProtectionManager(mock(Tweaks.class));
         World world = mock(World.class);
+        when(world.getName()).thenReturn("world");
 
         mgr.claim(region("first"), world, 0, 0, 95, 95);   // 6x6 = 36 chunks
         mgr.claim(region("second"), world, 0, 0, 95, 95);  // same area
 
         long sample = GeometryUtil.chunkKey(0, 0);
-        assertEquals(java.util.Set.of("first", "second"), mgr.pendingStamps().get(sample));
+        assertEquals(java.util.Set.of("first", "second"),
+                mgr.pendingStamps().get(ProtectionManager.stampKey("world", sample)));
     }
 
     private static Chunk fakeChunk() {

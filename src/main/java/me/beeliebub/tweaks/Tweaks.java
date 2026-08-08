@@ -171,7 +171,9 @@ public class Tweaks extends JavaPlugin {
         // takes its instances directly rather than Services itself, since it cannot read those fields
         // from outside this package.
         runShutdownStep("permissions", () -> PermissionsBootstrap.shutdown(this, services.permissionManager));
-        runShutdownStep("protection", () -> ProtectionBootstrap.shutdown(this, services.pendingStampsStore, services.regionSelectionManager));
+        runShutdownStep("protection", () -> ProtectionBootstrap.shutdown(this,
+                services.protectionManager == null ? null : services.protectionManager.writer(),
+                services.pendingStampsStore, services.regionSelectionManager));
         runShutdownStep("economy", () -> EconomyBootstrap.shutdown(this, services.housePaymentService, services.economyManager, services.houseAccount));
         runShutdownStep("lottery", () -> me.beeliebub.tweaks.lottery.LotteryBootstrap.shutdown(this, services.lotteryManager));
         runShutdownStep("minigames", () -> MinigamesBootstrap.shutdown(this, services.blackjackListener, services.rouletteListener));

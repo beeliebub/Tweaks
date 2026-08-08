@@ -41,7 +41,7 @@ class ConcurrencyTest {
 
     @Test
     void snapshotDoesNotCmeWhileMutatorsInsert(@TempDir Path tmp) throws Exception {
-        ConcurrentHashMap<Long, java.util.Set<String>> stamps = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, java.util.Set<String>> stamps = new ConcurrentHashMap<>();
         Tweaks plugin = mock(Tweaks.class);
         when(plugin.getLogger()).thenReturn(Logger.getLogger("concurrency"));
         PendingStampsStore store = new PendingStampsStore(
@@ -61,7 +61,7 @@ class ConcurrencyTest {
                         for (int i = 0; i < writesPerThread; i++) {
                             java.util.Set<String> set = ConcurrentHashMap.newKeySet();
                             set.add("r" + (base + i));
-                            stamps.put(base + i, set);
+                            stamps.put(ProtectionManager.stampKey("world", base + i), set);
                         }
                     } catch (Throwable e) {
                         failure.set(e);
@@ -89,7 +89,7 @@ class ConcurrencyTest {
         // Take one final snapshot so the on-disk file reflects all inserts,
         // then verify the file round-trips back into a populated cache.
         store.writeNow();
-        ConcurrentHashMap<Long, java.util.Set<String>> reloaded = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, java.util.Set<String>> reloaded = new ConcurrentHashMap<>();
         new PendingStampsStore(
                 plugin, tmp.toFile(), reloaded, ConcurrentHashMap.newKeySet()).load();
         assertEquals(3 * writesPerThread, reloaded.size(),
@@ -159,9 +159,9 @@ class ConcurrencyTest {
 
     @Test
     void pendingStampsInnerSetSurvivesConcurrentAdds() throws Exception {
-        ConcurrentHashMap<Long, java.util.Set<String>> stamps = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, java.util.Set<String>> stamps = new ConcurrentHashMap<>();
         java.util.Set<String> inner = ConcurrentHashMap.newKeySet();
-        stamps.put(0L, inner);
+        stamps.put(ProtectionManager.stampKey("world", 0L), inner);
 
         AtomicReference<Throwable> failure = new AtomicReference<>();
         ExecutorService pool = Executors.newFixedThreadPool(4);

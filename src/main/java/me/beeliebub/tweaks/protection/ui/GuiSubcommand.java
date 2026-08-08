@@ -54,6 +54,7 @@ final class GuiSubcommand implements RegionSubcommand {
             return;
         }
         String name = args[0];
+        if (!ctx.requireNamedRegionWorld(sender, args)) return;
         Region region = ctx.resolveRegion(sender, name);
         if (region == null) {
             sender.sendMessage(Messages.PROTECTION.text(Text.REGION_NOT_FOUND, name));
@@ -63,7 +64,7 @@ final class GuiSubcommand implements RegionSubcommand {
     }
 
     private static void openGuiFor(RegionCommandContext ctx, Player player, Region region) {
-        if (!RegionAuth.isOwnerManagerOrAdmin(player, region, ctx.protection)) {
+        if (!RegionAuth.isOwnerManagerOrAdmin(ctx, player, region)) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_OPEN_AUTH, region.id()));
             return;
         }

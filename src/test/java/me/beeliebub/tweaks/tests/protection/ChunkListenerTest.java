@@ -39,6 +39,9 @@ class ChunkListenerTest {
     private static Chunk chunkAt(long key, List<String> existingPdc) {
         Chunk chunk = mock(Chunk.class);
         when(chunk.getChunkKey()).thenReturn(key);
+        World world = mock(World.class);
+        when(world.getName()).thenReturn("world");
+        when(chunk.getWorld()).thenReturn(world);
         PersistentDataContainer pdc = mock(PersistentDataContainer.class);
         when(chunk.getPersistentDataContainer()).thenReturn(pdc);
         doReturn(existingPdc).when(pdc)
@@ -58,14 +61,14 @@ class ChunkListenerTest {
         Set<String> pending = ConcurrentHashMap.newKeySet();
         pending.add("home");
         pending.add("admin");
-        protection.pendingStamps().put(42L, pending);
+        protection.pendingStamps().put(ProtectionManager.stampKey("world", 42L), pending);
 
         listener.onChunkLoad(eventFor(chunk));
 
         verify(chunk.getPersistentDataContainer())
                 .set(any(NamespacedKey.class), any(), argThat(arg ->
                         arg instanceof List<?> l && Set.copyOf(l).equals(Set.of("home", "admin"))));
-        assertFalse(protection.pendingStamps().containsKey(42L),
+        assertFalse(protection.pendingStamps().containsKey(ProtectionManager.stampKey("world", 42L)),
                 "drained pending key must be removed atomically");
     }
 
@@ -74,13 +77,13 @@ class ChunkListenerTest {
         Chunk chunk = chunkAt(7L, List.of());
         Set<String> pending = ConcurrentHashMap.newKeySet();
         pending.add("home");
-        protection.pendingStamps().put(99L, pending);
+        protection.pendingStamps().put(ProtectionManager.stampKey("world", 99L), pending);
 
         listener.onChunkLoad(eventFor(chunk));
 
         verify(chunk.getPersistentDataContainer(), never())
                 .set(any(NamespacedKey.class), any(), any());
-        assertTrue(protection.pendingStamps().containsKey(99L),
+        assertTrue(protection.pendingStamps().containsKey(ProtectionManager.stampKey("world", 99L)),
                 "unrelated pending entry must not be touched");
     }
 
@@ -89,7 +92,7 @@ class ChunkListenerTest {
         Chunk chunk = chunkAt(1L, List.of("existing"));
         Set<String> pending = ConcurrentHashMap.newKeySet();
         pending.add("new");
-        protection.pendingStamps().put(1L, pending);
+        protection.pendingStamps().put(ProtectionManager.stampKey("world", 1L), pending);
 
         listener.onChunkLoad(eventFor(chunk));
 
@@ -100,7 +103,7 @@ class ChunkListenerTest {
     @Test
     void stripsOrphanedRegionsFromPdc() {
         Chunk chunk = chunkAt(5L, List.of("alive", "dead"));
-        protection.orphanedRegions().add("dead");
+        protection.orphanedRegions().add("world:dead");
 
         listener.onChunkLoad(eventFor(chunk));
 
@@ -111,8 +114,8 @@ class ChunkListenerTest {
     @Test
     void deletesKeyWhenAllPointersAreOrphaned() {
         Chunk chunk = chunkAt(5L, List.of("dead1", "dead2"));
-        protection.orphanedRegions().add("dead1");
-        protection.orphanedRegions().add("dead2");
+        protection.orphanedRegions().add("world:dead1");
+        protection.orphanedRegions().add("world:dead2");
 
         listener.onChunkLoad(eventFor(chunk));
 
@@ -122,7 +125,7 @@ class ChunkListenerTest {
     @Test
     void leavesPdcAloneWhenNoOrphansMatch() {
         Chunk chunk = chunkAt(5L, List.of("alive1", "alive2"));
-        protection.orphanedRegions().add("unrelated_dead");
+        protection.orphanedRegions().add("world:unrelated_dead");
 
         listener.onChunkLoad(eventFor(chunk));
 
@@ -134,7 +137,7 @@ class ChunkListenerTest {
     @Test
     void skipsOrphanScanWhenChunkPdcEmpty() {
         Chunk chunk = chunkAt(5L, List.of());
-        protection.orphanedRegions().add("dead");
+        protection.orphanedRegions().add("world:dead");
 
         listener.onChunkLoad(eventFor(chunk));
 
@@ -146,7 +149,7 @@ class ChunkListenerTest {
     @Test
     void emptyPendingSetIsTreatedAsNoStamp() {
         Chunk chunk = chunkAt(8L, List.of());
-        protection.pendingStamps().put(8L, ConcurrentHashMap.newKeySet());
+        protection.pendingStamps().put(ProtectionManager.stampKey("world", 8L), ConcurrentHashMap.newKeySet());
 
         listener.onChunkLoad(eventFor(chunk));
 

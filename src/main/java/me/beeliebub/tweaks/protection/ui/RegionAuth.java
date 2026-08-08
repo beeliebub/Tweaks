@@ -21,20 +21,40 @@ final class RegionAuth {
 
     private RegionAuth() {}
 
-    static boolean isAdmin(CommandSender sender) {
-        return sender.hasPermission(Permissions.PROTECTION_ADMIN);
+    static boolean isAdmin(RegionCommandContext context, CommandSender sender) {
+        return context.hasPerm(sender, Permissions.PROTECTION_ADMIN);
     }
 
-    static boolean isOwnerOrAdmin(CommandSender sender, Region region) {
-        if (isAdmin(sender)) return true;
+    static boolean isAdmin(CommandSender sender, ProtectionManager protection) {
+        return protection != null && new RegionCommandContext(protection.plugin(), protection, null)
+                .hasPerm(sender, Permissions.PROTECTION_ADMIN);
+    }
+
+    static boolean isOwnerOrAdmin(RegionCommandContext context, CommandSender sender, Region region) {
+        if (isAdmin(context, sender)) return true;
+        if (!(sender instanceof Player p)) return true;
+        return region.isOwner(p.getUniqueId());
+    }
+
+    static boolean isOwnerOrAdmin(CommandSender sender, Region region, ProtectionManager protection) {
+        if (isAdmin(sender, protection)) return true;
         if (!(sender instanceof Player p)) return true;
         return region.isOwner(p.getUniqueId());
     }
 
     static boolean isOwnerManagerOrAdmin(CommandSender sender, Region region, ProtectionManager pm) {
-        if (isAdmin(sender)) return true;
+        if (isAdmin(sender, pm)) return true;
         if (!(sender instanceof Player p)) return true;
         java.util.UUID uuid = p.getUniqueId();
         return region.isOwner(uuid) || region.isManager(uuid, pm.groupsOf(uuid));
+    }
+
+    static boolean isOwnerManagerOrAdmin(RegionCommandContext context,
+                                         CommandSender sender, Region region) {
+        if (isAdmin(context, sender)) return true;
+        if (!(sender instanceof Player p)) return true;
+        java.util.UUID uuid = p.getUniqueId();
+        return region.isOwner(uuid)
+                || region.isManager(uuid, context.protection.groupsOf(uuid));
     }
 }

@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,30 +45,30 @@ public final class PendingStampsStore {
     private final Tweaks plugin;
     private final File yamlFile;
     private final File tmpFile;
-    private final ConcurrentHashMap<Long, Set<String>> stamps;
+    private final ConcurrentHashMap<String, Set<String>> stamps;
     private final Set<String> orphanedRegions;
+    private final ConcurrentHashMap<String, Region> regions;
     private final Object writeLock = new Object();
 
     private boolean orphanCapWarningLogged;
     private BukkitTask task;
 
     public PendingStampsStore(Tweaks plugin, File dataFolder,
-                             ConcurrentHashMap<Long, Set<String>> stamps,
+                             ConcurrentHashMap<String, Set<String>> stamps,
                              Set<String> orphanedRegions) {
+        this(plugin, dataFolder, stamps, orphanedRegions, null);
+    }
+
+    public PendingStampsStore(Tweaks plugin, File dataFolder,
+                             ConcurrentHashMap<String, Set<String>> stamps,
+                             Set<String> orphanedRegions,
+                             ConcurrentHashMap<String, Region> regions) {
         this.plugin = plugin;
         this.yamlFile = new File(dataFolder, YAML_FILE);
         this.tmpFile = new File(dataFolder, TMP_FILE);
         this.stamps = stamps;
         this.orphanedRegions = orphanedRegions;
-    }
-
-    /**
-     * Compatibility constructor for callers that do not yet expose the live
-     * orphan set. New lifecycle wiring should use the four-argument form.
-     */
-    public PendingStampsStore(Tweaks plugin, File dataFolder,
-                             ConcurrentHashMap<Long, Set<String>> stamps) {
-        this(plugin, dataFolder, stamps, ConcurrentHashMap.newKeySet());
+        this.regions = regions;
     }
 
     // Synchronously read pending_stamps.yml on plugin enable. Also evicts any
@@ -80,24 +81,47 @@ public final class PendingStampsStore {
         if (!yamlFile.exists()) return;
 
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(yamlFile);
-        orphanedRegions.addAll(yaml.getStringList(ORPHANS_KEY));
+        migrateOrphans(yaml.getStringList(ORPHANS_KEY));
 
         ConfigurationSection section = yaml.getConfigurationSection(STAMPS_KEY);
         if (section == null) return;
 
+        int migrated = 0;
+        int dropped = 0;
         for (String key : section.getKeys(false)) {
-            long chunkKey;
-            try {
-                chunkKey = Long.parseLong(key);
-            } catch (NumberFormatException e) {
-                plugin.getLogger().warning("Skipping pending-stamp entry with non-numeric chunk key '" + key + "'");
-                continue;
-            }
             List<String> ids = section.getStringList(key);
             if (ids.isEmpty()) continue;
-            Set<String> set = ConcurrentHashMap.newKeySet();
-            set.addAll(ids);
-            stamps.put(chunkKey, set);
+            int separator = key.lastIndexOf(':');
+            if (separator > 0) {
+                try {
+                    Long.parseLong(key.substring(separator + 1));
+                } catch (NumberFormatException e) {
+                    plugin.getLogger().warning("Skipping pending-stamp entry with invalid chunk key '" + key + "'");
+                    continue;
+                }
+                stamps.computeIfAbsent(key, ignored -> ConcurrentHashMap.newKeySet()).addAll(ids);
+                continue;
+            }
+
+            try {
+                long chunkKey = Long.parseLong(key);
+                for (String id : ids) {
+                    Region region = findRegion(id);
+                    if (region == null || region.worldName() == null || region.worldName().isBlank()) {
+                        dropped++;
+                        continue;
+                    }
+                    stamps.computeIfAbsent(RegionRegistry.stampKey(region.worldName(), chunkKey),
+                            ignored -> ConcurrentHashMap.newKeySet()).add(id);
+                    migrated++;
+                }
+            } catch (NumberFormatException e) {
+                plugin.getLogger().warning("Skipping pending-stamp entry with invalid chunk key '" + key + "'");
+            }
+        }
+        if (migrated > 0 || dropped > 0) {
+            plugin.getLogger().info("Migrated " + migrated
+                    + " legacy pending stamp(s); dropped " + dropped + " unresolved id(s)");
         }
     }
 
@@ -106,25 +130,30 @@ public final class PendingStampsStore {
     // during shutdown. Synchronized to guarantee a single in-flight write
     // even if shutdown overlaps a scheduled tick.
     public void writeNow() throws IOException {
-        Map<Long, List<String>> snapshot = new HashMap<>(stamps.size());
-        for (Map.Entry<Long, Set<String>> e : stamps.entrySet()) {
+        Map<String, List<String>> snapshot = new HashMap<>(stamps.size());
+        for (Map.Entry<String, Set<String>> e : stamps.entrySet()) {
             snapshot.put(e.getKey(), new ArrayList<>(e.getValue()));
         }
         // Keep the live set complete for the current process; only the durable
         // snapshot is capped. Any omitted pointer is inert because region
         // resolution validates bounds before applying protection.
-        List<String> orphanSnapshot = new ArrayList<>(orphanedRegions);
+        List<String> orphanSnapshot;
+        synchronized (orphanedRegions) {
+            orphanSnapshot = new ArrayList<>(orphanedRegions);
+        }
         boolean orphanSnapshotTruncated = orphanSnapshot.size() > MAX_PERSISTED_ORPHANS;
         if (orphanSnapshotTruncated) {
             orphanSnapshot = new ArrayList<>(
-                    orphanSnapshot.subList(0, MAX_PERSISTED_ORPHANS));
+                    orphanSnapshot.subList(orphanSnapshot.size() - MAX_PERSISTED_ORPHANS,
+                            orphanSnapshot.size()));
         }
 
         synchronized (writeLock) {
             if (orphanSnapshotTruncated && !orphanCapWarningLogged) {
                 plugin.getLogger().warning("pending_stamps orphan list exceeds "
                         + MAX_PERSISTED_ORPHANS + " entries; persisting only the first "
-                        + MAX_PERSISTED_ORPHANS);
+                        + MAX_PERSISTED_ORPHANS + " newest entries (current size "
+                        + orphanedRegions.size() + ")");
                 orphanCapWarningLogged = true;
             }
 
@@ -135,8 +164,8 @@ public final class PendingStampsStore {
 
             YamlConfiguration yaml = new YamlConfiguration();
             ConfigurationSection section = yaml.createSection(STAMPS_KEY);
-            for (Map.Entry<Long, List<String>> e : snapshot.entrySet()) {
-                section.set(String.valueOf(e.getKey()), e.getValue());
+            for (Map.Entry<String, List<String>> e : snapshot.entrySet()) {
+                section.set(e.getKey(), e.getValue());
             }
             yaml.set(ORPHANS_KEY, orphanSnapshot);
             yaml.save(tmpFile);
@@ -171,6 +200,40 @@ public final class PendingStampsStore {
         if (task != null) {
             task.cancel();
             task = null;
+        }
+    }
+
+    private Region findRegion(String id) {
+        if (regions == null || id == null) return null;
+        Region exact = regions.get(id);
+        if (exact != null) return exact;
+        Region found = null;
+        for (Region region : regions.values()) {
+            if (!region.id().equals(id) || region.worldName() == null || region.worldName().isBlank()) continue;
+            if (found != null && !found.worldName().equals(region.worldName())) return null;
+            found = region;
+        }
+        return found;
+    }
+
+    private void migrateOrphans(Collection<String> loadedOrphans) {
+        int expanded = 0;
+        for (String orphan : loadedOrphans) {
+            if (orphan == null || orphan.isBlank() || orphan.indexOf(':') >= 0 || regions == null) {
+                if (orphan != null && !orphan.isBlank()) orphanedRegions.add(orphan);
+                continue;
+            }
+            orphanedRegions.remove(orphan);
+            List<org.bukkit.World> worlds = plugin.getServer().getWorlds();
+            for (org.bukkit.World world : worlds) {
+                if (regions.containsKey(RegionRegistry.keyOf(world.getName(), orphan))) continue;
+                orphanedRegions.add(ProtectionManager.keyOf(world.getName(), orphan));
+                expanded++;
+            }
+        }
+        if (expanded > 0) {
+            plugin.getLogger().info("Expanded " + expanded
+                    + " legacy world-less orphan pointer(s) into world-scoped entries");
         }
     }
 }

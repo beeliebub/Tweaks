@@ -7,6 +7,7 @@ import me.beeliebub.tweaks.permissions.PermissionManager;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.protection.region.ProtectionManager;
 import me.beeliebub.tweaks.protection.region.Region;
+import me.beeliebub.tweaks.protection.region.RegionFlag;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -15,6 +16,7 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -22,90 +24,89 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * Shared collaborators and boilerplate every {@link RegionSubcommand} needs — the "9 of 14
- * handlers" region-lookup/permission/tab-suggestion helpers that used to live directly on
- * {@code ProtectionCommand}.
- */
 final class RegionCommandContext {
 
-    /**
-     * Cap on region-name suggestions per tab keypress. Applied BEFORE prefix filtering (walking
-     * the live cache in iteration order and breaking once this many candidates have been
-     * collected) — on a server with more than this many regions, suggestions are effectively
-     * arbitrary-order-truncated. Pre-existing behavior, preserved as-is; see ui/CLAUDE.md.
-     */
     private static final int MAX_REGION_SUGGESTIONS = 100;
+    // Bukkit's enum-backed registries are not guaranteed to be initialized
+    // when this command class is loaded by an isolated unit test. Keep these
+    // derived lists lazy so class initialization itself remains side-effect free.
+    private static final class Names {
+        private static final List<String> BLOCK_MATERIAL_NAMES = materialNames();
+        private static final List<String> ENTITY_TYPE_NAMES = entityNames();
+    }
 
     final Tweaks plugin;
     final ProtectionManager protection;
     final RegionSelectionManager selections;
+    private final World scopeWorld;
+    private final boolean legacyBareLookup;
 
     RegionCommandContext(Tweaks plugin, ProtectionManager protection, RegionSelectionManager selections) {
+        this(plugin, protection, selections, null, false);
+    }
+
+    private RegionCommandContext(Tweaks plugin, ProtectionManager protection,
+                                 RegionSelectionManager selections, World scopeWorld,
+                                 boolean legacyBareLookup) {
         this.plugin = plugin;
         this.protection = protection;
         this.selections = selections;
+        this.scopeWorld = scopeWorld;
+        this.legacyBareLookup = legacyBareLookup;
+    }
+
+    RegionCommandContext withScope(World world) {
+        return new RegionCommandContext(plugin, protection, selections, world, false);
+    }
+
+    RegionCommandContext legacyBareLookup() {
+        return new RegionCommandContext(plugin, protection, selections, null, true);
+    }
+
+    World scopeWorld(CommandSender sender) {
+        return scopeWorld != null ? scopeWorld
+                : sender instanceof Player player ? player.getWorld() : null;
+    }
+
+    World requireWorld(CommandSender sender) {
+        World world = scopeWorld(sender);
+        if (world == null) sender.sendMessage(Messages.PROTECTION.text(Text.WORLD_REQUIRED));
+        return world;
+    }
+
+    boolean requireNamedRegionWorld(CommandSender sender, String[] args) {
+        return args.length == 0 || legacyBareLookup || scopeWorld(sender) != null || sender instanceof Player
+                || requireWorld(sender) != null;
     }
 
     PermissionManager permissions() {
         return plugin == null ? null : plugin.getPermissionManager();
     }
 
-    /**
-     * Checks whether sender holds `perm`, consulting both the Bukkit attachment (set on join)
-     * and PermissionManager's live effective-permission calculation (handles the case where
-     * permissions were granted after the player joined and the attachment hasn't been
-     * refreshed yet).
-     */
-    boolean hasPerm(CommandSender sender, String perm) {
-        if (sender.hasPermission(perm)) return true;
+    boolean hasPerm(CommandSender sender, String permission) {
+        if (sender.hasPermission(permission)) return true;
         if (!(sender instanceof Player player)) return false;
         PermissionManager pm = permissions();
-        return pm != null && pm.calculateEffectivePermissions(player.getUniqueId()).contains(perm);
+        return pm != null && pm.calculateEffectivePermissions(player.getUniqueId()).contains(permission);
     }
 
     Region resolveRegion(CommandSender sender, String name) {
-        // Per-world globals are addressed via the caller's world. Lazy-init so an admin's
-        // first /region flag __global__ ... in a fresh world materialises the region instead
-        // of returning "no region named '__global__'".
-        if (ProtectionManager.GLOBAL_REGION_ID.equals(name)) {
-            if (sender instanceof Player p) {
-                return protection.globalRegion(p.getWorld());
-            }
-            return null;
+        World world = scopeWorld(sender);
+        // A real Bukkit Player always has a world. The null-world branch is
+        // only a compatibility seam for isolated command tests and legacy
+        // world-less regions; it probes the bare legacy key only and never
+        // searches another world's composite entries.
+        if (world == null) {
+            return (sender instanceof Player || legacyBareLookup) ? protection.byName(null, name) : null;
         }
-        if (sender instanceof Player p) {
-            Region scoped = protection.byName(p.getWorld(), name);
-            if (scoped != null) return scoped;
-        }
-        return protection.byNameAnyWorld(name);
+        if (ProtectionManager.GLOBAL_REGION_ID.equals(name)) return protection.globalRegion(world);
+        return protection.byName(world, name);
     }
 
-    /**
-     * World context for the mutator overloads. Returns the player's world for player senders
-     * so global-region writes land in the right per-world entry; null for console (which falls
-     * back to byNameAnyWorld for non-globals).
-     */
     static World senderWorld(CommandSender sender) {
-        return (sender instanceof Player p) ? p.getWorld() : null;
+        return sender instanceof Player player ? player.getWorld() : null;
     }
 
-    /**
-     * Sends {@code handler}'s own usage entry (permission-filtered). Unlike the pre-split
-     * {@code showUsage(sender, literalPrefix)}, this takes the handler directly rather than
-     * string-matching a syntax prefix against a shared table — a rebuilt syntax string that
-     * differed by one character used to silently fall through to the full root-usage listing
-     * instead of the intended single-line usage message. Passing the handler removes that failure
-     * mode entirely.
-     *
-     * <p>Every entry in {@code handler.usage()} today shares the same permission the caller
-     * already checked before invoking {@code execute()}, so the loop's {@code continue} branch
-     * never actually fires in practice — but nothing enforces that the two stay in sync. If a
-     * future usage entry is ever given a stricter permission than the handler's own gate, the
-     * fallback below still shows the first entry unconditionally rather than sending nothing:
-     * the sender already passed the handler's permission gate to reach this call, so there's no
-     * information-disclosure risk in displaying its usage.
-     */
     void showUsage(CommandSender sender, RegionSubcommand handler) {
         List<RegionUsageEntry> entries = handler.usage();
         RegionUsageEntry toShow = null;
@@ -114,7 +115,7 @@ final class RegionCommandContext {
             toShow = entry;
             break;
         }
-        if (toShow == null && !entries.isEmpty()) toShow = entries.get(0);
+        if (toShow == null && !entries.isEmpty()) toShow = entries.getFirst();
         if (toShow == null) return;
         sender.sendMessage(Messages.PROTECTION.text(Text.USAGE_HEADER));
         sender.sendMessage(Messages.PROTECTION.usageLine(toShow.syntax(), toShow.description()));
@@ -122,71 +123,66 @@ final class RegionCommandContext {
 
     static String joinFrom(String[] args, int fromIndex) {
         if (fromIndex >= args.length) return "";
-        StringBuilder sb = new StringBuilder();
+        StringBuilder joined = new StringBuilder();
         for (int i = fromIndex; i < args.length; i++) {
-            if (i > fromIndex) sb.append(' ');
-            sb.append(args[i]);
+            if (i > fromIndex) joined.append(' ');
+            joined.append(args[i]);
         }
-        return sb.toString();
+        return joined.toString();
     }
-
-    // ---- Tab-completion shared helpers ------------------------------------------
 
     static List<String> filterByPrefix(List<String> options, String partial) {
         String prefix = partial == null ? "" : partial.toLowerCase(Locale.ROOT);
         List<String> out = new ArrayList<>();
-        for (String opt : options) {
-            if (opt.toLowerCase(Locale.ROOT).startsWith(prefix)) out.add(opt);
+        for (String option : options) {
+            if (option.toLowerCase(Locale.ROOT).startsWith(prefix)) out.add(option);
         }
         return out;
     }
 
-    /**
-     * Region ID suggestions: admins see every region in their world (or every region for
-     * console); everyone else only sees regions they own in their current world.
-     *
-     * <p><b>Known asymmetry (pre-existing, preserved):</b> this filters by sender's world and
-     * ownership, but {@link #resolveRegion} falls back to any world — a typed-out region name
-     * can work where tab completion offered nothing. Intentional name-leak reduction, not a bug
-     * to converge.
-     */
     List<String> regionSuggestions(CommandSender sender, String partial) {
-        boolean admin = !(sender instanceof Player) || sender.hasPermission(Permissions.PROTECTION_ADMIN);
-        UUID actor = (sender instanceof Player p) ? p.getUniqueId() : null;
-        String senderWorld = (sender instanceof Player p) ? p.getWorld().getName() : null;
+        World world = scopeWorld(sender);
+        if (world == null) return List.of();
+        boolean admin = hasPerm(sender, Permissions.PROTECTION_ADMIN);
+        UUID actor = sender instanceof Player player ? player.getUniqueId() : null;
+        Set<String> groups = actor == null ? Set.of() : protection.groupsOf(actor);
         String prefix = partial == null ? "" : partial.toLowerCase(Locale.ROOT);
-
-        List<String> out = new ArrayList<>();
+        List<String> matches = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        for (Map.Entry<String, Region> entry : protection.regions().entrySet()) {
-            if (out.size() >= MAX_REGION_SUGGESTIONS) break;
-            Region region = entry.getValue();
-            if (!admin && (actor == null || !region.isOwner(actor))) continue;
-            if (senderWorld != null && region.worldName() != null
-                    && !region.worldName().equals(senderWorld)) continue;
-            String id = region.id();
-            if (!seen.add(id)) continue;
-            if (id.toLowerCase(Locale.ROOT).startsWith(prefix)) {
-                out.add(id);
+        for (Region region : protection.regions().values()) {
+            if (region.worldName() != null && !region.worldName().equals(world.getName())) continue;
+            if (!admin && (actor == null || (!region.isOwner(actor)
+                    && !region.isManager(actor, groups) && !region.isMember(actor, groups)))) continue;
+            if (seen.add(region.id()) && region.id().toLowerCase(Locale.ROOT).startsWith(prefix)) {
+                matches.add(region.id());
             }
         }
-        return out;
+        Region global = protection.globalRegion(world);
+        if (admin && global != null && seen.add(global.id())
+                && global.id().toLowerCase(Locale.ROOT).startsWith(prefix)) {
+            matches.add(global.id());
+        }
+        matches.sort(String.CASE_INSENSITIVE_ORDER);
+        return matches.size() > MAX_REGION_SUGGESTIONS
+                ? List.copyOf(matches.subList(0, MAX_REGION_SUGGESTIONS)) : matches;
     }
 
-    /** Suggest "group:<name>" for every group currently listed on the region, prefix-filtered. */
-    List<String> regionGroupSuggestions(String regionName, String prefix, boolean managers) {
-        Region r = protection.byNameAnyWorld(regionName);
-        if (r == null) return List.of();
-        List<String> groups = managers ? r.managerGroups() : r.memberGroups();
+    List<String> regionGroupSuggestions(World world, String regionName, String prefix, boolean managers) {
+        Region region = scopedRegion(world, regionName);
+        if (region == null) return List.of();
+        List<String> groups = managers ? region.managerGroups() : region.memberGroups();
         List<String> out = new ArrayList<>();
-        for (String g : groups) {
-            String suggestion = "group:" + g;
+        for (String group : groups) {
+            String suggestion = "group:" + group;
             if (suggestion.startsWith(prefix)) out.add(suggestion);
         }
         return out;
     }
 
-    /** Suggest "group:<name>" for every known permission group, prefix-filtered. */
+    List<String> regionGroupSuggestions(String regionName, String prefix, boolean managers) {
+        return regionGroupSuggestions(null, regionName, prefix, managers);
+    }
+
     List<String> allGroupSuggestions(String prefix) {
         PermissionManager pm = permissions();
         if (pm == null) return List.of();
@@ -199,41 +195,43 @@ final class RegionCommandContext {
     }
 
     @SuppressWarnings("deprecation")
-    List<String> regionMemberNames(String regionName, String prefix) {
-        Region r = protection.byNameAnyWorld(regionName);
-        if (r == null) return List.of();
+    List<String> regionMemberNames(World world, String regionName, String prefix) {
+        Region region = scopedRegion(world, regionName);
+        if (region == null) return List.of();
         List<String> out = new ArrayList<>();
-        for (UUID member : r.members()) {
-            var p = Bukkit.getOfflinePlayer(member);
-            String name = p.getName();
-            if (name != null && name.toLowerCase(Locale.ROOT).startsWith(prefix)) {
-                out.add(name);
-            }
+        for (UUID member : region.members()) {
+            String name = Bukkit.getOfflinePlayer(member).getName();
+            if (name != null && name.toLowerCase(Locale.ROOT).startsWith(prefix)) out.add(name);
+        }
+        return out;
+    }
+
+    @SuppressWarnings("deprecation")
+    List<String> regionMemberNames(String regionName, String prefix) {
+        return regionMemberNames(null, regionName, prefix);
+    }
+
+    @SuppressWarnings("deprecation")
+    List<String> regionManagerNames(World world, String regionName, String prefix) {
+        Region region = scopedRegion(world, regionName);
+        if (region == null) return List.of();
+        List<String> out = new ArrayList<>();
+        for (UUID manager : region.managers()) {
+            String name = Bukkit.getOfflinePlayer(manager).getName();
+            if (name != null && name.toLowerCase(Locale.ROOT).startsWith(prefix)) out.add(name);
         }
         return out;
     }
 
     @SuppressWarnings("deprecation")
     List<String> regionManagerNames(String regionName, String prefix) {
-        Region r = protection.byNameAnyWorld(regionName);
-        if (r == null) return List.of();
-        List<String> out = new ArrayList<>();
-        for (UUID manager : r.managers()) {
-            var p = Bukkit.getOfflinePlayer(manager);
-            String name = p.getName();
-            if (name != null && name.toLowerCase(Locale.ROOT).startsWith(prefix)) {
-                out.add(name);
-            }
-        }
-        return out;
+        return regionManagerNames(null, regionName, prefix);
     }
 
     static List<String> onlinePlayerNames(String prefix) {
         List<String> out = new ArrayList<>();
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            if (p.getName().toLowerCase(Locale.ROOT).startsWith(prefix)) {
-                out.add(p.getName());
-            }
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.getName().toLowerCase(Locale.ROOT).startsWith(prefix)) out.add(player.getName());
         }
         return out;
     }
@@ -247,8 +245,8 @@ final class RegionCommandContext {
         PermissionManager pm = permissions();
         if (pm != null) {
             for (String groupName : pm.getGroups().keySet()) {
-                String lower = groupName.toLowerCase(Locale.ROOT);
-                if (lower.startsWith(prefix)) out.add(lower);
+                String group = groupName.toLowerCase(Locale.ROOT);
+                if (group.startsWith(prefix)) out.add(group);
             }
         }
         return out;
@@ -257,31 +255,44 @@ final class RegionCommandContext {
     static List<String> blockMaterialNames(String partial) {
         String prefix = partial == null ? "" : partial.toLowerCase(Locale.ROOT);
         List<String> out = new ArrayList<>();
-        for (Material m : Material.values()) {
-            if (!m.isBlock()) continue;
-            String name = m.name().toLowerCase(Locale.ROOT);
-            if (name.startsWith(prefix)) out.add(name);
-        }
+        for (String name : Names.BLOCK_MATERIAL_NAMES) if (name.startsWith(prefix)) out.add(name);
         return out;
     }
 
     static List<String> entityTypeNames(String partial) {
         String prefix = partial == null ? "" : partial.toLowerCase(Locale.ROOT);
         List<String> out = new ArrayList<>();
-        for (EntityType t : EntityType.values()) {
-            String name = t.name().toLowerCase(Locale.ROOT);
-            if (name.startsWith(prefix)) out.add(name);
-        }
+        for (String name : Names.ENTITY_TYPE_NAMES) if (name.startsWith(prefix)) out.add(name);
         return out;
     }
 
     static List<String> flagNameSuggestions(String partial) {
         String prefix = partial == null ? "" : partial.toLowerCase(Locale.ROOT);
         List<String> out = new ArrayList<>();
-        for (var flag : me.beeliebub.tweaks.protection.region.RegionFlag.values()) {
-            String n = flag.name();
-            if (n.toLowerCase(Locale.ROOT).startsWith(prefix)) out.add(n);
+        for (RegionFlag flag : RegionFlag.values()) {
+            String name = flag.name();
+            if (name.toLowerCase(Locale.ROOT).startsWith(prefix)) out.add(name);
         }
         return out;
+    }
+
+    private Region scopedRegion(World world, String id) {
+        if (world == null) return protection.byName(null, id);
+        return ProtectionManager.GLOBAL_REGION_ID.equals(id)
+                ? protection.globalRegion(world) : protection.byName(world, id);
+    }
+
+    private static List<String> materialNames() {
+        List<String> names = new ArrayList<>();
+        for (Material material : Material.values()) {
+            if (material.isBlock()) names.add(material.name().toLowerCase(Locale.ROOT));
+        }
+        return Collections.unmodifiableList(names);
+    }
+
+    private static List<String> entityNames() {
+        List<String> names = new ArrayList<>();
+        for (EntityType type : EntityType.values()) names.add(type.name().toLowerCase(Locale.ROOT));
+        return Collections.unmodifiableList(names);
     }
 }

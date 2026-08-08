@@ -76,7 +76,7 @@ public final class RegionGUI {
         // the underlying auth model — mirrored by the same RegionAuth.isOwnerOrAdmin guard
         // inside openManagersMenu/handleAddManagerSubmission/handleRemoveManager(Group) below,
         // for defense in depth against a stale dialog reference.
-        if (RegionAuth.isOwnerOrAdmin(player, region)) {
+        if (RegionAuth.isOwnerOrAdmin(player, region, pm)) {
             buttons.add(dialogButton(
                     Messages.PROTECTION.text(Text.GUI_EDIT_MANAGERS),
                     Messages.PROTECTION.text(Text.GUI_EDIT_MANAGERS_TIP),
@@ -271,6 +271,10 @@ public final class RegionGUI {
 
     private static void cycleBooleanRule(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager,
                                          RegionFlag flag, FlagTarget target, Boolean current) {
+        if ((current == null || current) && target.type() == FlagTarget.Type.GROUP
+                && "default".equals(target.groupName())) {
+            RegionFlagEditor.warnDefaultGroupTarget(player, target, region.id());
+        }
         World w = worldOf(region);
         boolean ok;
         if (current == null) {
@@ -350,9 +354,12 @@ public final class RegionGUI {
             openMaterialListMenu(player, region, pm, permissionManager, flag, returnPage);
             return;
         }
-        pm.setMaterials(worldOf(region), region.id(), flag, current);
-        player.sendMessage(Messages.PROTECTION.text(Text.GUI_MATERIAL_REMOVED,
-                material.name(), flag.name()));
+        if (!pm.setMaterials(worldOf(region), region.id(), flag, current)) {
+            player.sendMessage(Messages.PROTECTION.text(Text.MATERIAL_NO_CHANGE));
+        } else {
+            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MATERIAL_REMOVED,
+                    material.name(), flag.name()));
+        }
         openMaterialListMenu(player, region, pm, permissionManager, flag, returnPage);
     }
 
@@ -387,8 +394,11 @@ public final class RegionGUI {
             openMaterialListMenu(player, region, pm, permissionManager, flag, 0);
             return;
         }
-        pm.setMaterials(worldOf(region), region.id(), flag, current);
-        player.sendMessage(Messages.PROTECTION.text(Text.GUI_MATERIAL_ADDED, m.name(), flag.name()));
+        if (!pm.setMaterials(worldOf(region), region.id(), flag, current)) {
+            player.sendMessage(Messages.PROTECTION.text(Text.MATERIAL_NO_CHANGE));
+        } else {
+            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MATERIAL_ADDED, m.name(), flag.name()));
+        }
         openMaterialListMenu(player, region, pm, permissionManager, flag, 0);
     }
 
@@ -456,9 +466,12 @@ public final class RegionGUI {
             openEntityListMenu(player, region, pm, permissionManager, flag, returnPage);
             return;
         }
-        pm.setEntities(worldOf(region), region.id(), flag, current);
-        player.sendMessage(Messages.PROTECTION.text(Text.GUI_ENTITY_REMOVED,
-                type.name(), flag.name()));
+        if (!pm.setEntities(worldOf(region), region.id(), flag, current)) {
+            player.sendMessage(Messages.PROTECTION.text(Text.ENTITY_NO_CHANGE));
+        } else {
+            player.sendMessage(Messages.PROTECTION.text(Text.GUI_ENTITY_REMOVED,
+                    type.name(), flag.name()));
+        }
         openEntityListMenu(player, region, pm, permissionManager, flag, returnPage);
     }
 
@@ -495,108 +508,18 @@ public final class RegionGUI {
             openEntityListMenu(player, region, pm, permissionManager, flag, 0);
             return;
         }
-        pm.setEntities(worldOf(region), region.id(), flag, current);
-        player.sendMessage(Messages.PROTECTION.text(Text.GUI_ENTITY_ADDED, t.name(), flag.name()));
+        if (!pm.setEntities(worldOf(region), region.id(), flag, current)) {
+            player.sendMessage(Messages.PROTECTION.text(Text.ENTITY_NO_CHANGE));
+        } else {
+            player.sendMessage(Messages.PROTECTION.text(Text.GUI_ENTITY_ADDED, t.name(), flag.name()));
+        }
         openEntityListMenu(player, region, pm, permissionManager, flag, 0);
     }
 
     // ---------------------------------------------------------- Members menu
 
     static void openMembersMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
-        openMembersMenu(player, region, pm, permissionManager, 0);
-    }
-
-    private static void openMembersMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, int page) {
-        Region fresh = refreshRegion(pm, region);
-        if (fresh == null) {
-            player.sendMessage(Messages.PROTECTION.text(Text.REGION_GONE));
-            return;
-        }
-        List<UUID> members = new ArrayList<>(fresh.members());
-        members.sort(java.util.Comparator.comparing(RegionGUI::lookupName, String.CASE_INSENSITIVE_ORDER));
-        List<String> memberGroups = new ArrayList<>(fresh.memberGroups());
-
-        // Combined roster: UUID members first, then groups. Total drives pagination.
-        int total = members.size() + memberGroups.size();
-        int totalPages = Math.max(1, (total + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * LIST_PAGE_SIZE;
-        int end = Math.min(start + LIST_PAGE_SIZE, total);
-
-        List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            if (i < members.size()) {
-                UUID uuid = members.get(i);
-                String name = lookupName(uuid);
-                buttons.add(dialogButton(
-                        Messages.PROTECTION.text(Text.GUI_MEMBER_REMOVE, name),
-                        Messages.PROTECTION.text(Text.GUI_MEMBER_REMOVE_TIP),
-                        p -> handleRemoveMember(p, fresh, pm, permissionManager, uuid, currentPage)));
-            } else {
-                String groupName = memberGroups.get(i - members.size());
-                buttons.add(dialogButton(
-                        Messages.PROTECTION.text(Text.GUI_GROUP_REMOVE, groupName),
-                        Messages.PROTECTION.text(Text.GUI_GROUP_REMOVE_TIP),
-                        p -> handleRemoveMemberGroup(p, fresh, pm, permissionManager, groupName, currentPage)));
-            }
-        }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                p -> openMembersMenu(p, fresh, pm, permissionManager, currentPage - 1),
-                p -> openMembersMenu(p, fresh, pm, permissionManager, currentPage + 1));
-
-        buttons.add(dialogButton(
-                Messages.PROTECTION.text(Text.GUI_ADD_MEMBER),
-                Messages.PROTECTION.text(Text.GUI_ADD_MEMBER_TIP),
-                p -> openAddMemberDialog(p, fresh, pm, permissionManager)));
-
-        ActionButton back = dialogButton(
-                Messages.PROTECTION.text(Text.GUI_BACK_REGION),
-                Messages.PROTECTION.text(Text.GUI_BACK_REGION_TIP),
-                p -> openRegionHub(p, fresh, pm, permissionManager));
-
-        DialogBase base = DialogBase.builder(Messages.PROTECTION.title(Text.GUI_MEMBERS_TITLE, fresh.id()))
-                .body(List.of(DialogBody.plainMessage(pageSummary(total,
-                        Text.GUI_WORD_MEMBER, Text.GUI_WORD_MEMBERS, currentPage, totalPages))))
-                .build();
-
-        Dialog dialog = Dialog.create(b -> b.empty()
-                .base(base)
-                .type(DialogType.multiAction(buttons)
-                        .columns(LIST_COLUMNS)
-                        .exitAction(back)
-                        .build()));
-        player.showDialog(dialog);
-    }
-
-    private static void handleRemoveMember(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, UUID target, int returnPage) {
-        if (!pm.removeMember(region.id(), target)) {
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MEMBER_NOT_PRESENT));
-        } else {
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MEMBER_REMOVED,
-                    lookupName(target), region.id()));
-        }
-        openMembersMenu(player, region, pm, permissionManager, returnPage);
-    }
-
-    private static void handleRemoveMemberGroup(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, String groupName, int returnPage) {
-        if (!pm.removeMemberGroup(region.id(), groupName)) {
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MEMBER_GROUP_NOT_PRESENT, groupName));
-        } else {
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MEMBER_GROUP_REMOVED,
-                    groupName, region.id()));
-        }
-        openMembersMenu(player, region, pm, permissionManager, returnPage);
-    }
-
-    private static void openAddMemberDialog(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
-        RegionGuiSupport.openTextInputDialog(player,
-                Messages.PROTECTION.title(Text.GUI_ADD_MEMBER_TITLE),
-                Messages.PROTECTION.text(Text.GUI_ADD_MEMBER_PROMPT, region.id()),
-                "player_name", Messages.PROTECTION.text(Text.GUI_INPUT_PLAYER_NAME), 16,
-                Messages.PROTECTION.text(Text.GUI_APPLY_NAME_TIP),
-                (p, name) -> handleAddMemberSubmission(p, region, pm, permissionManager, name),
-                p -> openMembersMenu(p, region, pm, permissionManager));
+        RegionMembershipGui.openMembersMenu(player, region, pm, permissionManager);
     }
 
     // Public for testing: routes a raw add-member input to the correct
@@ -604,239 +527,54 @@ public final class RegionGUI {
     // (already present) or invalid input. Keeps group-prefix detection in one
     // testable place that unit tests can exercise without a Paper Dialog.
     public static boolean routeAddMemberInput(Player player, Region region, ProtectionManager pm, String rawName) {
-        String trimmed = rawName == null ? "" : rawName.trim();
-        if (trimmed.toLowerCase(Locale.ROOT).startsWith("group:")) {
-            String groupName = trimmed.substring("group:".length()).trim();
-            if (groupName.isEmpty()) {
-                player.sendMessage(Messages.PROTECTION.text(Text.GUI_GROUP_NAME_REQUIRED));
-                return false;
-            }
-            if (!pm.addMemberGroup(region.id(), groupName)) {
-                player.sendMessage(Messages.PROTECTION.text(Text.GUI_MEMBER_GROUP_EXISTS, groupName));
-                return false;
-            }
-            // See RegionAuthGroupTest / MembershipSubcommands.member's matching warning — "default"
-            // is the implicit group every player without explicit assignments belongs to.
-            if ("default".equalsIgnoreCase(groupName)) {
-                player.sendMessage(Messages.PROTECTION.text(Text.MEMBER_GROUP_DEFAULT_WARNING, region.id()));
-            }
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MEMBER_GROUP_ADDED,
-                    groupName, region.id()));
-            return true;
-        }
-        return false; // not a group: prefix — caller handles player path
+        return RegionMembershipGui.routeAddMemberInput(player, region, pm, rawName);
     }
 
     // Public for testing: same routing for the add-manager dialog.
     public static boolean routeAddManagerInput(Player player, Region region, ProtectionManager pm, String rawName) {
-        String trimmed = rawName == null ? "" : rawName.trim();
-        if (trimmed.toLowerCase(Locale.ROOT).startsWith("group:")) {
-            String groupName = trimmed.substring("group:".length()).trim();
-            if (groupName.isEmpty()) {
-                player.sendMessage(Messages.PROTECTION.text(Text.GUI_GROUP_NAME_REQUIRED));
-                return false;
-            }
-            if (!pm.addManagerGroup(region.id(), groupName)) {
-                player.sendMessage(Messages.PROTECTION.text(Text.GUI_MANAGER_GROUP_EXISTS, groupName));
-                return false;
-            }
-            if ("default".equalsIgnoreCase(groupName)) {
-                player.sendMessage(Messages.PROTECTION.text(Text.MANAGER_GROUP_DEFAULT_WARNING, region.id()));
-            }
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MANAGER_GROUP_ADDED,
-                    groupName, region.id()));
-            return true;
-        }
-        return false; // not a group: prefix — caller handles player path
-    }
-
-    private static void handleAddMemberSubmission(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, String rawName) {
-        String trimmed = rawName == null ? "" : rawName.trim();
-        // Route group: prefix before the player-lookup path.
-        if (trimmed.toLowerCase(Locale.ROOT).startsWith("group:")) {
-            routeAddMemberInput(player, region, pm, trimmed);
-            openMembersMenu(player, region, pm, permissionManager);
-            return;
-        }
-        OfflinePlayer target = validatePlayerName(player, rawName);
-        if (target == null) {
-            openMembersMenu(player, region, pm, permissionManager);
-            return;
-        }
-        if (region.owner().equals(target.getUniqueId())) {
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_OWNER_MEMBER));
-            openMembersMenu(player, region, pm, permissionManager);
-            return;
-        }
-        if (!pm.addMember(region.id(), target.getUniqueId())) {
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MEMBER_EXISTS));
-        } else {
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MEMBER_ADDED,
-                    target.getName(), region.id()));
-        }
-        openMembersMenu(player, region, pm, permissionManager);
+        return RegionMembershipGui.routeAddManagerInput(player, region, pm, rawName);
     }
 
     // ---------------------------------------------------------- Managers menu
 
     static void openManagersMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
-        openManagersMenu(player, region, pm, permissionManager, 0);
+        RegionMembershipGui.openManagersMenu(player, region, pm, permissionManager);
     }
 
     // Package-visible (not private) so RegionGUIManagerAuthTest can exercise the owner-only
     // guard directly instead of via reflection.
     static void openManagersMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, int page) {
-        if (!RegionAuth.isOwnerOrAdmin(player, region)) {
-            player.sendMessage(Messages.PROTECTION.text(Text.MANAGER_EDIT_AUTH));
-            return;
-        }
-        Region fresh = refreshRegion(pm, region);
-        if (fresh == null) {
-            player.sendMessage(Messages.PROTECTION.text(Text.REGION_GONE));
-            return;
-        }
-        List<UUID> managers = new ArrayList<>(fresh.managers());
-        managers.sort(java.util.Comparator.comparing(RegionGUI::lookupName, String.CASE_INSENSITIVE_ORDER));
-        List<String> managerGroups = new ArrayList<>(fresh.managerGroups());
-
-        // Combined roster: UUID managers first, then groups. Total drives pagination.
-        int total = managers.size() + managerGroups.size();
-        int totalPages = Math.max(1, (total + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * LIST_PAGE_SIZE;
-        int end = Math.min(start + LIST_PAGE_SIZE, total);
-
-        List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            if (i < managers.size()) {
-                UUID uuid = managers.get(i);
-                String name = lookupName(uuid);
-                buttons.add(dialogButton(
-                        Messages.PROTECTION.text(Text.GUI_MEMBER_REMOVE, name),
-                        Messages.PROTECTION.text(Text.GUI_MANAGER_REMOVE_TIP),
-                        p -> handleRemoveManager(p, fresh, pm, permissionManager, uuid, currentPage)));
-            } else {
-                String groupName = managerGroups.get(i - managers.size());
-                buttons.add(dialogButton(
-                        Messages.PROTECTION.text(Text.GUI_GROUP_REMOVE, groupName),
-                        Messages.PROTECTION.text(Text.GUI_MANAGER_GROUP_REMOVE_TIP),
-                        p -> handleRemoveManagerGroup(p, fresh, pm, permissionManager, groupName, currentPage)));
-            }
-        }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                p -> openManagersMenu(p, fresh, pm, permissionManager, currentPage - 1),
-                p -> openManagersMenu(p, fresh, pm, permissionManager, currentPage + 1));
-
-        buttons.add(dialogButton(
-                Messages.PROTECTION.text(Text.GUI_ADD_MANAGER),
-                Messages.PROTECTION.text(Text.GUI_ADD_MEMBER_TIP),
-                p -> openAddManagerDialog(p, fresh, pm, permissionManager)));
-
-        ActionButton back = dialogButton(
-                Messages.PROTECTION.text(Text.GUI_BACK_REGION),
-                Messages.PROTECTION.text(Text.GUI_BACK_REGION_TIP),
-                p -> openRegionHub(p, fresh, pm, permissionManager));
-
-        DialogBase base = DialogBase.builder(Messages.PROTECTION.title(Text.GUI_MANAGERS_TITLE, fresh.id()))
-                .body(List.of(DialogBody.plainMessage(pageSummary(total,
-                        Text.GUI_WORD_MANAGER, Text.GUI_WORD_MANAGERS, currentPage, totalPages))))
-                .build();
-
-        Dialog dialog = Dialog.create(b -> b.empty()
-                .base(base)
-                .type(DialogType.multiAction(buttons)
-                        .columns(LIST_COLUMNS)
-                        .exitAction(back)
-                        .build()));
-        player.showDialog(dialog);
+        RegionMembershipGui.openManagersMenu(player, region, pm, permissionManager, page);
     }
 
     // Package-visible (not private) so RegionGUIManagerAuthTest can exercise the owner-only
     // guard directly instead of via reflection.
     static void handleRemoveManager(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, UUID target, int returnPage) {
-        if (!RegionAuth.isOwnerOrAdmin(player, region)) {
-            player.sendMessage(Messages.PROTECTION.text(Text.MANAGER_EDIT_AUTH));
-            return;
-        }
-        if (!pm.removeManager(region.id(), target)) {
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MANAGER_NOT_PRESENT));
-        } else {
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MANAGER_DEMOTED,
-                    lookupName(target), region.id()));
-        }
-        openManagersMenu(player, region, pm, permissionManager, returnPage);
+        RegionMembershipGui.handleRemoveManager(player, region, pm, permissionManager, target, returnPage);
     }
 
     // Package-visible (not private) so RegionGUIManagerAuthTest can exercise the owner-only
     // guard directly instead of via reflection.
     static void handleRemoveManagerGroup(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, String groupName, int returnPage) {
-        if (!RegionAuth.isOwnerOrAdmin(player, region)) {
-            player.sendMessage(Messages.PROTECTION.text(Text.MANAGER_EDIT_AUTH));
-            return;
-        }
-        if (!pm.removeManagerGroup(region.id(), groupName)) {
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MANAGER_GROUP_NOT_PRESENT, groupName));
-        } else {
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MANAGER_GROUP_REMOVED,
-                    groupName, region.id()));
-        }
-        openManagersMenu(player, region, pm, permissionManager, returnPage);
+        RegionMembershipGui.handleRemoveManagerGroup(player, region, pm, permissionManager, groupName, returnPage);
     }
 
     // Package-visible (not private) so RegionGUIManagerAuthTest can exercise the owner-only
     // guard directly instead of via reflection.
     static void openAddManagerDialog(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
-        if (!RegionAuth.isOwnerOrAdmin(player, region)) {
-            player.sendMessage(Messages.PROTECTION.text(Text.MANAGER_EDIT_AUTH));
-            return;
-        }
-        RegionGuiSupport.openTextInputDialog(player,
-                Messages.PROTECTION.title(Text.GUI_ADD_MANAGER_TITLE),
-                Messages.PROTECTION.text(Text.GUI_ADD_MANAGER_PROMPT, region.id()),
-                "player_name", Messages.PROTECTION.text(Text.GUI_INPUT_PLAYER_NAME), 16,
-                Messages.PROTECTION.text(Text.GUI_APPLY_NAME_TIP),
-                (p, name) -> handleAddManagerSubmission(p, region, pm, permissionManager, name),
-                p -> openManagersMenu(p, region, pm, permissionManager));
+        RegionMembershipGui.openAddManagerDialog(player, region, pm, permissionManager);
     }
 
     // Package-visible (not private) so RegionGUIManagerAuthTest can exercise the owner-only
     // guard directly instead of via reflection.
     static void handleAddManagerSubmission(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, String rawName) {
-        if (!RegionAuth.isOwnerOrAdmin(player, region)) {
-            player.sendMessage(Messages.PROTECTION.text(Text.MANAGER_EDIT_AUTH));
-            return;
-        }
-        String trimmed = rawName == null ? "" : rawName.trim();
-        // Route group: prefix before the player-lookup path.
-        if (trimmed.toLowerCase(Locale.ROOT).startsWith("group:")) {
-            routeAddManagerInput(player, region, pm, trimmed);
-            openManagersMenu(player, region, pm, permissionManager);
-            return;
-        }
-        OfflinePlayer target = validatePlayerName(player, rawName);
-        if (target == null) {
-            openManagersMenu(player, region, pm, permissionManager);
-            return;
-        }
-        if (region.owner().equals(target.getUniqueId())) {
-            player.sendMessage(Messages.PROTECTION.text(Text.OWNER_MANAGER));
-            openManagersMenu(player, region, pm, permissionManager);
-            return;
-        }
-        if (!pm.addManager(region.id(), target.getUniqueId())) {
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MANAGER_EXISTS));
-        } else {
-            player.sendMessage(Messages.PROTECTION.text(Text.GUI_MANAGER_PROMOTED,
-                    target.getName(), region.id()));
-        }
-        openManagersMenu(player, region, pm, permissionManager);
+        RegionMembershipGui.handleAddManagerSubmission(player, region, pm, permissionManager, rawName);
     }
 
     // Resolve a raw name from the input field to an OfflinePlayer with a real
     // UUID. Returns null and notifies the player on any validation failure.
     @SuppressWarnings("deprecation") // getOfflinePlayer(String) is the only sync path from a literal name.
-    private static OfflinePlayer validatePlayerName(Player actor, String rawName) {
+    static OfflinePlayer validatePlayerName(Player actor, String rawName) {
         String trimmed = rawName == null ? "" : rawName.trim();
         if (trimmed.isEmpty()) {
             actor.sendMessage(Messages.PROTECTION.text(Text.GUI_INVALID_PLAYER));
@@ -853,7 +591,7 @@ public final class RegionGUI {
     // -------------------------------------------------------- Sub-regions menu
 
     static void openSubRegionsMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
-        if (!RegionAuth.isOwnerOrAdmin(player, region)) {
+        if (!RegionAuth.isOwnerOrAdmin(player, region, pm)) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_SUBREGION_AUTH));
             return;
         }
@@ -899,7 +637,8 @@ public final class RegionGUI {
     }
 
     private static void handleUnsetParent(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
-        reportSetParentResult(player, region, pm, permissionManager, null, pm.setParent(region.id(), null));
+        reportSetParentResult(player, region, pm, permissionManager, null,
+                pm.setParent(worldOf(region), region.id(), null, RegionAuth.isAdmin(player, pm)));
     }
 
     private static void openSetParentDialog(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
@@ -919,22 +658,19 @@ public final class RegionGUI {
             openSubRegionsMenu(player, region, pm, permissionManager);
             return;
         }
-        Region parent = pm.byName(player.getWorld(), trimmed);
-        if (parent == null) {
-            parent = pm.byNameAnyWorld(trimmed);
-        }
+        Region parent = pm.byName(worldOf(region), trimmed);
         if (parent == null) {
             player.sendMessage(Messages.PROTECTION.text(Text.PARENT_UNKNOWN, trimmed));
             openSubRegionsMenu(player, region, pm, permissionManager);
             return;
         }
-        if (!RegionAuth.isOwnerOrAdmin(player, parent)) {
+        if (!RegionAuth.isOwnerOrAdmin(player, parent, pm)) {
             player.sendMessage(Messages.PROTECTION.text(Text.PARENT_TARGET_AUTH));
             openSubRegionsMenu(player, region, pm, permissionManager);
             return;
         }
         reportSetParentResult(player, region, pm, permissionManager, trimmed,
-                pm.setParent(region.id(), trimmed, RegionAuth.isAdmin(player)));
+                pm.setParent(worldOf(region), region.id(), trimmed, RegionAuth.isAdmin(player, pm)));
     }
 
     private static void reportSetParentResult(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager,
@@ -967,7 +703,7 @@ public final class RegionGUI {
     // ----------------------------------------------------- Unclaim confirmation
 
     static void openUnclaimConfirmation(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
-        if (!RegionAuth.isOwnerOrAdmin(player, region)) {
+        if (!RegionAuth.isOwnerOrAdmin(player, region, pm)) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_UNCLAIM_AUTH));
             return;
         }
@@ -991,7 +727,7 @@ public final class RegionGUI {
         body.add(DialogBody.plainMessage(
                 Messages.PROTECTION.text(Text.GUI_UNCLAIM_BODY)
                         .decoration(TextDecoration.ITALIC, false)));
-        int descendantCount = pm.descendantsOf(fresh.id()).size();
+        int descendantCount = pm.descendantsOf(worldOf(fresh), fresh.id()).size();
         if (descendantCount > 0) {
             body.add(DialogBody.plainMessage(
                     Messages.PROTECTION.text(Text.GUI_UNCLAIM_BODY_CASCADE, descendantCount)
@@ -1012,7 +748,7 @@ public final class RegionGUI {
     // Re-check authorization when the callback runs so a stale dialog cannot bypass the
     // owner/admin gate.
     private static void handleUnclaim(Player player, Region region, ProtectionManager pm) {
-        if (!RegionAuth.isOwnerOrAdmin(player, region)) {
+        if (!RegionAuth.isOwnerOrAdmin(player, region, pm)) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_UNCLAIM_AUTH));
             return;
         }
@@ -1044,8 +780,8 @@ public final class RegionGUI {
     // World context for a region's mutator calls. Per-world regions (including
     // the per-world globals) carry their worldName; passing it to the World-aware
     // mutator overloads routes the write to the correct cache entry. Legacy
-    // null-world regions fall through to the byNameAnyWorld path via null.
-    private static World worldOf(Region region) {
+    // Legacy null-world regions use the bare-key compatibility lookup.
+    static World worldOf(Region region) {
         return RegionGuiSupport.worldOf(region);
     }
 

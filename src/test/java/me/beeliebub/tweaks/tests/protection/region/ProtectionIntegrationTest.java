@@ -65,12 +65,13 @@ class ProtectionIntegrationTest {
 
         Set<String> pending = ConcurrentHashMap.newKeySet();
         pending.add("home");
-        protection.pendingStamps().put(key, pending);
+        String stampKey = ProtectionManager.stampKey(world.getName(), key);
+        protection.pendingStamps().put(stampKey, pending);
 
         ChunkLoadEvent event = new ChunkLoadEvent(chunk, false);
         server.getPluginManager().callEvent(event);
 
-        assertFalse(protection.pendingStamps().containsKey(key),
+        assertFalse(protection.pendingStamps().containsKey(stampKey),
                 "ChunkListener must drain the pending entry on load");
         assertTrue(PDCUtil.read(chunk, protection.regionPointersKey()).contains("home"),
                 "PDC must carry the stamped region pointer");
@@ -82,7 +83,7 @@ class ProtectionIntegrationTest {
         PDCUtil.append(chunk, "dead", protection.regionPointersKey());
         assertTrue(PDCUtil.read(chunk, protection.regionPointersKey()).contains("dead"));
 
-        protection.orphanedRegions().add("dead");
+        protection.orphanedRegions().add(world.getName() + ":dead");
         server.getPluginManager().callEvent(new ChunkLoadEvent(chunk, false));
 
         assertFalse(PDCUtil.read(chunk, protection.regionPointersKey()).contains("dead"),

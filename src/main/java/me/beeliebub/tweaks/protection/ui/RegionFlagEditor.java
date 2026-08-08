@@ -30,12 +30,20 @@ final class RegionFlagEditor {
     static int setFlag(CommandSender sender, ProtectionManager protection,
                        PermissionManager permissions,
                        String name, String flagToken, String rawValue) {
-        Region region = resolveRegionFor(sender, protection, name);
+        RegionCommandContext context = new RegionCommandContext(protection.plugin(), protection, null)
+                .legacyBareLookup();
+        return setFlag(context, sender, protection, permissions, name, flagToken, rawValue);
+    }
+
+    static int setFlag(RegionCommandContext context, CommandSender sender, ProtectionManager protection,
+                       PermissionManager permissions,
+                       String name, String flagToken, String rawValue) {
+        Region region = context.resolveRegion(sender, name);
         if (region == null) {
             sender.sendMessage(Messages.PROTECTION.text(Text.REGION_NOT_FOUND, name));
             return 0;
         }
-        if (!RegionAuth.isOwnerManagerOrAdmin(sender, region, protection)) {
+        if (!RegionAuth.isOwnerManagerOrAdmin(context, sender, region)) {
             sender.sendMessage(Messages.PROTECTION.text(Text.FLAG_EDIT_AUTH));
             return 0;
         }
@@ -49,30 +57,38 @@ final class RegionFlagEditor {
         }
 
         if (flag.isMaterialFlag()) {
-            return applyMaterialFlag(sender, protection, name, flag, trimmed);
+            return applyMaterialFlag(sender, protection, context.scopeWorld(sender), name, flag, trimmed);
         }
         if (flag.isEntityFlag()) {
-            return applyEntityFlag(sender, protection, name, flag, trimmed);
+            return applyEntityFlag(sender, protection, context.scopeWorld(sender), name, flag, trimmed);
         }
-        return applyBooleanFlag(sender, protection, permissions, name, flag, trimmed);
+        return applyBooleanFlag(sender, protection, permissions, context.scopeWorld(sender), name, flag, trimmed);
     }
 
     static int removeFlag(CommandSender sender, ProtectionManager protection,
                           PermissionManager permissions,
                           String name, String flagToken, String rawTarget) {
-        Region region = resolveRegionFor(sender, protection, name);
+        RegionCommandContext context = new RegionCommandContext(protection.plugin(), protection, null)
+                .legacyBareLookup();
+        return removeFlag(context, sender, protection, permissions, name, flagToken, rawTarget);
+    }
+
+    static int removeFlag(RegionCommandContext context, CommandSender sender, ProtectionManager protection,
+                          PermissionManager permissions,
+                          String name, String flagToken, String rawTarget) {
+        Region region = context.resolveRegion(sender, name);
         if (region == null) {
             sender.sendMessage(Messages.PROTECTION.text(Text.REGION_NOT_FOUND, name));
             return 0;
         }
-        if (!RegionAuth.isOwnerManagerOrAdmin(sender, region, protection)) {
+        if (!RegionAuth.isOwnerManagerOrAdmin(context, sender, region)) {
             sender.sendMessage(Messages.PROTECTION.text(Text.FLAG_EDIT_AUTH));
             return 0;
         }
         RegionFlag flag = parseFlagToken(sender, flagToken);
         if (flag == null) return 0;
 
-        World world = RegionCommandContext.senderWorld(sender);
+        World world = context.scopeWorld(sender);
         if (flag.isMaterialFlag()) {
             if (rawTarget != null) {
                 sender.sendMessage(Messages.PROTECTION.text(Text.MATERIAL_TARGET_WARNING,
@@ -164,14 +180,14 @@ final class RegionFlagEditor {
 
     private static int applyMaterialFlag(
             CommandSender sender, ProtectionManager protection,
-            String name, RegionFlag flag, String rawValue) {
+            World world, String name, RegionFlag flag, String rawValue) {
         EnumSet<Material> materials = parseMaterials(sender, rawValue);
         if (materials == null) return 0;
         if (materials.isEmpty()) {
             sender.sendMessage(Messages.PROTECTION.text(Text.MATERIAL_REQUIRED));
             return 0;
         }
-        if (!protection.setMaterials(RegionCommandContext.senderWorld(sender), name, flag, materials)) {
+        if (!protection.setMaterials(world, name, flag, materials)) {
             sender.sendMessage(Messages.PROTECTION.text(Text.MATERIAL_NO_CHANGE));
             return 0;
         }
@@ -182,14 +198,14 @@ final class RegionFlagEditor {
 
     private static int applyEntityFlag(
             CommandSender sender, ProtectionManager protection,
-            String name, RegionFlag flag, String rawValue) {
+            World world, String name, RegionFlag flag, String rawValue) {
         EnumSet<EntityType> entities = parseEntities(sender, rawValue);
         if (entities == null) return 0;
         if (entities.isEmpty()) {
             sender.sendMessage(Messages.PROTECTION.text(Text.ENTITY_REQUIRED));
             return 0;
         }
-        if (!protection.setEntities(RegionCommandContext.senderWorld(sender), name, flag, entities)) {
+        if (!protection.setEntities(world, name, flag, entities)) {
             sender.sendMessage(Messages.PROTECTION.text(Text.ENTITY_NO_CHANGE));
             return 0;
         }
@@ -200,7 +216,7 @@ final class RegionFlagEditor {
 
     private static int applyBooleanFlag(
             CommandSender sender, ProtectionManager protection, PermissionManager permissions,
-            String name, RegionFlag flag, String rawValue) {
+            World world, String name, RegionFlag flag, String rawValue) {
         String[] tokens = rawValue.split("\\s+");
         String boolToken = tokens[0].toLowerCase(Locale.ROOT);
         boolean value;
@@ -220,8 +236,9 @@ final class RegionFlagEditor {
         String rawTarget = (tokens.length == 2) ? tokens[1] : null;
         FlagTarget target = resolveTarget(sender, permissions, rawTarget);
         if (target == null) return 0;
+        warnDefaultGroupTarget(sender, target, name);
 
-        if (!protection.setFlag(RegionCommandContext.senderWorld(sender), name, flag, target, value)) {
+        if (!protection.setFlag(world, name, flag, target, value)) {
             sender.sendMessage(Messages.PROTECTION.text(Text.BOOLEAN_NO_CHANGE,
                     name, flag.name(), target.toKey(), value, name, flag.name()));
             return 0;
@@ -296,17 +313,9 @@ final class RegionFlagEditor {
         return target;
     }
 
-    private static Region resolveRegionFor(CommandSender sender, ProtectionManager protection, String name) {
-        if (ProtectionManager.GLOBAL_REGION_ID.equals(name)) {
-            if (sender instanceof org.bukkit.entity.Player p) {
-                return protection.globalRegion(p.getWorld());
-            }
-            return null;
+    static void warnDefaultGroupTarget(CommandSender sender, FlagTarget target, String regionName) {
+        if (target.type() == FlagTarget.Type.GROUP && "default".equals(target.groupName())) {
+            sender.sendMessage(Messages.PROTECTION.text(Text.MEMBER_GROUP_DEFAULT_WARNING, regionName));
         }
-        if (sender instanceof org.bukkit.entity.Player p) {
-            Region scoped = protection.byName(p.getWorld(), name);
-            if (scoped != null) return scoped;
-        }
-        return protection.byNameAnyWorld(name);
     }
 }

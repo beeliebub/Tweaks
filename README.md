@@ -1024,7 +1024,9 @@ Territory is claimed in **full-chunk increments**.
     - **Relaxed Input**: Clicking any block in a chunk anchors that entire chunk (no corner snapping required).
     - A particle outline will show your current selection.
     - Use `/region clear` (alias `/rg clear`) to drop your current selection.
-2.  **Claiming**: Run `/region claim <name>` to protect the selected chunks.
+2.  **Claiming**: Run `/region claim <name>` to protect the selected chunks. Names are trimmed,
+    lowercased, and must match `^[a-z0-9_-]{1,32}$`; `__global__`, `_deleted`, and `_legacy` are
+    reserved. Existing legacy names are loaded unchanged.
     - **Overlap Prevention**: You cannot claim territory that overlaps an existing region in the same world unless you own it.
     - **Per-World Uniqueness**: Region names are unique per world. Two regions can share a name (e.g., "home") if they are in different worlds.
 3.  **Visuals**: Use `/region info` while standing in a claim to see its boundaries and details.
@@ -1047,6 +1049,12 @@ Regions support multiple roles and hierarchical parenting.
   - **Ownership**: A sub-region must share its parent's owner, and nesting requires owning both regions (or being an admin).
   - **Cascade Unclaim**: Unclaiming a region permanently deletes all of its sub-regions and refunds each region to its own owner.
   - Membership is independent; being a member of a parent does not automatically make you a member of its children.
+
+All named-region commands resolve in the sender's current world. An admin may append a loaded world
+name (`/region info home nether`) to address another world; the trailing-world token is consumed only
+for admins when the subcommand's minimum arguments remain. Console/RCON callers must provide the world
+argument and receive an explicit world-required message otherwise. Same-named regions remain isolated
+per world, including pending chunk stamps, orphan cleanup, and `__global__` wilderness flags.
 
 ### Advanced Flags & Targeting
 
@@ -1156,20 +1164,20 @@ When an action occurs, the system checks rules in this order:
 | `/ranks edit` | `tweaks.admin.ranks` | Open the visual rank editor. |
 | `/rank set <player> <rank_id/name>` | `tweaks.admin.rank.set` | Manually assign a player's rank. |
 | `/region claim <name>` | `tweaks.protection.purchaseable` | Claim territory using wand selection. |
-| `/region unclaim <name>` | `tweaks.protection.unclaim` | Remove a region claim and permanently delete its sub-regions, refunding each owner. Alias: `/rg unclaim`. |
-| `/region info [name]` | `tweaks.protection.info` | Show region details. Alias: `/rg i`. |
-| `/region select <name>` | `tweaks.protection.info` | Restore wand selection to match a region. |
+| `/region unclaim <name> [world]` | `tweaks.protection.unclaim` | Remove a region claim and permanently delete its sub-regions, refunding each owner. Alias: `/rg unclaim`. |
+| `/region info [name] [world]` | `tweaks.protection.info` | Show region details. Alias: `/rg i`. |
+| `/region select <name> [world]` | `tweaks.protection.info` | Restore wand selection to match a region. |
 | `/region clear` | — | Drop the current wand selection. |
 | `/region wand` | — | Get the selection wand. |
-| `/region addmember <r> <p|group:name>` | `tweaks.protection.member` | Add a member (player or group) to a region. Alias: `/rg am`. |
-| `/region removemember <r> <p|group:name>` | `tweaks.protection.member` | Remove a member from a region. Alias: `/rg rm`. |
-| `/region addmanager <r> <p|group:name>` | `tweaks.protection.member` | Add a manager (player or group) to a region. Alias: `/rg aman`. |
-| `/region removemanager <r> <p|group:name>` | `tweaks.protection.member` | Remove a manager from a region. Alias: `/rg rman`. |
-| `/region flag [name] <f> <v...>` | `tweaks.protection.flag` | Set a targeted boolean or material flag. |
-| `/region unflag <r> <f> [t]` | `tweaks.protection.flag` | Remove a targeted flag rule or material list. |
-| `/region setparent <c> <p>` | `tweaks.protection.purchaseable` | Nest a region inside another; you must own both regions unless admin. |
-| `/region unsetparent <c>` | `tweaks.protection.purchaseable` | Remove region parenting. |
-| `/region gui [name]` | `tweaks.protection.info` | Open the dialog dashboard for a region. |
+| `/region addmember <r> <p|group:name> [world]` | `tweaks.protection.member` | Add a member (player or group) to a region. Alias: `/rg am`. |
+| `/region removemember <r> <p|group:name> [world]` | `tweaks.protection.member` | Remove a member from a region. Alias: `/rg rm`. |
+| `/region addmanager <r> <p|group:name> [world]` | `tweaks.protection.member` | Add a manager (player or group) to a region. Alias: `/rg aman`. |
+| `/region removemanager <r> <p|group:name> [world]` | `tweaks.protection.member` | Remove a manager from a region. Alias: `/rg rman`. |
+| `/region flag [name] <f> <v...> [world]` | `tweaks.protection.flag` | Set a targeted boolean or material flag. |
+| `/region unflag <r> <f> [t] [world]` | `tweaks.protection.flag` | Remove a targeted flag rule or material list. |
+| `/region setparent <c> <p> [world]` | `tweaks.protection.purchaseable` | Nest a region inside another; you must own both regions unless admin. |
+| `/region unsetparent <c> [world]` | `tweaks.protection.purchaseable` | Remove region parenting. |
+| `/region gui [name] [world]` | `tweaks.protection.info` | Open the dialog dashboard for a region. |
 | `/blackjack createtable <bet> [hexColor]` | `tweaks.blackjack.createtable` | Create button-linked Blackjack tables. |
 | `/blackjack removetable` | `tweaks.blackjack.removetable` | Remove a Blackjack table. |
 | `/roulette createboard <min> <max>` | `tweaks.roulette.createboard` | Begin Roulette board setup; right-click a button/lever to finalize. |

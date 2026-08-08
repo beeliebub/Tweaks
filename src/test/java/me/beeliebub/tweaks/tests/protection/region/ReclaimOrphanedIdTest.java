@@ -53,7 +53,7 @@ class ReclaimOrphanedIdTest {
         protection.regions().put("world:home", original);
         protection.setWriter(writer);
         protection.unclaim("home");
-        assertTrue(protection.orphanedRegions().contains("home"));
+        assertTrue(protection.orphanedRegions().contains("world:home"));
 
         World world = mock(World.class);
         when(world.getName()).thenReturn("world");
@@ -67,7 +67,7 @@ class ReclaimOrphanedIdTest {
         protection.claim(new Region("home", OWNER, List.of(), Map.of()), world,
                 0, 0, 15, 15).join();
 
-        assertFalse(protection.orphanedRegions().contains("home"));
+        assertFalse(protection.orphanedRegions().contains("world:home"));
         assertTrue(Files.exists(tmp.resolve("world/home.yml")),
                 "a reclaimed id must no longer be blocked by the old tombstone");
     }

@@ -28,6 +28,7 @@ final class UnclaimSubcommand implements RegionSubcommand {
 
     @Override public String name() { return "unclaim"; }
     @Override public String permission() { return Permissions.PROTECTION_UNCLAIM; }
+    @Override public int minArgs() { return 1; }
     @Override public List<RegionUsageEntry> usage() {
         return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_UNCLAIM_SYNTAX),
                 Messages.PROTECTION.value(Text.USAGE_UNCLAIM_DESCRIPTION),
@@ -38,6 +39,7 @@ final class UnclaimSubcommand implements RegionSubcommand {
     public void execute(RegionCommandContext ctx, CommandSender sender, String[] args) {
         if (args.length < 1) { ctx.showUsage(sender, this); return; }
         String name = args[0];
+        if (!ctx.requireNamedRegionWorld(sender, args)) return;
         if (ProtectionManager.GLOBAL_REGION_ID.equals(name)) {
             sender.sendMessage(Messages.PROTECTION.text(Text.GLOBAL_UNCLAIM_DENIED));
             return;
@@ -47,11 +49,11 @@ final class UnclaimSubcommand implements RegionSubcommand {
             sender.sendMessage(Messages.PROTECTION.text(Text.REGION_NOT_FOUND, name));
             return;
         }
-        if (!RegionAuth.isOwnerOrAdmin(sender, region)) {
+        if (!RegionAuth.isOwnerOrAdmin(ctx, sender, region)) {
             sender.sendMessage(Messages.PROTECTION.text(Text.UNCLAIM_OWNER_ONLY, name));
             return;
         }
-        int descendantCount = ctx.protection.descendantsOf(name).size();
+        int descendantCount = ctx.protection.descendantsOf(ctx.scopeWorld(sender), name).size();
         if (descendantCount > 0) {
             sender.sendMessage(Messages.PROTECTION.text(Text.UNCLAIM_CASCADE_WARNING, descendantCount));
         }
@@ -73,7 +75,8 @@ final class UnclaimSubcommand implements RegionSubcommand {
     static ProtectionManager.UnclaimOutcome unclaimWithRefund(CommandSender sender, ProtectionManager pm,
                                                               Region region) {
         String name = region.id();
-        ProtectionManager.UnclaimOutcome outcome = pm.unclaim(name);
+        org.bukkit.World world = region.worldName() == null ? null : Bukkit.getWorld(region.worldName());
+        ProtectionManager.UnclaimOutcome outcome = pm.unclaim(world, name);
         switch (outcome.result()) {
             case GLOBAL_DENIED -> sender.sendMessage(Messages.PROTECTION.text(Text.GLOBAL_UNCLAIM_DENIED));
             case UNKNOWN_REGION -> sender.sendMessage(Messages.PROTECTION.text(Text.REGION_NOT_FOUND, name));

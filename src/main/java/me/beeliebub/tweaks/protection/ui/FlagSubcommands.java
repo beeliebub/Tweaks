@@ -20,6 +20,7 @@ final class FlagSubcommands {
     static final class Flag implements RegionSubcommand {
         @Override public String name() { return "flag"; }
         @Override public String permission() { return Permissions.PROTECTION_FLAG; }
+        @Override public int minArgs() { return 3; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_FLAG_SYNTAX),
                     Messages.PROTECTION.value(Text.USAGE_FLAG_DESCRIPTION), Permissions.PROTECTION_FLAG));
@@ -30,12 +31,13 @@ final class FlagSubcommands {
             if (args.length < 2) { ctx.showUsage(sender, this); return; }
             String name = args[0];
             String flagToken = args[1];
+            if (!ctx.requireNamedRegionWorld(sender, args)) return;
             String rawValue = RegionCommandContext.joinFrom(args, 2);
             if (rawValue.isEmpty()) {
                 RegionFlagEditor.listSingleFlag(ctx, sender, name, flagToken);
                 return;
             }
-            RegionFlagEditor.setFlag(sender, ctx.protection, ctx.permissions(), name, flagToken, rawValue);
+            RegionFlagEditor.setFlag(ctx, sender, ctx.protection, ctx.permissions(), name, flagToken, rawValue);
         }
 
         @Override
@@ -68,6 +70,7 @@ final class FlagSubcommands {
     static final class Unflag implements RegionSubcommand {
         @Override public String name() { return "unflag"; }
         @Override public String permission() { return Permissions.PROTECTION_FLAG; }
+        @Override public int minArgs() { return 2; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_UNFLAG_SYNTAX),
                     Messages.PROTECTION.value(Text.USAGE_UNFLAG_DESCRIPTION),
@@ -80,7 +83,7 @@ final class FlagSubcommands {
             String name = args[0];
             String flagToken = args[1];
             String rawTarget = (args.length >= 3) ? args[2] : null;
-            RegionFlagEditor.removeFlag(sender, ctx.protection, ctx.permissions(), name, flagToken, rawTarget);
+            RegionFlagEditor.removeFlag(ctx, sender, ctx.protection, ctx.permissions(), name, flagToken, rawTarget);
         }
 
         @Override

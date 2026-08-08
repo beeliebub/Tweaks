@@ -23,7 +23,7 @@ class PendingStampsReconcileTest {
     void reconcilePrunesMissingRegionIdsAndRecordsThemAsOrphans(@TempDir Path tmp) throws Exception {
         Files.writeString(tmp.resolve("pending_stamps.yml"), """
                 stamps:
-                  '42':
+                  'world:42':
                     - missing-region
                 """);
         Tweaks plugin = mock(Tweaks.class);
@@ -33,12 +33,13 @@ class PendingStampsReconcileTest {
                 protection.pendingStamps(), protection.orphanedRegions());
 
         store.load();
-        assertEquals(Set.of("missing-region"), protection.pendingStamps().get(42L));
+        assertEquals(Set.of("missing-region"),
+                protection.pendingStamps().get(ProtectionManager.stampKey("world", 42L)));
 
         int pruned = protection.reconcilePendingStamps();
 
         assertEquals(1, pruned);
         assertTrue(protection.pendingStamps().isEmpty());
-        assertTrue(protection.orphanedRegions().contains("missing-region"));
+        assertTrue(protection.orphanedRegions().contains("world:missing-region"));
     }
 }

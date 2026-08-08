@@ -6,6 +6,7 @@ import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.protection.region.ProtectionManager;
 import me.beeliebub.tweaks.protection.region.Region;
 import me.beeliebub.tweaks.protection.region.RegionFlag;
+import me.beeliebub.tweaks.protection.region.RegionNames;
 import me.beeliebub.tweaks.utils.GeometryUtil;
 import me.beeliebub.tweaks.utils.InventoryUtil;
 import net.kyori.adventure.text.Component;
@@ -52,6 +53,7 @@ final class ClaimSubcommand implements RegionSubcommand {
 
     @Override public String name() { return "claim"; }
     @Override public String permission() { return Permissions.PROTECTION_PURCHASEABLE; }
+    @Override public int minArgs() { return 1; }
     @Override public List<RegionUsageEntry> usage() {
         return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_CLAIM_SYNTAX),
                 Messages.PROTECTION.value(Text.USAGE_CLAIM_DESCRIPTION),
@@ -65,7 +67,15 @@ final class ClaimSubcommand implements RegionSubcommand {
             sender.sendMessage(Messages.PROTECTION.text(Text.CLAIM_ONLY_PLAYERS));
             return;
         }
-        String name = args[0];
+        String name = RegionNames.normalize(args[0]);
+        if (!RegionNames.isValid(name)) {
+            sender.sendMessage(Messages.PROTECTION.text(Text.REGION_NAME_INVALID));
+            return;
+        }
+        if (RegionNames.isReserved(name)) {
+            sender.sendMessage(Messages.PROTECTION.text(Text.REGION_NAME_RESERVED, name));
+            return;
+        }
         if (ctx.protection.byName(player.getWorld(), name) != null) {
             sender.sendMessage(Messages.PROTECTION.text(Text.CLAIM_EXISTS_WORLD, name));
             return;
@@ -93,7 +103,7 @@ final class ClaimSubcommand implements RegionSubcommand {
 
         // Admin shortcut: skip limit + purchasable + payment. cost = 0 means
         // unclaim issues no refund (matches the "free" intent).
-        boolean adminBypass = player.hasPermission(Permissions.PROTECTION_ADMIN);
+        boolean adminBypass = ctx.hasPerm(player, Permissions.PROTECTION_ADMIN);
 
         int cost = 0;
         if (!adminBypass) {

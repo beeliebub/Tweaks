@@ -85,6 +85,7 @@ final class SelectionSubcommands {
     static final class Select implements RegionSubcommand {
         @Override public String name() { return "select"; }
         @Override public String permission() { return Permissions.PROTECTION_INFO; }
+        @Override public int minArgs() { return 1; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_SELECT_SYNTAX),
                     Messages.PROTECTION.value(Text.USAGE_SELECT_DESCRIPTION), Permissions.PROTECTION_INFO));
@@ -103,13 +104,14 @@ final class SelectionSubcommands {
                 return;
             }
             String name = args[0];
+            if (!ctx.requireNamedRegionWorld(sender, args)) return;
             Region region = ctx.resolveRegion(sender, name);
             if (region == null) {
                 sender.sendMessage(Messages.PROTECTION.text(Text.REGION_NOT_FOUND, name));
                 return;
             }
             boolean isOwner = region.isOwner(player.getUniqueId());
-            if (!isOwner && !player.hasPermission(Permissions.PROTECTION_ADMIN)) {
+            if (!isOwner && !RegionAuth.isAdmin(ctx, player)) {
                 sender.sendMessage(Messages.PROTECTION.text(Text.SELECT_AUTH, name));
                 return;
             }
@@ -119,7 +121,7 @@ final class SelectionSubcommands {
                 return;
             }
 
-            var sel = ctx.selections.getOrCreate(player, player.getWorld());
+            var sel = ctx.selections.getOrCreate(player, ctx.scopeWorld(player));
             sel.setPos1(GeometryUtil.chunkKey(bounds.minChunkX(), bounds.minChunkZ()));
             sel.setPos2(GeometryUtil.chunkKey(bounds.maxChunkX(), bounds.maxChunkZ()));
 

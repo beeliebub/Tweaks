@@ -62,6 +62,9 @@ import java.util.stream.Stream;
 //                        # flag chain (sub-region resolution).
 public final class RegionLoader {
 
+    public record LoadResult(int loaded, int skipped, int nonConformingNames) {}
+    private record ParseResult(Region region, boolean nonConformingName) {}
+
     private final Logger logger;
 
     public RegionLoader(Logger logger) {
@@ -72,9 +75,13 @@ public final class RegionLoader {
     // number of regions successfully loaded (skipped malformed files do
     // not count). Creates the directory on first boot if absent.
     public int load(File regionsDir, ConcurrentHashMap<String, Region> cache) {
+        return loadWithReport(regionsDir, cache).loaded();
+    }
+
+    public LoadResult loadWithReport(File regionsDir, ConcurrentHashMap<String, Region> cache) {
         if (!regionsDir.exists() && !regionsDir.mkdirs()) {
             logger.warning("Could not create regions directory " + regionsDir);
-            return 0;
+            return new LoadResult(0, 0, 0);
         }
 
         List<Path> files;
@@ -86,13 +93,20 @@ public final class RegionLoader {
                     .toList();
         } catch (IOException e) {
             logger.log(Level.SEVERE, "Failed to walk regions directory " + regionsDir, e);
-            return 0;
+            return new LoadResult(0, 0, 0);
         }
 
         int loaded = 0;
+        int skipped = 0;
+        int nonConformingNames = 0;
         for (Path path : files) {
-            Region region = parse(path.toFile());
-            if (region == null) continue;
+            ParseResult parsed = parse(path.toFile());
+            if (parsed == null || parsed.region() == null) {
+                skipped++;
+                continue;
+            }
+            Region region = parsed.region();
+            if (parsed.nonConformingName()) nonConformingNames++;
 
             String cacheKey = ProtectionManager.keyOf(region);
             Region clash = cache.putIfAbsent(cacheKey, region);
@@ -103,7 +117,7 @@ public final class RegionLoader {
                 loaded++;
             }
         }
-        return loaded;
+        return new LoadResult(loaded, skipped, nonConformingNames);
     }
 
     private static boolean isArchivePath(Path regionsDir, Path path) {
@@ -112,13 +126,28 @@ public final class RegionLoader {
                 && RegionWriter.ARCHIVE_DIR.equals(relative.getName(0).toString());
     }
 
-    private Region parse(File file) {
+    private ParseResult parse(File file) {
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
 
         String id = yaml.getString("id");
         if (id == null || id.isEmpty()) {
-            logger.warning("Skipping region file " + file.getName() + ": missing 'id'");
+            try {
+                if (Files.size(file.toPath()) > 0) {
+                    logger.warning("Skipping region file " + file.getName()
+                            + ": malformed or unreadable YAML");
+                } else {
+                    logger.warning("Skipping region file " + file.getName() + ": missing 'id'");
+                }
+            } catch (IOException e) {
+                logger.log(Level.WARNING, "Could not inspect region file " + file.getName(), e);
+            }
             return null;
+        }
+
+        boolean nonConformingName = !RegionNames.isValid(id);
+        if (nonConformingName) {
+            logger.warning("Region file " + file.getName() + " uses non-conforming region name '" + id
+                    + "'; loading it unchanged");
         }
 
         String ownerStr = yaml.getString("owner");
@@ -191,7 +220,8 @@ public final class RegionLoader {
         // they originally received.
         int cost = Math.max(0, yaml.getInt("cost", 0));
 
-        return new Region(id, owner, members, flagRules, materialFlags, parent, bounds, world, managers, entityFlags, cost, memberGroups, managerGroups);
+        return new ParseResult(new Region(id, owner, members, flagRules, materialFlags, parent, bounds,
+                world, managers, entityFlags, cost, memberGroups, managerGroups), nonConformingName);
     }
 
     // Detect and strip the `group:` prefix (case-insensitive) from a members/

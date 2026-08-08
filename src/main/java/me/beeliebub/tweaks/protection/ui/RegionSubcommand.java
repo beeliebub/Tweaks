@@ -34,6 +34,11 @@ interface RegionSubcommand {
     /** Required permission node, or {@code null} if this subcommand has no gate. */
     String permission();
 
+    /** Minimum number of post-subcommand arguments required by execute(). */
+    default int minArgs() {
+        return 0;
+    }
+
     /** False for aliases — they dispatch and tab-complete but contribute no usage line. */
     default boolean visibleInUsage() {
         return true;

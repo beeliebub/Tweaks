@@ -30,11 +30,14 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 // Consolidates the three protection-related listeners that previously lived in
@@ -79,9 +82,9 @@ public final class ProtectionListeners implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onChunkLoad(ChunkLoadEvent event) {
         Chunk chunk = event.getChunk();
-        long key = chunk.getChunkKey();
+        String stampKey = ProtectionManager.stampKey(chunk.getWorld().getName(), chunk.getChunkKey());
 
-        Set<String> pending = protection.pendingStamps().remove(key);
+        Set<String> pending = protection.pendingStamps().remove(stampKey);
         if (pending != null && !pending.isEmpty()) {
             PDCUtil.append(chunk, pending, protection.regionPointersKey());
         }
@@ -92,7 +95,7 @@ public final class ProtectionListeners implements Listener {
 
         Set<String> deadOnThisChunk = null;
         for (String id : current) {
-            if (orphaned.contains(id)) {
+            if (orphaned.contains(ProtectionManager.keyOf(chunk.getWorld().getName(), id))) {
                 if (deadOnThisChunk == null) deadOnThisChunk = new HashSet<>();
                 deadOnThisChunk.add(id);
                 continue;
@@ -111,6 +114,11 @@ public final class ProtectionListeners implements Listener {
             }
         }
         if (deadOnThisChunk != null) PDCUtil.remove(chunk, deadOnThisChunk, protection.regionPointersKey());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onWorldLoad(WorldLoadEvent event) {
+        protection.globalRegion(event.getWorld());
     }
 
     // ─── ProtectionListener (block/interact/explosion/spawn/damage) ───────────
@@ -226,8 +234,17 @@ public final class ProtectionListeners implements Listener {
     }
 
     private void filterExplosion(java.util.List<Block> blocks) {
-        blocks.removeIf(b -> !protection.isAllowed(
-                b.getLocation(), null, RegionFlag.EXPLOSION));
+        Map<Long, Boolean> verdicts = new HashMap<>();
+        blocks.removeIf(block -> {
+            Chunk chunk = block.getChunk();
+            // Mocked or synthetic Block implementations may not expose a
+            // Chunk; retain the correctness path without making the hot path
+            // throw before protection can evaluate the location.
+            long cacheKey = chunk == null ? System.identityHashCode(block) : chunk.getChunkKey();
+            boolean allowed = verdicts.computeIfAbsent(cacheKey,
+                    ignored -> protection.isAllowed(block.getLocation(), null, RegionFlag.EXPLOSION));
+            return !allowed;
+        });
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -272,7 +289,10 @@ public final class ProtectionListeners implements Listener {
     public void onPlayerMove(PlayerMoveEvent event) {
         Location from = event.getFrom();
         Location to = event.getTo();
-        if (from.getBlockX() == to.getBlockX() && from.getBlockZ() == to.getBlockZ()) return;
+        if (to == null) return;
+        if (from.getWorld() == to.getWorld()
+                && GeometryUtil.blockToChunk(from.getBlockX()) == GeometryUtil.blockToChunk(to.getBlockX())
+                && GeometryUtil.blockToChunk(from.getBlockZ()) == GeometryUtil.blockToChunk(to.getBlockZ())) return;
         Player player = event.getPlayer();
         if (!protection.isAllowed(to, player.getUniqueId(), RegionFlag.ENTRY)) {
             event.setCancelled(true);
@@ -283,11 +303,13 @@ public final class ProtectionListeners implements Listener {
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onPlayerRespawn(PlayerRespawnEvent event) {
         Location respawnLoc = event.getRespawnLocation();
+        org.bukkit.World world = respawnLoc.getWorld();
+        if (world == null) return;
+        int chunkX = GeometryUtil.blockToChunk(respawnLoc.getBlockX());
+        int chunkZ = GeometryUtil.blockToChunk(respawnLoc.getBlockZ());
+        if (!world.isChunkLoaded(chunkX, chunkZ)) return;
         if (!protection.isAllowed(respawnLoc, event.getPlayer().getUniqueId(), RegionFlag.ENTRY)) {
-            org.bukkit.World world = respawnLoc.getWorld();
-            if (world != null) {
-                event.setRespawnLocation(world.getSpawnLocation());
-            }
+            event.setRespawnLocation(world.getSpawnLocation());
         }
     }
 

@@ -9,6 +9,7 @@ import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.World;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -38,6 +39,9 @@ class SubRegionHierarchyTest {
         Chunk chunk = mock(Chunk.class);
         PersistentDataContainer pdc = mock(PersistentDataContainer.class);
         when(chunk.getPersistentDataContainer()).thenReturn(pdc);
+        World world = mock(World.class);
+        when(world.getName()).thenReturn("world");
+        when(chunk.getWorld()).thenReturn(world);
         doReturn(pdcIds).when(pdc).getOrDefault(any(NamespacedKey.class), any(), eq(List.of()));
         Location loc = mock(Location.class);
         when(loc.getChunk()).thenReturn(chunk);
@@ -46,7 +50,9 @@ class SubRegionHierarchyTest {
 
     private void putRegion(String id, UUID owner, List<UUID> members,
                           Map<RegionFlag, Map<FlagTarget, Boolean>> rules, String parent) {
-        mgr.regions().put(id, new Region(id, owner, members, rules, parent));
+        Region region = new Region(id, owner, members, rules, Map.of(), parent,
+                null, "world", List.of(), Map.of());
+        mgr.regions().put(ProtectionManager.keyOf("world", id), region);
     }
 
     // ---- setParent mutator ----
@@ -93,13 +99,15 @@ class SubRegionHierarchyTest {
     void setParentSwapsPointerAndPreservesEverythingElse() {
         Map<RegionFlag, Map<FlagTarget, Boolean>> rules =
                 Map.of(RegionFlag.PVP, Map.of(FlagTarget.DEFAULT, true));
-        mgr.regions().put("parent", new Region("parent", PARENT_OWNER, List.of(), Map.of()));
-        mgr.regions().put("child", new Region("child", CHILD_OWNER, List.of(OUTSIDER), rules));
+        mgr.regions().put("world:parent", new Region("parent", PARENT_OWNER, List.of(), Map.of(), Map.of(),
+                null, null, "world", List.of(), Map.of()));
+        mgr.regions().put("world:child", new Region("child", CHILD_OWNER, List.of(OUTSIDER), rules, Map.of(),
+                null, null, "world", List.of(), Map.of()));
 
         assertEquals(ProtectionManager.SetParentResult.OK,
                 mgr.setParent("child", "parent", true));
 
-        Region updated = mgr.regions().get("child");
+        Region updated = mgr.regions().get("world:child");
         assertEquals("parent", updated.parentId());
         assertEquals(CHILD_OWNER, updated.owner());
         assertEquals(List.of(OUTSIDER), updated.members());
@@ -112,7 +120,7 @@ class SubRegionHierarchyTest {
         putRegion("child", CHILD_OWNER, List.of(), Map.of(), "parent");
         assertEquals(ProtectionManager.SetParentResult.OK,
                 mgr.setParent("child", null));
-        assertNull(mgr.regions().get("child").parentId());
+        assertNull(mgr.regions().get("world:child").parentId());
     }
 
     // ---- isAllowed with hierarchy ----

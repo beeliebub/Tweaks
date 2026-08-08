@@ -44,12 +44,12 @@ class RegionUnclaimCascadeTest {
         }
         protection.setWriter(writer);
         for (long key : new long[] {1L, 2L, 3L}) {
-            protection.pendingStamps().put(key,
+            protection.pendingStamps().put(ProtectionManager.stampKey("world", key),
                     ConcurrentHashMap.newKeySet());
         }
-        protection.pendingStamps().get(1L).add("parent");
-        protection.pendingStamps().get(2L).add("child");
-        protection.pendingStamps().get(3L).add("grandchild");
+        protection.pendingStamps().get(ProtectionManager.stampKey("world", 1L)).add("parent");
+        protection.pendingStamps().get(ProtectionManager.stampKey("world", 2L)).add("child");
+        protection.pendingStamps().get(ProtectionManager.stampKey("world", 3L)).add("grandchild");
 
         ProtectionManager.UnclaimOutcome outcome = protection.unclaim("parent");
 
@@ -57,7 +57,7 @@ class RegionUnclaimCascadeTest {
         assertEquals(List.of("grandchild", "child", "parent"),
                 outcome.destroyed().stream().map(Region::id).toList());
         for (String id : List.of("parent", "child", "grandchild")) {
-            assertTrue(protection.orphanedRegions().contains(id));
+            assertTrue(protection.orphanedRegions().contains("world:" + id));
             assertFalse(protection.regions().containsKey("world:" + id));
             assertFalse(Files.exists(tmp.resolve("world/" + id + ".yml")));
         }

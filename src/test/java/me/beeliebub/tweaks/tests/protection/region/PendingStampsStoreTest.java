@@ -36,10 +36,10 @@ class PendingStampsStoreTest {
 
     @Test
     void writeNowCreatesFileAndRoundTripsBackIntoCache(@TempDir Path tmp) throws IOException {
-        ConcurrentHashMap<Long, Set<String>> stamps = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, Set<String>> stamps = new ConcurrentHashMap<>();
         Set<String> orphans = ConcurrentHashMap.newKeySet();
-        stamps.put(42L, newSet("home", "spawn"));
-        stamps.put(-1234567890123L, newSet("admin"));
+        stamps.put("world:42", newSet("home", "spawn"));
+        stamps.put("world:-1234567890123", newSet("admin"));
 
         PendingStampsStore writer = new PendingStampsStore(
                 pluginWithLogger(), tmp.toFile(), stamps, orphans);
@@ -47,18 +47,18 @@ class PendingStampsStoreTest {
 
         assertTrue(tmp.resolve("pending_stamps.yml").toFile().exists());
 
-        ConcurrentHashMap<Long, Set<String>> reloaded = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, Set<String>> reloaded = new ConcurrentHashMap<>();
         PendingStampsStore reader = new PendingStampsStore(
                 pluginWithLogger(), tmp.toFile(), reloaded, ConcurrentHashMap.newKeySet());
         reader.load();
 
-        assertEquals(Set.of("home", "spawn"), reloaded.get(42L));
-        assertEquals(Set.of("admin"), reloaded.get(-1234567890123L));
+        assertEquals(Set.of("home", "spawn"), reloaded.get("world:42"));
+        assertEquals(Set.of("admin"), reloaded.get("world:-1234567890123"));
     }
 
     @Test
     void loadIgnoresMissingFileAndPopulatesNothing(@TempDir Path tmp) {
-        ConcurrentHashMap<Long, Set<String>> stamps = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, Set<String>> stamps = new ConcurrentHashMap<>();
         PendingStampsStore store = new PendingStampsStore(
                 pluginWithLogger(), tmp.toFile(), stamps, ConcurrentHashMap.newKeySet());
         store.load();
@@ -80,28 +80,28 @@ class PendingStampsStoreTest {
 
     @Test
     void writeNowReplacesExistingYamlAtomically(@TempDir Path tmp) throws IOException {
-        ConcurrentHashMap<Long, Set<String>> first = new ConcurrentHashMap<>();
-        first.put(1L, newSet("alpha"));
+        ConcurrentHashMap<String, Set<String>> first = new ConcurrentHashMap<>();
+        first.put("world:1", newSet("alpha"));
         new PendingStampsStore(pluginWithLogger(), tmp.toFile(), first,
                 ConcurrentHashMap.newKeySet()).writeNow();
 
-        ConcurrentHashMap<Long, Set<String>> second = new ConcurrentHashMap<>();
-        second.put(2L, newSet("beta"));
+        ConcurrentHashMap<String, Set<String>> second = new ConcurrentHashMap<>();
+        second.put("world:2", newSet("beta"));
         new PendingStampsStore(pluginWithLogger(), tmp.toFile(), second,
                 ConcurrentHashMap.newKeySet()).writeNow();
 
-        ConcurrentHashMap<Long, Set<String>> reloaded = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, Set<String>> reloaded = new ConcurrentHashMap<>();
         new PendingStampsStore(pluginWithLogger(), tmp.toFile(), reloaded,
                 ConcurrentHashMap.newKeySet()).load();
 
-        assertNull(reloaded.get(1L));
-        assertEquals(Set.of("beta"), reloaded.get(2L));
+        assertNull(reloaded.get("world:1"));
+        assertEquals(Set.of("beta"), reloaded.get("world:2"));
     }
 
     @Test
     void writeNowLeavesNoLeftoverTmpFile(@TempDir Path tmp) throws IOException {
-        ConcurrentHashMap<Long, Set<String>> stamps = new ConcurrentHashMap<>();
-        stamps.put(7L, newSet("x"));
+        ConcurrentHashMap<String, Set<String>> stamps = new ConcurrentHashMap<>();
+        stamps.put("world:7", newSet("x"));
         new PendingStampsStore(pluginWithLogger(), tmp.toFile(), stamps,
                 ConcurrentHashMap.newKeySet()).writeNow();
 
@@ -115,8 +115,8 @@ class PendingStampsStoreTest {
         File missing = tmp.resolve("subdir").toFile();
         assertFalse(missing.exists());
 
-        ConcurrentHashMap<Long, Set<String>> stamps = new ConcurrentHashMap<>();
-        stamps.put(1L, newSet("a"));
+        ConcurrentHashMap<String, Set<String>> stamps = new ConcurrentHashMap<>();
+        stamps.put("world:1", newSet("a"));
         new PendingStampsStore(pluginWithLogger(), missing, stamps,
                 ConcurrentHashMap.newKeySet()).writeNow();
 
@@ -129,7 +129,7 @@ class PendingStampsStoreTest {
                 new ConcurrentHashMap<>(), ConcurrentHashMap.newKeySet());
         store.writeNow();
 
-        ConcurrentHashMap<Long, Set<String>> reloaded = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, Set<String>> reloaded = new ConcurrentHashMap<>();
         new PendingStampsStore(pluginWithLogger(), tmp.toFile(), reloaded,
                 ConcurrentHashMap.newKeySet()).load();
         assertTrue(reloaded.isEmpty());
@@ -139,25 +139,25 @@ class PendingStampsStoreTest {
     void loadSkipsNonNumericChunkKeys(@TempDir Path tmp) throws IOException {
         Files.writeString(tmp.resolve("pending_stamps.yml"), """
                 stamps:
-                  '42':
+                  'world:42':
                     - good
                   bogus:
                     - bad
                 """);
 
-        ConcurrentHashMap<Long, Set<String>> stamps = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, Set<String>> stamps = new ConcurrentHashMap<>();
         new PendingStampsStore(pluginWithLogger(), tmp.toFile(), stamps,
                 ConcurrentHashMap.newKeySet()).load();
 
         assertEquals(1, stamps.size());
-        assertEquals(Set.of("good"), stamps.get(42L));
+        assertEquals(Set.of("good"), stamps.get("world:42"));
     }
 
     @Test
     void snapshotIsDecoupledFromLiveMapMutationAfterCall(@TempDir Path tmp) throws IOException {
-        ConcurrentHashMap<Long, Set<String>> stamps = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, Set<String>> stamps = new ConcurrentHashMap<>();
         Set<String> live = newSet("frozen");
-        stamps.put(99L, live);
+        stamps.put("world:99", live);
 
         PendingStampsStore store = new PendingStampsStore(pluginWithLogger(), tmp.toFile(), stamps,
                 ConcurrentHashMap.newKeySet());
@@ -165,24 +165,24 @@ class PendingStampsStoreTest {
 
         // Mutate the live map after the write completes — must not affect the file.
         live.add("late");
-        stamps.put(100L, newSet("late2"));
+        stamps.put("world:100", newSet("late2"));
 
-        ConcurrentHashMap<Long, Set<String>> reloaded = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, Set<String>> reloaded = new ConcurrentHashMap<>();
         new PendingStampsStore(pluginWithLogger(), tmp.toFile(), reloaded,
                 ConcurrentHashMap.newKeySet()).load();
-        assertEquals(Set.of("frozen"), reloaded.get(99L));
-        assertNull(reloaded.get(100L));
+        assertEquals(Set.of("frozen"), reloaded.get("world:99"));
+        assertNull(reloaded.get("world:100"));
     }
 
     @Test
     void orphanIdsRoundTripThroughDisk(@TempDir Path tmp) throws IOException {
-        ConcurrentHashMap<Long, Set<String>> stamps = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, Set<String>> stamps = new ConcurrentHashMap<>();
         Set<String> orphans = ConcurrentHashMap.newKeySet();
         orphans.addAll(List.of("deleted-home", "deleted-spawn"));
 
         new PendingStampsStore(pluginWithLogger(), tmp.toFile(), stamps, orphans).writeNow();
 
-        ConcurrentHashMap<Long, Set<String>> reloadedStamps = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, Set<String>> reloadedStamps = new ConcurrentHashMap<>();
         Set<String> reloadedOrphans = ConcurrentHashMap.newKeySet();
         new PendingStampsStore(pluginWithLogger(), tmp.toFile(), reloadedStamps,
                 reloadedOrphans).load();

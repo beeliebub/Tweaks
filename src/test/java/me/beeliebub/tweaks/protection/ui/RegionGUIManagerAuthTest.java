@@ -123,7 +123,7 @@ class RegionGUIManagerAuthTest {
         // Sanity check on the predicate itself (no Dialog construction reached): an owner must
         // NOT be denied. We can't call the GUI methods for the owner path (they'd proceed into
         // Dialog construction, which MockBukkit can't do), so this pins RegionAuth directly.
-        assertFalse(!RegionAuth.isOwnerOrAdmin(ownerMock(), region),
+        assertFalse(!RegionAuth.isOwnerOrAdmin(ownerMock(), region, protection),
                 "owner must pass the same isOwnerOrAdmin gate the manager-menu methods use");
     }
 
