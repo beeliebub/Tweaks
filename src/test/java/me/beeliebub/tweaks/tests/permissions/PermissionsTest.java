@@ -160,6 +160,21 @@ class PermissionsTest {
                 "The union of getPermissionsByCategory over all categories must equal getAllPermissions()");
     }
 
+    @Test
+    void everyPermissionHasANonBlankHoverDescription() {
+        for (String permission : Permissions.getAllPermissions()) {
+            String description = Permissions.getDescription(permission);
+            assertNotNull(description, "Description must not be null for: " + permission);
+            assertFalse(description.isBlank(), "Description must not be blank for: " + permission);
+        }
+    }
+
+    @Test
+    void getDescriptionRejectsAnUnknownPermission() {
+        assertThrows(IllegalArgumentException.class,
+                () -> Permissions.getDescription("tweaks.nonexistent.permission.xyz"));
+    }
+
     /**
      * getCategory() must fall back to "tools" for an unknown permission string.
      */

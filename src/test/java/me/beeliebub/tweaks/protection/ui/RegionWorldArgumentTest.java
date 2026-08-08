@@ -50,6 +50,25 @@ class RegionWorldArgumentTest {
     }
 
     @Test
+    void optionalInfoNameMustPrecedeItsWorld() {
+        World world = MockBukkit.getMock().addSimpleWorld("info-world");
+        Tweaks plugin = mock(Tweaks.class);
+        RegionCommandContext context = new RegionCommandContext(plugin,
+                new ProtectionManager(plugin), mock(RegionSelectionManager.class));
+        RegionSubcommand info = new InfoSubcommands.Info();
+
+        RegionWorldArgument.Result firstToken = RegionWorldArgument.strip(
+                context, player(true), info, new String[] {world.getName()});
+        assertNull(firstToken.world());
+        assertArrayEquals(new String[] {world.getName()}, firstToken.args());
+
+        RegionWorldArgument.Result trailingToken = RegionWorldArgument.strip(
+                context, player(true), info, new String[] {"home", world.getName()});
+        assertSame(world, trailingToken.world());
+        assertArrayEquals(new String[] {"home"}, trailingToken.args());
+    }
+
+    @Test
     void consoleWithoutWorldIsRejectedByTheContext() {
         Tweaks plugin = mock(Tweaks.class);
         RegionCommandContext context = new RegionCommandContext(plugin,
@@ -70,6 +89,7 @@ class RegionWorldArgumentTest {
             public String name() { return "test"; }
             public String permission() { return null; }
             public int minArgs() { return minArgs; }
+            public boolean supportsWorldArgument() { return true; }
             public List<RegionUsageEntry> usage() { return List.of(); }
             public void execute(RegionCommandContext c, CommandSender s, String[] a) {}
             public List<String> tabComplete(RegionCommandContext c, CommandSender s, String[] a) { return List.of(); }

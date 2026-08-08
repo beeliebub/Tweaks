@@ -29,6 +29,7 @@ final class UnclaimSubcommand implements RegionSubcommand {
     @Override public String name() { return "unclaim"; }
     @Override public String permission() { return Permissions.PROTECTION_UNCLAIM; }
     @Override public int minArgs() { return 1; }
+    @Override public boolean supportsWorldArgument() { return true; }
     @Override public List<RegionUsageEntry> usage() {
         return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_UNCLAIM_SYNTAX),
                 Messages.PROTECTION.value(Text.USAGE_UNCLAIM_DESCRIPTION),

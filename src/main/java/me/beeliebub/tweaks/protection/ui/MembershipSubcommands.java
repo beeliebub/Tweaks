@@ -33,6 +33,7 @@ final class MembershipSubcommands {
         @Override public List<String> aliases() { return List.of(add ? "am" : "rm"); }
         @Override public String permission() { return Permissions.PROTECTION_MEMBER; }
         @Override public int minArgs() { return 2; }
+        @Override public boolean supportsWorldArgument() { return true; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(
                     Messages.PROTECTION.value(Text.USAGE_MEMBER_SYNTAX, name()),
@@ -61,6 +62,7 @@ final class MembershipSubcommands {
         @Override public List<String> aliases() { return List.of(add ? "aman" : "rman"); }
         @Override public String permission() { return Permissions.PROTECTION_MEMBER; }
         @Override public int minArgs() { return 2; }
+        @Override public boolean supportsWorldArgument() { return true; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(
                     Messages.PROTECTION.value(Text.USAGE_MANAGER_SYNTAX, name()),

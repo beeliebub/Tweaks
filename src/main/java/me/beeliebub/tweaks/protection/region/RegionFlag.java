@@ -5,7 +5,8 @@ package me.beeliebub.tweaks.protection.region;
 // the rule may be permissive or restrictive for the DEFAULT audience, the
 // region OWNER, MEMBER, or specific permission groups. A flag with no rule
 // at all falls back to the legacy default (members allowed, non-members
-// blocked).
+// blocked), except ENTRY, which is permissive until an ENTRY rule resolves
+// for the actor.
 //
 // Routing of Bukkit events to specific flags happens in ProtectionListener
 // (e.g. PlayerInteractEvent splits CONTAINER_ACCESS vs INTERACT vs REDSTONE

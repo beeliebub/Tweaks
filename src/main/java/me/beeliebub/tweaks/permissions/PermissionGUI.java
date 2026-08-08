@@ -171,6 +171,7 @@ public final class PermissionGUI {
     }
 
     private static void handleCreateGroupSubmission(Player player, PermissionManager manager, String rawName) {
+        if (!canManage(player)) return;
         String trimmed = rawName == null ? "" : rawName.trim();
         if (trimmed.isEmpty() || trimmed.contains(" ")) {
             player.sendMessage(Messages.PERMISSIONS.invalidGroupName());
@@ -206,10 +207,12 @@ public final class PermissionGUI {
                 Messages.PERMISSIONS.directPermissionsTooltip(group.getPermissions().size()),
                 p -> openGroupPermCategories(p, manager, name)));
 
-        buttons.add(dialogButton(
-                Messages.PERMISSIONS.manageMembersLabel(),
-                Messages.PERMISSIONS.manageMembersTooltip(),
-                p -> openGroupMembersToggle(p, manager, name, 0)));
+        if (!name.equalsIgnoreCase("default")) {
+            buttons.add(dialogButton(
+                    Messages.PERMISSIONS.manageMembersLabel(),
+                    Messages.PERMISSIONS.manageMembersTooltip(),
+                    p -> openGroupMembersToggle(p, manager, name, 0)));
+        }
 
         buttons.add(dialogButton(
                 Messages.PERMISSIONS.inheritanceLabel(),
@@ -249,9 +252,13 @@ public final class PermissionGUI {
             openGroupHub(player, manager, groupName);
             return;
         }
-        manager.getGroups().remove(groupName.toLowerCase());
+        if (!manager.deleteGroup(groupName)) {
+            openGroupsMenu(player, manager, 0);
+            return;
+        }
         manager.saveGroups();
-        refreshAllInGroupForPlayers(manager, groupName);
+        manager.saveUsers();
+        manager.refreshAllOnlinePlayers();
         player.sendMessage(Messages.PERMISSIONS.groupDeleted(groupName));
         openGroupsMenu(player, manager, 0);
     }
@@ -317,7 +324,7 @@ public final class PermissionGUI {
             String perm = catPerms.get(i);
             boolean has = group.hasDirectPermission(perm);
             Component label = Messages.PERMISSIONS.permissionToggleLabel(perm, has);
-            Component tip = Messages.PERMISSIONS.permissionToggleTooltip(has);
+            Component tip = Messages.PERMISSIONS.permissionToggleTooltip(perm, Permissions.getDescription(perm), has);
             buttons.add(dialogButton(label, tip,
                     p -> toggleGroupPermission(p, manager, name, perm, category, currentPage)));
         }
@@ -355,18 +362,22 @@ public final class PermissionGUI {
         if (group.hasDirectPermission(permission)) group.removePermission(permission);
         else group.addPermission(permission);
         manager.saveGroups();
-        refreshAllInGroupForPlayers(manager, group.getName());
+        manager.refreshAllOnlinePlayers();
         openGroupPerms(player, manager, group.getName(), category, returnPage);
     }
 
     public static void openGroupMembersToggle(Player player, PermissionManager manager, String groupName, int page) {
+        if (groupName.equalsIgnoreCase("default")) {
+            openGroupHub(player, manager, groupName);
+            return;
+        }
         PermissionGroup group = manager.getGroups().get(groupName.toLowerCase());
         if (group == null) {
             openGroupsMenu(player, manager, 0);
             return;
         }
         String name = group.getName();
-        List<UUID> all = listPlayers(manager, _ -> true);
+        List<UUID> all = knownPlayerIds(manager);
 
         int totalPages = Math.max(1, (all.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
         int currentPage = Math.max(0, Math.min(page, totalPages - 1));
@@ -380,9 +391,7 @@ public final class PermissionGUI {
             UserPermissions u = manager.getUsers().get(uuid);
             boolean isMember = u != null && u.hasGroup(name);
             String playerName = target.getName() == null ? uuid.toString() : target.getName();
-            String groupsLabel = (u == null || u.getGroups().isEmpty())
-                    ? "default"
-                    : String.join(", ", u.getGroups());
+            String groupsLabel = groupSummary(u);
 
             Component label = Messages.PERMISSIONS.playerMembershipLabel(playerName, isMember, NamedTextColor.GRAY);
             Component tip = Messages.PERMISSIONS.playerDetailsTooltip(target.isOnline(), groupsLabel, isMember);
@@ -415,6 +424,10 @@ public final class PermissionGUI {
     }
 
     private static void toggleGroupMembership(Player player, PermissionManager manager, String groupName, UUID target, int returnPage) {
+        if (groupName.equalsIgnoreCase("default")) {
+            openGroupHub(player, manager, groupName);
+            return;
+        }
         UserPermissions u = manager.getUserPermissions(target);
         if (u.hasGroup(groupName)) u.removeGroup(groupName);
         else u.addGroup(groupName);
@@ -487,7 +500,7 @@ public final class PermissionGUI {
         }
         group.setParentName(parentName == null ? null : parentName.toLowerCase());
         manager.saveGroups();
-        refreshAllInGroupForPlayers(manager, group.getName());
+        manager.refreshAllOnlinePlayers();
         player.sendMessage(Messages.PERMISSIONS.groupInheritanceSetFromGui(group.getName(), parentName));
         openGroupHub(player, manager, group.getName());
     }
@@ -495,7 +508,7 @@ public final class PermissionGUI {
     // ------------------------------------------------------------ Users list
 
     public static void openUsersMenu(Player player, PermissionManager manager, int page) {
-        List<UUID> uuids = listPlayers(manager, _ -> true);
+        List<UUID> uuids = onlinePlayerIds();
 
         int totalPages = Math.max(1, (uuids.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
         int currentPage = Math.max(0, Math.min(page, totalPages - 1));
@@ -508,9 +521,7 @@ public final class PermissionGUI {
             OfflinePlayer target = Bukkit.getOfflinePlayer(uuid);
             UserPermissions u = manager.getUsers().get(uuid);
             String playerName = target.getName() == null ? uuid.toString() : target.getName();
-            String groupsLabel = (u == null || u.getGroups().isEmpty())
-                    ? "default"
-                    : String.join(", ", u.getGroups());
+            String groupsLabel = groupSummary(u);
 
             Component label = Messages.PERMISSIONS.playerListLabel(playerName);
             Component tip = Messages.PERMISSIONS.playerListTooltip(target.isOnline(), groupsLabel);
@@ -586,6 +597,7 @@ public final class PermissionGUI {
     }
 
     private static void handleSearchPlayerSubmission(Player player, PermissionManager manager, String rawName) {
+        if (!canManage(player)) return;
         String trimmed = rawName == null ? "" : rawName.trim();
         if (trimmed.isEmpty()) {
             player.sendMessage(Messages.PERMISSIONS.invalidPlayerName());
@@ -607,9 +619,7 @@ public final class PermissionGUI {
         OfflinePlayer target = Bukkit.getOfflinePlayer(targetUuid);
         UserPermissions user = manager.getUserPermissions(targetUuid);
         String name = target.getName() == null ? targetUuid.toString() : target.getName();
-        String groupsLabel = user.getGroups().isEmpty()
-                ? "default"
-                : String.join(", ", user.getGroups());
+        String groupsLabel = groupSummary(user);
 
         List<ActionButton> buttons = new ArrayList<>();
 
@@ -713,7 +723,7 @@ public final class PermissionGUI {
             String perm = catPerms.get(i);
             boolean has = user.hasDirectPermission(perm);
             Component label = Messages.PERMISSIONS.permissionToggleLabel(perm, has);
-            Component tip = Messages.PERMISSIONS.permissionToggleTooltip(has);
+            Component tip = Messages.PERMISSIONS.permissionToggleTooltip(perm, Permissions.getDescription(perm), has);
             buttons.add(dialogButton(label, tip,
                     p -> toggleUserPermission(p, manager, targetUuid, perm, category, currentPage)));
         }
@@ -757,6 +767,7 @@ public final class PermissionGUI {
         String name = target.getName() == null ? targetUuid.toString() : target.getName();
 
         List<String> groupNames = new ArrayList<>(manager.getGroups().keySet());
+        groupNames.removeIf(groupKey -> groupKey.equalsIgnoreCase("default"));
         groupNames.sort(String.CASE_INSENSITIVE_ORDER);
 
         int totalPages = Math.max(1, (groupNames.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
@@ -800,6 +811,10 @@ public final class PermissionGUI {
     }
 
     private static void toggleUserGroup(Player player, PermissionManager manager, UUID targetUuid, String groupName, int returnPage) {
+        if (groupName.equalsIgnoreCase("default")) {
+            openUserGroupPicker(player, manager, targetUuid, returnPage);
+            return;
+        }
         UserPermissions u = manager.getUserPermissions(targetUuid);
         if (u.hasGroup(groupName)) u.removeGroup(groupName);
         else u.addGroup(groupName);
@@ -822,11 +837,18 @@ public final class PermissionGUI {
                 .action(DialogAction.customClick(
                         (_, audience) -> {
                             if (audience instanceof Player p) {
+                                if (!canManage(p)) return;
                                 action.accept(p);
                             }
                         },
                         unlimitedClicks()))
                 .build();
+    }
+
+    static boolean canManage(Player player) {
+        if (player.hasPermission(Permissions.ADMIN_PERMISSIONS)) return true;
+        player.sendMessage(Messages.noPermission());
+        return false;
     }
 
     private static Component joinLines(Component... lines) {
@@ -859,32 +881,35 @@ public final class PermissionGUI {
         if (p != null) manager.refreshPlayer(p);
     }
 
-    private static void refreshAllInGroupForPlayers(PermissionManager manager, String groupName) {
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            UserPermissions u = manager.getUsers().get(p.getUniqueId());
-            boolean inGroup;
-            if (u == null || u.getGroups().isEmpty()) {
-                inGroup = groupName.equalsIgnoreCase("default");
-            } else {
-                inGroup = u.hasGroup(groupName);
-            }
-            if (inGroup) {
-                manager.refreshPlayer(p);
-            }
-        }
+    static List<UUID> onlinePlayerIds() {
+        return Bukkit.getOnlinePlayers().stream()
+                .sorted(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER))
+                .map(Player::getUniqueId)
+                .toList();
     }
 
-    private static List<UUID> listPlayers(PermissionManager manager, java.util.function.Predicate<UUID> filter) {
+    private static List<UUID> knownPlayerIds(PermissionManager manager) {
         Set<UUID> all = new HashSet<>();
         Bukkit.getOnlinePlayers().forEach(p -> all.add(p.getUniqueId()));
         all.addAll(manager.getUsers().keySet());
 
         return all.stream()
-                .filter(filter)
                 .sorted(Comparator.comparing((UUID u) -> {
                     String n = Bukkit.getOfflinePlayer(u).getName();
                     return n == null ? u.toString() : n;
                 }, String.CASE_INSENSITIVE_ORDER))
                 .toList();
+    }
+
+    private static String groupSummary(UserPermissions user) {
+        List<String> names = new ArrayList<>();
+        names.add("default");
+        if (user != null) {
+            user.getGroups().stream()
+                    .filter(name -> !name.equalsIgnoreCase("default"))
+                    .sorted(String.CASE_INSENSITIVE_ORDER)
+                    .forEach(names::add);
+        }
+        return String.join(", ", names);
     }
 }

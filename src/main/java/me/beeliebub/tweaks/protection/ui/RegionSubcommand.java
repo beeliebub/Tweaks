@@ -39,6 +39,16 @@ interface RegionSubcommand {
         return 0;
     }
 
+    /** Whether this command grammar accepts an optional trailing world argument. */
+    default boolean supportsWorldArgument() {
+        return false;
+    }
+
+    /** Minimum arguments required before a trailing world can be consumed; defaults to execute's minimum. */
+    default int worldArgumentMinArgs() {
+        return minArgs();
+    }
+
     /** False for aliases — they dispatch and tab-complete but contribute no usage line. */
     default boolean visibleInUsage() {
         return true;

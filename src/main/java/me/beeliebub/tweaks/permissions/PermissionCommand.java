@@ -95,8 +95,10 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Messages.PERMISSIONS.defaultGroupCannotBeDeleted());
                     return true;
                 }
-                if (manager.getGroups().remove(name) != null) {
+                if (manager.deleteGroup(name)) {
                     manager.saveGroups();
+                    manager.saveUsers();
+                    manager.refreshAllOnlinePlayers();
                     sender.sendMessage(Messages.PERMISSIONS.groupDeleted(name));
                 } else {
                     sender.sendMessage(Messages.PERMISSIONS.groupNotFound());
@@ -114,7 +116,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 }
                 group.addPermission(args[3]);
                 manager.saveGroups();
-                refreshAllInGroup(name);
+                manager.refreshAllOnlinePlayers();
                 sender.sendMessage(Messages.PERMISSIONS.groupPermissionAdded(name));
             }
             case "delperm" -> {
@@ -129,7 +131,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 }
                 group.removePermission(args[3]);
                 manager.saveGroups();
-                refreshAllInGroup(name);
+                manager.refreshAllOnlinePlayers();
                 sender.sendMessage(Messages.PERMISSIONS.groupPermissionRemoved(name));
             }
             case "inherited-from" -> {
@@ -149,7 +151,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 }
                 group.setParentName(parent);
                 manager.saveGroups();
-                refreshAllInGroup(name);
+                manager.refreshAllOnlinePlayers();
                 sender.sendMessage(Messages.PERMISSIONS.groupInheritanceSet(name, parent));
             }
             default -> sender.sendMessage(Messages.PERMISSIONS.unknownAction());
@@ -250,21 +252,6 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
         Player player = Bukkit.getPlayer(uuid);
         if (player != null) {
             manager.refreshPlayer(player);
-        }
-    }
-
-    private void refreshAllInGroup(String groupName) {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            UserPermissions user = manager.getUsers().get(player.getUniqueId());
-            boolean inGroup;
-            if (user == null || user.getGroups().isEmpty()) {
-                inGroup = groupName.equalsIgnoreCase("default");
-            } else {
-                inGroup = user.hasGroup(groupName);
-            }
-            if (inGroup) {
-                manager.refreshPlayer(player);
-            }
         }
     }
 

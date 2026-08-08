@@ -82,8 +82,9 @@ public final class ProtectionCommand implements CommandExecutor, TabCompleter {
             return Collections.emptyList();
         }
         List<String> suggestions = new java.util.ArrayList<>(handler.tabComplete(ctx, sender, args));
-        if (ctx.hasPerm(sender, me.beeliebub.tweaks.permissions.Permissions.PROTECTION_ADMIN)
-                && args.length - 1 > handler.minArgs()) {
+        if (handler.supportsWorldArgument()
+                && ctx.hasPerm(sender, me.beeliebub.tweaks.permissions.Permissions.PROTECTION_ADMIN)
+                && args.length - 1 > handler.worldArgumentMinArgs()) {
             String prefix = args[args.length - 1].toLowerCase(Locale.ROOT);
             for (org.bukkit.World world : org.bukkit.Bukkit.getWorlds()) {
                 if (world.getName().toLowerCase(Locale.ROOT).startsWith(prefix)

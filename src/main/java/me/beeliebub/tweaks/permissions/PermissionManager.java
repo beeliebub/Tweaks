@@ -142,25 +142,39 @@ public class PermissionManager implements Listener {
         return users.computeIfAbsent(uuid, UserPermissions::new);
     }
 
+    /** Removes a non-default group and every reference that could otherwise revive it. */
+    public boolean deleteGroup(String groupName) {
+        if (groupName == null || groupName.equalsIgnoreCase("default")) return false;
+        String normalized = groupName.toLowerCase();
+        if (groups.remove(normalized) == null) return false;
+
+        for (UserPermissions user : users.values()) {
+            user.removeGroup(normalized);
+        }
+        for (PermissionGroup group : groups.values()) {
+            if (normalized.equalsIgnoreCase(group.getParentName())) {
+                group.setParentName(null);
+            }
+        }
+        return true;
+    }
+
     public Set<String> calculateEffectivePermissions(UUID uuid) {
         Set<String> effective = new HashSet<>();
         UserPermissions user = users.get(uuid);
-        if (user == null) return effective;
+        if (user != null) {
+            effective.addAll(user.getPermissions());
+        }
 
-        // 1. User direct permissions
-        effective.addAll(user.getPermissions());
-
-        // 2. Group permissions (including inheritance).
+        // Every player receives the default group's permissions. Additional group
+        // memberships supplement that baseline and may contribute inherited permissions.
         // A single `visited` set is shared across all entry-point groups so that
         // shared ancestors in the inheritance DAG (e.g. two groups inheriting
         // from a common parent) contribute their permissions exactly once.
-        Set<String> userGroups = user.getGroups();
         Set<String> visited = new HashSet<>();
-        if (userGroups.isEmpty()) {
-            // Implicit fallback: users with no explicit groups belong to 'default'.
-            addInheritedPermissions("default", effective, visited);
-        } else {
-            for (String groupName : userGroups) {
+        addInheritedPermissions("default", effective, visited);
+        if (user != null) {
+            for (String groupName : user.getGroups()) {
                 addInheritedPermissions(groupName, effective, visited);
             }
         }
@@ -199,6 +213,13 @@ public class PermissionManager implements Listener {
         Set<String> perms = calculateEffectivePermissions(uuid);
         for (String perm : perms) {
             attachment.setPermission(perm, true);
+        }
+    }
+
+    /** Rebuilds permission attachments after an administrative group change. */
+    public void refreshAllOnlinePlayers() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            refreshPlayer(player);
         }
     }
 

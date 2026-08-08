@@ -11,7 +11,8 @@ final class RegionWorldArgument {
 
     static Result strip(RegionCommandContext context, CommandSender sender,
                         RegionSubcommand handler, String[] args) {
-        if (args.length == 0 || !context.hasPerm(sender, Permissions.PROTECTION_ADMIN)) {
+        if (args.length == 0 || !handler.supportsWorldArgument()
+                || !context.hasPerm(sender, Permissions.PROTECTION_ADMIN)) {
             return new Result(null, args);
         }
         String candidate = args[args.length - 1];
@@ -21,7 +22,7 @@ final class RegionWorldArgument {
             return new Result(null, args);
         }
         World world = Bukkit.getWorld(candidate);
-        if (world == null || args.length - 1 < handler.minArgs()) {
+        if (world == null || args.length - 1 < handler.worldArgumentMinArgs()) {
             return new Result(null, args);
         }
         String[] stripped = new String[args.length - 1];

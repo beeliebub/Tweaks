@@ -7,9 +7,9 @@ import java.util.UUID;
 /**
  * Per-user permission data and group memberships.
  *
- * <p>Users may belong to any number of permission groups simultaneously. A user
- * with no explicit group memberships still resolves to the {@code default} group
- * during effective-permission calculation (see {@link PermissionManager}).
+ * <p>Users may belong to any number of additional permission groups simultaneously.
+ * Every player resolves to the {@code default} group during effective-permission
+ * calculation (see {@link PermissionManager}).
  */
 public class UserPermissions {
     private final UUID uuid;
@@ -29,12 +29,12 @@ public class UserPermissions {
     }
 
     public void addGroup(String groupName) {
-        if (groupName == null) return;
+        if (groupName == null || groupName.equalsIgnoreCase("default")) return;
         groupNames.add(groupName.toLowerCase());
     }
 
     public void removeGroup(String groupName) {
-        if (groupName == null) return;
+        if (groupName == null || groupName.equalsIgnoreCase("default")) return;
         groupNames.remove(groupName.toLowerCase());
     }
 

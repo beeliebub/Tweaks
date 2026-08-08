@@ -94,7 +94,7 @@ class FlagInheritanceMatrixTest {
 
     @ParameterizedTest(name = "[parent only] {0} silent rule denies outsider via legacy default")
     @EnumSource(value = RegionFlag.class, mode = EnumSource.Mode.EXCLUDE,
-            names = {"ALLOW_BLOCK_BREAK", "DENY_BLOCK_BREAK", "ALLOW_BLOCK_PLACE", "DENY_BLOCK_PLACE"})
+            names = {"ALLOW_BLOCK_BREAK", "DENY_BLOCK_BREAK", "ALLOW_BLOCK_PLACE", "DENY_BLOCK_PLACE", "ENTRY"})
     void parentSilentDeniesOutsider(RegionFlag flag) {
         mgr.regions().put("home", new Region("home", PARENT_OWNER, List.of(),
                 ruleFor(flag, null)));
@@ -164,6 +164,11 @@ class FlagInheritanceMatrixTest {
         Location loc = locInChunkWithPdc(List.of("home"));
         for (RegionFlag other : RegionFlag.values()) {
             if (other.isMaterialFlag() || other == permitted) continue;
+            if (other == RegionFlag.ENTRY) {
+                assertTrue(mgr.isAllowed(loc, OUTSIDER, other),
+                        permitted + "=true must not make the unconfigured ENTRY flag restrictive");
+                continue;
+            }
             assertFalse(mgr.isAllowed(loc, OUTSIDER, other),
                     permitted + "=true should not enable " + other);
         }

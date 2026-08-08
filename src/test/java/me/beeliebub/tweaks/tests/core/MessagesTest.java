@@ -111,9 +111,18 @@ class MessagesTest {
         assertEquals("Permissions", fullContent(Messages.PERMISSIONS.mainTitle()));
         assertEquals(TextDecoration.State.FALSE,
                 Messages.PERMISSIONS.mainTitle().decoration(TextDecoration.ITALIC));
+        assertEquals("Group: <red>literal name</red>",
+                fullContent(Messages.PERMISSIONS.groupTitle("<red>literal name</red>")));
         assertEquals("2 permissions — Page 1 of 3", fullContent(Messages.PERMISSIONS.pageSummary(
                 2, me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PERMISSION, 0, 3)));
         assertEquals("✓ tweaks.admin", fullContent(Messages.PERMISSIONS.permissionToggleLabel("tweaks.admin", true)));
+        for (String permission : me.beeliebub.tweaks.permissions.Permissions.getAllPermissions()) {
+            String description = me.beeliebub.tweaks.permissions.Permissions.getDescription(permission);
+            assertEquals("Permission: " + permission + "\nDescription: " + description + "\nClick to grant.",
+                    fullContent(Messages.PERMISSIONS.permissionToggleTooltip(permission, description, false)));
+            assertEquals("Permission: " + permission + "\nDescription: " + description + "\nClick to revoke.",
+                    fullContent(Messages.PERMISSIONS.permissionToggleTooltip(permission, description, true)));
+        }
     }
 
     @Test

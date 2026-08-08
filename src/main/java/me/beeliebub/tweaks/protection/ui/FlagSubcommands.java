@@ -21,6 +21,7 @@ final class FlagSubcommands {
         @Override public String name() { return "flag"; }
         @Override public String permission() { return Permissions.PROTECTION_FLAG; }
         @Override public int minArgs() { return 3; }
+        @Override public boolean supportsWorldArgument() { return true; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_FLAG_SYNTAX),
                     Messages.PROTECTION.value(Text.USAGE_FLAG_DESCRIPTION), Permissions.PROTECTION_FLAG));
@@ -71,6 +72,7 @@ final class FlagSubcommands {
         @Override public String name() { return "unflag"; }
         @Override public String permission() { return Permissions.PROTECTION_FLAG; }
         @Override public int minArgs() { return 2; }
+        @Override public boolean supportsWorldArgument() { return true; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_UNFLAG_SYNTAX),
                     Messages.PROTECTION.value(Text.USAGE_UNFLAG_DESCRIPTION),

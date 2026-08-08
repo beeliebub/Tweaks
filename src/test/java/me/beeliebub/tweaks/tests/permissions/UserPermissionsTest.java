@@ -39,6 +39,13 @@ class UserPermissionsTest {
     }
 
     @Test
+    void defaultIsNotStoredAsAnAdditionalGroup() {
+        UserPermissions u = new UserPermissions(uuid);
+        u.addGroup("default");
+        assertTrue(u.getGroups().isEmpty());
+    }
+
+    @Test
     void removeGroupLowercasesAndRemoves() {
         UserPermissions u = new UserPermissions(uuid);
         u.addGroup("admin");
@@ -51,6 +58,14 @@ class UserPermissionsTest {
         UserPermissions u = new UserPermissions(uuid);
         u.addGroup("admin");
         u.removeGroup(null);
+        assertTrue(u.hasGroup("admin"));
+    }
+
+    @Test
+    void removeDefaultDoesNotAffectAdditionalGroups() {
+        UserPermissions u = new UserPermissions(uuid);
+        u.addGroup("admin");
+        u.removeGroup("default");
         assertTrue(u.hasGroup("admin"));
     }
 

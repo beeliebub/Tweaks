@@ -19,6 +19,9 @@ final class InfoSubcommands {
         @Override public String name() { return "info"; }
         @Override public List<String> aliases() { return List.of("i"); }
         @Override public String permission() { return Permissions.PROTECTION_INFO; }
+        // The optional world is only valid after the optional region name.
+        @Override public int worldArgumentMinArgs() { return 1; }
+        @Override public boolean supportsWorldArgument() { return true; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_INFO_SYNTAX),
                     Messages.PROTECTION.value(Text.USAGE_INFO_DESCRIPTION), Permissions.PROTECTION_INFO));
@@ -63,6 +66,9 @@ final class InfoSubcommands {
     static final class Flags implements RegionSubcommand {
         @Override public String name() { return "flags"; }
         @Override public String permission() { return Permissions.PROTECTION_FLAG; }
+        // The optional world is only valid after the optional region name.
+        @Override public int worldArgumentMinArgs() { return 1; }
+        @Override public boolean supportsWorldArgument() { return true; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_FLAGS_SYNTAX),
                     Messages.PROTECTION.value(Text.USAGE_FLAGS_DESCRIPTION),

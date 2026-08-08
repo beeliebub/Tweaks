@@ -96,7 +96,7 @@ public final class PermissionMessages {
     public Component deleteGroupWarning() { return red("CAUTION: This cannot be undone!"); }
     public Component backToGroupsLabel() { return bold("← Back to Groups", NamedTextColor.RED); }
     public Component groupsListTooltip() { return gray("Return to the groups list."); }
-    public Component groupTitle(String name) { return title("<!italic><green>Group: " + name); }
+    public Component groupTitle(String name) { return literalTitle("Group: " + name); }
     public Component groupBody() { return plainGray("Manage settings for this group."); }
 
     public Component categoryLabel(String category) { return bold(category, NamedTextColor.YELLOW); }
@@ -106,7 +106,7 @@ public final class PermissionMessages {
     public Component backToGroupLabel() { return bold("← Back to Group", NamedTextColor.RED); }
     public Component groupMenuTooltip() { return gray("Return to the group menu."); }
     public Component permissionsTitle(String categoryOrScope, String name) {
-        return title("<!italic><green>" + categoryOrScope + ": " + name);
+        return literalTitle(categoryOrScope + ": " + name);
     }
     public Component groupPermissionsTitle(String name) { return permissionsTitle("Permissions", name); }
     public Component userPermissionsTitle(String name) { return permissionsTitle("Permissions", name); }
@@ -115,7 +115,12 @@ public final class PermissionMessages {
     public Component permissionToggleLabel(String permission, boolean granted) {
         return bold((granted ? "✓ " : "✗ ") + permission, granted ? NamedTextColor.GREEN : NamedTextColor.RED);
     }
-    public Component permissionToggleTooltip(boolean granted) { return gray(granted ? "Click to revoke." : "Click to grant."); }
+    public Component permissionToggleTooltip(String permission, String description, boolean granted) {
+        return lines(
+                gray("Permission: ").append(Component.text(permission, NamedTextColor.YELLOW)),
+                gray("Description: ").append(Component.text(description, NamedTextColor.WHITE)),
+                gray(granted ? "Click to revoke." : "Click to grant."));
+    }
     public Component backToCategoriesLabel() { return bold("← Back to Categories", NamedTextColor.RED); }
     public Component categoriesTooltip() { return gray("Return to the category list."); }
 
@@ -127,7 +132,7 @@ public final class PermissionMessages {
                 gray("Groups: ").append(Component.text(groups, NamedTextColor.YELLOW)),
                 gray(isMember ? "Click to remove from this group." : "Click to add to this group."));
     }
-    public Component membersTitle(String name) { return title("<!italic><green>Members: " + name); }
+    public Component membersTitle(String name) { return literalTitle("Members: " + name); }
 
     public Component parentCandidateLabel(String name, boolean selected) {
         return bold((selected ? "✓ " : "  ") + name, selected ? NamedTextColor.GREEN : NamedTextColor.YELLOW);
@@ -140,7 +145,7 @@ public final class PermissionMessages {
     }
     public Component noneLabel() { return bold("✗ None", NamedTextColor.RED); }
     public Component clearInheritanceTooltip() { return gray("Clear inheritance."); }
-    public Component inheritanceTitle(String name) { return title("<!italic><green>Inheritance: " + name); }
+    public Component inheritanceTitle(String name) { return literalTitle("Inheritance: " + name); }
     public Component groupInheritanceSetFromGui(String groupName, String parentName) {
         return green("Set inheritance for " + groupName + " to " + (parentName == null ? "none" : parentName) + ".");
     }
@@ -172,7 +177,7 @@ public final class PermissionMessages {
     public Component backToPlayersLabel() { return bold("← Back to Players", NamedTextColor.RED); }
     public Component playersListTooltip() { return gray("Return to the players list."); }
     public Component backToUserLabel() { return bold("← Back to User", NamedTextColor.RED); }
-    public Component userTitle(String name) { return title("<!italic><green>User: " + name); }
+    public Component userTitle(String name) { return literalTitle("User: " + name); }
     public Component userBody() { return plainGray("Manage settings for this player."); }
     public Component userReset(String name) { return green("Reset " + name + " to defaults."); }
     public Component userMenuTooltip() { return gray("Return to the user menu."); }
@@ -183,7 +188,7 @@ public final class PermissionMessages {
         return parentName == null ? lines(permissions, action)
                 : lines(permissions, gray("Inherits from: ").append(Component.text(parentName, NamedTextColor.YELLOW)), action);
     }
-    public Component editGroupsTitle(String name) { return title("<!italic><green>Edit Groups: " + name); }
+    public Component editGroupsTitle(String name) { return literalTitle("Edit Groups: " + name); }
 
     public Component pageSummary(int total, PageNoun noun, int currentPage, int totalPages) {
         String singular = switch (noun) {
@@ -199,6 +204,9 @@ public final class PermissionMessages {
     public Component pageTooltip(int page, int totalPages) { return gray("Page " + page + " of " + totalPages); }
 
     private static Component title(String miniMessage) { return Messages.MM.deserialize(miniMessage); }
+    private static Component literalTitle(String text) {
+        return Component.text(text, NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false);
+    }
     private static Component plainGray(String text) { return gray(text).decoration(TextDecoration.ITALIC, false); }
     private static Component plainYellow(String text) { return Component.text(text, NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false); }
     private static Component bold(String text, NamedTextColor color) { return Component.text(text, color, TextDecoration.BOLD); }

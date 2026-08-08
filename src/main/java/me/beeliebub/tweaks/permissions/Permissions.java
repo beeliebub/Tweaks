@@ -1,11 +1,10 @@
 package me.beeliebub.tweaks.permissions;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Centralized permission constants for the Tweaks plugin.
@@ -247,67 +246,74 @@ public final class Permissions {
         CATEGORY_DISPLAY_NAMES.put("bypass",     "Bypasses");
     }
 
-    /**
-     * Explicit mapping from each permission string to its category key.
-     * Every constant defined in this class must appear exactly once here.
-     */
-    private static final Map<String, String> PERM_TO_CATEGORY;
+    /** Metadata used to place and describe a permission in the GUI. */
+    private record PermissionDetails(String category, String description) {}
+
+    /** Ordered, immutable metadata for every permission constant in this class. */
+    private static final Map<String, PermissionDetails> PERMISSION_CATALOG;
 
     static {
-        Map<String, String> m = new LinkedHashMap<>();
+        Map<String, PermissionDetails> m = new LinkedHashMap<>();
 
         // tools — general admin utilities
-        m.put(ADMIN_NICK,         "tools");
-        m.put(ADMIN_CONFIG,       "tools");
-        m.put(ADMIN_MORE,         "tools");
-        m.put(ADMIN_INVSEE,       "tools");
-        m.put(ADMIN_LOGS,         "tools");
-        m.put(ADMIN_BALANCE,      "tools");
-        m.put(HOUSE_ADMIN,        "tools");
-        m.put(LOTTERY_ADMIN,      "tools");
-        m.put(ADMIN_ITEM_EDIT,    "tools");
-        m.put(ADMIN_GUI_COPY,     "tools");
-        m.put(ADMIN_GAMEMODE,     "tools");
-        m.put(ADMIN_PERMISSIONS,       "tools");
-        m.put(ADMIN_DEATH_INVENTORY,  "tools");
+        register(m, ADMIN_NICK, "tools", "Set or remove player nicknames.");
+        register(m, ADMIN_CONFIG, "tools", "Modify Tweaks runtime configuration through /tconfig.");
+        register(m, ADMIN_MORE, "tools", "Maximize the stack size of the held item.");
+        register(m, ADMIN_INVSEE, "tools", "View and modify another online player's inventory.");
+        register(m, ADMIN_LOGS, "tools", "Toggle chest interaction log inspector mode.");
+        register(m, ADMIN_BALANCE, "tools", "View and modify player balances.");
+        register(m, HOUSE_ADMIN, "tools", "View and administer the server-wide casino house account.");
+        register(m, LOTTERY_ADMIN, "tools", "Draw and administer the server-wide lottery.");
+        register(m, ADMIN_ITEM_EDIT, "tools", "Edit item display names and lore.");
+        register(m, ADMIN_GUI_COPY, "tools", "Save a chest's contents as a GUI layout YAML file.");
+        register(m, ADMIN_GAMEMODE, "tools", "Switch gamemodes through commands.");
+        register(m, ADMIN_PERMISSIONS, "tools", "Manage permission groups, user overrides, and the permissions GUI.");
+        register(m, ADMIN_DEATH_INVENTORY, "tools", "View and restore saved player death inventories.");
 
         // teleport — home and warp administration
-        m.put(ADMIN_HOME,         "teleport");
-        m.put(ADMIN_HOMES,        "teleport");
-        m.put(ADMIN_SETHOME,      "teleport");
-        m.put(ADMIN_DELHOME,      "teleport");
-        m.put(ADMIN_SETWARP,      "teleport");
-        m.put(ADMIN_DELWARP,      "teleport");
+        register(m, ADMIN_HOME, "teleport", "Teleport to any player's home.");
+        register(m, ADMIN_HOMES, "teleport", "List the homes of any player.");
+        register(m, ADMIN_SETHOME, "teleport", "Set a home for any player.");
+        register(m, ADMIN_DELHOME, "teleport", "Delete the home of any player.");
+        register(m, ADMIN_SETWARP, "teleport", "Create server warps.");
+        register(m, ADMIN_DELWARP, "teleport", "Delete server warps.");
 
         // minigames — events and game administration
-        m.put(ADMIN_REWARD,                    "minigames");
-        m.put(ADMIN_WHACK,                     "minigames");
-        m.put(ADMIN_BLOODMOON,                 "minigames");
-        m.put(ADMIN_RESOURCE_SETTARGET_SELF,   "minigames");
-        m.put(ADMIN_RESOURCE_SETTARGET_OTHER,  "minigames");
-        m.put(BLACKJACK_CREATETABLE,           "minigames");
-        m.put(BLACKJACK_REMOVETABLE,           "minigames");
-        m.put(ADMIN_ROULETTE_SCAN,             "minigames");
-        m.put(ROULETTE_CREATEBOARD,            "minigames");
-        m.put(ROULETTE_REMOVEBOARD,            "minigames");
-        m.put(ROULETTE_FORCESPIN,              "minigames");
+        register(m, ADMIN_REWARD, "minigames", "Manage and claim minigame rewards.");
+        register(m, ADMIN_WHACK, "minigames", "Use Whack-an-Andrew administration commands.");
+        register(m, ADMIN_BLOODMOON, "minigames", "Force the next full moon to become a Blood Moon.");
+        register(m, ADMIN_RESOURCE_SETTARGET_SELF, "minigames", "Set your own Resource Hunt target.");
+        register(m, ADMIN_RESOURCE_SETTARGET_OTHER, "minigames", "Set another player's Resource Hunt target.");
+        register(m, BLACKJACK_CREATETABLE, "minigames", "Start the Blackjack table creation flow.");
+        register(m, BLACKJACK_REMOVETABLE, "minigames", "Start the Blackjack table removal flow.");
+        register(m, ADMIN_ROULETTE_SCAN, "minigames", "Run the read-only Roulette board geometry diagnostic.");
+        register(m, ROULETTE_CREATEBOARD, "minigames", "Start the Roulette board setup flow.");
+        register(m, ROULETTE_REMOVEBOARD, "minigames", "Start the Roulette board removal flow.");
+        register(m, ROULETTE_FORCESPIN, "minigames", "Force a Roulette board to close betting and spin immediately.");
 
         // protection — land claim permissions
-        m.put(PROTECTION_PURCHASEABLE, "protection");
-        m.put(PROTECTION_UNCLAIM,      "protection");
-        m.put(PROTECTION_MEMBER,       "protection");
-        m.put(PROTECTION_FLAG,         "protection");
-        m.put(PROTECTION_INFO,         "protection");
-        m.put(PROTECTION_ADMIN,        "protection");
+        register(m, PROTECTION_PURCHASEABLE, "protection", "Claim land and change claim parent relationships.");
+        register(m, PROTECTION_UNCLAIM, "protection", "Unclaim owned land regions.");
+        register(m, PROTECTION_MEMBER, "protection", "Manage members and managers of a region.");
+        register(m, PROTECTION_FLAG, "protection", "Set and unset region protection flags.");
+        register(m, PROTECTION_INFO, "protection", "Select regions and view their information and flags.");
+        register(m, PROTECTION_ADMIN, "protection", "Administer all regions while bypassing ownership and limits.");
 
         // ranks — rank editing and assignment
-        m.put(ADMIN_RANKS,    "ranks");
-        m.put(ADMIN_RANK_SET, "ranks");
+        register(m, ADMIN_RANKS, "ranks", "Edit rank definitions.");
+        register(m, ADMIN_RANK_SET, "ranks", "Manually set a player's rank.");
 
         // bypass — limit overrides
-        m.put(BYPASS_HOMES, "bypass");
+        register(m, BYPASS_HOMES, "bypass", "Bypass the maximum home count limit.");
 
-        PERM_TO_CATEGORY = Map.copyOf(m);
+        PERMISSION_CATALOG = Collections.unmodifiableMap(new LinkedHashMap<>(m));
+    }
+
+    private static void register(Map<String, PermissionDetails> catalog, String permission, String category, String description) {
+        PermissionDetails previous = catalog.put(permission, new PermissionDetails(category, description));
+        if (previous != null) {
+            throw new IllegalStateException("Duplicate permission catalog entry: " + permission);
+        }
     }
 
     /**
@@ -318,14 +324,30 @@ public final class Permissions {
      * @return a category key matching a key in {@link #getCategories()}
      */
     public static String getCategory(String permission) {
-        return PERM_TO_CATEGORY.getOrDefault(permission, "tools");
+        PermissionDetails details = PERMISSION_CATALOG.get(permission);
+        return details == null ? "tools" : details.category();
+    }
+
+    /**
+     * Returns the concise explanation shown for a registered permission in the GUI.
+     *
+     * @param permission a permission string returned by {@link #getAllPermissions()}
+     * @return the permission's non-empty description
+     * @throws IllegalArgumentException if the permission is not registered in this catalog
+     */
+    public static String getDescription(String permission) {
+        PermissionDetails details = PERMISSION_CATALOG.get(permission);
+        if (details == null) {
+            throw new IllegalArgumentException("Unknown permission: " + permission);
+        }
+        return details.description();
     }
 
     /**
      * Returns an ordered map of category key -> display name for every defined category.
      * The insertion order is the order categories appear in the GUI picker.
      *
-     * @return unmodifiable ordered map of category key to display name
+     * @return a defensive ordered copy of category key to display name
      */
     public static LinkedHashMap<String, String> getCategories() {
         return new LinkedHashMap<>(CATEGORY_DISPLAY_NAMES);
@@ -339,8 +361,8 @@ public final class Permissions {
      */
     public static List<String> getPermissionsByCategory(String category) {
         List<String> result = new ArrayList<>();
-        for (Map.Entry<String, String> entry : PERM_TO_CATEGORY.entrySet()) {
-            if (entry.getValue().equals(category)) {
+        for (Map.Entry<String, PermissionDetails> entry : PERMISSION_CATALOG.entrySet()) {
+            if (entry.getValue().category().equals(category)) {
                 result.add(entry.getKey());
             }
         }
@@ -349,19 +371,8 @@ public final class Permissions {
 
     // ---------------------------------------------------------------- All permissions
 
-    /**
-     * Gets all permission constants defined in this class using reflection.
-     * Useful for GUI lists and tab completion.
-     */
+    /** Gets all catalogued permissions in their declared GUI order. */
     public static List<String> getAllPermissions() {
-        List<String> perms = new ArrayList<>();
-        for (Field field : Permissions.class.getDeclaredFields()) {
-            if (java.lang.reflect.Modifier.isStatic(field.getModifiers()) && field.getType() == String.class) {
-                try {
-                    perms.add((String) field.get(null));
-                } catch (IllegalAccessException ignored) {}
-            }
-        }
-        return perms;
+        return new ArrayList<>(PERMISSION_CATALOG.keySet());
     }
 }

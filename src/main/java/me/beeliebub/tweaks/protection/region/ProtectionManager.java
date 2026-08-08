@@ -457,7 +457,8 @@ public final class ProtectionManager {
     //   true  -> region permits, continue checking the rest
     //   false -> region denies, short-circuit return false
     // When the entire chain returns empty, fall back to the legacy default
-    // applied at the leaf: members may act, non-members may not.
+    // applied at the leaf: members may act, non-members may not. ENTRY is the
+    // exception: an empty ENTRY chain is permissive.
     //
     // Pass actor=null for actor-less events (TNT, creeper, etc.) — then only
     // the DEFAULT target can permit the action.

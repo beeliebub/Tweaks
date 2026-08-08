@@ -543,7 +543,7 @@ A hybrid GUI/CLI permission system with **multi-group membership**, single-paren
 | `/tprm user <player> delperm <p>` | `tweaks.admin.permissions` | Revoke a per-user override. |
 | `/tprm user <player> setgroup <g\|none>` | `tweaks.admin.permissions` | Replace a user's group memberships with the named group (or clear all with `none`). Use the GUI's **Edit Groups** menu to assemble multi-group memberships interactively. |
 
-**Multi-group model**: A player may belong to any number of groups simultaneously. A user with no explicit group memberships implicitly resolves to the `default` group at permission-resolution time. Each group may declare a single parent for inheritance, and parent chains are walked recursively per group.
+**Multi-group model**: Every player always receives the `default` group's permissions, including players without a saved user record; `default` membership cannot be removed. A player may additionally belong to any number of groups, and those permissions supplement the default baseline. Each group may declare a single parent for inheritance, and parent chains are walked recursively per group.
 
 **Effective permissions** for a player are the union of:
 1. The player's direct permission overrides.
@@ -553,9 +553,10 @@ A hybrid GUI/CLI permission system with **multi-group membership**, single-paren
 When two of the player's groups share an ancestor in the inheritance graph, that ancestor's permissions are added exactly once. Cycles in the inheritance graph are skipped safely.
 
 **Permissions GUI**: The visual editor is a tree of Paper Dialogs (multi-action and confirmation) that organizes permissions into logical categories (Admin & Tools, Minigames, etc.) for easier management. Groups and players can be managed with simple click toggles. List screens paginate at 12 entries per page; toggle buttons prefix `✓` for "on" and `✗` for "off".
+- **Permission Details**: Hover any permission toggle to see its complete node, a concise description of what it permits, and the pending grant/revoke action.
 - **Main Menu**: Entry point with `Groups` and `Players` buttons.
 - **Groups Hub**: Manage group permissions (organized by category), member list (toggle-based), and inheritance. The **+ Create Group** button opens a name-entry dialog; **Delete Group** is hidden for the protected `default` group.
-- **Users Hub**: Manage player-specific overrides (organized by category) and multi-group memberships. The **Edit Groups** panel lists every group with a `✓` marker on the ones the player already belongs to — click any entry to toggle membership. The **⌕ Search Player** button on the players list opens a name-entry dialog for looking up offline players.
+- **Users Hub**: Manage player-specific overrides (organized by category) and additional group memberships. The **Edit Groups** panel lists non-default groups with a `✓` marker on the ones the player already belongs to — click any entry to toggle membership. The Players list contains online users only; use **⌕ Search Player** to look up an offline player who has previously joined.
 
 ---
 
@@ -1260,11 +1261,13 @@ When an action occurs, the system checks rules in this order:
 | `tweaks.admin.gamemode` | Allows switching gamemodes via command. |
 | `tweaks.admin.balance` | Allows administrative balance management (set, add, remove). |
 | `tweaks.admin.house` | Allows viewing and administering the server-wide casino house account. |
+| `tweaks.admin.lottery` | Allows drawing and administering the server-wide lottery. |
 | `tweaks.admin.ranks` | Allows access to the administrative rank editor via `/ranks edit`. |
 | `tweaks.admin.rank.set` | Allows manually assigning a player's rank via `/rank set`. |
 | `tweaks.admin.permissions` | Grants full access to the custom permission management system, including groups, users, and GUI editor. |
 | `tweaks.blackjack.createtable` | Allows starting the button-linking table creation flow. |
 | `tweaks.blackjack.removetable` | Allows starting the table removal flow. |
+| `tweaks.admin.roulettescan` | Allows running the read-only Roulette board geometry diagnostic. |
 | `tweaks.roulette.createboard` | Allows starting the Roulette board setup flow. |
 | `tweaks.roulette.removeboard` | Allows starting the Roulette board removal flow. |
 | `tweaks.roulette.forcespin` | Allows an admin's board-side control to force-close betting and spin immediately. |

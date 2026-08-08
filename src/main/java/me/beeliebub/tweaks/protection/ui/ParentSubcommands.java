@@ -28,6 +28,7 @@ final class ParentSubcommands {
         @Override public String name() { return "setparent"; }
         @Override public String permission() { return Permissions.PROTECTION_PURCHASEABLE; }
         @Override public int minArgs() { return 2; }
+        @Override public boolean supportsWorldArgument() { return true; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_SET_PARENT_SYNTAX),
                     Messages.PROTECTION.value(Text.USAGE_SET_PARENT_DESCRIPTION),
@@ -78,6 +79,7 @@ final class ParentSubcommands {
         @Override public String name() { return "unsetparent"; }
         @Override public String permission() { return Permissions.PROTECTION_PURCHASEABLE; }
         @Override public int minArgs() { return 1; }
+        @Override public boolean supportsWorldArgument() { return true; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_UNSET_PARENT_SYNTAX),
                     Messages.PROTECTION.value(Text.USAGE_UNSET_PARENT_DESCRIPTION),

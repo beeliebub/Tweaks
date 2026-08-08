@@ -86,6 +86,7 @@ final class SelectionSubcommands {
         @Override public String name() { return "select"; }
         @Override public String permission() { return Permissions.PROTECTION_INFO; }
         @Override public int minArgs() { return 1; }
+        @Override public boolean supportsWorldArgument() { return true; }
         @Override public List<RegionUsageEntry> usage() {
             return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_SELECT_SYNTAX),
                     Messages.PROTECTION.value(Text.USAGE_SELECT_DESCRIPTION), Permissions.PROTECTION_INFO));

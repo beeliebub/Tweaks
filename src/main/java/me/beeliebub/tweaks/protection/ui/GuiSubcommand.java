@@ -17,6 +17,9 @@ final class GuiSubcommand implements RegionSubcommand {
 
     @Override public String name() { return "gui"; }
     @Override public String permission() { return Permissions.PROTECTION_INFO; }
+    // The optional world is only valid after the optional region name.
+    @Override public int worldArgumentMinArgs() { return 1; }
+    @Override public boolean supportsWorldArgument() { return true; }
     @Override public List<RegionUsageEntry> usage() {
         return List.of(new RegionUsageEntry(Messages.PROTECTION.value(Text.USAGE_GUI_SYNTAX),
                 Messages.PROTECTION.value(Text.USAGE_GUI_DESCRIPTION), Permissions.PROTECTION_INFO));

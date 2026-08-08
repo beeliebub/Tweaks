@@ -66,15 +66,15 @@ class PermissionCommandTest {
     @Test
     void onCommandGroupDelete() {
         player.setOp(true);
-        Map<String, PermissionGroup> groups = new HashMap<>();
-        groups.put("testgroup", new PermissionGroup("testgroup"));
-        when(manager.getGroups()).thenReturn(groups);
+        when(manager.deleteGroup("testgroup")).thenReturn(true);
         
         command.onCommand(player, mock(Command.class), "tprm", new String[]{"group", "testgroup", "delete"});
         
+        verify(manager).deleteGroup("testgroup");
         verify(manager).saveGroups();
+        verify(manager).saveUsers();
+        verify(manager).refreshAllOnlinePlayers();
         MessageAssert.assertMessageSent(player, "Group 'testgroup' deleted.");
-        assertFalse(groups.containsKey("testgroup"));
     }
 
     @Test
@@ -89,5 +89,19 @@ class PermissionCommandTest {
         verify(userPerms).addPermission("some.perm");
         verify(manager).saveUsers();
         MessageAssert.assertMessageSent(player, "Added permission to user Target.");
+    }
+
+    @Test
+    void onCommandGroupPermissionRefreshesEveryOnlinePlayer() {
+        player.setOp(true);
+        PermissionGroup group = new PermissionGroup("default");
+        Map<String, PermissionGroup> groups = new HashMap<>();
+        groups.put("default", group);
+        when(manager.getGroups()).thenReturn(groups);
+
+        command.onCommand(player, mock(Command.class), "tprm",
+                new String[] {"group", "default", "addperm", "tweaks.fly"});
+
+        verify(manager).refreshAllOnlinePlayers();
     }
 }
