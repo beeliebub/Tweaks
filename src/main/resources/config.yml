@@ -13,6 +13,14 @@ protection:
     base: 10.0
     decay-rate: 1.1
     minimum-per-chunk: 1
+  # Worlds where any player may run /region claim without holding
+  # tweaks.protection.purchaseable. Entries are namespaced world keys
+  # (e.g. "minecraft:overworld"), matched case-insensitively. For non-admins, the
+  # claim price, per-player chunk limit, and every overlap/geometry check still apply -
+  # only the permission requirement is waived, and only for claim (setparent/unsetparent
+  # still require the permission in every world). Admins retain their free/unlimited
+  # bypass. An empty list keeps non-admin claiming permission-gated everywhere.
+  public-claim-worlds: []
 
 # Maximum number of chunks a single player may own through the purchase system.
 max_chunks: 200

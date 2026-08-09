@@ -61,6 +61,7 @@ final class RegionSubcommandRegistry {
         int shown = 0;
         for (RegionSubcommand handler : ordered) {
             if (!handler.visibleInUsage()) continue;
+            if (!handler.visibleTo(ctx, sender)) continue;
             for (RegionUsageEntry entry : handler.usage()) {
                 if (entry.permission() != null && !ctx.hasPerm(sender, entry.permission())) continue;
                 sender.sendMessage(Messages.PROTECTION.usageLine(entry.syntax(), entry.description()));
@@ -76,9 +77,7 @@ final class RegionSubcommandRegistry {
         List<String> out = new ArrayList<>();
         for (RegionSubcommand handler : ordered) {
             if (!handler.visibleInUsage()) continue;
-            if (handler.permission() == null || ctx.hasPerm(sender, handler.permission())) {
-                out.add(handler.name());
-            }
+            if (handler.visibleTo(ctx, sender)) out.add(handler.name());
         }
         return out;
     }

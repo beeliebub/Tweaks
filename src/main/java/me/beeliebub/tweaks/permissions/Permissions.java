@@ -150,9 +150,11 @@ public final class Permissions {
     public static final String ADMIN_PERMISSIONS = "tweaks.admin.permissions";
 
     /**
-     * Permission gate for paid/purchasable protection actions: claim, setparent, and unsetparent.
-     * Players with this permission can perform region operations that may incur Resource Rupee
-     * costs and counted against the per-player chunk-claim limit.
+     * Permission gate for paid/purchasable protection actions: setparent and unsetparent always,
+     * plus claim except in worlds listed under {@code protection.public-claim-worlds}. A public
+     * world waives only the claim permission check for non-admins; public non-admin claims still
+     * pay and count against the per-player chunk limit, while admins retain their free/unlimited
+     * bypass. Players without this permission cannot use setparent or unsetparent in any world.
      */
     public static final String PROTECTION_PURCHASEABLE = "tweaks.protection.purchaseable";
 

@@ -871,11 +871,15 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("- Coverage is chunk-granular: entire chunks are claimed."),
                 white("- Claims <= 5 chunks stamp immediately; others stamp as chunks load."),
                 white("- Names are unique per world; 'home' can exist in multiple worlds."),
+                white("- Admins may list worlds in protection.public-claim-worlds so anyone can claim there."),
+                white("- Public non-admin claims still cost Resource Rupees and count toward max_chunks; admins bypass both."),
+                white("- Unclaim/info/flag/member permissions are separate; removing a world is not retroactive."),
                 yellow("Alias: /rg claim"),
-                red("Requires permission: " + Permissions.PROTECTION_PURCHASEABLE + ".")
+                red("Requires permission: " + Permissions.PROTECTION_PURCHASEABLE
+                        + ", unless the current world is publicly claimable.")
         ), Material.OAK_FENCE, 20, ColorUtil.HELP_GRAD_PROTECTION_PURCHASEABLE,
                 List.of("protection_info", "protection_members", "protection_flags"),
-                Permissions.PROTECTION_PURCHASEABLE));
+                null));
 
         articles.add(new HelpArticle("protection_info", "Region Info", List.of(
                 gray("View details about regions at your location or by name."),

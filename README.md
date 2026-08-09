@@ -1030,6 +1030,7 @@ Territory is claimed in **full-chunk increments**.
     reserved. Existing legacy names are loaded unchanged.
     - **Overlap Prevention**: You cannot claim territory that overlaps an existing region in the same world unless you own it.
     - **Per-World Uniqueness**: Region names are unique per world. Two regions can share a name (e.g., "home") if they are in different worlds.
+    - **Public Claim Worlds**: An admin can add namespaced world keys (for example, `minecraft:overworld`) to `protection.public-claim-worlds` so any non-admin player can claim there without `tweaks.protection.purchaseable`. Public non-admin claims still incur the normal cost, global per-player chunk limit, and overlap/geometry checks; admins retain their free/unlimited bypass, and removing a world never changes existing claims. Public claim access does not grant `unclaim`, `info`, `flag`, or `member`, so those companion permissions are still required for a fully self-service claim.
 3.  **Visuals**: Use `/region info` while standing in a claim to see its boundaries and details.
 4.  **Restore Selection**: Use `/region select <name>` to restore the selection wand boundaries to match an existing region you own.
 
@@ -1078,9 +1079,9 @@ Flags control what non-members can do in a region. Rules can target specific gro
 
 ### Command UX & Tab Completion
 
-- **Usage Info**: If you run a protection command incorrectly, the plugin will display friendly usage information (filtered by your permissions).
+- **Usage Info**: If you run a protection command incorrectly, the plugin will display friendly usage information (filtered by your permissions and current-world authorization rules).
 - **Tab Completion**: Fully implemented for the legacy command system.
-  - **Subcommands**: Filtered based on your permissions.
+  - **Subcommands**: Filtered based on your permissions and current-world authorization rules.
   - **Region IDs**: Suggestions are ownership-aware. Owners and managers see their regions. Admins with the `tweaks.protection.admin` permission see all regions in their current world (limited to the first 100 results).
   - **Players & Groups**: Online players and existing permission groups (prefixed with `group:`) are suggested for `addmember`/`addmanager`, while current members/managers (including groups) are suggested for `removemember`/`removemanager`.
   - **Flags & Targets**: Region flags, targets, block materials, and entity types are fully tab-completable.
@@ -1164,7 +1165,7 @@ When an action occurs, the system checks rules in this order:
 | `/tprm user <player> <addperm\|delperm\|setgroup>` | `tweaks.admin.permissions` | CLI user management. |
 | `/ranks edit` | `tweaks.admin.ranks` | Open the visual rank editor. |
 | `/rank set <player> <rank_id/name>` | `tweaks.admin.rank.set` | Manually assign a player's rank. |
-| `/region claim <name>` | `tweaks.protection.purchaseable` | Claim territory using wand selection. |
+| `/region claim <name>` | `tweaks.protection.purchaseable` (or a listed `protection.public-claim-worlds` world) | Claim territory using wand selection; non-admin public claims still pay and obey the chunk-limit and overlap checks. |
 | `/region unclaim <name> [world]` | `tweaks.protection.unclaim` | Remove a region claim and permanently delete its sub-regions, refunding each owner. Alias: `/rg unclaim`. |
 | `/region info [name] [world]` | `tweaks.protection.info` | Show region details. Alias: `/rg i`. |
 | `/region select <name> [world]` | `tweaks.protection.info` | Restore wand selection to match a region. |
@@ -1199,7 +1200,7 @@ When an action occurs, the system checks rules in this order:
 | `/tconfig world-profiles add <world-key> <profile> <label> <color>` | `tweaks.admin.config` | Register a new world-key mapping (profile is only settable here — see [World Profiles](#world-profiles)). |
 | `/tconfig world-profiles remove <world-key>` | `tweaks.admin.config` | Remove a world-key mapping (that world falls back to the default profile/tag). |
 | `/tconfig world-profiles edit <world-key> <label> <color>` | `tweaks.admin.config` | Change an existing mapping's tab-list tag/color (its profile cannot be changed). |
-| `/tconfig <path> <value>` | `tweaks.admin.config` | Generic setter for any other registered setting by its config.yml path, e.g. `protection.selection-tool <material>`, `fly-advancement <namespaced-key>`, `fly-worlds <add\|remove> <world>`, `disabled-end-portal-worlds <add\|remove> <world>`, `economy.daily-reward-base <amount>`, `economy.streak-multipliers <day 1-7> <multiplier>`, `blocklog.retention-days <days>`, `blocklog.max-entries-per-chest <n>`, `deathinventory.retention-days <days>`, `enchantments.spawner-pickup.drop-chance-percent <0.0-100.0>`, `enchantments.spawner-pickup.uses <n>`, `enchantments.egg-collector.uses <n>`, `enchantments.quality.chance-percent <0.0-100.0>`, `enchantments.quality.blood-moon-chance-percent <0.0-100.0>`, `enchantments.lumberjack.max-logs <n>`, `itemadmin.tool-protect.default-threshold <n>`, `itemadmin.tool-protect.warn-cooldown-ms <ms>`, `itemadmin.gui-copy.max-distance <1-64>`, `xpbottle.orbs-per-emerald <n>` (restart required). |
+| `/tconfig <path> <value>` | `tweaks.admin.config` | Generic setter for any other registered setting by its config.yml path, e.g. `protection.selection-tool <material>`, `protection.public-claim-worlds <add\|remove> <world-key>`, `fly-advancement <namespaced-key>`, `fly-worlds <add\|remove> <world>`, `disabled-end-portal-worlds <add\|remove> <world>`, `economy.daily-reward-base <amount>`, `economy.streak-multipliers <day 1-7> <multiplier>`, `blocklog.retention-days <days>`, `blocklog.max-entries-per-chest <n>`, `deathinventory.retention-days <days>`, `enchantments.spawner-pickup.drop-chance-percent <0.0-100.0>`, `enchantments.spawner-pickup.uses <n>`, `enchantments.egg-collector.uses <n>`, `enchantments.quality.chance-percent <0.0-100.0>`, `enchantments.quality.blood-moon-chance-percent <0.0-100.0>`, `enchantments.lumberjack.max-logs <n>`, `itemadmin.tool-protect.default-threshold <n>`, `itemadmin.tool-protect.warn-cooldown-ms <ms>`, `itemadmin.gui-copy.max-distance <1-64>`, `xpbottle.orbs-per-emerald <n>` (restart required). |
 | `/more` | `tweaks.admin.more` | Maximize the stack size of the held item. |
 | `/invsee <player>` | `tweaks.admin.invsee` | View and modify an online player's inventory. |
 | `/bloodmoon` | `tweaks.admin.bloodmoon` | Force-activate the Blood Moon event. |
@@ -1233,7 +1234,7 @@ When an action occurs, the system checks rules in this order:
 | Permission | What it grants |
 |---|---|
 | `tweaks.bypass.homes` | Allows bypassing the maximum home count limit. |
-| `tweaks.protection.purchaseable` | Permission gate for paid/purchasable protection actions: claim, setparent, and unsetparent. (Incurs Resource Rupee costs and counts against chunk-claim limit). |
+| `tweaks.protection.purchaseable` | Gates `setparent`/`unsetparent` everywhere and `claim` unless the current world is listed in `protection.public-claim-worlds`. Non-admin public claims still incur Resource Rupee costs and count against the global chunk limit. |
 | `tweaks.protection.unclaim` | Allows unclaiming owned land regions. |
 | `tweaks.protection.info` | Allows selecting regions and viewing region information/flags. |
 | `tweaks.protection.member` | Allows managing (adding/removing) members and managers of a region. |
@@ -1292,6 +1293,7 @@ protection:
     base: 10.0                   # first-chunk price; not retroactive to already-claimed regions
     decay-rate: 1.1               # per-chunk geometric taper; must be >= 1.0
     minimum-per-chunk: 1
+  public-claim-worlds: []         # namespaced world keys where claim permission is waived
 playeradmin:
   afk-auto-minutes: 10           # idle time before auto-AFK
   max-nick-length: 24            # new /nick calls only - doesn't retroactively re-check existing nicknames

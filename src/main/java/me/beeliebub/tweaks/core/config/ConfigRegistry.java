@@ -56,7 +56,15 @@ public final class ConfigRegistry {
                     ConfigSetting.bounded("protection.claim-cost.decay-rate", "protection.claim-cost.decay-rate",
                             "Claim Cost Decay Rate", EditorType.DOUBLE, 1.0, Double.MAX_VALUE),
                     ConfigSetting.bounded("protection.claim-cost.minimum-per-chunk", "protection.claim-cost.minimum-per-chunk",
-                            "Claim Cost Minimum Per Chunk", EditorType.INT, 1, Integer.MAX_VALUE)
+                            "Claim Cost Minimum Per Chunk", EditorType.INT, 1, Integer.MAX_VALUE),
+                    // Waives only the tweaks.protection.purchaseable requirement for /region claim
+                    // in the listed worlds for non-admins. Public non-admin claims still pay and
+                    // count against the per-player chunk limit; admins retain their free/unlimited
+                    // bypass. Every overlap check still applies, and setparent/unsetparent still
+                    // require the permission everywhere. Entries are namespaced world keys,
+                    // matched case-insensitively.
+                    ConfigSetting.of("protection.public-claim-worlds", "protection.public-claim-worlds",
+                            "Public Claim Worlds", EditorType.WORLD_KEY_LIST)
             )),
             new ConfigCategory("playeradmin", "Player Admin", List.of(
                     ConfigSetting.of("fly-worlds", "fly-worlds",

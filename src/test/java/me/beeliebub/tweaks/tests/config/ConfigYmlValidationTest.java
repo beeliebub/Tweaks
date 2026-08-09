@@ -66,6 +66,20 @@ class ConfigYmlValidationTest {
     }
 
     @Test
+    void publicClaimWorldsIsAListOfNonBlankStrings() {
+        Map<?, ?> protection = (Map<?, ?>) root.get("protection");
+        assertNotNull(protection);
+        Object value = protection.get("public-claim-worlds");
+        assertInstanceOf(List.class, value, "protection.public-claim-worlds must be a list");
+        for (Object world : (List<?>) value) {
+            assertInstanceOf(String.class, world,
+                    "protection.public-claim-worlds entries must be strings");
+            assertFalse(((String) world).isBlank(),
+                    "protection.public-claim-worlds contains blank entry");
+        }
+    }
+
+    @Test
     void gemConnoisseurRatesStructureIsValid() {
         Object ratesObj = root.get("gem-connoisseur-rates");
         assertInstanceOf(Map.class, ratesObj, "gem-connoisseur-rates must be a map");
