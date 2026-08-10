@@ -14,9 +14,11 @@ public enum EditorType {
     BOOLEAN,
     MATERIAL,
     NAMESPACED_KEY,
+    WORLD_KEY,
     STRING_LIST,
     WORLD_KEY_LIST,
     MOB_LIST,
     MATERIAL_LIST,
-    NUMBER_MAP
+    NUMBER_MAP,
+    STRING
 }

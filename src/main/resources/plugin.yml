@@ -169,3 +169,20 @@ commands:
       /region setparent <child> <parent> | unsetparent <child>
       /region gui [name]
     aliases: [rg]
+  skyblock:
+    description: Travel to your Skyblock island or its spawn.
+    usage: /skyblock
+    aliases: [sb]
+  island:
+      description: Manage your Skyblock island.
+      usage: /island <create [type difficulty|gui]|home [name]|sethome <name>|homes buy|biome <name>|info [island]|invite <player>|accept|kick <player>|leave|visit <island>|settings public|delete [confirm]|challenges [list|claim <id>]|shop [buy <material> [amount]]>
+      aliases: [is]
+  isadmin:
+      description: Administer Skyblock islands and progression.
+      usage: /isadmin <help [topic]|status|spawn|clearspawn [confirm]|gui|island|templates|types|difficulties|challenges|generators|shop|reload>
+  sell:
+    description: Sell sellable items from your Skyblock inventory.
+    usage: /sell [item|all]
+  pay:
+    description: Pay another island from your Skyblock wallet.
+    usage: /pay <player> <amount>

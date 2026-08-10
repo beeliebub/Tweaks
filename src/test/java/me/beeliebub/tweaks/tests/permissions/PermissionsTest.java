@@ -84,17 +84,17 @@ class PermissionsTest {
     // =========================================================================
 
     private static final Set<String> EXPECTED_CATEGORY_KEYS = Set.of(
-            "tools", "teleport", "minigames", "protection", "ranks", "bypass"
+            "tools", "teleport", "minigames", "protection", "ranks", "bypass", "skyblock"
     );
 
     /**
-     * getCategories() must contain exactly the 6 known category keys.
+     * getCategories() must contain exactly the 7 known category keys.
      */
     @Test
-    void getCategoriesContainsExactlyTheSixExpectedKeys() {
+    void getCategoriesContainsExactlyTheSevenExpectedKeys() {
         LinkedHashMap<String, String> categories = Permissions.getCategories();
-        assertEquals(6, categories.size(),
-                "getCategories() must have exactly 6 entries");
+        assertEquals(7, categories.size(),
+                "getCategories() must have exactly 7 entries");
         for (String expected : EXPECTED_CATEGORY_KEYS) {
             assertTrue(categories.containsKey(expected),
                     "getCategories() must contain key: " + expected);
@@ -111,7 +111,7 @@ class PermissionsTest {
     @Test
     void getCategoriesIteratesInDeclaredButtonOrder() {
         assertEquals(
-                List.of("tools", "teleport", "minigames", "protection", "ranks", "bypass"),
+                List.of("tools", "teleport", "minigames", "protection", "ranks", "bypass", "skyblock"),
                 List.copyOf(Permissions.getCategories().keySet()),
                 "getCategories() must iterate in declared button order");
     }

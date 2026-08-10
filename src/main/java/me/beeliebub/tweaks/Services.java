@@ -20,6 +20,11 @@ import me.beeliebub.tweaks.protection.region.PendingStampsStore;
 import me.beeliebub.tweaks.protection.region.ProtectionManager;
 import me.beeliebub.tweaks.protection.ui.RegionSelectionManager;
 import me.beeliebub.tweaks.ranks.RankManager;
+import me.beeliebub.tweaks.skyblock.SkyblockBootstrap;
+import me.beeliebub.tweaks.skyblock.island.IslandManager;
+import me.beeliebub.tweaks.skyblock.economy.SkyblockEconomy;
+import me.beeliebub.tweaks.tab.TabManager;
+import me.beeliebub.tweaks.teleport.TeleportCommandManager;
 import me.beeliebub.tweaks.worldmanagement.MoonSystem;
 import org.bukkit.Material;
 
@@ -73,6 +78,11 @@ public final class Services {
     BlackjackListener blackjackListener;
     RouletteListener rouletteListener;
     LotteryManager lotteryManager;
+    SkyblockBootstrap.Runtime skyblockRuntime;
+    IslandManager skyblockManager;
+    SkyblockEconomy skyblockEconomy;
+    TabManager tabManager;
+    TeleportCommandManager teleportCommandManager;
 
     public void setStorageManager(StorageManager storageManager) {
         if (this.storageManager != null) throw new IllegalStateException("storageManager already published");
@@ -291,5 +301,58 @@ public final class Services {
     public LotteryManager lotteryManager() {
         if (lotteryManager == null) throw new IllegalStateException("lotteryManager not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
         return lotteryManager;
+    }
+
+    public void setSkyblockRuntime(SkyblockBootstrap.Runtime skyblockRuntime) {
+        if (this.skyblockRuntime != null) throw new IllegalStateException("skyblockRuntime already published");
+        this.skyblockRuntime = skyblockRuntime;
+    }
+
+    public SkyblockBootstrap.Runtime skyblockRuntime() {
+        if (skyblockRuntime == null) throw new IllegalStateException("skyblockRuntime not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
+        return skyblockRuntime;
+    }
+
+    public void setSkyblockManager(IslandManager skyblockManager) {
+        if (this.skyblockManager != null) throw new IllegalStateException("skyblockManager already published");
+        this.skyblockManager = skyblockManager;
+    }
+
+    public IslandManager skyblockManager() {
+        if (skyblockManager == null) throw new IllegalStateException("skyblockManager not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
+        return skyblockManager;
+    }
+
+    public void setSkyblockEconomy(SkyblockEconomy skyblockEconomy) {
+        if (this.skyblockEconomy != null) throw new IllegalStateException("skyblockEconomy already published");
+        this.skyblockEconomy = skyblockEconomy;
+    }
+
+    public SkyblockEconomy skyblockEconomy() {
+        if (skyblockEconomy == null) throw new IllegalStateException("skyblockEconomy not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
+        return skyblockEconomy;
+    }
+
+    public void setTabManager(TabManager tabManager) {
+        if (this.tabManager != null) throw new IllegalStateException("tabManager already published");
+        this.tabManager = tabManager;
+    }
+
+    public TabManager tabManager() {
+        if (tabManager == null) throw new IllegalStateException("tabManager not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
+        return tabManager;
+    }
+
+    public TabManager tabManagerOrNull() {
+        return tabManager;
+    }
+
+    public void setTeleportCommandManager(TeleportCommandManager manager) {
+        if (this.teleportCommandManager != null) throw new IllegalStateException("teleportCommandManager already published");
+        this.teleportCommandManager = manager;
+    }
+
+    public TeleportCommandManager teleportCommandManagerOrNull() {
+        return teleportCommandManager;
     }
 }

@@ -60,6 +60,9 @@ public final class Messages {
     /** Player-feedback factories and dialog copy for the {@code /tconfig} generic settings engine and GUI. */
     public static final ConfigMessages CONFIG = new ConfigMessages();
 
+    /** Player-feedback factories for Skyblock islands, progression, and economy. */
+    public static final SkyblockMessages SKYBLOCK = new SkyblockMessages();
+
     // ---------------------------------------------------------------- Permissions
 
     /**

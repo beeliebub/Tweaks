@@ -1,0 +1,6 @@
+tiers:
+  - id: starter
+    name: Starter
+    outputs:
+      COBBLESTONE: 0.8
+      IRON_ORE: 0.2

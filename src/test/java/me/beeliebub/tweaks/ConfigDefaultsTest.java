@@ -114,4 +114,13 @@ class ConfigDefaultsTest {
 
         assertEquals(10000, readLiveFile().getInt("lottery.reseed-amount", -1));
     }
+
+    @Test
+    void skyblockTemplateBlockBudgetIsRestoredFromBundledDefault() {
+        writeLiveFile("skyblock.template-max-blocks", null);
+
+        plugin.reconcileConfigDefaults();
+
+        assertEquals(250000, readLiveFile().getInt("skyblock.template-max-blocks", -1));
+    }
 }

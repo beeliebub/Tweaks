@@ -1,0 +1,9 @@
+items:
+  - material: COBBLESTONE
+    category: blocks
+    buyPrice: -1
+    sellPrice: 0.05
+  - material: OAK_SAPLING
+    category: farming
+    buyPrice: 5.0
+    sellPrice: 1.0

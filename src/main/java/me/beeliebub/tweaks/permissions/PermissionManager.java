@@ -214,6 +214,8 @@ public class PermissionManager implements Listener {
         for (String perm : perms) {
             attachment.setPermission(perm, true);
         }
+        // Skyblock is a player feature; administration and containment bypass remain explicit.
+        attachment.setPermission(Permissions.SKYBLOCK_USE, true);
     }
 
     /** Rebuilds permission attachments after an administrative group change. */

@@ -56,6 +56,7 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
     private final JavaPlugin plugin;
     private final StorageManager storage;
     private final ResourceHuntItems resourceHuntItems;
+    private SkyblockTeleportGate skyblockGate;
 
     private NamespacedKey backKey;
     private final Map<UUID, TpaRequest> tpaRequests = new HashMap<>();
@@ -65,6 +66,10 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
         this.plugin = plugin;
         this.storage = storage;
         this.resourceHuntItems = resourceHuntItems;
+    }
+
+    public void setSkyblockGate(SkyblockTeleportGate skyblockGate) {
+        this.skyblockGate = skyblockGate;
     }
 
     // Lazy so unit tests that only exercise unrelated commands can mock the plugin without
@@ -87,6 +92,8 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String @NotNull [] args) {
+        if (sender instanceof Player player && skyblockGate != null
+                && !skyblockGate.allowedCommand(player, label, args)) return true;
         return switch (label.toLowerCase()) {
             case "home"     -> handleHome(sender, args);
             case "sethome"  -> handleSetHome(sender, args);
@@ -150,6 +157,11 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
 
         showHome(player, targetUUID, homeName);
         return true;
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void enforceSkyblockDestination(PlayerTeleportEvent event) {
+        if (skyblockGate != null && !skyblockGate.allowed(event.getPlayer(), event.getTo())) event.setCancelled(true);
     }
 
     private void showHome(Player player, UUID targetUUID, String homeName) {

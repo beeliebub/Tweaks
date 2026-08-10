@@ -9,6 +9,23 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
 ## Table of Contents
 
 - [World Profiles](#world-profiles)
+- [Skyblock](#skyblock)
+  - [Getting Started](#getting-started)
+  - [Creating an Island](#creating-an-island)
+  - [Your Island](#your-island)
+  - [Skyblock Homes](#skyblock-homes)
+  - [Skyblock Co-op](#skyblock-co-op)
+  - [Skyblock Challenges](#skyblock-challenges)
+  - [Progress Tracking](#progress-tracking)
+  - [Generators](#generators)
+  - [Wallet, Shop, and Selling](#wallet-shop-and-selling)
+  - [Changing Your Biome](#changing-your-biome)
+  - [Deleting Your Island](#deleting-your-island)
+  - [Skyblock Setup Guide](#skyblock-setup-guide)
+  - [Skyblock Admin Reference](#skyblock-admin-reference)
+  - [Player Command Reference](#player-command-reference)
+  - [Skyblock Configuration](#skyblock-configuration)
+  - [Skyblock Data and Troubleshooting](#skyblock-data-and-troubleshooting)
 - [Teleportation](#teleportation)
   - [Homes](#homes)
   - [Warps](#warps)
@@ -110,6 +127,525 @@ Admins can add, remove, or modify world-key mappings at runtime — including re
 - Your ender chest contents are separate per profile. Storing diamonds in your survival ender chest won't make them appear in the lobby ender chest.
 - Your experience level and progress are separate per profile. Earning 30 levels in survival won't give you 30 levels in the lobby.
 - If you die, your death inventory is correctly handled — the plugin won't accidentally save an empty inventory over your real one.
+
+---
+
+## Skyblock
+
+Skyblock runs in the configured world (default `jass:skyblock`) under an exclusive `skyblock` world
+profile. Each island owns a grid slot, a protected footprint, membership, progression, generator
+tier, homes, and a wallet. The guide below covers both the normal player path and the complete
+administrator authoring path.
+
+### Getting Started
+
+`/skyblock` sends you to your island home, or to the configured Skyblock spawn when you do not have
+an island. `/skyblock help` is accepted as the same travel command. Skyblock is world-gated: the
+player commands work only in the configured world, and `/skyblock` is the way to enter it from
+another world.
+
+The Skyblock world uses the separate `skyblock` profile. Its inventory, ender chest, and experience
+are swapped independently from every other world profile; items and XP earned elsewhere do not
+appear in Skyblock. The default world key is `jass:skyblock`, but an administrator can configure a
+different namespaced world key before enabling the feature.
+
+### Creating an Island
+
+There are three creation forms:
+
+| Command | Result |
+|---|---|
+| `/island create` | Creates an island using `skyblock.default-type` and `skyblock.default-difficulty`. |
+| `/island create <type> <difficulty>` | Creates an island with that configured type/difficulty pair. The difficulty must be allowed by the type. |
+| `/island create gui` | Opens a picker containing the configured types and their available difficulties. |
+
+A type chooses the template, starting kit, biome, allowed challenges, and available difficulties.
+A difficulty supplies the progression multiplier: a base tracked or possession requirement is
+multiplied and rounded up when readiness is checked. For example, a requirement of 16 with a
+multiplier of `1.5` requires 24.
+
+The shipped defaults are `default` and `normal`, but the shipped `default` type intentionally has
+no template and no kit. Until an administrator captures a template or adds a kit, that type creates
+an empty void island. A failed bare create reports the configured type and difficulty so the problem
+can be fixed instead of silently creating the wrong island.
+
+### Your Island
+
+An island occupies a slot in the configured grid. Its protection footprint follows the island size:
+`SMALL`, `MEDIUM`, or `LARGE`. Size increases are normally challenge rewards; an administrator can
+also increase a live island with `/isadmin island size <owner|id> <size>`. The live-island admin
+surface does not edit ownership, members, wallets, progression, or generator assignments.
+
+Containment keeps island members and visitors inside the permitted island or spawn area. Attempts
+to leave are redirected or refused so players cannot bypass the grid or protection boundary.
+Use `/island info` for your own island, or `/island info <island>` for a loaded island id or owner
+name. `/island settings public` controls whether other players may visit; it is owner-only.
+
+### Skyblock Homes
+
+`/island sethome <name>` saves a named location inside your own island. `/island home` returns to
+the island spawn, and `/island home <name>` returns to a named home. The default configuration
+gives every member three home slots (`skyblock.max-homes: 3`); `/island homes buy` purchases another
+slot from the island wallet. The default home-slot price is `0.0`, and purchases are capped by
+`skyblock.max-homes-purchasable` (default `10` total configured slots, including the default
+slots). Homes are stored as island state, so leaving or being kicked clears that member's homes.
+
+### Skyblock Co-op
+
+The owner starts an invitation with `/island invite <player>`. The target runs `/island accept`.
+The owner can remove an online member with `/island kick <player>`; a member can leave with
+`/island leave`. The owner cannot leave their own island and must delete it instead. The owner can
+toggle public visits with `/island settings public`; a visitor uses `/island visit <island>` with a
+public island id or owner name.
+
+The default member cap is four people total, including the owner (`skyblock.max-members: 4`). An
+invitation expires after 300 seconds by default (`skyblock.invite-timeout-seconds`). Leaving or
+being kicked removes the member from protection, clears their saved homes, clears their Skyblock
+inventory and Skyblock ender chest, marks the profile for a durable wipe, and sends them to spawn.
+Skyblock XP is deliberately preserved because it belongs to the world profile rather than the
+island membership.
+
+### Skyblock Challenges
+
+`/island challenges` opens the challenge Dialog. `/island challenges gui` opens it explicitly, and
+`/island challenges list` prints readiness in chat. Claim a ready definition with
+`/island challenges claim <id>`.
+
+Challenges can combine several requirement kinds:
+
+- A tracked requirement reads an island counter such as `collect:STONE`; it does not consume an
+  item when claimed.
+- A possession requirement checks compatible items in the player's inventory and consumes them on
+  claim. Renamed, enchanted, damaged, custom-model, foreign-PDC, and otherwise incompatible items
+  are not accepted.
+- Prerequisites require earlier challenges. An any-of group requires its configured number from a
+  group of challenge ids. Type gating can restrict a challenge to selected island types.
+
+The four reward kinds are item stacks, island-size upgrades, generator-tier unlocks, and money.
+The claim path rechecks island membership, world, readiness, possession contents, and resize capacity
+before applying rewards. Difficulty multipliers affect both tracked and possession requirements.
+
+### Progress Tracking
+
+Tracked requirements use the following stable categories. Material identifiers are Bukkit material
+names such as `STONE`; entity identifiers are Bukkit entity-type names such as `COW`.
+
+| Category | Identifier | Incrementing event or result |
+|---|---|---|
+| `COLLECT` | Material | `BlockDropItemEvent` and player-killer `EntityDeathEvent` drops |
+| `KILL` | Entity type | `EntityDeathEvent` when the player is the killer |
+| `SMELT` | Material | `FurnaceExtractEvent` output |
+| `ENCHANT` | Material | `EnchantItemEvent` item |
+| `SHEAR` | Entity type | `PlayerShearEntityEvent` |
+| `BREED` | Entity type | `EntityBreedEvent` when the breeder is a player; the child type is counted |
+| `CRAFT` | Material | `CraftItemEvent` result |
+| `BARTER` | Material | `PiglinBarterEvent` outcome stacks |
+| `PLACE` | Material | `BlockPlaceEvent` placed block |
+| `FISH` | Material | `PlayerFishEvent` caught item |
+| `BREW` | Material | `BrewEvent` produced result stacks |
+| `TRADE` | Material | `PlayerTradeEvent` recipe result |
+| `TAME` | Entity type | `EntityTameEvent` when the owner is a player |
+
+The event must occur in the island's protected Skyblock footprint. The six interaction counters
+(`SHEAR`, `BREED`, `BARTER`, `BREW`, `TRADE`, and `TAME`) are action counters; they do not mark
+their output items as collected.
+
+Purchased shop items are marked as purchased and never count toward gathered `COLLECT` progress.
+That provenance survives placement, crafting, smelting, and breaking the resulting block or item.
+Blocks that can produce renewable drops are tainted at their original location; breaking and
+replacing the same block does not farm a collection counter. Generated materials follow these same
+provenance and taint rules.
+
+### Generators
+
+When a cobblestone generator triggers, the island's unlocked tier chooses an output from its
+weighted material table. Weights are relative: `8` and `2` mean an 80/20 split, not literal
+percentages. Generator tiers are normally unlocked by a `GeneratorUnlock` challenge reward and
+remain attached to the island. An empty or invalid tier is rejected by the setup checklist and is
+left safely unchanged by the generator listener.
+
+### Wallet, Shop, and Selling
+
+Skyblock money is stored per island and is separate from the global `/balance`. Use
+`/island shop` for the buy Dialog or `/island shop buy <material> [amount]` for a direct purchase.
+`/sell` sells the held item, `/sell <material>` sells that material from the main inventory, and
+`/sell all` sells every compatible sellable stack. `/pay <player> <amount>` transfers money from the
+player's island wallet to the target player's island; both players must be online and on islands.
+
+The shop refuses renamed, lore-bearing, enchanted, damaged, custom-model, foreign-tagged, or
+otherwise incompatible items. Shop entries use one buy price and one sell price; `-1` disables a
+direction. Transactions are limited to the configured Skyblock world and island membership.
+
+### Changing Your Biome
+
+Run `/island biome <name>` inside your island. The command accepts a Bukkit `Biome` name, for
+example `/island biome CHERRY_GROVE`, and applies it to the island footprint through the wallet
+service. The default price is `skyblock.price.biome-change: 0.0`; an administrator can change it
+with `/tconfig skyblock.price.biome-change <value>`.
+
+### Deleting Your Island
+
+Only the owner can delete an island. Run `/island delete` to start the confirmation window, then
+run `/island delete confirm` within 60 seconds. The deletion first persists a durable deletion
+record, ejects players to spawn, removes the protection claim, and clears the island's large
+footprint a bounded number of chunks per tick. It then clears every member's Skyblock inventory and
+ender chest, preserves their Skyblock XP, removes pending island wallet data, clears visits, removes
+the island record and releases its grid slot. Deletion progress is resumable after restart; the slot
+is not reusable while terrain cleanup is in progress.
+
+### Skyblock Setup Guide
+
+This is the zero-to-playable path for an administrator. Use `/isadmin gui` for the Dialog surface;
+the CLI forms below are the equivalent authoring operations. All administrator commands require
+`tweaks.admin.skyblock`. A player running `/isadmin` must stand in the configured Skyblock world;
+console can run console-safe registry and status operations.
+
+1. **Create and map the world (`world`).** Create or load the target namespaced world, then run
+   `/tconfig world-profiles add jass:skyblock skyblock Skyblock AQUA` (replace the world key if
+   needed). The `skyblock` profile must be exclusive to this world. Restart after changing the
+   mapping: the Skyblock boot gate needs the loaded world and frozen profile before it registers
+   the runtime. If the gate refuses to enable, the log names the reason and prints the exact
+   `/tconfig world-profiles add ...` remediation followed by “restart the server.”
+2. **Open the authoring hub (`status`).** Enter the configured world and run `/isadmin gui`, or
+   run `/isadmin status` from console. The hub and status command show every check as `SATISFIED`,
+   `INCOMPLETE`, `BLOCKED`, or `ADVISORY`. `BLOCKED` means the game cannot be safely played;
+   `INCOMPLETE` means an optional authoring prerequisite is still missing; `ADVISORY` is
+   informational. Use **Run Setup** to open the first actionable screen in order.
+3. **Record spawn (`spawn`).** Run `/region wand` or press **Get selection wand** on the Spawn
+   screen. In the configured Skyblock world, set both selection corners around the spawn area, then
+   run `/isadmin spawn` or press **Record Spawn**. The checklist entry is `spawn`; the recorded
+   player location must be inside the selected chunk bounds. **Clear Spawn** or
+   `/isadmin clearspawn` then `/isadmin clearspawn confirm` removes the record and restores the
+   world fallback.
+4. **Capture a starter template (`templates`).** Build the starter island inside a selected region,
+   select both corners with the wand, and run `/isadmin templates save starter`, or use Templates →
+   **Capture**. Preview it with `/isadmin templates preview starter`. A capture must be in the
+   configured world, contain a complete selection, contain at least one non-air block, and fit
+   `template-max-height` and `template-max-blocks`. The shipped `default` type has no template and
+   an empty kit, so it produces an empty void island until a type is pointed at this template or a
+   kit is authored. This step satisfies `templates`.
+5. **Create difficulties (`difficulties`).** Use Difficulties → **Create**, or run
+   `/isadmin difficulties create hard Hard`, then
+   `/isadmin difficulties set hard multiplier 1.5` and
+   `/isadmin difficulties set hard order 1`. A multiplier scales every tracked and possession
+   requirement upward and rounds it up. Inspect with `/isadmin difficulties inspect hard`; this
+   satisfies `difficulties`.
+6. **Create island types and defaults (`types`, `default-type`, `playable-types`).** In Types,
+   create a type and use its fields, or run:
+
+   ```text
+   /isadmin types create starter Starter
+   /isadmin types set starter difficulties normal,hard
+   /isadmin types set starter template starter
+   /isadmin types set starter biome PLAINS
+   ```
+
+   Set the allowed challenge ids with `/isadmin types set starter allowed first-stone`, or use the
+   GUI multi-select. Edit the physical kit with Types → **Edit Kit**; `/isadmin types kit starter`
+   is intentionally GUI-only because it edits an item container and preserves item metadata. Mark
+   the type default with Type → **Make default**, choose an allowed difficulty, or set the pair
+   through `/tconfig`:
+
+   ```text
+   /tconfig skyblock.default-type starter
+   /tconfig skyblock.default-difficulty normal
+   ```
+
+   The configured pair must resolve and the type must allow the difficulty. A type with neither a
+   template nor a kit is reported as `VOID_ISLAND` and keeps `playable-types` blocked.
+7. **Author a challenge (`challenges`, `challenge-integrity`, `reachable-challenges`).** Create a
+   category and a challenge, then set each field independently:
+
+   ```text
+   /isadmin challenges category create gathering Gathering
+   /isadmin challenges create first-stone First Stone
+   /isadmin challenges set first-stone category gathering
+   /isadmin challenges set first-stone description Gather stone and bring a diamond.
+   /isadmin challenges requirement add first-stone tracked collect:STONE 16
+   /isadmin challenges requirement add first-stone possession DIAMOND 1
+   /isadmin challenges reward add first-stone money 10
+   /isadmin challenges reward add first-stone size MEDIUM
+   /isadmin challenges reward add first-stone generator starter
+   /isadmin challenges validate first-stone
+   ```
+
+   Add an item reward from Challenges → Rewards → **Items**; the CLI prints a GUI pointer for
+   `/isadmin challenges reward add first-stone item STONE 1` because the input is a physical item
+   container. The complete in-place edit syntax is
+   `/isadmin challenges requirement edit first-stone 0 tracked collect:COBBLESTONE 32` and
+   `/isadmin challenges reward edit first-stone 0 money 25`; list positions remain unchanged.
+   Use `/isadmin challenges prerequisites first-stone cobblestone`,
+   `/isadmin challenges any-of first-stone 1 cobblestone dirt`, and
+   `/isadmin challenges types first-stone starter` when progression needs prerequisites or gating.
+   Validation must report no problems; a fresh island should have at least one claimable challenge.
+8. **Author generator tiers (`generators`, `generator-weights`).** Use Generators → **Create** and
+   add outputs, or run:
+
+   ```text
+   /isadmin generators create starter Starter
+   /isadmin generators output set starter COBBLESTONE 8
+   /isadmin generators output set starter IRON_ORE 2
+   /isadmin generators inspect starter
+   ```
+
+   Weights are relative and must be finite and positive. A newly created CLI tier is empty while
+   being authored, so add an output before relying on it. This satisfies `generator-weights` once
+   every tier has a usable output table.
+9. **Author shop entries (`shop`, `shop-prices`).** Use Shop → **Add material**, or run:
+
+   ```text
+   /isadmin shop set COBBLESTONE blocks -1 0.05
+   /isadmin shop set OAK_SAPLING farming 5.0 1.0
+   /isadmin shop inspect COBBLESTONE
+   ```
+
+   The values are category, buy price, and sell price. `-1` disables one direction, but both cannot
+   be `-1`. Shop → **Add held item** and `/isadmin shop add-held-item` are GUI-only because the
+   physical held item is the input. This satisfies `shop-prices` when every entry has at least one
+   enabled direction.
+10. **Tune live configuration (`/tconfig`).** Set the individual `skyblock.*` keys documented in
+    [Skyblock Configuration](#skyblock-configuration). World and grid pitch are restart-required;
+    defaults and the remaining scalar settings are live configuration reads. The GUI Settings page
+    is read-only and shows the exact `/tconfig` path for each value.
+11. **Verify the game.** Create a test island with `/island create` and confirm its template, kit,
+    biome, protection, home, and default challenge. Perform the tracked action and claim it. Use
+    `/isadmin island force-complete <owner|id> <challenge>` on a second test challenge to verify the
+    normal reward path, then check `/island shop`, `/island shop buy OAK_SAPLING 1`, `/sell`, and
+    `/balance`/the island wallet. Finally run `/isadmin status` and confirm the required checks are
+    satisfied.
+
+### Skyblock Admin Reference
+
+The CLI is safe for console automation. Every destructive command is two-step: the first invocation
+describes the consequence, reports the current reference count and backup directory, and stores a
+one-shot confirmation for 60 seconds. Repeat the same command with a trailing `confirm`. Registry
+deletions write a bounded backup under `plugins/Tweaks/skyblock/backups/` before mutating data.
+
+#### Root and live islands
+
+| Form | Worked example | Notes |
+|---|---|---|
+| `/isadmin help [topic]` | `/isadmin help challenges` | Prints the declarative syntax catalogue; `/isadmin help` prints all topics. |
+| `/isadmin status` | `/isadmin status` | Console-safe checklist with state, reason, and target screen. |
+| `/isadmin spawn` | `/isadmin spawn` | Player-only after a complete in-world wand selection. |
+| `/isadmin clearspawn [confirm]` | `/isadmin clearspawn confirm` | First run previews; confirmation restores the world fallback. |
+| `/isadmin reload` | `/isadmin reload` | Reloads types, challenges, generators, and shop registries. |
+| `/isadmin gui` | `/isadmin gui` | Player-only complete authoring hub. |
+| `/isadmin island list` | `/isadmin island list` | List live islands; console-safe. |
+| `/isadmin island inspect <owner\|id>` | `/isadmin island inspect Alex` | Inspect by owner name or 32-character island id. |
+| `/isadmin island teleport <owner\|id>` | `/isadmin island teleport 0123456789abcdef0123456789abcdef` | Player-only teleport to the island spawn. |
+| `/isadmin island size <owner\|id> <size>` | `/isadmin island size Alex MEDIUM` | Increase the footprint; it never shrinks an island. |
+| `/isadmin island force-complete <owner\|id> <challenge>` | `/isadmin island force-complete Alex first-stone` | Uses the normal challenge reward path. |
+| `/isadmin island force-delete <owner\|id> [confirm]` | `/isadmin island force-delete Alex confirm` | Confirmed durable deletion; the live-island boundary has no ownership or wallet editor. |
+
+#### Templates and spawn selections
+
+| Form | Worked example | Notes |
+|---|---|---|
+| `/isadmin templates list` | `/isadmin templates list` | List captured template ids. |
+| `/isadmin templates save <id>` | `/isadmin templates save starter` | Player-only; saves the current complete wand selection. |
+| `/isadmin templates preview <id>` | `/isadmin templates preview starter` | Prints dimensions and block-entity count. |
+| `/isadmin templates delete <id> [confirm]` | `/isadmin templates delete starter confirm` | Requires confirmation and refuses referenced templates. |
+
+#### Types and difficulties
+
+| Form | Worked example | Notes |
+|---|---|---|
+| `/isadmin types list [filter]` | `/isadmin types list starter` | Lists id and display name. |
+| `/isadmin types create <id> [display...]` | `/isadmin types create starter Starter Island` | Minimal create; set fields separately. |
+| `/isadmin types set <id> name <value...>` | `/isadmin types set starter name Starter Island` | Multiword display name. |
+| `/isadmin types set <id> difficulties <difficulty...>` | `/isadmin types set starter difficulties normal hard` | Replaces the allowed difficulty set. |
+| `/isadmin types set <id> template <value...>` | `/isadmin types set starter template starter` | Use an empty value through the GUI to clear it. |
+| `/isadmin types set <id> biome <value>` | `/isadmin types set starter biome PLAINS` | Uses a Bukkit biome name. |
+| `/isadmin types set <id> allowed <challenge...>` | `/isadmin types set starter allowed first-stone` | Empty allowed set means all challenges. |
+| `/isadmin types inspect <id>` | `/isadmin types inspect starter` | Shows definition and validation problems. |
+| `/isadmin types kit <id>` | `/isadmin types kit starter` | GUI-only physical item editor; use `/isadmin gui`. |
+| `/isadmin types allowed <id> <challenge...>` | `/isadmin types allowed starter first-stone` | Legacy alias for setting allowed challenges. |
+| `/isadmin types edit <id> <name> <difficulty[,difficulty]> [template] [biome]` | `/isadmin types edit starter Starter normal starter PLAINS` | Legacy positional alias. |
+| `/isadmin types delete <id> [confirm]` | `/isadmin types delete starter confirm` | Confirmation includes island references and backup location. |
+| `/isadmin difficulties list [filter]` | `/isadmin difficulties list hard` | Lists difficulty id and display name. |
+| `/isadmin difficulties create <id> [display...]` | `/isadmin difficulties create hard Hard Mode` | Minimal create. |
+| `/isadmin difficulties set <id> name <value...>` | `/isadmin difficulties set hard name Hard Mode` | Set display name only. |
+| `/isadmin difficulties set <id> multiplier <value>` | `/isadmin difficulties set hard multiplier 1.5` | Finite progression multiplier. |
+| `/isadmin difficulties set <id> order <value>` | `/isadmin difficulties set hard order 1` | Display order. |
+| `/isadmin difficulties inspect <id>` | `/isadmin difficulties inspect hard` | Inspect one difficulty. |
+| `/isadmin difficulties edit <id> <name> <multiplier> [order]` | `/isadmin difficulties edit hard Hard 1.5 1` | Legacy positional alias. |
+| `/isadmin difficulties delete <id> [confirm]` | `/isadmin difficulties delete hard confirm` | Refuses type or island references. |
+
+#### Generators and shop
+
+| Form | Worked example | Notes |
+|---|---|---|
+| `/isadmin generators list [filter]` | `/isadmin generators list starter` | Lists generator tiers. |
+| `/isadmin generators create <id> [display...]` | `/isadmin generators create starter Starter` | Minimal create; add outputs before use. |
+| `/isadmin generators set <id> name <value...>` | `/isadmin generators set starter name Starter Generator` | Set display name. |
+| `/isadmin generators output set <id> <material> <weight>` | `/isadmin generators output set starter COBBLESTONE 8` | Add or replace one weighted output. |
+| `/isadmin generators output remove <id> <material> [confirm]` | `/isadmin generators output remove starter IRON_ORE confirm` | Explicit confirmation; a tier must retain one output. |
+| `/isadmin generators inspect <id>` | `/isadmin generators inspect starter` | Shows weight shares and validation. |
+| `/isadmin generators edit <id> <name> <material> <weight> ...` | `/isadmin generators edit starter Starter COBBLESTONE 8 IRON_ORE 2` | Legacy whole-table alias. |
+| `/isadmin generators delete <id> [confirm]` | `/isadmin generators delete starter confirm` | Refuses island references. |
+| `/isadmin shop list [filter]` | `/isadmin shop list farming` | Lists material, category, and prices. |
+| `/isadmin shop set <material> <category> <buy> <sell>` | `/isadmin shop set OAK_SAPLING farming 5 1` | Use `-1` to disable one direction. |
+| `/isadmin shop inspect <material>` | `/isadmin shop inspect OAK_SAPLING` | Shows prices and validation. |
+| `/isadmin shop add-held-item` | `/isadmin shop add-held-item` | GUI-only held-item pointer; use `/isadmin gui`. |
+| `/isadmin shop delete <material> [confirm]` | `/isadmin shop delete OAK_SAPLING confirm` | Confirmed catalog deletion. |
+
+#### Challenges and categories
+
+| Form | Worked example | Notes |
+|---|---|---|
+| `/isadmin challenges list [filter]` | `/isadmin challenges list stone` | Lists challenge ids and names. |
+| `/isadmin challenges create <id> [display...]` | `/isadmin challenges create first-stone First Stone` | Uses the first category, then set category explicitly when needed. |
+| `/isadmin challenges set <id> name <value...>` | `/isadmin challenges set first-stone name First Stone` | Set one field. |
+| `/isadmin challenges set <id> description <value...>` | `/isadmin challenges set first-stone description Gather stone.` | Set one field. |
+| `/isadmin challenges set <id> category <category>` | `/isadmin challenges set first-stone category gathering` | Assign an existing category. |
+| `/isadmin challenges inspect <id>` | `/isadmin challenges inspect first-stone` | Shows descriptions, ordered entries, and validation. |
+| `/isadmin challenges validate [id]` | `/isadmin challenges validate first-stone` | Validate one challenge or omit the id for all. |
+| `/isadmin challenges requirement add <id> <tracked\|possession> <identifier> <amount>` | `/isadmin challenges requirement add first-stone tracked collect:STONE 16` | Identifier is domain-validated; use `possession DIAMOND 1` for inventory. |
+| `/isadmin challenges requirement edit <id> <index> <tracked\|possession> <identifier> <amount>` | `/isadmin challenges requirement edit first-stone 0 tracked collect:STONE 32` | Replaces one requirement in place. |
+| `/isadmin challenges requirement remove <id> <index>` | `/isadmin challenges requirement remove first-stone 1` | Removes one ordered requirement. |
+| `/isadmin challenges requirement move <id> <from> <to>` | `/isadmin challenges requirement move first-stone 1 0` | Reorders without rewriting the list. |
+| `/isadmin challenges reward add <id> <money\|size\|generator\|item> <value...>` | `/isadmin challenges reward add first-stone money 10` | Money, size, and generator rewards are CLI-authorable; item input is GUI-only. |
+| `/isadmin challenges reward edit <id> <index> <money\|size\|generator\|item> <value...>` | `/isadmin challenges reward edit first-stone 0 money 25` | Replaces one reward in place. |
+| `/isadmin challenges reward remove <id> <index>` | `/isadmin challenges reward remove first-stone 0` | Removes one ordered reward. |
+| `/isadmin challenges reward move <id> <from> <to>` | `/isadmin challenges reward move first-stone 1 0` | Reorders without rewriting the list. |
+| `/isadmin challenges prerequisites <id> <challenge...>` | `/isadmin challenges prerequisites first-stone cobblestone` | Sets all-of prerequisites. |
+| `/isadmin challenges any-of <id> <required> <challenge...>` | `/isadmin challenges any-of first-stone 1 cobblestone dirt` | Sets an any-of prerequisite group. |
+| `/isadmin challenges types <id> <type...>` | `/isadmin challenges types first-stone starter` | Sets island-type gating. |
+| `/isadmin challenges category create <id> [display...]` | `/isadmin challenges category create gathering Gathering` | Creates a category. |
+| `/isadmin challenges category set <id> name <value...>` | `/isadmin challenges category set gathering name Gathering` | Sets category display name. |
+| `/isadmin challenges category set <id> order <value>` | `/isadmin challenges category set gathering order 1` | Sets category ordering. |
+| `/isadmin challenges category delete <id> [confirm]` | `/isadmin challenges category delete gathering confirm` | Refuses categories still used by challenges. |
+| `/isadmin challenges edit <id> <name> <description...>` | `/isadmin challenges edit first-stone First Stone Gather stone.` | Legacy positional text alias. |
+| `/isadmin challenges category-create <id> [display...]` | `/isadmin challenges category-create gathering Gathering` | Legacy category-create alias. |
+| `/isadmin challenges category-delete <id> [confirm]` | `/isadmin challenges category-delete gathering confirm` | Legacy category-delete alias. |
+| `/isadmin challenges category-order <id> <order>` | `/isadmin challenges category-order gathering 1` | Legacy category-order alias. |
+| `/isadmin challenges category <id> <category>` | `/isadmin challenges category first-stone gathering` | Legacy category-assignment alias. |
+| `/isadmin challenges requirement-remove <id> <index>` | `/isadmin challenges requirement-remove first-stone 1` | Legacy requirement-removal alias. |
+| `/isadmin challenges requirement-move <id> <from> <to>` | `/isadmin challenges requirement-move first-stone 1 0` | Legacy requirement-move alias. |
+| `/isadmin challenges reward-remove <id> <index>` | `/isadmin challenges reward-remove first-stone 0` | Legacy reward-removal alias. |
+| `/isadmin challenges reward-move <id> <from> <to>` | `/isadmin challenges reward-move first-stone 1 0` | Legacy reward-move alias. |
+| `/isadmin challenges delete <id> [confirm]` | `/isadmin challenges delete first-stone confirm` | Confirmation includes prerequisite references and backup location. |
+
+#### Player-facing items in the GUI
+
+Three inputs remain deliberately GUI-only because they are physical item containers: `/isadmin
+types kit <id>`, item challenge rewards, and `/isadmin shop add-held-item`. The CLI responds with
+the exact `/isadmin gui` pointer. The GUI item editor copies full item metadata, including names,
+lore, enchants, model data, and foreign PDC; it does not consume or mutate the administrator's
+held stack when adding a shop material.
+
+### Player Command Reference
+
+| Form | Worked example | Result |
+|---|---|---|
+| `/skyblock` | `/skyblock` | Travel to your island home or Skyblock spawn. |
+| `/skyblock help` | `/skyblock help` | Accepted travel alias. |
+| `/island create` | `/island create` | Use configured default type/difficulty. |
+| `/island create <type> <difficulty>` | `/island create starter normal` | Use an explicit allowed pair. |
+| `/island create gui` | `/island create gui` | Open the type/difficulty picker. |
+| `/island home [name]` | `/island home mine` | Go to the island spawn or a named home. |
+| `/island sethome <name>` | `/island sethome mine` | Save a home inside the island. |
+| `/island homes buy` | `/island homes buy` | Buy one available home slot. |
+| `/island info [island]` | `/island info` or `/island info Alex` | Inspect your island or a loaded island. |
+| `/island invite <player>` | `/island invite Alex` | Owner sends a co-op invitation. |
+| `/island accept` | `/island accept` | Accept the pending invitation. |
+| `/island kick <player>` | `/island kick Alex` | Owner removes a member and wipes their Skyblock inventory/ender chest. |
+| `/island leave` | `/island leave` | Member leaves, loses homes and Skyblock inventory/ender chest, and returns to spawn. |
+| `/island settings public` | `/island settings public` | Owner toggles public visits. |
+| `/island visit <island>` | `/island visit Alex` | Visit a public island by id or owner name. |
+| `/island challenges` | `/island challenges` | Open the challenge Dialog. |
+| `/island challenges gui` | `/island challenges gui` | Open the challenge Dialog explicitly. |
+| `/island challenges list` | `/island challenges list` | Print every challenge's readiness. |
+| `/island challenges claim <id>` | `/island challenges claim first-stone` | Claim a ready challenge and apply its rewards. |
+| `/island shop` | `/island shop` | Open the shop buy Dialog. |
+| `/island shop buy <material>` | `/island shop buy OAK_SAPLING` | Buy one item. |
+| `/island shop buy <material> <amount>` | `/island shop buy OAK_SAPLING 16` | Buy an explicit amount. |
+| `/island biome <name>` | `/island biome CHERRY_GROVE` | Change the island biome for its configured price. |
+| `/island delete` | `/island delete` | Start the owner-only deletion confirmation. |
+| `/island delete confirm` | `/island delete confirm` | Confirm within 60 seconds and begin durable deletion. |
+| `/sell` | `/sell` | Sell the held compatible item. |
+| `/sell <material>` | `/sell OAK_SAPLING` | Sell that material from the main inventory. |
+| `/sell all` | `/sell all` | Sell every compatible sellable stack. |
+| `/pay <player> <amount>` | `/pay Alex 25` | Transfer island-wallet money to another online player's island. |
+
+### Skyblock Configuration
+
+All paths below are in `config.yml` and can be set with `/tconfig <path> <value>`. The values shown
+are the shipped defaults. `world` and `grid-pitch-chunks` are captured for the server lifetime and
+require a restart; changing the world-profile mapping also requires a restart so the boot gate can
+rebuild the exclusive runtime. Other values are live reads unless the table says otherwise.
+
+| Key | Default | Valid range | Restart? | Effect |
+|---|---:|---|---|---|
+| `skyblock.world` | `jass:skyblock` | Loaded namespaced world key | Yes | Selects the Skyblock world and its frozen profile boundary. |
+| `skyblock.grid-pitch-chunks` | `35` | Positive chunk pitch | Yes | Distance between island grid slots; it is part of persisted slot identity. |
+| `skyblock.default-type` | `default` | Non-blank live type id | No | Type used by bare `/island create`. |
+| `skyblock.default-difficulty` | `normal` | Non-blank live difficulty id allowed by the default type | No | Difficulty used by bare `/island create`. |
+| `skyblock.island-y` | `64` | `-64` to `320` | No | Island spawn Y coordinate. |
+| `skyblock.max-members` | `4` | At least `1` | No | Total co-op member cap, including the owner. |
+| `skyblock.max-homes` | `3` | At least `1` | No | Free named-home slots per member. |
+| `skyblock.max-homes-purchasable` | `10` | At least `1` | No | Maximum total home slots after purchases. |
+| `skyblock.invite-timeout-seconds` | `300` | At least `1` | No | Lifetime of a pending co-op invitation. |
+| `skyblock.save-interval-seconds` | `60` | At least `1` | No | Periodic island persistence interval. |
+| `skyblock.deletion-chunks-per-tick` | `4` | At least `1` | No | Shared terrain-cleanup budget for durable island deletion. |
+| `skyblock.containment-message-cooldown-ms` | `3000` | At least `0` | No | Cooldown for repeated containment messages. |
+| `skyblock.template-max-height` | `128` | `1` to `384` | No | Maximum vertical scan height for template capture. |
+| `skyblock.template-max-blocks` | `250000` | At least `1` | No | Maximum estimated blocks for one template capture. |
+| `skyblock.max-slot-index` | `100000` | At least `0` | No | Highest island grid slot that can be allocated. |
+| `skyblock.price.biome-change` | `0.0` | At least `0` | No | Island-wallet price of `/island biome`. |
+| `skyblock.price.home-slot` | `0.0` | At least `0` | No | Island-wallet price of `/island homes buy`. |
+
+The GUI Settings page is read-only but displays every path and its `/tconfig` form. Default
+selection can also be set by Type → **Make default**, which writes the type and paired difficulty
+together. Registry edits use `/isadmin reload`; world/profile and grid changes require a restart.
+
+### Skyblock Data and Troubleshooting
+
+Skyblock persistence lives below `plugins/Tweaks/skyblock/`:
+
+| Path | Contents |
+|---|---|
+| `islands/` | One YAML record per island: owner, members, slot, size, type/difficulty, homes, counters, completed challenges, and generator tier. |
+| `spawn.yml` | Recorded spawn point and selected chunk bounds. |
+| `templates/` | Lossless captured template payloads and block entities. |
+| `deletions/` | Durable deletion cursors; records remain until ejection, unclaim, terrain sweep, profile/wallet cleanup, and final slot release finish. |
+| `balances/` | Per-island wallet snapshots. |
+| `wallet-transfers/` | Durable transfer intents used to replay interrupted wallet writes. |
+| `backups/` | Bounded pre-mutation backups for destructive registry and template edits. |
+| `types.yml` | Island types, difficulties, templates, biomes, allowed challenges, and serialized kits. |
+| `challenges.yml` | Challenge categories, definitions, requirements, prerequisites, gating, and rewards. |
+| `generators.yml` | Weighted cobblestone generator tiers. |
+| `shop.yml` | Material categories and buy/sell prices. |
+
+Do not hand-edit island, deletion, wallet, or template records while the server is running. Use the
+GUI or `/isadmin` so validation, backups, and asynchronous persistence stay coordinated. `/isadmin
+reload` reloads the four editable registries only; it does not reload the world, grid, islands,
+wallets, or templates.
+
+If the boot gate refuses to enable Skyblock, check that the configured world is loaded, its
+`world-profiles` entry uses profile `skyblock`, and no other world uses that profile. Run the exact
+remediation command printed in the server log, then restart. If `/isadmin status` shows `BLOCKED`,
+follow the target screen named by the check: `default-type` means the configured pair is missing or
+not allowed, `playable-types` means a type has no template and no kit, `challenge-integrity` names
+invalid references or cycles, `shop-prices` names entries disabled in both directions, and
+`generator-weights` names an empty or invalid output table.
+
+If a challenge never progresses, verify its tracked key with `/isadmin challenges inspect <id>` and
+the table in [Progress Tracking](#progress-tracking). The identifier must be a recordable material
+or entity type, and the event must occur inside the island. Shop-purchased items never count toward
+gathered progress; renewable block taint also prevents farming the same location. If a challenge
+is ready but will not claim, check prerequisites, type gating, possession compatibility, and the
+difficulty multiplier.
+
+If an island is empty, inspect its type. A blank template plus an empty kit is intentionally a void
+island; capture a non-air template or author a kit, set the type's template/difficulties, and make
+the pair the default. If template capture refuses, confirm both wand positions are in the configured
+world, the selection is within `template-max-height`/`template-max-blocks`, and the selected volume
+contains a non-air block. If a delete is refused, the confirmation preview gives the reference
+count; inspect and move the type/template/challenge/generator references first. A deletion already
+started is not stuck merely because the island disappears from the browser: watch `deletions/` until
+the durable cursor drains and the slot is released.
 
 ---
 
@@ -1147,6 +1683,17 @@ When an action occurs, the system checks rules in this order:
 | `/reroll` | Re-roll your current Resource Hunt target. |
 | `/resource` | Teleport to the resource world. |
 | `/roulette stake <amount>` | Set your sticky Roulette stake; every segment click wagers it. |
+| `/skyblock [help]` | Travel to your Skyblock island or spawn. |
+| `/island create [<type> <difficulty>\|gui]` | Create an island with explicit values, configured defaults, or the picker. |
+| `/island home [name]` / `/island sethome <name>` / `/island homes buy` | Use, save, and purchase island homes. |
+| `/island info [island]` / `/island biome <name>` | Inspect an island or change your island biome. |
+| `/island invite <player>` / `/island accept` / `/island kick <player>` / `/island leave` | Manage co-op membership. |
+| `/island settings public` / `/island visit <island>` | Toggle and use public island visits. |
+| `/island challenges [gui\|list\|claim <id>]` | View readiness or claim challenges. |
+| `/island shop [buy <material> [amount]]` | Open the shop or buy directly. |
+| `/island delete [confirm]` | Request and confirm owner-only durable deletion. |
+| `/sell [material\|all]` | Sell the held item, one material, or all compatible items. |
+| `/pay <player> <amount>` | Transfer Skyblock wallet money to another island. |
 
 ### Admin Commands
 
@@ -1225,6 +1772,15 @@ When an action occurs, the system checks rules in this order:
 | `/creative` | `tweaks.admin.gamemode` | Switch your gamemode to Creative. |
 | `/resource settarget [p] <t>` | `tweaks.admin.resource.settarget.self/other` | Override a player's Resource Hunt target. |
 | `/displaychest [hand\|off]` | `tweaks.admin.displaychest` | Toggle display chest setup/removal mode. |
+| `/isadmin help [topic]` / `/isadmin status` | `tweaks.admin.skyblock` | Show the complete authoring syntax or the readiness checklist. |
+| `/isadmin gui` / `/isadmin reload` | `tweaks.admin.skyblock` | Open the GUI or reload the four editable registries. |
+| `/isadmin spawn` / `/isadmin clearspawn [confirm]` | `tweaks.admin.skyblock` | Record or confirmed-clear the wand-selected Skyblock spawn. |
+| `/isadmin island <list\|inspect\|teleport\|size\|force-complete\|force-delete>` | `tweaks.admin.skyblock` | Inspect and administer live islands within the documented boundary. |
+| `/isadmin templates <list\|save\|preview\|delete>` | `tweaks.admin.skyblock` | Capture, inspect, and confirmed-delete templates. |
+| `/isadmin types ...` / `/isadmin difficulties ...` | `tweaks.admin.skyblock` | Create-then-set or legacy-author island types and difficulties. |
+| `/isadmin challenges ...` | `tweaks.admin.skyblock` | Author categories, challenges, ordered requirements/rewards, and gating. |
+| `/isadmin generators ...` / `/isadmin shop ...` | `tweaks.admin.skyblock` | Author weighted generators and shop prices. |
+| `/isadmin types kit <id>` / `/isadmin challenges reward ... item ...` / `/isadmin shop add-held-item` | `tweaks.admin.skyblock` | GUI-only physical-item authoring operations; the CLI prints the GUI pointer. |
 
 ---
 
@@ -1268,6 +1824,9 @@ When an action occurs, the system checks rules in this order:
 | `tweaks.blackjack.createtable` | Allows starting the button-linking table creation flow. |
 | `tweaks.blackjack.removetable` | Allows starting the table removal flow. |
 | `tweaks.admin.roulettescan` | Allows running the read-only Roulette board geometry diagnostic. |
+| `tweaks.admin.skyblock` | Allows Skyblock administration, registry inspection, spawn recording, and island tools. |
+| `tweaks.skyblock.use` | Allows player Skyblock commands and progression. |
+| `tweaks.skyblock.bypass` | Bypasses Skyblock containment restrictions. |
 | `tweaks.roulette.createboard` | Allows starting the Roulette board setup flow. |
 | `tweaks.roulette.removeboard` | Allows starting the Roulette board removal flow. |
 | `tweaks.roulette.forcespin` | Allows an admin's board-side control to force-close betting and spin immediately. |
@@ -1363,6 +1922,7 @@ spawner-egg-disabled-mobs: []
 # Worlds where the end portal is disabled.
 disabled-end-portal-worlds:
   - "jass:archive"
+  - "jass:resource"
 
 # Worlds where fly is enabled by default.
 fly-worlds:
@@ -1390,6 +1950,7 @@ efficacy: "jass:test9"
 1. Place the JAR in `plugins/`.
 2. Ensure you are running **Paper 26.2** with **Java 25**.
 3. Install the required **data pack** for custom enchantments.
+
 4. Start the server, then update namespaced keys in `config.yml`.
 5. Run `/setwarp spawn` to enable `/spawn`.
 6. Run `/setwarp newspawn` to enable resource world login ejection.
@@ -1409,6 +1970,7 @@ All data is stored in YAML files under `plugins/Tweaks/`:
 - `nick-removals.yml`: Pending nickname removals.
 - `whack.yml`: Whack-an-Andrew configuration.
 - `rewards/`: Reward templates.
+- Skyblock data layout and recovery rules: see [Skyblock Data and Troubleshooting](#skyblock-data-and-troubleshooting).
 
 ### Building from Source
 

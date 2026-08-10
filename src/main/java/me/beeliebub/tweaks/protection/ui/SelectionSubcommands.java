@@ -5,11 +5,8 @@ import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.core.ProtectionMessages.Text;
 import me.beeliebub.tweaks.protection.region.Region;
 import me.beeliebub.tweaks.utils.GeometryUtil;
-import net.kyori.adventure.text.format.TextDecoration;
-import org.bukkit.Material;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
 
 import java.util.Collections;
 import java.util.List;
@@ -63,17 +60,7 @@ final class SelectionSubcommands {
                 sender.sendMessage(Messages.PROTECTION.text(Text.WAND_ONLY_PLAYERS));
                 return;
             }
-            Material tool = ctx.plugin.getProtectionSelectionTool();
-            ItemStack wand = new ItemStack(tool);
-            wand.editMeta(meta -> meta.displayName(Messages.PROTECTION.text(Text.WAND_NAME)
-                    .decoration(TextDecoration.ITALIC, false)));
-            var overflow = player.getInventory().addItem(wand);
-            if (!overflow.isEmpty()) {
-                player.getWorld().dropItemNaturally(player.getLocation(), wand);
-                sender.sendMessage(Messages.PROTECTION.text(Text.WAND_FULL));
-            } else {
-                sender.sendMessage(Messages.PROTECTION.text(Text.WAND_SUCCESS));
-            }
+            new RegionWand(ctx.plugin).give(player);
         }
 
         @Override

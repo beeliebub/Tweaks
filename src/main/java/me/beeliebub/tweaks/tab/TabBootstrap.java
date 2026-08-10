@@ -18,6 +18,7 @@ public final class TabBootstrap {
     public static void register(Tweaks plugin, Services services) {
         TabManager tabManager = new TabManager(plugin, services.economyManager(), services.rankManager(),
                 services.playerAdminManager(), services.worldProfileTable());
+        services.setTabManager(tabManager);
         plugin.getServer().getPluginManager().registerEvents(tabManager, plugin);
         services.playerAdminManager().setTabManager(tabManager);
         services.economyManager().setTabManager(tabManager);

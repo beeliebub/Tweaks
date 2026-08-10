@@ -1,10 +1,12 @@
 package me.beeliebub.tweaks.profiles;
 
 import me.beeliebub.tweaks.utils.Point;
+import me.beeliebub.tweaks.utils.InventoryUtil;
 import me.beeliebub.tweaks.utils.YamlStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
 import java.util.*;
@@ -208,6 +210,44 @@ public class StorageManager {
 
     public void cacheInventory(UUID player, String profile, String base64) {
         inventoryCache.computeIfAbsent(player, k -> new ConcurrentHashMap<>()).put(profile, base64);
+    }
+
+    /**
+     * Clears a player's inventory and ender-chest payloads for one frozen world profile.
+     * Experience is deliberately left untouched: it is stored under a separate key and must
+     * survive leaving or losing access to an island.
+     *
+     * <p>The read-modify-write preserves profile data that is not currently cached, including the
+     * XP payload. A serialized empty inventory is written rather than removing keys because an
+     * absent inventory value is allowed to fall through to a different migration/default path on
+     * a later login.
+     */
+    public CompletableFuture<Void> clearProfileData(UUID player, String profile) {
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(profile, "profile");
+        if (profile.isBlank() || profile.contains(".")) {
+            throw new IllegalArgumentException("profile must be a non-blank YAML key without dots");
+        }
+
+        String enderChestKey = "ec_" + profile;
+        String emptyInventory = InventoryUtil.toBase64(new ItemStack[41]);
+        String emptyEnderChest = InventoryUtil.toBase64(new ItemStack[27]);
+        Map<String, String> cache = inventoryCache.computeIfAbsent(player,
+                ignored -> new ConcurrentHashMap<>());
+        cache.put(profile, emptyInventory);
+        cache.put(enderChestKey, emptyEnderChest);
+
+        return inventoryStore.readOrderedAsyncStrict(player.toString()).thenCompose(config -> {
+            Map<String, String> snapshot = new HashMap<>();
+            for (String key : config.getKeys(false)) {
+                String value = config.getString(key);
+                if (value != null) snapshot.put(key, value);
+            }
+            snapshot.putAll(cache);
+            snapshot.put(profile, emptyInventory);
+            snapshot.put(enderChestKey, emptyEnderChest);
+            return inventoryStore.writeAsync(player.toString(), output -> snapshot.forEach(output::set));
+        });
     }
 
     public String getCachedInventory(UUID player, String profile) {

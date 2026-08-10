@@ -21,6 +21,11 @@ import me.beeliebub.tweaks.protection.ui.RegionSelectionManager;
 import me.beeliebub.tweaks.ranks.RankManager;
 import me.beeliebub.tweaks.ranks.RanksBootstrap;
 import me.beeliebub.tweaks.recipes.RecipesBootstrap;
+import me.beeliebub.tweaks.skyblock.SkyblockBootstrap;
+import me.beeliebub.tweaks.skyblock.SkyblockConfig;
+import me.beeliebub.tweaks.skyblock.island.IslandStore;
+import me.beeliebub.tweaks.skyblock.island.IslandManager;
+import me.beeliebub.tweaks.skyblock.island.PendingWipeStore;
 import me.beeliebub.tweaks.tab.TabBootstrap;
 import me.beeliebub.tweaks.teleport.TeleportBootstrap;
 import me.beeliebub.tweaks.economy.EconomyManager;
@@ -96,6 +101,30 @@ public class Tweaks extends JavaPlugin {
         return services.lotteryManager;
     }
 
+    public SkyblockBootstrap.Runtime getSkyblockRuntime() {
+        return services.skyblockRuntime;
+    }
+
+    public SkyblockConfig getSkyblockConfig() {
+        return services.skyblockRuntime == null ? null : services.skyblockRuntime.config();
+    }
+
+    public String getSkyblockProfile() {
+        return services.skyblockRuntime == null ? null : services.skyblockRuntime.profile();
+    }
+
+    public IslandStore getSkyblockIslandStore() {
+        return services.skyblockRuntime == null ? null : services.skyblockRuntime.islandStore();
+    }
+
+    public PendingWipeStore getSkyblockPendingWipeStore() {
+        return services.skyblockRuntime == null ? null : services.skyblockRuntime.pendingWipeStore();
+    }
+
+    public IslandManager getSkyblockManager() {
+        return services.skyblockManager;
+    }
+
     @Override
     public void onEnable() {
         services = new Services();
@@ -141,6 +170,7 @@ public class Tweaks extends JavaPlugin {
             XpBottleBootstrap.register(this, services);
             BlockLogBootstrap.register(this, services);
             DeathInventoryBootstrap.register(this, services);
+            SkyblockBootstrap.register(this, services);
 
             getLogger().info("Tweaks has been enabled safely. Async I/O and Teleportation active.");
         } catch (RuntimeException e) {
@@ -177,6 +207,7 @@ public class Tweaks extends JavaPlugin {
         runShutdownStep("economy", () -> EconomyBootstrap.shutdown(this, services.housePaymentService, services.economyManager, services.houseAccount));
         runShutdownStep("lottery", () -> me.beeliebub.tweaks.lottery.LotteryBootstrap.shutdown(this, services.lotteryManager));
         runShutdownStep("minigames", () -> MinigamesBootstrap.shutdown(this, services.blackjackListener, services.rouletteListener));
+        runShutdownStep("skyblock", () -> SkyblockBootstrap.shutdown(this, services.skyblockRuntime));
     }
 
     private void runShutdownStep(String name, Runnable step) {

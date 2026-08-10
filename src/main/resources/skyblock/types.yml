@@ -1,0 +1,10 @@
+difficulties:
+  - id: normal
+    name: Normal
+    order: 0
+types:
+  default:
+    name: Default
+    difficulties: [normal]
+    template: ""
+    kit: []

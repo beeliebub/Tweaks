@@ -24,6 +24,7 @@ import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -270,6 +271,15 @@ public final class ProtectionListeners implements Listener {
         if (!(event.getEntity() instanceof Player player)) return;
         if (protection.isExplicitlyAllowed(
                 player.getLocation(), player.getUniqueId(), RegionFlag.INVINCIBILITY)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onPlayerDamage(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof Player victim)) return;
+        if (!(event.getDamager() instanceof Player attacker)) return;
+        if (!protection.isAllowed(victim.getLocation(), attacker.getUniqueId(), RegionFlag.PVP)) {
             event.setCancelled(true);
         }
     }

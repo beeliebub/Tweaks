@@ -123,6 +123,7 @@ public final class ConfigGUI {
 
         switch (setting.type()) {
             case BOOLEAN -> openBooleanEditor(player, valueEditor, categoryKey, setting);
+            case STRING -> openScalarEditor(player, valueEditor, categoryKey, setting);
             case STRING_LIST, WORLD_KEY_LIST, MOB_LIST, MATERIAL_LIST ->
                     openListEditor(player, valueEditor, categoryKey, setting, page);
             case NUMBER_MAP -> openMapEditor(player, valueEditor, categoryKey, setting);

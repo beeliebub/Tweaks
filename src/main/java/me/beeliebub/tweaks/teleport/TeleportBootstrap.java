@@ -17,6 +17,7 @@ public final class TeleportBootstrap {
         // max-homes is read live at the /sethome check site, not cached here.
         TeleportCommandManager teleportManager = new TeleportCommandManager(
                 plugin, services.storageManager(), services.resourceHuntItems());
+        services.setTeleportCommandManager(teleportManager);
         for (String label : new String[]{"home", "sethome", "delhome", "homes",
                                           "warp", "setwarp", "delwarp", "warps",
                                           "spawn", "back",

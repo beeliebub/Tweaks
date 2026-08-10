@@ -105,6 +105,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         catalog.add(buildEnchantments());
         catalog.add(buildQuality());
         catalog.add(buildFeatures());
+        catalog.add(buildSkyblock());
         catalog.add(buildMinigames());
         catalog.add(buildPermissions());
         catalog.add(buildProtection());
@@ -661,6 +662,93 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         return new HelpCategory("features", "Player Features", articles, Material.WRITABLE_BOOK, 30, ColorUtil.HELP_GRAD_PLAYER_FEATURES);
     }
 
+    private HelpCategory buildSkyblock() {
+        List<HelpArticle> articles = new ArrayList<>();
+
+        articles.add(new HelpArticle("skyblock_islands", "Skyblock Islands", List.of(
+                gray("A separated island world with one protected grid slot per island."),
+                cmd("/island create", "Create an island using the configured default type and difficulty."),
+                cmd("/island create <type> <difficulty>", "Create an island with an explicit configured pair."),
+                cmd("/island create gui", "Choose an available type and difficulty in the island picker."),
+                cmd("/island home [name]", "Return to your island home or a named home."),
+                cmd("/island sethome <name>", "Save a named home inside your island."),
+                cmd("/island homes buy", "Buy an additional island home slot."),
+                cmd("/island biome <name>", "Change the island biome using the wallet sink."),
+                cmd("/island info", "View island ownership and membership."),
+                cmd("/island invite <player>", "Invite a player to your co-op island."),
+                cmd("/island visit <island>", "Visit a public island."),
+                cmd("/island delete", "Request deletion; confirm with /island delete confirm within 60 seconds."),
+                white("Island boundaries, spawn, and containment are enforced automatically."),
+                red("Skyblock commands work only in the configured Skyblock world.")
+        ), Material.GRASS_BLOCK, 10, ColorUtil.HELP_GRAD_PLAYER_FEATURES, List.of("skyblock_coop", "skyblock_challenges", "profiles")));
+
+        articles.add(new HelpArticle("skyblock_coop", "Skyblock Co-op", List.of(
+                gray("Island owners control membership and public access."),
+                cmd("/island invite <player>", "Send a co-op invitation."),
+                cmd("/island accept", "Accept your pending invitation."),
+                cmd("/island kick <player>", "Remove a co-op member (owner only)."),
+                cmd("/island leave", "Leave an island without deleting it."),
+                cmd("/island settings public", "Toggle public visits (owner only)."),
+                yellow("Leaving or being removed clears the Skyblock inventory and ender chest, then sends the player to spawn.")
+        ), Material.PLAYER_HEAD, 12, ColorUtil.HELP_GRAD_PLAYER_FEATURES, List.of("skyblock_islands", "skyblock_challenges", "spawn")));
+
+        articles.add(new HelpArticle("skyblock_challenges", "Skyblock Challenges", List.of(
+                gray("Challenges combine tracked island progress with possession requirements."),
+                cmd("/island challenges", "Open the challenge dialog."),
+                cmd("/island challenges list", "List readiness and missing requirements."),
+                cmd("/island challenges claim <id>", "Claim a ready challenge."),
+                white("Tracked requirements use island counters; possession requirements consume compatible items."),
+                white("Prerequisites, any-of groups, type restrictions, and difficulty multipliers are validated server-side."),
+                green("Rewards may unlock generators, island size, money, or items."),
+                yellow("Possession requirements consume only compatible, unmodified items.")
+        ), Material.NETHER_STAR, 14, ColorUtil.HELP_GRAD_QUALITY_ENCHANTS, List.of("skyblock_islands", "skyblock_shop", "balance")));
+
+        articles.add(new HelpArticle("skyblock_shop", "Skyblock Shop & Wallet", List.of(
+                gray("Skyblock money is stored per island and is separate from the main balance."),
+                cmd("/island shop", "Open the buy dialog."),
+                cmd("/island shop buy <material> [amount]", "Buy an item from the catalog; amount defaults to 1."),
+                cmd("/sell [item|all]", "Sell compatible items from your inventory."),
+                cmd("/pay <player> <amount>", "Transfer Skyblock money to another island."),
+                white("Shop prices and categories are server-configured."),
+                red("Money and item transactions are limited to the configured Skyblock world.")
+        ), Material.EMERALD, 16, ColorUtil.HELP_GRAD_ECONOMY, List.of("skyblock_islands", "balance", "profiles")));
+
+        articles.add(new HelpArticle("skyblock_generators", "Skyblock Generators", List.of(
+                gray("Cobblestone generators use the tier attached to your island."),
+                white("Each tier defines weighted outputs; invalid or empty tiers fall back safely."),
+                white("Generator unlocks are challenge rewards and remain island-owned."),
+                cmd("/island info", "Check your current island state."),
+                yellow("Generated materials are processed by the same Skyblock tracking and taint rules as other resources.")
+        ), Material.COBBLESTONE, 18, ColorUtil.HELP_GRAD_PLAYER_FEATURES, List.of("skyblock_challenges", "skyblock_shop")));
+
+        articles.add(new HelpArticle("skyblock_admin", "Skyblock Administration", List.of(
+                gray("Administrators have guarded tools for the configured Skyblock world."),
+                cmd("/isadmin gui", "Open the complete authoring hub and clear its setup checklist."),
+                cmd("/isadmin help [topic]", "Print the complete create-then-set syntax catalogue."),
+                cmd("/isadmin status", "Print every setup check and its current state."),
+                cmd("/isadmin spawn", "Record the current wand-selected Skyblock spawn."),
+                cmd("/isadmin clearspawn [confirm]", "Preview or confirm clearing the recorded spawn."),
+                cmd("/isadmin island list", "List loaded islands."),
+                cmd("/isadmin island inspect <owner|id>", "Inspect one island."),
+                cmd("/isadmin island force-delete <owner|id> [confirm]", "Preview or confirm durable deletion."),
+                cmd("/isadmin island size <owner|id> <size>", "Increase an island footprint."),
+                cmd("/isadmin templates list", "List captured template ids."),
+                cmd("/isadmin templates save|preview <id>", "Capture or inspect a template."),
+                cmd("/isadmin templates delete <id> [confirm]", "Safely remove an unreferenced template."),
+                cmd("/isadmin types create|set|inspect|list|delete ...", "Author types; use the GUI-only kit editor."),
+                cmd("/isadmin difficulties create|set|inspect|list|delete ...", "Author difficulty multipliers and order."),
+                cmd("/isadmin challenges create|set|inspect|validate|delete ...", "Author challenge text, categories, and validation."),
+                cmd("/isadmin challenges requirement|reward <add|edit|remove|move> ...", "Edit ordered requirements and rewards in place."),
+                cmd("/isadmin generators create|set|output|inspect|delete ...", "Author weighted generator tiers and outputs."),
+                cmd("/isadmin shop list|set|inspect|delete ...", "Author shop prices and categories."),
+                yellow("Type kits, challenge item rewards, and shop held-item entries are GUI-only; use /isadmin gui."),
+                cmd("/isadmin reload", "Reload editable Skyblock registries."),
+                red("Permission: tweaks.admin.skyblock.")
+        ), Material.COMMAND_BLOCK, 20, ColorUtil.HELP_GRAD_ITEM_TOOLS, List.of("skyblock_islands", "skyblock_shop"), Permissions.ADMIN_SKYBLOCK));
+
+        return new HelpCategory("skyblock", "Skyblock", articles, Material.END_STONE, 31, ColorUtil.HELP_GRAD_PLAYER_FEATURES);
+    }
+
     private HelpCategory buildMinigames() {
         List<HelpArticle> articles = new ArrayList<>();
 
@@ -887,10 +975,11 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("- Members list: hover '(N entries)' for full names."),
                 white("- Active flag rules (including targeted rules)."),
                 white("- Mob-spawn entity lists (ALLOW/DENY_MOB_SPAWN)."),
+                yellow("Skyblock islands use dedicated protection regions; manage them with /island."),
                 yellow("Aliases: /rg i, /rg am, /rg rm"),
                 red("Requires permission: " + Permissions.PROTECTION_INFO + ".")
         ), Material.BOOK, 22, ColorUtil.HELP_GRAD_PROTECTION_PURCHASEABLE,
-                List.of("protection_purchaseable", "protection_flags"),
+                List.of("protection_purchaseable", "protection_flags", "skyblock_islands"),
                 Permissions.PROTECTION_INFO));
 
         articles.add(new HelpArticle("protection_members", "Members & Hierarchy", List.of(
@@ -995,8 +1084,9 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/balance add <player> <amount>", "Grant funds."),
                 cmd("/balance remove <player> <amount>", "Deduct funds."),
                 white("Balance changes that cannot be represented exactly are rejected without changing the balance."),
-                red("Permission: tweaks.admin.balance.")
-        ), Material.EMERALD, 22, ColorUtil.HELP_GRAD_ECONOMY, List.of("daily_rewards", "ranks", "lottery")));
+                red("Permission: tweaks.admin.balance."),
+                white("Skyblock has a separate per-island wallet; see the Skyblock Shop & Wallet article.")
+        ), Material.EMERALD, 22, ColorUtil.HELP_GRAD_ECONOMY, List.of("daily_rewards", "ranks", "lottery", "skyblock_shop")));
 
         articles.add(new HelpArticle("lottery", "Server Lottery", List.of(
                 gray("Players who lose to the casino can enter the server-wide lottery."),

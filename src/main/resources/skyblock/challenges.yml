@@ -1,0 +1,18 @@
+categories:
+  - id: general
+    name: General
+    order: 0
+challenges:
+  cobblestone:
+    category: general
+    name: Cobblestone
+    description: Gather cobblestone for your island.
+    requirements:
+      - type: tracked
+        key: collect:COBBLESTONE
+        amount: 64
+    rewards:
+      - type: items
+        items:
+          - material: OAK_SAPLING
+            amount: 1

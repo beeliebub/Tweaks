@@ -225,6 +225,15 @@ public final class Permissions {
      */
     public static final String ROULETTE_FORCESPIN = "tweaks.roulette.forcespin";
 
+    /** Allows a player to use the player-facing Skyblock commands. */
+    public static final String SKYBLOCK_USE = "tweaks.skyblock.use";
+
+    /** Allows a player to ignore Skyblock island containment and membership checks. */
+    public static final String SKYBLOCK_BYPASS = "tweaks.skyblock.bypass";
+
+    /** Allows access to the Skyblock administration command suite. */
+    public static final String ADMIN_SKYBLOCK = "tweaks.admin.skyblock";
+
     // ---------------------------------------------------------------- Categories
 
     /**
@@ -244,6 +253,7 @@ public final class Permissions {
         CATEGORY_DISPLAY_NAMES.put("protection", "Protection");
         CATEGORY_DISPLAY_NAMES.put("ranks",      "Ranks");
         CATEGORY_DISPLAY_NAMES.put("bypass",     "Bypasses");
+        CATEGORY_DISPLAY_NAMES.put("skyblock",   "Skyblock");
     }
 
     /** Metadata used to place and describe a permission in the GUI. */
@@ -305,6 +315,11 @@ public final class Permissions {
 
         // bypass — limit overrides
         register(m, BYPASS_HOMES, "bypass", "Bypass the maximum home count limit.");
+
+        // skyblock — island use, containment bypass, and administration
+        register(m, SKYBLOCK_USE, "skyblock", "Use Skyblock island, shop, and selling commands.");
+        register(m, SKYBLOCK_BYPASS, "skyblock", "Ignore Skyblock containment and island access checks.");
+        register(m, ADMIN_SKYBLOCK, "skyblock", "Use the complete Skyblock admin GUI/CLI for islands, registries, templates, and progression data.");
 
         PERMISSION_CATALOG = Collections.unmodifiableMap(new LinkedHashMap<>(m));
     }

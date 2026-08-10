@@ -23,6 +23,7 @@ import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
 import java.util.UUID;
+import java.util.OptionalDouble;
 
 // Single source of truth for the tab-list display name and scoreboard team ordering.
 // Owns all tab constants, world-tag mapping, team plumbing, and the refreshTab render logic.
@@ -43,6 +44,8 @@ public class TabManager implements Listener {
     private final RankManager rankManager;
     private final PlayerAdminManager playerAdminManager;
     private final WorldProfileTable worldProfileTable;
+    private SkyblockBalanceProvider skyblockBalanceProvider;
+    private String skyblockWorldKey;
 
     public TabManager(Tweaks plugin, EconomyManager economyManager, RankManager rankManager,
                       PlayerAdminManager playerAdminManager, WorldProfileTable worldProfileTable) {
@@ -51,6 +54,11 @@ public class TabManager implements Listener {
         this.rankManager = rankManager;
         this.playerAdminManager = playerAdminManager;
         this.worldProfileTable = worldProfileTable;
+    }
+
+    public void setSkyblockBalanceProvider(String worldKey, SkyblockBalanceProvider provider) {
+        this.skyblockWorldKey = worldKey;
+        this.skyblockBalanceProvider = provider;
     }
 
     // ============================================================
@@ -89,8 +97,15 @@ public class TabManager implements Listener {
         }
 
         // Balance (omitted when hidden).
-        if (!economyManager.isBalanceHidden(uuid)) {
-            double balance = economyManager.getBalance(uuid);
+        OptionalDouble skyblockBalance = skyblockWorldKey != null && skyblockWorldKey.equals(worldKey)
+                && skyblockBalanceProvider != null ? skyblockBalanceProvider.balance(player) : OptionalDouble.empty();
+        if (skyblockWorldKey != null && skyblockWorldKey.equals(worldKey) && skyblockBalanceProvider != null
+                && skyblockBalance.isEmpty()) {
+            player.playerListName(playerAdminManager.isAfk(player) ? name.append(AFK_SUFFIX) : name);
+            return;
+        }
+        if (!economyManager.isBalanceHidden(uuid) || skyblockBalance.isPresent()) {
+            double balance = skyblockBalance.orElseGet(() -> economyManager.getBalance(uuid));
             name = name.append(Component.text(
                     " " + BalanceCommand.formatBalance(balance), NamedTextColor.YELLOW));
         }
@@ -101,6 +116,11 @@ public class TabManager implements Listener {
         }
 
         player.playerListName(name);
+    }
+
+    @FunctionalInterface
+    public interface SkyblockBalanceProvider {
+        OptionalDouble balance(Player player);
     }
 
     /**

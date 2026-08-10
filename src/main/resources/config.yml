@@ -271,3 +271,25 @@ world-profile-sort-order:
   standard: b
   archive: c
   pi: d
+
+# Skyblock is provided by the datapack and is enabled only when this world has
+# its own non-fallback world profile.
+skyblock:
+  world: "jass:skyblock"
+  grid-pitch-chunks: 35
+  default-type: default
+  default-difficulty: normal
+  island-y: 64
+  max-members: 4
+  max-homes: 3
+  max-homes-purchasable: 10
+  invite-timeout-seconds: 300
+  save-interval-seconds: 60
+  deletion-chunks-per-tick: 4
+  containment-message-cooldown-ms: 3000
+  template-max-height: 128
+  template-max-blocks: 250000
+  max-slot-index: 100000
+  price:
+    biome-change: 0.0
+    home-slot: 0.0

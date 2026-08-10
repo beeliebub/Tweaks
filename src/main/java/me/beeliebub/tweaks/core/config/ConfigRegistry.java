@@ -6,9 +6,8 @@ import java.util.Optional;
 
 /**
  * Single static ordered category -&gt; settings table backing both {@code /tconfig}'s CLI path
- * grammar and its Dialog GUI. Every later phase of the config-migration plan only appends entries
- * here, plus its own package's live-read conversion - this file's structure (the record types it's
- * built from) does not need to grow again per phase.
+ * grammar and its Dialog GUI. New settings append entries here while each owning package keeps its
+ * live-read conversion local; the record types used to describe settings remain stable.
  *
  * <p>{@link #EGGDROP_SENTINEL_PATH}, {@link #SPAWNEREGG_SENTINEL_PATH}, and
  * {@link #RESOURCEITEMS_SENTINEL_PATH} mark the three pre-existing legacy settings whose mutation
@@ -169,6 +168,43 @@ public final class ConfigRegistry {
             new ConfigCategory("xpbottle", "Xp Bottle", List.of(
                     ConfigSetting.bounded("xpbottle.orbs-per-emerald", "xpbottle.orbs-per-emerald",
                             "Orbs Per Emerald (restart required)", EditorType.INT, 1, Integer.MAX_VALUE)
+            )),
+            new ConfigCategory("skyblock", "Skyblock", List.of(
+                    ConfigSetting.of("skyblock.world", "skyblock.world",
+                            "Skyblock World (restart required)", EditorType.WORLD_KEY),
+                    ConfigSetting.bounded("skyblock.grid-pitch-chunks", "skyblock.grid-pitch-chunks",
+                            "Skyblock Grid Pitch (restart required)", EditorType.INT, 1, Integer.MAX_VALUE),
+                    ConfigSetting.of("skyblock.default-type", "skyblock.default-type",
+                            "Skyblock Default Type", EditorType.STRING),
+                    ConfigSetting.of("skyblock.default-difficulty", "skyblock.default-difficulty",
+                            "Skyblock Default Difficulty", EditorType.STRING),
+                    ConfigSetting.bounded("skyblock.island-y", "skyblock.island-y",
+                            "Skyblock Island Y", EditorType.INT, -64, 320),
+                    ConfigSetting.bounded("skyblock.max-members", "skyblock.max-members",
+                            "Skyblock Max Members", EditorType.INT, 1, Integer.MAX_VALUE),
+                    ConfigSetting.bounded("skyblock.max-homes", "skyblock.max-homes",
+                            "Skyblock Max Homes", EditorType.INT, 1, Integer.MAX_VALUE),
+                    ConfigSetting.bounded("skyblock.max-homes-purchasable", "skyblock.max-homes-purchasable",
+                            "Skyblock Max Purchasable Homes", EditorType.INT, 1, Integer.MAX_VALUE),
+                    ConfigSetting.bounded("skyblock.invite-timeout-seconds", "skyblock.invite-timeout-seconds",
+                            "Skyblock Invite Timeout", EditorType.INT, 1, Integer.MAX_VALUE),
+                    ConfigSetting.bounded("skyblock.save-interval-seconds", "skyblock.save-interval-seconds",
+                            "Skyblock Save Interval", EditorType.INT, 1, Integer.MAX_VALUE),
+                    ConfigSetting.bounded("skyblock.deletion-chunks-per-tick", "skyblock.deletion-chunks-per-tick",
+                            "Skyblock Deletion Chunks Per Tick", EditorType.INT, 1, Integer.MAX_VALUE),
+                    ConfigSetting.bounded("skyblock.containment-message-cooldown-ms",
+                            "skyblock.containment-message-cooldown-ms", "Skyblock Containment Message Cooldown",
+                            EditorType.LONG, 0, Long.MAX_VALUE),
+                    ConfigSetting.bounded("skyblock.template-max-height", "skyblock.template-max-height",
+                            "Skyblock Template Max Height", EditorType.INT, 1, 384),
+                    ConfigSetting.bounded("skyblock.template-max-blocks", "skyblock.template-max-blocks",
+                            "Skyblock Template Maximum Blocks", EditorType.INT, 1, Integer.MAX_VALUE),
+                    ConfigSetting.bounded("skyblock.max-slot-index", "skyblock.max-slot-index",
+                            "Skyblock Maximum Slot Index", EditorType.INT, 0, Integer.MAX_VALUE),
+                    ConfigSetting.bounded("skyblock.price.biome-change", "skyblock.price.biome-change",
+                            "Skyblock Biome Change Price", EditorType.DOUBLE, 0.0, Double.MAX_VALUE),
+                    ConfigSetting.bounded("skyblock.price.home-slot", "skyblock.price.home-slot",
+                            "Skyblock Home Slot Price", EditorType.DOUBLE, 0.0, Double.MAX_VALUE)
             ))
     );
 

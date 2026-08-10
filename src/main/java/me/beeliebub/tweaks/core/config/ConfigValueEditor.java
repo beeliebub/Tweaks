@@ -26,9 +26,9 @@ import java.util.logging.Level;
  * <p>The six pre-existing legacy CLI forms (max_homes, max_chunks, egg_collector_drop_chance,
  * eggdrop, spawneregg, resourceitems) keep dedicated methods reproducing their exact historical
  * response wording via {@code Messages.COMMANDS} - a wording change there is a behavior-visible
- * regression pinned by {@code ConfigCommandTest}. Every setting a later phase of the
- * config-migration plan adds goes through the generic engine below ({@link #applyScalar},
- * {@link #listAdd}, {@link #listRemove}, {@link #mapPut}) and {@code Messages.CONFIG} instead.
+ * regression pinned by {@code ConfigCommandTest}. Every registry-backed setting goes through the
+ * generic engine below ({@link #applyScalar}, {@link #listAdd}, {@link #listRemove},
+ * {@link #mapPut}) and {@code Messages.CONFIG} instead.
  * {@link #listAdd}/{@link #listRemove} route the three sentinel-path settings back to the legacy
  * toggle/delegate methods so the registry (and therefore the GUI) can still present them uniformly.
  *
@@ -209,9 +209,11 @@ public final class ConfigValueEditor {
             case INT -> setBoundedNumber(setting, rawValue, true);
             case LONG -> setLong(setting, rawValue);
             case DOUBLE, PERCENT -> setBoundedNumber(setting, rawValue, false);
+            case STRING -> setString(setting, rawValue);
             case BOOLEAN -> setBoolean(setting, rawValue);
             case MATERIAL -> setMaterial(setting, rawValue);
             case NAMESPACED_KEY -> setNamespacedKey(setting, rawValue);
+            case WORLD_KEY -> setWorldKey(setting, rawValue);
             default -> new EditResult.Invalid(Messages.CONFIG.notAScalarSetting(setting.displayName()));
         };
     }
@@ -261,6 +263,13 @@ public final class ConfigValueEditor {
         return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), String.valueOf(value)));
     }
 
+    private EditResult setString(ConfigSetting setting, String rawValue) {
+        String value = rawValue == null ? "" : rawValue;
+        plugin.getConfig().set(setting.path(), value);
+        plugin.saveConfig();
+        return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), value));
+    }
+
     private static final String PROTECTION_SELECTION_TOOL_PATH = "protection.selection-tool";
 
     private EditResult setMaterial(ConfigSetting setting, String rawValue) {
@@ -284,6 +293,17 @@ public final class ConfigValueEditor {
 
     private EditResult setNamespacedKey(ConfigSetting setting, String rawValue) {
         NamespacedKey key = rawValue == null ? null : NamespacedKey.fromString(rawValue.toLowerCase(Locale.ROOT));
+        if (key == null) {
+            return new EditResult.Invalid(Messages.CONFIG.invalidNamespacedKey(String.valueOf(rawValue)));
+        }
+        plugin.getConfig().set(setting.path(), key.toString());
+        plugin.saveConfig();
+        return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), key.toString()));
+    }
+
+    private EditResult setWorldKey(ConfigSetting setting, String rawValue) {
+        NamespacedKey key = rawValue == null
+                ? null : NamespacedKey.fromString(rawValue.toLowerCase(Locale.ROOT));
         if (key == null) {
             return new EditResult.Invalid(Messages.CONFIG.invalidNamespacedKey(String.valueOf(rawValue)));
         }

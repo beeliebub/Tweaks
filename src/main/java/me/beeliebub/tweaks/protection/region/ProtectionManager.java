@@ -246,6 +246,49 @@ public final class ProtectionManager {
     // I/O queue and stall organic player chunk loads.
     public static final int ASYNC_STAMP_THRESHOLD = 5;
 
+    /**
+     * Replaces a live region's bounds and stamps only the chunks newly covered
+     * by the replacement bounds.
+     *
+     * <p>The existing region remains live throughout the operation: no
+     * pending stamps are purged, no orphan marker is changed, and no writer
+     * tombstone is touched.</p>
+     */
+    public boolean resize(World world, String id, Region.RegionBounds newBounds) {
+        if (world == null || id == null || id.isBlank() || newBounds == null
+                || GLOBAL_REGION_ID.equals(id)) {
+            return false;
+        }
+
+        String worldName = world.getName();
+        if (worldName == null || worldName.isBlank()) return false;
+
+        Region current = byName(world, id);
+        if (current == null || !worldName.equals(current.worldName())) return false;
+        if (current.bounds() != null && current.bounds().equals(newBounds)) return false;
+        if (boundedArea(newBounds) > Integer.MAX_VALUE) return false;
+
+        for (Region other : regions.values()) {
+            if (Objects.equals(keyOf(other), keyOf(current))) continue;
+            if (other.bounds() == null || !worldName.equals(other.worldName())) continue;
+            if (!boundsIntersect(newBounds, other.bounds())) continue;
+            if (current.owner() == null || !current.owner().equals(other.owner())) return false;
+        }
+
+        long[] newlyCovered = newlyCoveredChunkKeys(current.bounds(), newBounds);
+        Region updated = current.withBounds(newBounds);
+        String cacheKey = keyOf(current);
+        if (!regions.replace(cacheKey, current, updated)) return false;
+
+        if (newlyCovered.length <= ASYNC_STAMP_THRESHOLD) {
+            if (newlyCovered.length > 0) claimAsync(world, newlyCovered, updated.id());
+        } else {
+            claimLazy(world, newlyCovered, updated.id());
+        }
+        if (writer != null) writer.queue(updated);
+        return true;
+    }
+
     // Register the region and stamp every chunk it covers. Returns a future
     // that completes once all immediate (async path) PDC writes are done;
     // the lazy path resolves immediately because actual stamping happens
@@ -364,6 +407,51 @@ public final class ProtectionManager {
                 && inner.maxChunkX() <= outer.maxChunkX()
                 && inner.minChunkZ() >= outer.minChunkZ()
                 && inner.maxChunkZ() <= outer.maxChunkZ();
+    }
+
+    private static long[] newlyCoveredChunkKeys(Region.RegionBounds previous,
+                                                Region.RegionBounds replacement) {
+        long area = boundedArea(replacement);
+        if (area > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Resize bounds cover too many chunks");
+        }
+
+        long previouslyCovered = 0;
+        if (previous != null) {
+            int minX = Math.max(previous.minChunkX(), replacement.minChunkX());
+            int minZ = Math.max(previous.minChunkZ(), replacement.minChunkZ());
+            int maxX = Math.min(previous.maxChunkX(), replacement.maxChunkX());
+            int maxZ = Math.min(previous.maxChunkZ(), replacement.maxChunkZ());
+            if (minX <= maxX && minZ <= maxZ) {
+                previouslyCovered = boundedArea(new Region.RegionBounds(minX, minZ, maxX, maxZ));
+            }
+        }
+
+        int count = Math.toIntExact(area - previouslyCovered);
+        if (count == 0) return new long[0];
+
+        long[] keys = new long[count];
+        int index = 0;
+        for (long chunkX = replacement.minChunkX(); chunkX <= replacement.maxChunkX(); chunkX++) {
+            for (long chunkZ = replacement.minChunkZ(); chunkZ <= replacement.maxChunkZ(); chunkZ++) {
+                int x = (int) chunkX;
+                int z = (int) chunkZ;
+                if (previous == null || !previous.contains(x, z)) {
+                    keys[index++] = GeometryUtil.chunkKey(x, z);
+                }
+            }
+        }
+        return keys;
+    }
+
+    private static long boundedArea(Region.RegionBounds bounds) {
+        long width = (long) bounds.maxChunkX() - bounds.minChunkX() + 1L;
+        long height = (long) bounds.maxChunkZ() - bounds.minChunkZ() + 1L;
+        if (width > Integer.MAX_VALUE || height > Integer.MAX_VALUE
+                || width > Integer.MAX_VALUE / height) {
+            return (long) Integer.MAX_VALUE + 1L;
+        }
+        return width * height;
     }
 
     private CompletableFuture<Void> claimAsync(World world, long[] keys, String regionId) {
