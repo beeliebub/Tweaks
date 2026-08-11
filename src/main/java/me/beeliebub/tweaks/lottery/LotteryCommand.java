@@ -1,9 +1,10 @@
 package me.beeliebub.tweaks.lottery;
 
-import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.core.Messages;
-import me.beeliebub.tweaks.economy.HousePaymentService;
 import me.beeliebub.tweaks.economy.HouseAccount;
+import me.beeliebub.tweaks.economy.HousePaymentService;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -15,17 +16,23 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
 import java.util.logging.Level;
 
 /** Legacy command surface for lottery information and administration. */
 public final class LotteryCommand implements CommandExecutor, TabCompleter {
 
+    private static final long ENTRIES_COOLDOWN_MILLIS = 3_000L;
+
     private final JavaPlugin plugin;
     private final LotteryManager manager;
     private final HouseAccount houseAccount;
     private final HousePaymentService housePaymentService;
+    private final Map<UUID, Long> entriesCooldowns = new HashMap<>();
 
     public LotteryCommand(JavaPlugin plugin, LotteryManager manager, HouseAccount houseAccount,
                           HousePaymentService housePaymentService) {
@@ -43,14 +50,18 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             showInfo(sender, args);
             return true;
         }
+        if (sub.equals("entries")) {
+            showEntries(sender, args);
+            return true;
+        }
         if (!sender.hasPermission(Permissions.LOTTERY_ADMIN)) {
             sender.sendMessage(Messages.LOTTERY.noPermission());
             return true;
         }
         switch (sub) {
             case "draw" -> draw(sender, args);
-            case "entries" -> showEntries(sender, args);
             case "baseline" -> setBaseline(sender, args);
+            case "fallback" -> setFallback(sender, args);
             default -> sender.sendMessage(Messages.LOTTERY.usage());
         }
         return true;
@@ -66,9 +77,10 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             return;
         }
         LotteryMath.PotOutcome outcome = manager.currentPot();
-        String pot = outcome instanceof LotteryMath.PotOutcome.Payable payable
-                ? "$" + payable.pot() : "unavailable";
-        sender.sendMessage(Messages.LOTTERY.info(manager.entrantCount(), manager.baseline(), pot));
+        for (Component line : Messages.LOTTERY.info(manager.entrantCount(), manager.baseline(), manager.fallback(),
+                manager.configuredFallbackBase(), outcome)) {
+            sender.sendMessage(line);
+        }
     }
 
     private void showEntries(CommandSender sender, String[] args) {
@@ -76,19 +88,21 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Messages.LOTTERY.usage());
             return;
         }
+        if (entriesCooldown(sender)) return;
         if (!manager.isLoaded()) {
             sender.sendMessage(Messages.LOTTERY.loading());
             return;
         }
-        List<java.util.UUID> entrants = manager.entrantSnapshot();
-        sender.sendMessage(Messages.LOTTERY.entriesHeader(entrants.size()));
-        int limit = Math.min(entrants.size(), 50);
-        for (int i = 0; i < limit; i++) {
-            OfflinePlayer player = Bukkit.getOfflinePlayer(entrants.get(i));
+        LotteryManager.EntrantPage page = manager.entrantSnapshot(50);
+        sender.sendMessage(Messages.LOTTERY.entriesHeader(page.total()));
+        for (UUID entrant : page.shown()) {
+            OfflinePlayer player = Bukkit.getOfflinePlayer(entrant);
             sender.sendMessage(Messages.LOTTERY.entry(player.getName() == null
-                    ? entrants.get(i).toString() : player.getName()));
+                    ? entrant.toString() : player.getName()));
         }
-        if (entrants.size() > limit) sender.sendMessage(Messages.LOTTERY.entriesTruncated(entrants.size() - limit));
+        if (page.total() > page.shown().size()) {
+            sender.sendMessage(Messages.LOTTERY.entriesTruncated(page.total() - page.shown().size()));
+        }
     }
 
     private void setBaseline(CommandSender sender, String[] args) {
@@ -107,12 +121,62 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Messages.LOTTERY.baselineInvalid(args[1]));
             return;
         }
+        String actorName = sender instanceof org.bukkit.entity.Player player ? player.getName() : null;
+        UUID actorId = sender instanceof org.bukkit.entity.Player player ? player.getUniqueId() : null;
         manager.setBaseline(baseline).whenComplete((success, error) -> {
             if (error != null) {
                 plugin.getLogger().log(Level.SEVERE, "Lottery baseline update failed", error);
                 deliver(sender, Messages.LOTTERY.baselineFailed());
             } else {
+                if (success) {
+                    ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+                    if (eventLog != null) eventLog.log(LoggingPaths.LOTTERY_BASELINE, () ->
+                            "[Lottery] " + ConsoleEventLog.actorLabel(actorName, actorId)
+                                    + " set baseline to " + baseline);
+                }
                 deliver(sender, success ? Messages.LOTTERY.baselineUpdated(baseline) : Messages.LOTTERY.loading());
+            }
+        });
+    }
+
+    private void setFallback(CommandSender sender, String[] args) {
+        if (args.length == 1) {
+            if (!manager.isLoaded()) {
+                sender.sendMessage(Messages.LOTTERY.loading());
+                return;
+            }
+            sender.sendMessage(Messages.LOTTERY.fallbackStatus(manager.fallback(), manager.configuredFallbackBase()));
+            return;
+        }
+        if (args.length != 2) {
+            sender.sendMessage(Messages.LOTTERY.usage());
+            return;
+        }
+        long fallback;
+        try {
+            fallback = Long.parseLong(args[1]);
+        } catch (NumberFormatException e) {
+            sender.sendMessage(Messages.LOTTERY.fallbackInvalid(args[1]));
+            return;
+        }
+        if (fallback < 0) {
+            sender.sendMessage(Messages.LOTTERY.fallbackInvalid(args[1]));
+            return;
+        }
+        String actorName = sender instanceof org.bukkit.entity.Player player ? player.getName() : null;
+        UUID actorId = sender instanceof org.bukkit.entity.Player player ? player.getUniqueId() : null;
+        manager.setFallback(fallback).whenComplete((success, error) -> {
+            if (error != null) {
+                plugin.getLogger().log(Level.SEVERE, "Lottery fallback update failed", error);
+                deliver(sender, Messages.LOTTERY.fallbackFailed());
+            } else {
+                if (success) {
+                    ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+                    if (eventLog != null) eventLog.log(LoggingPaths.LOTTERY_FALLBACK, () ->
+                            "[Lottery] " + ConsoleEventLog.actorLabel(actorName, actorId)
+                                    + " set fallback to " + fallback);
+                }
+                deliver(sender, success ? Messages.LOTTERY.fallbackUpdated(fallback) : Messages.LOTTERY.loading());
             }
         });
     }
@@ -143,24 +207,42 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
     private void deliverDraw(CommandSender sender, LotteryManager.DrawResult result) {
         if (!plugin.isEnabled()) return;
         Bukkit.getScheduler().runTask(plugin, () -> {
-            if (result instanceof LotteryManager.DrawResult.NotReady) {
-                sender.sendMessage(Messages.LOTTERY.drawNotReady());
-            } else if (result instanceof LotteryManager.DrawResult.InFlight) {
-                sender.sendMessage(Messages.LOTTERY.drawInFlight());
-            } else if (result instanceof LotteryManager.DrawResult.Refused refused) {
-                sender.sendMessage(Messages.LOTTERY.drawRefused(refused.reason()));
-            } else if (result instanceof LotteryManager.DrawResult.PaymentAbandoned abandoned) {
-                sender.sendMessage(Messages.LOTTERY.paymentAbandoned(abandoned.outcome().name(),
-                        abandoned.entrantCount()));
-                Bukkit.broadcast(Messages.LOTTERY.paymentAbandonedBroadcast(abandoned.entrantCount()));
-            } else if (result instanceof LotteryManager.DrawResult.PaymentPending pending) {
-                sender.sendMessage(Messages.LOTTERY.paymentPending(pending.paymentId(), pending.outcome().name()));
-            } else if (result instanceof LotteryManager.DrawResult.PaymentStuck stuck) {
-                sender.sendMessage(Messages.LOTTERY.paymentStuck(stuck.paymentId()));
-            } else if (result instanceof LotteryManager.DrawResult.Awarded awarded) {
-                OfflinePlayer winner = Bukkit.getOfflinePlayer(awarded.winner());
-                String name = winner.getName() == null ? awarded.winner().toString() : winner.getName();
-                Bukkit.broadcast(Messages.LOTTERY.winner(name, awarded.amount()));
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null) eventLog.log(LoggingPaths.LOTTERY_DRAW, () ->
+                    "[Lottery] (console) draw completed with " + result.getClass().getSimpleName());
+            switch (result) {
+                case LotteryManager.DrawResult.NotReady ignored -> sender.sendMessage(Messages.LOTTERY.drawNotReady());
+                case LotteryManager.DrawResult.InFlight ignored -> sender.sendMessage(Messages.LOTTERY.drawInFlight());
+                case LotteryManager.DrawResult.NotEnoughEntrants notEnough -> {
+                    Bukkit.broadcast(Messages.LOTTERY.notEnoughEntries());
+                    if (notEnough.rolledIn() > 0) {
+                        sender.sendMessage(Messages.LOTTERY.rollInDetail(notEnough.rolledIn(), notEnough.fallback(),
+                                notEnough.baseline()));
+                    }
+                }
+                case LotteryManager.DrawResult.Refused refused -> {
+                    if (refused.reason() == LotteryMath.RefusalReason.NO_GROWTH) {
+                        Bukkit.broadcast(Messages.LOTTERY.noGrowthBroadcast());
+                    } else if (refused.reason() == LotteryMath.RefusalReason.NOT_ENOUGH_ENTRANTS) {
+                        Bukkit.broadcast(Messages.LOTTERY.notEnoughEntries());
+                    } else {
+                        sender.sendMessage(Messages.LOTTERY.drawRefused(refused.reason()));
+                    }
+                }
+                case LotteryManager.DrawResult.PaymentAbandoned abandoned -> {
+                    sender.sendMessage(Messages.LOTTERY.paymentAbandoned(abandoned.outcome().name(),
+                            abandoned.entrantCount()));
+                    Bukkit.broadcast(Messages.LOTTERY.paymentAbandonedBroadcast(abandoned.entrantCount()));
+                }
+                case LotteryManager.DrawResult.PaymentPending pending ->
+                        sender.sendMessage(Messages.LOTTERY.paymentPending(pending.paymentId(), pending.outcome().name()));
+                case LotteryManager.DrawResult.PaymentStuck stuck ->
+                        sender.sendMessage(Messages.LOTTERY.paymentStuck(stuck.paymentId()));
+                case LotteryManager.DrawResult.Awarded awarded -> {
+                    OfflinePlayer winner = Bukkit.getOfflinePlayer(awarded.winner());
+                    String name = winner.getName() == null ? awarded.winner().toString() : winner.getName();
+                    Bukkit.broadcast(Messages.LOTTERY.winner(name, awarded.amount()));
+                }
             }
         });
     }
@@ -170,13 +252,30 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
         Bukkit.getScheduler().runTask(plugin, () -> sender.sendMessage(message));
     }
 
+    private boolean entriesCooldown(CommandSender sender) {
+        long now = System.currentTimeMillis();
+        entriesCooldowns.entrySet().removeIf(entry -> now - entry.getValue() >= ENTRIES_COOLDOWN_MILLIS);
+        if (!(sender instanceof org.bukkit.entity.Player player)
+                || sender.hasPermission(Permissions.LOTTERY_ADMIN)) {
+            return false;
+        }
+        UUID playerId = player.getUniqueId();
+        Long lastRequest = entriesCooldowns.get(playerId);
+        if (lastRequest != null && now - lastRequest < ENTRIES_COOLDOWN_MILLIS) {
+            sender.sendMessage(Messages.LOTTERY.entriesCooldown());
+            return true;
+        }
+        entriesCooldowns.put(playerId, now);
+        return false;
+    }
+
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                       @NotNull String alias, @NotNull String[] args) {
         if (args.length != 1) return List.of();
         String partial = args[0].toLowerCase(Locale.ROOT);
         List<String> options = sender.hasPermission(Permissions.LOTTERY_ADMIN)
-                ? List.of("info", "draw", "entries", "baseline") : List.of("info");
+                ? List.of("info", "entries", "draw", "baseline", "fallback") : List.of("info", "entries");
         return options.stream().filter(option -> option.startsWith(partial)).toList();
     }
 }

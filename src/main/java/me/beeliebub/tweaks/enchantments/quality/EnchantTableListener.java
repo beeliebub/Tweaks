@@ -1,6 +1,9 @@
 package me.beeliebub.tweaks.enchantments.quality;
 
 import me.beeliebub.tweaks.worldmanagement.MoonSystem;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.HotPathEventBuffer;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -69,6 +72,14 @@ public class EnchantTableListener implements Listener {
             int cappedLevel = Math.min(level, qualityEnchant.getMaxLevel());
             toRemove.add(enchant);
             toAdd.put(qualityEnchant, cappedLevel);
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null) {
+                String actorName = event.getEnchanter().getName();
+                java.util.UUID actorId = event.getEnchanter().getUniqueId();
+                String context = "quality:" + name + ":" + tier.name().toLowerCase(java.util.Locale.ROOT);
+                eventLog.logHot(LoggingPaths.ENCHANTMENTS_QUALITY,
+                        new HotPathEventBuffer.HotKey(actorId, context, null), actorName);
+            }
 
             if (tier == QualityTier.EPIC || tier == QualityTier.LEGENDARY) {
                 announceQualityRoll(event.getEnchanter(), tier, name, cappedLevel, qualityEnchant.getMaxLevel());

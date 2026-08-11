@@ -5,6 +5,7 @@ import me.beeliebub.tweaks.core.config.ConfigRegistry;
 import me.beeliebub.tweaks.core.config.ConfigSetting;
 import me.beeliebub.tweaks.core.config.ConfigValueEditor;
 import me.beeliebub.tweaks.core.config.EditResult;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import me.beeliebub.tweaks.profiles.WorldProfileTable;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -17,7 +18,10 @@ import org.mockbukkit.mockbukkit.ServerMock;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.util.concurrent.atomic.AtomicReference;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.spy;
 
 /**
  * Exercises ConfigValueEditor directly - the unit-testable core both ConfigCommand (CLI) and
@@ -73,6 +77,19 @@ class ConfigValueEditorTest {
         assertEquals(7, plugin.getConfig().getInt("max-homes"));
     }
 
+    @Test
+    void failedSaveDoesNotReportSuccess() {
+        Tweaks saveBlocked = spy(plugin);
+        doNothing().when(saveBlocked).saveConfig();
+        ConfigValueEditor saveBlockedEditor = new ConfigValueEditor(saveBlocked, resourceHuntItems,
+                new WorldProfileTable(saveBlocked));
+
+        EditResult result = saveBlockedEditor.setMaxHomes("7");
+
+        assertInstanceOf(EditResult.Invalid.class, result);
+        assertEquals(15, plugin.getConfig().getInt("max-homes"));
+    }
+
     // ------------------------------------------------------------ Generic scalar (percent)
 
     @Test
@@ -93,6 +110,43 @@ class ConfigValueEditorTest {
 
         assertInstanceOf(EditResult.Ok.class, result);
         assertEquals(42.0, plugin.getConfig().getDouble("egg-collector-drop-chance"));
+    }
+
+    @Test
+    void failedLargeLongSaveDoesNotCollapseThroughDoublePrecision() {
+        ConfigSetting setting = ConfigRegistry.byPath("itemadmin.tool-protect.warn-cooldown-ms").orElseThrow();
+        long persistedValue = 9_007_199_254_740_992L;
+        long attemptedValue = 9_007_199_254_740_993L;
+        plugin.getConfig().set(setting.path(), persistedValue);
+        plugin.saveConfig();
+
+        Tweaks saveBlocked = spy(plugin);
+        doNothing().when(saveBlocked).saveConfig();
+        ConfigValueEditor saveBlockedEditor = new ConfigValueEditor(saveBlocked, resourceHuntItems,
+                new WorldProfileTable(saveBlocked));
+
+        EditResult result = saveBlockedEditor.applyScalar(setting, Long.toString(attemptedValue));
+
+        assertInstanceOf(EditResult.Invalid.class, result);
+        assertEquals(persistedValue, plugin.getConfig().getLong(setting.path()));
+    }
+
+    @Test
+    void confirmedLoggingBooleanWriteUpdatesTheLiveCacheCallback() {
+        ConfigSetting setting = ConfigRegistry.byPath(LoggingPaths.CORE_CONFIG_CHANGED).orElseThrow();
+        AtomicReference<String> changedPath = new AtomicReference<>();
+        AtomicReference<Boolean> changedValue = new AtomicReference<>();
+        ConfigValueEditor callbackEditor = new ConfigValueEditor(plugin, resourceHuntItems,
+                new WorldProfileTable(plugin), (path, value) -> {
+                    changedPath.set(path);
+                    changedValue.set(value);
+                });
+
+        EditResult result = callbackEditor.applyScalar(setting, "true");
+
+        assertInstanceOf(EditResult.Ok.class, result);
+        assertEquals(LoggingPaths.CORE_CONFIG_CHANGED, changedPath.get());
+        assertEquals(Boolean.TRUE, changedValue.get());
     }
 
     @Test

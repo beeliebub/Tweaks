@@ -30,7 +30,7 @@ class RegionSubcommandRegistryTest {
             "claim", "clear", "wand", "select", "unclaim",
             "addmember", "removemember", "addmanager", "removemanager",
             "flag", "unflag", "flags", "info",
-            "setparent", "unsetparent", "gui");
+            "setparent", "unsetparent", "gui", "list", "tp", "togglebypass");
 
     private RegionSubcommandRegistry registry;
     private RegionCommandContext ctx;

@@ -135,10 +135,18 @@ economy:
     6: 1.5
     7: 1.6
 
-# House balance restored after a lottery draw pays out the entire House. A positive floor prevents
-# the empty-House state from causing every later draw to pay 100% again.
+# Lottery pot maths:
+#   pot = pot-multiplier x (House balance - baseline) x (1 + 0.01 x entrant count)
+# pot-multiplier: 0.6 is the default. Raise it (for example 1.2) to increase lottery payouts
+#   during a "House is feeling generous" event. At 1.0 or above, the pot exceeds the House's
+#   growth since the last draw, so the House Balance itself is drawn down below its baseline.
+# reseed-amount: the base fallback floor. The House balance is never paid below the live
+#   fallback, and the live fallback snaps back to this base after a successful draw. The live
+#   value is stored in data/lottery/lottery.yml and grows when a draw is attempted with only
+#   one entrant.
 lottery:
   reseed-amount: 10000
+  pot-multiplier: 0.6
 
 # Player ranks. Rank 0 = unranked (no name/cost/bonus). Ranks 1..10 are purchasable in order via /rankup.
 # multiplier = rank bonus applied to daily login rewards. rakeback = casino rakeback rate. Both are fractions (0.01 = 1%).
@@ -279,3 +287,110 @@ world-profile-sort-order:
   standard: b
   archive: c
   pi: d
+
+# Console event records are individually disabled by default. Changes made through /tconfig take
+# effect immediately after the confirmed save; editing this file while the server is running does
+# not update the live cache and requires a restart.
+logging:
+  # Balance mutations, rewards, and house-account outcomes.
+  economy:
+    balance-set: false
+    balance-add: false
+    balance-remove: false
+    daily-reward-claimed: false
+    house-mutated: false
+    house-payment-completed: false
+  # Blackjack bets, settlements, and table administration.
+  blackjack:
+    bet-placed: false
+    hand-settled: false
+    table-mutated: false
+  # Roulette bets, spins, board administration, and diagnostics.
+  roulette:
+    bet-placed: false
+    spin-settled: false
+    board-mutated: false
+    scan-run: false
+  # Lottery entries and administrative draw settings.
+  lottery:
+    entered: false
+    draw-completed: false
+    baseline-changed: false
+    fallback-changed: false
+  # Claims, flags, membership changes, and collapsed protection denials.
+  protection:
+    claim-created: false
+    claim-removed: false
+    flag-changed: false
+    member-changed: false
+    block-break-denied: false
+    block-place-denied: false
+    entry-denied: false
+    container-denied: false
+  # Custom permission and group administration.
+  permissions:
+    group-mutated: false
+    permission-mutated: false
+    user-groups-changed: false
+  # Rank administration and purchases.
+  ranks:
+    admin-set: false
+    purchased: false
+  # TPA, homes, and server warps.
+  teleport:
+    tpa-accepted: false
+    home-set: false
+    admin-home-deleted: false
+    warp-set: false
+    warp-deleted: false
+  # Player administration actions and AFK transitions.
+  playeradmin:
+    gamemode-changed: false
+    fly-toggled: false
+    nick-changed: false
+    afk-auto: false
+  # World-profile changes applied to a player.
+  profiles:
+    switch-applied: false
+  # Item editing and inventory administration.
+  itemadmin:
+    item-edited: false
+    gui-copy-saved: false
+    condense-run: false
+    invsee-opened: false
+  # Death-inventory capture and restoration.
+  deathinventory:
+    captured: false
+    admin-restored: false
+  # Inspector mode and retention cleanup.
+  blocklog:
+    inspector-toggled: false
+    retention-purged: false
+  # Quality rolls and spawner pickup outcomes.
+  enchantments:
+    quality-roll: false
+    spawner-pickup: false
+  # Resource Hunt target changes.
+  resourcehunt:
+    target-assigned: false
+    target-rerolled: false
+    target-admin-forced: false
+  # Whack session and reward outcomes.
+  whack:
+    session-started: false
+    reward-claimed: false
+  # Blood Moon transitions and portal denials.
+  worldmanagement:
+    blood-moon-risen: false
+    blood-moon-ended: false
+    portal-blocked: false
+  # Resource currency crafting.
+  recipes:
+    currency-crafted: false
+  # XP bottle creation and consumption outcomes.
+  xpbottle:
+    xp-bottled: false
+    xp-released: false
+  # Runtime configuration changes, including logging toggle changes.
+  core:
+    config-changed: false

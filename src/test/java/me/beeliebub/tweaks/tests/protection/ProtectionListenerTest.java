@@ -18,6 +18,7 @@ import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -222,6 +223,57 @@ class ProtectionListenerTest {
         listener.onBlockPlace(event);
 
         verify(event, never()).setCancelled(true);
+    }
+
+    @Test
+    void teleportIntoEntryLockedRegionIsCancelled() {
+        protection.regions().put("home", new Region("home", UUID.randomUUID(), List.of(),
+                java.util.Map.of(RegionFlag.ENTRY,
+                        java.util.Map.of(me.beeliebub.tweaks.protection.region.FlagTarget.DEFAULT, false)),
+                java.util.Map.of(), null));
+        Player p = player(PLAYER);
+        Location destination = locationInProtectedChunk(List.of("home"));
+        PlayerTeleportEvent event = mock(PlayerTeleportEvent.class);
+        when(event.getPlayer()).thenReturn(p);
+        when(event.getTo()).thenReturn(destination);
+
+        listener.onPlayerTeleport(event);
+
+        verify(event).setCancelled(true);
+    }
+
+    @Test
+    void teleportBypassAllowsEntryIntoLockedRegion() {
+        protection.regions().put("home", new Region("home", UUID.randomUUID(), List.of(),
+                java.util.Map.of(RegionFlag.ENTRY,
+                        java.util.Map.of(me.beeliebub.tweaks.protection.region.FlagTarget.DEFAULT, false)),
+                java.util.Map.of(), null));
+        protection.toggleProtectionBypass(PLAYER);
+        Player p = player(PLAYER);
+        Location destination = locationInProtectedChunk(List.of("home"));
+        PlayerTeleportEvent event = mock(PlayerTeleportEvent.class);
+        when(event.getPlayer()).thenReturn(p);
+        when(event.getTo()).thenReturn(destination);
+
+        listener.onPlayerTeleport(event);
+
+        verify(event, never()).setCancelled(true);
+    }
+
+    @Test
+    void joinAndQuitClearSessionBypass() {
+        protection.toggleProtectionBypass(PLAYER);
+        Player p = player(PLAYER);
+        org.bukkit.event.player.PlayerJoinEvent join = mock(org.bukkit.event.player.PlayerJoinEvent.class);
+        when(join.getPlayer()).thenReturn(p);
+        listener.onPlayerJoin(join);
+        assertFalse(protection.isProtectionBypassEnabled(PLAYER));
+
+        protection.toggleProtectionBypass(PLAYER);
+        org.bukkit.event.player.PlayerQuitEvent quit = mock(org.bukkit.event.player.PlayerQuitEvent.class);
+        when(quit.getPlayer()).thenReturn(p);
+        listener.onPlayerQuit(quit);
+        assertFalse(protection.isProtectionBypassEnabled(PLAYER));
     }
 
     // ---- PlayerInteractEvent ----

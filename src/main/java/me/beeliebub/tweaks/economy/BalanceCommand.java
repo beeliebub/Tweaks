@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.economy;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.utils.OfflinePlayerResolver;
 import org.bukkit.Bukkit;
@@ -115,6 +117,19 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
                         sub,
                         formatBalance(amount),
                         formatBalance(economyManager.getBalance(targetId))));
+                ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(economyManager.plugin());
+                if (eventLog != null) {
+                    String actorName = sender instanceof Player player ? player.getName() : null;
+                    UUID actorId = sender instanceof Player player ? player.getUniqueId() : null;
+                    String path = switch (sub) {
+                        case "set" -> LoggingPaths.ECONOMY_BALANCE_SET;
+                        case "add" -> LoggingPaths.ECONOMY_BALANCE_ADD;
+                        default -> LoggingPaths.ECONOMY_BALANCE_REMOVE;
+                    };
+                    eventLog.log(path, () -> "[Economy] "
+                            + ConsoleEventLog.actorLabel(actorName, actorId)
+                            + " changed " + targetName + " balance by " + formatBalance(amount));
+                }
             });
             return true;
         }

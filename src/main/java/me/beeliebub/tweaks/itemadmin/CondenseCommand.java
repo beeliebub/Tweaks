@@ -2,6 +2,8 @@ package me.beeliebub.tweaks.itemadmin;
 
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.Command;
@@ -12,6 +14,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Collections;
@@ -55,8 +58,14 @@ public class CondenseCommand implements CommandExecutor, TabCompleter {
     }
 
     private final ResourceHunt resourceHunt;
+    private final JavaPlugin plugin;
 
     public CondenseCommand(ResourceHunt resourceHunt) {
+        this(null, resourceHunt);
+    }
+
+    public CondenseCommand(JavaPlugin plugin, ResourceHunt resourceHunt) {
+        this.plugin = plugin;
         this.resourceHunt = resourceHunt;
     }
 
@@ -79,6 +88,7 @@ public class CondenseCommand implements CommandExecutor, TabCompleter {
                 player.sendMessage(Messages.COMMANDS.condenseNothingToCondense());
             } else {
                 player.sendMessage(Messages.COMMANDS.condenseAllSuccess(totalBlocks));
+                log(player, "condensed all eligible materials into " + totalBlocks + " block(s)");
             }
             return true;
         }
@@ -97,6 +107,8 @@ public class CondenseCommand implements CommandExecutor, TabCompleter {
             Material block = CONDENSE_MAP.get(granular);
             player.sendMessage(Messages.COMMANDS.condenseHeldItemSuccess(
                     blocks, block.name().toLowerCase(Locale.ROOT)));
+            log(player, "condensed " + blocks + " " + granular.name().toLowerCase(Locale.ROOT)
+                    + " stack(s)");
         }
         return true;
     }
@@ -177,6 +189,13 @@ public class CondenseCommand implements CommandExecutor, TabCompleter {
 
     private boolean hasResourceHuntTag(ItemStack stack) {
         return resourceHunt.isItemCounted(stack);
+    }
+
+    private void log(Player player, String detail) {
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.ITEMADMIN_CONDENSE, () ->
+                "[ItemAdmin] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
+                        + " " + detail);
     }
 
     @Override

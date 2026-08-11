@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.permissions;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.utils.OfflinePlayerResolver;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
@@ -89,6 +91,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 manager.getGroups().put(name, new PermissionGroup(name));
                 manager.saveGroups();
                 sender.sendMessage(Messages.PERMISSIONS.groupCreated(name));
+                log(sender, LoggingPaths.PERMISSIONS_GROUP, "created group " + name);
             }
             case "delete" -> {
                 if (name.equals("default")) {
@@ -100,6 +103,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                     manager.saveUsers();
                     manager.refreshAllOnlinePlayers();
                     sender.sendMessage(Messages.PERMISSIONS.groupDeleted(name));
+                    log(sender, LoggingPaths.PERMISSIONS_GROUP, "deleted group " + name);
                 } else {
                     sender.sendMessage(Messages.PERMISSIONS.groupNotFound());
                 }
@@ -118,6 +122,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 manager.saveGroups();
                 manager.refreshAllOnlinePlayers();
                 sender.sendMessage(Messages.PERMISSIONS.groupPermissionAdded(name));
+                log(sender, LoggingPaths.PERMISSIONS_PERMISSION, "granted " + args[3] + " to group " + name);
             }
             case "delperm" -> {
                 if (args.length < 4) {
@@ -133,6 +138,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 manager.saveGroups();
                 manager.refreshAllOnlinePlayers();
                 sender.sendMessage(Messages.PERMISSIONS.groupPermissionRemoved(name));
+                log(sender, LoggingPaths.PERMISSIONS_PERMISSION, "revoked " + args[3] + " from group " + name);
             }
             case "inherited-from" -> {
                 if (args.length < 4) {
@@ -153,6 +159,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 manager.saveGroups();
                 manager.refreshAllOnlinePlayers();
                 sender.sendMessage(Messages.PERMISSIONS.groupInheritanceSet(name, parent));
+                log(sender, LoggingPaths.PERMISSIONS_GROUP, "set parent of " + name + " to " + parent);
             }
             default -> sender.sendMessage(Messages.PERMISSIONS.unknownAction());
         }
@@ -183,6 +190,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 manager.saveUsers();
                 refreshPlayer(uuid);
                 sender.sendMessage(Messages.PERMISSIONS.userPermissionAdded(target.getName()));
+                log(sender, LoggingPaths.PERMISSIONS_PERMISSION, "granted " + args[3] + " to user " + uuid);
             }
             case "delperm" -> {
                 if (args.length < 4) {
@@ -193,6 +201,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 manager.saveUsers();
                 refreshPlayer(uuid);
                 sender.sendMessage(Messages.PERMISSIONS.userPermissionRemoved(target.getName()));
+                log(sender, LoggingPaths.PERMISSIONS_PERMISSION, "revoked " + args[3] + " from user " + uuid);
             }
             case "setgroup" -> {
                 if (args.length < 4) {
@@ -210,6 +219,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                 manager.saveUsers();
                 refreshPlayer(uuid);
                 sender.sendMessage(Messages.PERMISSIONS.userGroupSet(target.getName(), group));
+                log(sender, LoggingPaths.PERMISSIONS_USER_GROUPS, "set user " + uuid + " groups to " + group);
             }
             default -> sender.sendMessage(Messages.PERMISSIONS.unknownAction());
         }
@@ -253,6 +263,15 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
         if (player != null) {
             manager.refreshPlayer(player);
         }
+    }
+
+    private void log(CommandSender sender, String path, String detail) {
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog == null) return;
+        String actorName = sender instanceof Player player ? player.getName() : null;
+        UUID actorId = sender instanceof Player player ? player.getUniqueId() : null;
+        eventLog.log(path, () -> "[Permissions] " + ConsoleEventLog.actorLabel(actorName, actorId)
+                + " " + detail);
     }
 
     private void sendUsage(CommandSender sender) {

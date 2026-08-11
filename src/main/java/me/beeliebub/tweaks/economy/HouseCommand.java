@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.economy;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.utils.OfflinePlayerResolver;
 import org.bukkit.Bukkit;
@@ -89,6 +91,7 @@ public final class HouseCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         sender.sendMessage(Messages.houseMutation("added", amount, houseAccount.balance()));
+        logHouseMutation(sender, "added", amount);
         return true;
     }
 
@@ -100,6 +103,7 @@ public final class HouseCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         sender.sendMessage(Messages.houseMutation("removed", amount, houseAccount.balance()));
+        logHouseMutation(sender, "removed", amount);
         return true;
     }
 
@@ -112,6 +116,7 @@ public final class HouseCommand implements CommandExecutor, TabCompleter {
             long amount = Long.parseLong(args[1]);
             houseAccount.set(amount);
             sender.sendMessage(Messages.houseMutation("set to", amount, houseAccount.balance()));
+            logHouseMutation(sender, "set to", amount);
         } catch (NumberFormatException exception) {
             sender.sendMessage(Messages.houseInvalidAmount(args[1]));
         }
@@ -197,6 +202,14 @@ public final class HouseCommand implements CommandExecutor, TabCompleter {
                 case NOT_READY -> Messages.houseStillLoading();
                 case FAILED -> Messages.housePaymentFailed();
             });
+            if (outcome == HousePayOutcome.SUCCESS) {
+                String actorName = sender instanceof Player player ? player.getName() : null;
+                java.util.UUID actorId = sender instanceof Player player ? player.getUniqueId() : null;
+                ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+                if (eventLog != null) eventLog.log(LoggingPaths.ECONOMY_HOUSE_PAYMENT, () ->
+                        "[Economy] " + ConsoleEventLog.actorLabel(actorName, actorId)
+                                + " completed house payment of $" + amount + " to " + targetName);
+            }
         });
     }
 
@@ -208,6 +221,21 @@ public final class HouseCommand implements CommandExecutor, TabCompleter {
         };
         plugin.getLogger().log(level, "House payment to " + targetName + " for $" + amount
                 + " resolved as " + outcome + " (sender no longer reachable).");
+        if (outcome == HousePayOutcome.SUCCESS) {
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null) eventLog.log(LoggingPaths.ECONOMY_HOUSE_PAYMENT, () ->
+                    "[Economy] (console) completed house payment of $" + amount + " to " + targetName);
+        }
+    }
+
+    private void logHouseMutation(CommandSender sender, String operation, long amount) {
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog == null) return;
+        String actorName = sender instanceof Player player ? player.getName() : null;
+        java.util.UUID actorId = sender instanceof Player player ? player.getUniqueId() : null;
+        eventLog.log(LoggingPaths.ECONOMY_HOUSE_MUTATED, () ->
+                "[Economy] " + ConsoleEventLog.actorLabel(actorName, actorId)
+                        + " " + operation + " house account by $" + amount);
     }
 
     private Long positiveAmount(CommandSender sender, String[] args, String usage) {

@@ -52,6 +52,10 @@ public final class ConfigMessages {
         return Component.text("Something went wrong applying that change; see the server console.", NamedTextColor.RED);
     }
 
+    public Component saveFailed(String displayName) {
+        return Component.text(displayName + " could not be saved; the change was not applied.", NamedTextColor.RED);
+    }
+
     public Component invalidMapKey(String input) {
         return Component.text("Invalid key '" + input + "' - keys cannot be empty or contain '.'.", NamedTextColor.RED);
     }

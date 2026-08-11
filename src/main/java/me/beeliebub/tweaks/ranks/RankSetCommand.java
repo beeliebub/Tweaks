@@ -3,6 +3,8 @@ package me.beeliebub.tweaks.ranks;
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.permissions.Permissions;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.utils.OfflinePlayerResolver;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
@@ -83,6 +85,15 @@ public class RankSetCommand implements CommandExecutor, TabCompleter {
             economyManager.setRank(uuid, finalRankId);
             sender.sendMessage(Messages.rankSetSuccess(target.getName() != null ? target.getName() : args[1],
                     rankManager.getRankDisplayComponent(finalRankId)));
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null) {
+                String actorName = sender instanceof Player player ? player.getName() : null;
+                UUID actorId = sender instanceof Player player ? player.getUniqueId() : null;
+                String targetName = target.getName() != null ? target.getName() : args[1];
+                eventLog.log(LoggingPaths.RANKS_ADMIN_SET, () ->
+                        "[Ranks] " + ConsoleEventLog.actorLabel(actorName, actorId)
+                                + " set " + targetName + " to rank " + finalRankId);
+            }
         });
 
         return true;

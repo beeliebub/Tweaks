@@ -17,7 +17,8 @@ public final class CoreBootstrap {
         plugin.getCommand("help").setTabCompleter(helpSystem);
         plugin.getServer().getPluginManager().registerEvents(helpSystem, plugin);
 
-        ConfigCommand configCommand = new ConfigCommand(plugin, services.resourceHuntItems(), services.worldProfileTable());
+        ConfigCommand configCommand = new ConfigCommand(plugin, services.resourceHuntItems(),
+                services.worldProfileTable(), services.consoleEventLog()::updateCachedBoolean);
         plugin.getCommand("tconfig").setExecutor(configCommand);
         plugin.getCommand("tconfig").setTabCompleter(configCommand);
     }

@@ -3,6 +3,9 @@ package me.beeliebub.tweaks.enchantments;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.HotPathEventBuffer;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -103,6 +106,12 @@ public class SpawnerPickup implements Listener {
             pdc.set(counterKey, PersistentDataType.INTEGER, count);
             updateUsesLore(meta, breakAt - count);
             tool.setItemMeta(meta);
+        }
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) {
+            String actorName = player.getName();
+            eventLog.logHot(LoggingPaths.ENCHANTMENTS_SPAWNER,
+                    new HotPathEventBuffer.HotKey(player.getUniqueId(), "spawner", null), actorName);
         }
     }
 

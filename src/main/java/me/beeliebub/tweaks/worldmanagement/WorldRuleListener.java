@@ -1,6 +1,9 @@
 package me.beeliebub.tweaks.worldmanagement;
 
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.HotPathEventBuffer;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.protection.region.ProtectionManager;
 import me.beeliebub.tweaks.protection.region.RegionFlag;
 import net.kyori.adventure.text.Component;
@@ -32,6 +35,7 @@ import org.bukkit.inventory.Merchant;
 import org.bukkit.inventory.MerchantInventory;
 
 import java.util.List;
+import java.util.Locale;
 
 // Consolidated world-rule listener. Previously: TrampleListener, PortalListener,
 // MobGriefListener, SpawnerEggListener, VillagerTradeListener. Each is a small
@@ -82,10 +86,22 @@ public class WorldRuleListener implements Listener {
         if (cause == PlayerTeleportEvent.TeleportCause.END_PORTAL && isEndPortalDisabled(worldKey)) {
             event.setCancelled(true);
             event.getPlayer().sendMessage(Component.text("The End is disabled in this world!", NamedTextColor.RED));
+            logPortalBlocked(event.getPlayer(), cause, worldKey);
         } else if (cause == PlayerTeleportEvent.TeleportCause.NETHER_PORTAL && isNetherPortalDisabled(worldKey)) {
             event.setCancelled(true);
             event.getPlayer().sendMessage(Component.text("Nether portals do not work in this world.", NamedTextColor.RED));
+            logPortalBlocked(event.getPlayer(), cause, worldKey);
         }
+    }
+
+    private void logPortalBlocked(Player player, PlayerTeleportEvent.TeleportCause cause, String worldKey) {
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog == null) return;
+        String actorName = player.getName();
+        java.util.UUID actorId = player.getUniqueId();
+        eventLog.logHot(LoggingPaths.WORLDMANAGEMENT_PORTAL,
+                new HotPathEventBuffer.HotKey(actorId,
+                        worldKey + ":" + cause.name().toLowerCase(Locale.ROOT), null), actorName);
     }
 
     // Live read (no constructor-time caching) so a /tconfig edit to disabled-end-portal-worlds

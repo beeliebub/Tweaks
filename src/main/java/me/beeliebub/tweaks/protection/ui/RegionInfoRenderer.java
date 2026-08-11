@@ -137,7 +137,7 @@ final class RegionInfoRenderer {
     }
 
     @SuppressWarnings("deprecation")
-    private static String resolveName(UUID uuid) {
+    static String resolveName(UUID uuid) {
         if (uuid == null) return Messages.PROTECTION.value(Text.UNKNOWN_NAME);
         OfflinePlayer p = Bukkit.getOfflinePlayer(uuid);
         String name = p.getName();

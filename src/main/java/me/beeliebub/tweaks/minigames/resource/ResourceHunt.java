@@ -2,6 +2,8 @@ package me.beeliebub.tweaks.minigames.resource;
 
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.minigames.RewardManager;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
@@ -140,10 +142,12 @@ public class ResourceHunt implements Listener {
             this.worldTargets = List.copyOf(entriesByWorld.get(pickedKey));
             ResourceHuntTarget.Definition picked = worldTargets.get(ThreadLocalRandom.current().nextInt(worldTargets.size()));
             this.initialTarget = picked;
-            plugin.getLogger().info("Resource Hunt active world this session: " + activeWorldKey
-                    + " (chosen from " + entriesByWorld.size() + " populated world(s); "
-                    + "initial target " + picked.category + ":" + targetIdName(picked)
-                    + ", " + worldTargets.size() + " candidate target(s) in pool)");
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null) eventLog.log(LoggingPaths.RESOURCEHUNT_ASSIGNED,
+                    () -> "[ResourceHunt] (console) Resource Hunt active world this session: " + activeWorldKey
+                            + " (chosen from " + entriesByWorld.size() + " populated world(s); "
+                            + "initial target " + picked.category + ":" + targetIdName(picked)
+                            + ", " + worldTargets.size() + " candidate target(s) in pool)");
         }
 
         // Pre-create the reward shell so admins can populate it via /reward edit resource even
@@ -151,8 +155,10 @@ public class ResourceHunt implements Listener {
         // because RewardManager resolves items lazily.
         if (!rewardManager.rewardExists(REWARD_NAME)) {
             rewardManager.createReward(REWARD_NAME);
-            plugin.getLogger().info("Created empty '" + REWARD_NAME
-                    + "' reward shell for Resource Hunt.");
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null) eventLog.log(LoggingPaths.RESOURCEHUNT_ASSIGNED,
+                    () -> "[ResourceHunt] (console) Created empty '" + REWARD_NAME
+                            + "' reward shell for Resource Hunt.");
         }
     }
 
@@ -195,9 +201,12 @@ public class ResourceHunt implements Listener {
         ResourceHuntTarget.Player pt = new ResourceHuntTarget.Player(pick, NUM_TIERS);
         playerTargets.put(uuid, pt);
         assignedKeys.add(pick.identityKey());
-        plugin.getLogger().info("Resource Hunt: assigned " + pick.category + ":" + targetIdName(pick)
-                + " (tiers " + pt.tierThresholds[0] + "/" + pt.tierThresholds[1] + "/" + pt.tierThresholds[2]
-                + ", x" + pick.multiplier + ") to " + uuid);
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.RESOURCEHUNT_ASSIGNED,
+                () -> "[ResourceHunt] " + ConsoleEventLog.actorLabel(null, uuid)
+                        + " assigned " + pick.category + ":" + targetIdName(pick)
+                        + " (tiers " + pt.tierThresholds[0] + "/" + pt.tierThresholds[1] + "/" + pt.tierThresholds[2]
+                        + ", x" + pick.multiplier + ")");
         return pt;
     }
 
@@ -691,7 +700,8 @@ public class ResourceHunt implements Listener {
         }
         if (match == null) return false;
 
-        ResourceHuntTarget.Player pt = new ResourceHuntTarget.Player(match, NUM_TIERS);
+        ResourceHuntTarget.Definition forcedTarget = match;
+        ResourceHuntTarget.Player pt = new ResourceHuntTarget.Player(forcedTarget, NUM_TIERS);
         playerTargets.put(playerUuid, pt);
         progress.remove(playerUuid);
         tiersCompleted.remove(playerUuid);
@@ -705,9 +715,11 @@ public class ResourceHunt implements Listener {
             }
         }
 
-        plugin.getLogger().info("Resource Hunt: admin forced target " + match.category + ":" + targetIdName(match)
-                + " (tiers " + pt.tierThresholds[0] + "/" + pt.tierThresholds[1] + "/" + pt.tierThresholds[2]
-                + ") onto " + playerUuid);
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.RESOURCEHUNT_FORCED,
+                () -> "[ResourceHunt] (console) admin forced target " + forcedTarget.category + ":" + targetIdName(forcedTarget)
+                        + " (tiers " + pt.tierThresholds[0] + "/" + pt.tierThresholds[1] + "/" + pt.tierThresholds[2]
+                        + ") onto " + playerUuid);
         return true;
     }
 
@@ -779,10 +791,12 @@ public class ResourceHunt implements Listener {
             showBossBar(player);
         }
 
-        plugin.getLogger().info("Resource Hunt: rerolled target for " + uuid
-                + " -> " + pick.category + ":" + targetIdName(pick)
-                + " (tiers " + pt.tierThresholds[0] + "/" + pt.tierThresholds[1]
-                + "/" + pt.tierThresholds[2] + ")");
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.RESOURCEHUNT_REROLLED,
+                () -> "[ResourceHunt] " + ConsoleEventLog.actorLabel(player.getName(), uuid)
+                        + " rerolled target -> " + pick.category + ":" + targetIdName(pick)
+                        + " (tiers " + pt.tierThresholds[0] + "/" + pt.tierThresholds[1]
+                        + "/" + pt.tierThresholds[2] + ")");
         return true;
     }
 

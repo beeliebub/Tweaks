@@ -14,6 +14,9 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockDropItemEvent;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.HotPathEventBuffer;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
@@ -76,12 +79,19 @@ public class FortuneQualityListener implements Listener {
             }
 
             // If the best roll has item types not in the original (rare), spawn new entities
-            if (!bestList.isEmpty()) {
+        if (!bestList.isEmpty()) {
                 Location dropLoc = block.getLocation().add(0.5, 0.5, 0.5);
                 for (ItemStack remaining : bestList) {
                     Item entity = block.getWorld().dropItemNaturally(dropLoc, remaining);
                     event.getItems().add(entity);
                 }
+            }
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(registry.plugin());
+            if (eventLog != null) {
+                String actorName = player.getName();
+                eventLog.logHot(LoggingPaths.ENCHANTMENTS_QUALITY,
+                        new HotPathEventBuffer.HotKey(player.getUniqueId(),
+                                "fortune:" + block.getType().name(), null), actorName);
             }
         }
     }

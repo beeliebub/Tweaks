@@ -3,6 +3,8 @@ package me.beeliebub.tweaks.economy;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.ranks.RankManager;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -83,6 +85,13 @@ public class EconomyListener implements Listener {
 
         // Notify the player.
         player.sendMessage(Messages.dailyReward(BalanceCommand.formatBalance(reward), newStreak));
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) {
+            String name = player.getName();
+            eventLog.log(LoggingPaths.ECONOMY_DAILY_REWARD, () -> "[Economy] "
+                    + ConsoleEventLog.actorLabel(name, uuid) + " claimed daily reward: "
+                    + BalanceCommand.formatBalance(reward) + " (streak " + newStreak + ")");
+        }
     }
 
 }

@@ -119,4 +119,13 @@ class ConfigYmlValidationTest {
         assertNotNull(lottery);
         assertTrue(((Number) lottery.get("reseed-amount")).longValue() > 0);
     }
+
+    @Test
+    void lotteryPotMultiplierIsWithinConfiguredBounds() {
+        Map<?, ?> lottery = (Map<?, ?>) root.get("lottery");
+        assertNotNull(lottery);
+        double multiplier = ((Number) lottery.get("pot-multiplier")).doubleValue();
+        assertTrue(Double.isFinite(multiplier));
+        assertTrue(multiplier >= 0.0D && multiplier <= 10.0D);
+    }
 }

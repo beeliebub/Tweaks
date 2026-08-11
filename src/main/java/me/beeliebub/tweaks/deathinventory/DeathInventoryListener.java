@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.deathinventory;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.permissions.Permissions;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -158,6 +160,12 @@ public final class DeathInventoryListener implements Listener, CommandExecutor, 
             }
             sender.sendMessage(Messages.deathInventoryRestored(targetName));
             target.sendMessage(Messages.deathInventoryRestoreNotice());
+            String actorName = sender instanceof Player player ? player.getName() : null;
+            UUID actorId = sender instanceof Player player ? player.getUniqueId() : null;
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null) eventLog.log(LoggingPaths.DEATHINVENTORY_RESTORED, () ->
+                    "[DeathInventory] " + ConsoleEventLog.actorLabel(actorName, actorId)
+                            + " restored " + id + " for " + targetName);
             return;
         }
 

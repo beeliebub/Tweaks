@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.itemadmin;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -127,6 +129,10 @@ public class InvSeeCommand implements CommandExecutor, TabCompleter, Listener {
         // session's close is still cleaned up correctly.
         sessions.put(viewer.getUniqueId(), session);
         viewer.openInventory(gui);
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.ITEMADMIN_INVSEE, () ->
+                "[ItemAdmin] " + ConsoleEventLog.actorLabel(viewer.getName(), viewer.getUniqueId())
+                        + " opened inventory of " + ConsoleEventLog.actorLabel(target.getName(), target.getUniqueId()));
     }
 
     private void renderTargetInto(Inventory gui, Player target) {

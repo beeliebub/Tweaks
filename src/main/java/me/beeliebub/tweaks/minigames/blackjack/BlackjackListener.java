@@ -4,6 +4,8 @@ import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
 import me.beeliebub.tweaks.lottery.LotteryManager;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.ranks.RankManager;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
@@ -71,6 +73,7 @@ import java.util.UUID;
  */
 public final class BlackjackListener implements Listener {
 
+    private final JavaPlugin plugin;
     private final BlackjackTableStore tableStore;
     private final BlackjackRenderer renderer;
     private final BlackjackSessionManager sessionManager;
@@ -91,6 +94,7 @@ public final class BlackjackListener implements Listener {
 
     public BlackjackListener(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
                              RankManager rankManager, LotteryManager lotteryManager) {
+        this.plugin = plugin;
         this.tableStore = new BlackjackTableStore(plugin);
         this.renderer = new BlackjackRenderer(plugin);
         this.sessionManager = new BlackjackSessionManager(plugin, economyManager, houseAccount, rankManager,
@@ -268,6 +272,12 @@ public final class BlackjackListener implements Listener {
         tableStore.persistTable(entry);
         activateTable(entry);
 
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.BLACKJACK_TABLE, () ->
+                "[Blackjack] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
+                        + " created table at " + center.getBlockX() + "," + center.getBlockY()
+                        + "," + center.getBlockZ() + " with bet $" + bet);
+
         player.sendMessage(Messages.MINIGAMES.blackjackTableRegistered(
                 String.format("%.1f, %.1f, %.1f", center.x(), center.y(), center.z()), bet));
     }
@@ -285,6 +295,12 @@ public final class BlackjackListener implements Listener {
         // nearest-entity proximity rather than by per-table UUID (see removeHologramNear).
         renderer.removeHologramNear(renderer.hologramAnchor(center), chunk);
         tableStore.unregisterButtons(table);
+
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.BLACKJACK_TABLE, () ->
+                "[Blackjack] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
+                        + " removed table at " + center.getBlockX() + "," + center.getBlockY()
+                        + "," + center.getBlockZ());
 
         player.sendMessage(Messages.MINIGAMES.blackjackTableRemoved());
     }

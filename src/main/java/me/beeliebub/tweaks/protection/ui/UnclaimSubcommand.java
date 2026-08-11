@@ -6,6 +6,8 @@ import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.protection.region.ProtectionManager;
 import me.beeliebub.tweaks.protection.region.Region;
 import me.beeliebub.tweaks.utils.InventoryUtil;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -136,6 +138,15 @@ final class UnclaimSubcommand implements RegionSubcommand {
             if (owedButUnpaid > 0) {
                 sender.sendMessage(Messages.PROTECTION.unclaimOfflineRefund(name, owedButUnpaid));
             }
+        }
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(pm.plugin());
+        if (eventLog != null) {
+            String actorName = sender instanceof Player player ? player.getName() : null;
+            UUID actorId = sender instanceof Player player ? player.getUniqueId() : null;
+            eventLog.log(LoggingPaths.PROTECTION_UNCLAIM, () ->
+                    "[Protection] " + ConsoleEventLog.actorLabel(actorName, actorId)
+                            + " removed region " + name + " and " + (destroyed.size() - 1)
+                            + " descendant(s)");
         }
         return outcome;
     }

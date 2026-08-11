@@ -2,6 +2,8 @@ package me.beeliebub.tweaks.playeradmin;
 
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -66,6 +68,10 @@ public class PlayerAdminCommand implements CommandExecutor {
         }
         player.setGameMode(target);
         player.sendMessage(Component.text("Gamemode set to " + target.name().toLowerCase() + ".", NamedTextColor.GREEN));
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(manager.plugin());
+        if (eventLog != null) eventLog.log(LoggingPaths.PLAYERADMIN_GAMEMODE, () ->
+                "[PlayerAdmin] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
+                        + " changed gamemode to " + target.name().toLowerCase());
         return true;
     }
 
@@ -100,6 +106,7 @@ public class PlayerAdminCommand implements CommandExecutor {
         if (player.getAllowFlight()) {
             manager.disableFlight(player);
             player.sendMessage(Component.text("Flight disabled.").color(NamedTextColor.RED));
+            logFlight(player, false);
             return true;
         }
         if (!manager.canFly(player)) {
@@ -109,6 +116,7 @@ public class PlayerAdminCommand implements CommandExecutor {
         }
         manager.enableFlight(player);
         player.sendMessage(Component.text("Flight enabled!").color(NamedTextColor.GREEN));
+        logFlight(player, true);
         return true;
     }
 
@@ -160,6 +168,7 @@ public class PlayerAdminCommand implements CommandExecutor {
                         .color(NamedTextColor.GREEN));
                 onlineTarget.sendMessage(Component.text("Your nickname has been removed by an admin.")
                         .color(NamedTextColor.YELLOW));
+                logNick(sender, "removed nickname for " + onlineTarget.getName());
                 return true;
             }
 
@@ -175,6 +184,7 @@ public class PlayerAdminCommand implements CommandExecutor {
             sender.sendMessage(Component.text("Nickname removal queued for " + resolvedName
                             + ". It will be cleared on their next login.")
                     .color(NamedTextColor.GREEN));
+            logNick(sender, "queued nickname removal for " + resolvedName);
             return true;
         }
 
@@ -188,6 +198,7 @@ public class PlayerAdminCommand implements CommandExecutor {
         }
         manager.clearNickname(player);
         player.sendMessage(Component.text("Nickname removed!").color(NamedTextColor.GREEN));
+        logNick(player, "removed own nickname");
         return true;
     }
 
@@ -218,6 +229,23 @@ public class PlayerAdminCommand implements CommandExecutor {
         player.sendMessage(Component.text("Nickname set to ").color(NamedTextColor.GREEN)
                 .append(nickname)
                 .append(Component.text("!").color(NamedTextColor.GREEN)));
+        logNick(player, "set nickname");
         return true;
+    }
+
+    private void logFlight(Player player, boolean enabled) {
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(manager.plugin());
+        if (eventLog != null) eventLog.log(LoggingPaths.PLAYERADMIN_FLY, () ->
+                "[PlayerAdmin] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
+                        + " toggled flight " + (enabled ? "on" : "off"));
+    }
+
+    private void logNick(CommandSender sender, String detail) {
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(manager.plugin());
+        if (eventLog == null) return;
+        String name = sender instanceof Player player ? player.getName() : null;
+        java.util.UUID id = sender instanceof Player player ? player.getUniqueId() : null;
+        eventLog.log(LoggingPaths.PLAYERADMIN_NICK, () ->
+                "[PlayerAdmin] " + ConsoleEventLog.actorLabel(name, id) + " " + detail);
     }
 }

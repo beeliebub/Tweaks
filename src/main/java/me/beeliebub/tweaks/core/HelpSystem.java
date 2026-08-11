@@ -620,6 +620,8 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/tconfig spawneregg <disable|enable> <mob>", "Toggle spawner-egg usage for mobs."),
                 cmd("/tconfig resourceitems <add|remove> <item>", "Manage resource world allowed items."),
                 cmd("/tconfig world-profiles <list|add|remove|edit>", "Manage world-key -> profile/tag/color mappings (see /help profiles)."),
+                cmd("/tconfig logging.<feature>.<event> <true|false>", "Toggle one console-only event record."),
+                white("Logging records are disabled by default; a confirmed CLI/GUI save applies immediately, while hand edits require a restart."),
                 cmd("/tconfig <path> <value>", "Generic setter for any other registered setting (Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Xp Bottle categories)."),
                 white("Ranks: /ranks edit  ·  Permissions: /tprm  ·  Whack: /whack"),
                 red("Permission: tweaks.admin.config.")
@@ -886,6 +888,9 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/region info [name] [world]", "Show details for a specific region."),
                 cmd("/rg i", "Quick info for where you are standing."),
                 cmd("/region select <name>", "Restore selection boundaries from a region."),
+                cmd("/region list [player|page] [page]", "Admin-only paginated list of non-global regions across worlds."),
+                cmd("/region tp <name> [world]", "Admin-only teleport to a region's safe centre."),
+                cmd("/region togglebypass", "Opt into the session-only admin bypass for in-world protection."),
                 aqua("Displays:"),
                 white("- Region ID, Owner, Parent (if sub-region)."),
                 white("- Members list: hover '(N entries)' for full names."),
@@ -932,6 +937,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("- ENTRY false default blocks all non-exempt players at the border."),
                 white("- Players already inside cannot move; must /home or /spawn to leave."),
                 white("- Respawn inside a denied region redirects to world spawn."),
+                white("- Admins with " + Permissions.PROTECTION_BYPASS + " can toggle a session-only bypass; it is cleared on join and quit."),
                 aqua("Targeting (Boolean only):"),
                 white("- [target] can be: owner, manager, member, or group (e.g. group:admin)."),
                 white("- Priority: GROUP > OWNER > MANAGER > MEMBER > DEFAULT."),
@@ -1004,12 +1010,16 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
 
         articles.add(new HelpArticle("lottery", "Server Lottery", List.of(
                 gray("Players who lose to the casino can enter the server-wide lottery."),
-                cmd("/lottery info", "View entrants, the baseline, and the current pot."),
+                white("The pot is floor(M x House growth since the baseline x (1 + 1% per entrant)), clamped so the House stays above its live fallback."),
+                white("One entrant rolls positive House growth into the fallback and advances the baseline; the fallback resets to its configured base after a successful payout."),
+                white("At least two players must have entries before a draw can pay out."),
+                cmd("/lottery info", "View entrants, the baseline, fallback floor, and current pot."),
                 cmd("/lottery", "Shows the public lottery information."),
+                cmd("/lottery entries", "List the current entrant pool. Public, with a short non-admin cooldown."),
                 red("Admin:"),
                 cmd("/lottery draw", "Draw one eligible winner and pay the current pot."),
-                cmd("/lottery entries", "List the current entrant pool."),
                 cmd("/lottery baseline <amount>", "Set the growth baseline."),
+                cmd("/lottery fallback [<amount>]", "View or set the live fallback floor."),
                 white("If payment is abandoned, entries and baseline stay unchanged. A retained payment resumes on the next startup; a stuck payment needs House reconciliation."),
                 red("Admin permission: " + Permissions.LOTTERY_ADMIN + ".")
         ), Material.CHEST, 21, ColorUtil.HELP_GRAD_ECONOMY, List.of("house", "balance")));

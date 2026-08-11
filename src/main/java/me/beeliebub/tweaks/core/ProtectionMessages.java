@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.core;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 
@@ -76,6 +77,36 @@ public final class ProtectionMessages {
         return Component.text(flag + " (" + size + " entr" + (size == 1 ? "y" : "ies") + ")",
                         NamedTextColor.GRAY)
                 .hoverEvent(HoverEvent.showText(Component.text(fullList, NamedTextColor.WHITE)));
+    }
+
+    /** Renders the paginated region-list header. */
+    public Component regionListHeader(int page, int pages) {
+        return text(Text.REGION_LIST_HEADER, page, pages);
+    }
+
+    /** Renders one region-list row with exact centre coordinates on hover. */
+    public Component regionListRow(String id, String world, String coordinates,
+                                   String exactCoordinates, String owner) {
+        Component coordinate = Component.text(coordinates, NamedTextColor.YELLOW)
+                .hoverEvent(HoverEvent.showText(Component.text(exactCoordinates, NamedTextColor.WHITE)));
+        return Component.text("  " + id, NamedTextColor.AQUA)
+                .append(Component.text(" | " + world + " | ", NamedTextColor.GRAY))
+                .append(coordinate)
+                .append(Component.text(" | " + owner, NamedTextColor.GRAY));
+    }
+
+    /** Renders one clickable region-list page button. */
+    public Component regionListPageButton(Text label, int page, String command) {
+        return text(label, page).clickEvent(ClickEvent.runCommand(command));
+    }
+
+    /** Renders a clickable page-navigation line. */
+    public Component regionListNavigation(Component previous, Component next) {
+        Component line = Component.empty();
+        if (previous != null) line = line.append(previous);
+        if (previous != null && next != null) line = line.append(Component.text("  ", NamedTextColor.GRAY));
+        if (next != null) line = line.append(next);
+        return line;
     }
 
     /** Preserves the red/yellow segmented claim-limit feedback. */
@@ -201,6 +232,33 @@ public final class ProtectionMessages {
         USAGE_FLAG_DESCRIPTION("Set a flag rule, or list rules when no value is given.", NamedTextColor.GRAY),
         USAGE_UNFLAG_SYNTAX("/region unflag <name> <flag> [target] [world]", NamedTextColor.GRAY),
         USAGE_UNFLAG_DESCRIPTION("Remove a flag rule (clears material list for material flags).", NamedTextColor.GRAY),
+        USAGE_TOGGLE_BYPASS_SYNTAX("/region togglebypass", NamedTextColor.GRAY),
+        USAGE_TOGGLE_BYPASS_DESCRIPTION("Toggle your session-only bypass of in-world region protection flags.", NamedTextColor.GRAY),
+        BYPASS_ONLY_PLAYERS("Only players can toggle a protection bypass.", NamedTextColor.RED),
+        BYPASS_ENABLED("Protection bypass enabled for this session.", NamedTextColor.YELLOW),
+        BYPASS_DISABLED("Protection bypass disabled.", NamedTextColor.GREEN),
+        BYPASS_REQUIRED("Protection blocked this action. Run /region togglebypass to opt into the session-only admin bypass.", NamedTextColor.RED),
+        USAGE_LIST_SYNTAX("/region list [player|page] [page]", NamedTextColor.GRAY),
+        USAGE_LIST_DESCRIPTION("List regions across all loaded and unloaded worlds.", NamedTextColor.GRAY),
+        USAGE_TP_SYNTAX("/region tp <name> [world]", NamedTextColor.GRAY),
+        USAGE_TP_DESCRIPTION("Teleport to the safe centre of a region.", NamedTextColor.GRAY),
+        REGION_LIST_HEADER("Regions — page %s of %s", NamedTextColor.AQUA),
+        REGION_LIST_EMPTY("No regions matched that filter.", NamedTextColor.YELLOW),
+        REGION_LIST_NUMERIC_HINT("A numeric player name must be followed by an explicit page number.", NamedTextColor.YELLOW),
+        REGION_LIST_NO_BOUNDS("no bounds", NamedTextColor.GRAY),
+        REGION_LIST_NO_WORLD("no world recorded", NamedTextColor.GRAY),
+        REGION_LIST_CENTRE("Centre block: %s, %s", NamedTextColor.WHITE),
+        REGION_LIST_NOT_LOADED("%s (not loaded)", NamedTextColor.GRAY),
+        REGION_LIST_PREVIOUS("◀ Page %s", NamedTextColor.GREEN),
+        REGION_LIST_NEXT("Page %s ▶", NamedTextColor.GREEN),
+        TP_ONLY_PLAYERS("Only players can teleport to a region.", NamedTextColor.RED),
+        TP_NO_BOUNDS("Region '%s' has no recorded bounds. Re-claim it before teleporting.", NamedTextColor.RED),
+        TP_NO_WORLD("Region '%s' has no recorded world. It cannot be teleported to until its world is restored.", NamedTextColor.RED),
+        TP_WORLD_NOT_LOADED("World '%s' is not loaded, so region '%s' cannot be reached.", NamedTextColor.RED),
+        TP_TELEPORTING("Finding a safe centre for region '%s'…", NamedTextColor.YELLOW),
+        TP_NO_GROUND("No solid ground was found at the centre of '%s'; using a non-mutating fallback location.", NamedTextColor.YELLOW),
+        TP_SUCCESS("Teleported to the centre of '%s'.", NamedTextColor.GREEN),
+        TP_FAILED("Could not teleport to region '%s'.", NamedTextColor.RED),
 
         CLAIM_ONLY_PLAYERS("Only players can claim regions.", NamedTextColor.RED),
         CLAIM_EXISTS_WORLD("Region '%s' already exists in this world.", NamedTextColor.RED),

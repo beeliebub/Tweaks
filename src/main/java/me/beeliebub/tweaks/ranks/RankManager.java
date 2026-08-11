@@ -102,6 +102,10 @@ public class RankManager {
         return def != null ? def.name() : "Unranked";
     }
 
+    JavaPlugin plugin() {
+        return plugin;
+    }
+
     /** Returns the configured rank name rendered with the supported legacy color format. */
     public Component getRankDisplayComponent(int rank) {
         return ColorUtil.parse(getRankDisplayName(rank));

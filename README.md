@@ -60,6 +60,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Item Editing](#item-editing)
   - [Chest GUI Copy](#chest-gui-copy)
   - [Gamemode Shortcuts](#gamemode-shortcuts)
+  - [Console Event Logging](#console-event-logging)
 - [World Events](#world-events)
   - [Blood Moon](#blood-moon)
 - [Minigames](#minigames)
@@ -640,18 +641,25 @@ to the House account and logged for recovery.
 
 The server-wide lottery grows from House-account growth since the previous draw. A player enters
 after a settled blackjack loss or inactivity forfeiture, or when their roulette round ends net
-negative. Entries are one-per-player and offline entrants remain eligible. The pot is paid from the
-House through a durable payment intent and house-payment journal; an unpaid draw keeps its entries
-and baseline, while an in-flight payment resumes from its retained House debit on the next startup.
-Only a committed draw removes the recorded entrants, so entries added during payment remain. A draw
-that pays the entire House reseeds it to the configured positive amount (default `$10,000`).
+negative. Entries are one-per-player and offline entrants remain eligible. With `M` as the configured
+pot multiplier, `X` as the baseline, `Y` as the House balance, and `Z` as the entrant count, the pot
+is `floor(M x (Y - X) x (1 + 0.01 x Z))`, clamped so the House never falls below its live fallback
+floor. At least two distinct entrants are required to draw. A one-entrant draw rolls positive House
+growth into the fallback and advances the baseline without paying anyone; the ticket is retained.
+
+The pot is paid from the House through a durable payment intent and house-payment journal; an
+unpaid draw keeps its entries and baseline, while an in-flight payment resumes from its retained
+House debit on the next startup. Only a committed draw removes the recorded entrants, so entries
+added during payment remain. The live fallback is stored with lottery state, resets to the configured
+base after a successful draw, and can be viewed or changed with `/lottery fallback`.
 
 | Command | What it does |
 |---|---|
 | `/lottery info` | Show the current entrant count, House balance, baseline, and computed pot. |
+| `/lottery entries` | List up to 50 current entrants. Public; non-admin requests have a short cooldown. |
 | `/lottery draw` | Draw and announce a winner. Admin permission required. |
-| `/lottery entries` | List current entrants. Admin permission required. |
 | `/lottery baseline <amount>` | Set the growth baseline. Admin permission required. |
+| `/lottery fallback [<amount>]` | View or set the live fallback floor. Admin permission required. |
 
 ### Ranks
 
@@ -822,6 +830,21 @@ Convenience commands for switching your own gamemode, both gated by the same adm
 | `/creative` | `tweaks.admin.gamemode` | Switch the executing player to Creative. |
 
 Both commands are player-only and only affect the executing player; if you're already in the target gamemode, the command no-ops with a yellow note. Use vanilla `/gamemode` to target other players.
+
+### Console Event Logging
+
+Console event records are opt-in and console-only. Every `logging.*` switch in `config.yml` starts
+disabled, so enable only the event families you need. Use `/tconfig logging.<feature>.<event>
+<true|false>`, `/tconfig list logging-core` (or another logging category), or the `/tconfig gui`
+to manage them. A confirmed `/tconfig` save updates the running logger immediately; editing
+`config.yml` by hand while the server is running requires a restart.
+
+The logger covers economy, minigames, lottery, protection administration, permissions, ranks,
+teleports, player administration, profiles, item administration, death inventories, block logs,
+enchantment outcomes, Resource Hunt, Whack, world management, currency recipes, XP bottles, and
+config changes. It does not replace existing `WARNING` or `SEVERE` diagnostics. Protection denials
+and other high-frequency records are collapsed into a summary every 30 seconds, with at most 2,000
+distinct event keys per window and an explicit overflow marker when admissions are dropped.
 
 ---
 
@@ -1077,6 +1100,20 @@ Flags control what non-members can do in a region. Rules can target specific gro
   - Per-role overrides work the same as all other boolean flags (e.g. `ENTRY true manager` to permit managers).
   - Players who respawn inside an ENTRY-denied region are redirected to the world's default spawn point.
 
+### Administrative Region Tools
+
+Admins with `tweaks.protection.admin` can inspect claims across every world with
+`/region list [player|page] [page]`. Results exclude the per-world `__global__` wilderness entries,
+are sorted by region name, and show eight regions per page with clickable navigation. Use
+`/region tp <name> [world]` to teleport yourself to a region's safe centre; the destination chunk is
+loaded asynchronously and the locator searches for solid ground without placing or changing blocks.
+
+`/region togglebypass` is available to admins with `tweaks.protection.bypass`. It enables a
+session-only bypass for in-world protection checks, including block actions, container access, and
+`ENTRY` teleport/movement denial. The bypass is cleared on join and quit, so an admin must opt in
+again after every login. It does not grant region command permission or ownership and does not alter
+the region flags themselves.
+
 ### Command UX & Tab Completion
 
 - **Usage Info**: If you run a protection command incorrectly, the plugin will display friendly usage information (filtered by your permissions and current-world authorization rules).
@@ -1143,6 +1180,7 @@ When an action occurs, the system checks rules in this order:
 | `/balance hide` | Toggle whether your balance is visible in the tab list. |
 | `/house balance` | View the casino house account (admin). |
 | `/lottery info` | View the public lottery status and computed pot. |
+| `/lottery entries` | List current lottery entrants (public, with a short non-admin cooldown). |
 | `/ranks` | List all available ranks and their benefits. |
 | `/rankup` | Purchase the next rank in the hierarchy. |
 | `/reroll` | Re-roll your current Resource Hunt target. |
@@ -1180,14 +1218,17 @@ When an action occurs, the system checks rules in this order:
 | `/region setparent <c> <p> [world]` | `tweaks.protection.purchaseable` | Nest a region inside another; you must own both regions unless admin. |
 | `/region unsetparent <c> [world]` | `tweaks.protection.purchaseable` | Remove region parenting. |
 | `/region gui [name] [world]` | `tweaks.protection.info` | Open the dialog dashboard for a region. |
+| `/region list [player\|page] [page]` | `tweaks.protection.admin` | List non-global regions across worlds, eight per page. |
+| `/region tp <name> [world]` | `tweaks.protection.admin` | Teleport yourself to a region's asynchronously located safe centre. |
+| `/region togglebypass` | `tweaks.protection.bypass` | Toggle the session-only in-world protection bypass. |
 | `/blackjack createtable <bet> [hexColor]` | `tweaks.blackjack.createtable` | Create button-linked Blackjack tables. |
 | `/blackjack removetable` | `tweaks.blackjack.removetable` | Remove a Blackjack table. |
 | `/roulette createboard <min> <max>` | `tweaks.roulette.createboard` | Begin Roulette board setup; right-click a button/lever to finalize. |
 | `/roulette removeboard` | `tweaks.roulette.removeboard` | Begin Roulette board removal; right-click the board's spin control. |
 | `/house <balance\|add\|remove\|set\|pay>` | `tweaks.admin.house` | View or administer the server-wide casino house account. |
 | `/lottery draw` | `tweaks.admin.lottery` | Draw the server-wide lottery and announce the winner. |
-| `/lottery entries` | `tweaks.admin.lottery` | List current lottery entrants. |
 | `/lottery baseline <amount>` | `tweaks.admin.lottery` | Set the lottery growth baseline. |
+| `/lottery fallback [<amount>]` | `tweaks.admin.lottery` | View or set the live lottery fallback floor. |
 | `/tconfig` / `/tconfig gui` | `tweaks.admin.config` | Open the admin config Dialog GUI (players only; console gets plain usage). |
 | `/tconfig list [category]` | `tweaks.admin.config` | Print every registered setting and its current value. |
 | `/tconfig max_homes <int>` | `tweaks.admin.config` | Set global max homes per player. |
@@ -1200,7 +1241,7 @@ When an action occurs, the system checks rules in this order:
 | `/tconfig world-profiles add <world-key> <profile> <label> <color>` | `tweaks.admin.config` | Register a new world-key mapping (profile is only settable here — see [World Profiles](#world-profiles)). |
 | `/tconfig world-profiles remove <world-key>` | `tweaks.admin.config` | Remove a world-key mapping (that world falls back to the default profile/tag). |
 | `/tconfig world-profiles edit <world-key> <label> <color>` | `tweaks.admin.config` | Change an existing mapping's tab-list tag/color (its profile cannot be changed). |
-| `/tconfig <path> <value>` | `tweaks.admin.config` | Generic setter for any other registered setting by its config.yml path, e.g. `protection.selection-tool <material>`, `protection.public-claim-worlds <add\|remove> <world-key>`, `fly-advancement <namespaced-key>`, `fly-worlds <add\|remove> <world>`, `disabled-end-portal-worlds <add\|remove> <world>`, `economy.daily-reward-base <amount>`, `economy.streak-multipliers <day 1-7> <multiplier>`, `blocklog.retention-days <days>`, `blocklog.max-entries-per-chest <n>`, `deathinventory.retention-days <days>`, `enchantments.spawner-pickup.drop-chance-percent <0.0-100.0>`, `enchantments.spawner-pickup.uses <n>`, `enchantments.egg-collector.uses <n>`, `enchantments.quality.chance-percent <0.0-100.0>`, `enchantments.quality.blood-moon-chance-percent <0.0-100.0>`, `enchantments.lumberjack.max-logs <n>`, `itemadmin.tool-protect.default-threshold <n>`, `itemadmin.tool-protect.warn-cooldown-ms <ms>`, `itemadmin.gui-copy.max-distance <1-64>`, `xpbottle.orbs-per-emerald <n>` (restart required). |
+| `/tconfig <path> <value>` | `tweaks.admin.config` | Generic setter for any other registered setting by its config.yml path, e.g. `protection.selection-tool <material>`, `protection.public-claim-worlds <add\|remove> <world-key>`, `fly-advancement <namespaced-key>`, `fly-worlds <add\|remove> <world>`, `disabled-end-portal-worlds <add\|remove> <world>`, `economy.daily-reward-base <amount>`, `economy.streak-multipliers <day 1-7> <multiplier>`, `lottery.pot-multiplier <0.0-10.0>`, `blocklog.retention-days <days>`, `blocklog.max-entries-per-chest <n>`, `deathinventory.retention-days <days>`, `enchantments.spawner-pickup.drop-chance-percent <0.0-100.0>`, `enchantments.spawner-pickup.uses <n>`, `enchantments.egg-collector.uses <n>`, `enchantments.quality.chance-percent <0.0-100.0>`, `enchantments.quality.blood-moon-chance-percent <0.0-100.0>`, `enchantments.lumberjack.max-logs <n>`, `itemadmin.tool-protect.default-threshold <n>`, `itemadmin.tool-protect.warn-cooldown-ms <ms>`, `itemadmin.gui-copy.max-distance <1-64>`, `xpbottle.orbs-per-emerald <n>` (restart required). |
 | `/more` | `tweaks.admin.more` | Maximize the stack size of the held item. |
 | `/invsee <player>` | `tweaks.admin.invsee` | View and modify an online player's inventory. |
 | `/bloodmoon` | `tweaks.admin.bloodmoon` | Force-activate the Blood Moon event. |
@@ -1240,6 +1281,7 @@ When an action occurs, the system checks rules in this order:
 | `tweaks.protection.member` | Allows managing (adding/removing) members and managers of a region. |
 | `tweaks.protection.flag` | Allows setting and unsetting region protection flags. |
 | `tweaks.protection.admin` | Grants full administrative access over all regions, bypassing limits and ownership checks. |
+| `tweaks.protection.bypass` | Allows an admin to opt into the session-only bypass for in-world protection checks. |
 | `tweaks.admin.home` | Allows teleporting to any player's home. |
 | `tweaks.admin.sethome` | Allows setting a home for any player. |
 | `tweaks.admin.delhome` | Allows deleting the home of any player. |
@@ -1262,7 +1304,7 @@ When an action occurs, the system checks rules in this order:
 | `tweaks.admin.gamemode` | Allows switching gamemodes via command. |
 | `tweaks.admin.balance` | Allows administrative balance management (set, add, remove). |
 | `tweaks.admin.house` | Allows viewing and administering the server-wide casino house account. |
-| `tweaks.admin.lottery` | Allows drawing and administering the server-wide lottery. |
+| `tweaks.admin.lottery` | Allows drawing and administering the server-wide lottery; viewing entries is public. |
 | `tweaks.admin.ranks` | Allows access to the administrative rank editor via `/ranks edit`. |
 | `tweaks.admin.rank.set` | Allows manually assigning a player's rank via `/rank set`. |
 | `tweaks.admin.permissions` | Grants full access to the custom permission management system, including groups, users, and GUI editor. |
@@ -1281,7 +1323,15 @@ The plugin generates a `config.yml` on first startup. Custom enchantments requir
 
 On every startup, any key present in the bundled default `config.yml` but missing from your live file is automatically added back with its default value (an admin-modified value is never overwritten, and an explicit empty list you've saved stays empty — only a genuinely absent key is filled in).
 
-A growing set of settings — spanning General, Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, and Xp Bottle — is also editable at runtime without touching `config.yml` by hand, via `/tconfig`. Six have dedicated CLI forms (see the [Commands Reference](#commands-reference) table above); the rest use the generic `/tconfig <path> <value>` grammar. Run `/tconfig gui` in-game for a Dialog-based editor with the same categories, or `/tconfig list [category]` to print every registered setting and its current value from the console or in chat.
+A growing set of settings — spanning General, Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Xp Bottle, and Console Event Logging — is also editable at runtime without touching `config.yml` by hand, via `/tconfig`. Six have dedicated CLI forms (see the [Commands Reference](#commands-reference) table above); the rest use the generic `/tconfig <path> <value>` grammar. Run `/tconfig gui` in-game for a Dialog-based editor with the same categories, or `/tconfig list [category]` to print every registered setting and its current value from the console or in chat.
+
+### Console logging settings
+
+The top-level `logging:` section contains one boolean for each supported event. All are `false` by
+default. The switches are cached for low-overhead event checks, and a successful CLI or GUI write
+updates that cache after the YAML round-trip has been confirmed. Manual edits to `config.yml` are
+read on the next restart. Records are written only to the server console; they are not sent to
+players or persisted as a separate audit file.
 
 The world-key -> profile/tag/color mapping (`world-profiles`, `world-profile-fallback`, `world-profile-sort-order`) is a separate, fully admin-editable list rather than a single scalar/list setting — see [World Profiles](#world-profiles) and the `/tconfig world-profiles ...` rows in [Commands Reference](#commands-reference) for add/remove/edit.
 

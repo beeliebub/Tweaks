@@ -26,3 +26,6 @@ run/
 .mux/
 .gemini/
 /org/mockbukkit/
+build-codex-data-model/
+build-codex-data-model-full
+build-scoped

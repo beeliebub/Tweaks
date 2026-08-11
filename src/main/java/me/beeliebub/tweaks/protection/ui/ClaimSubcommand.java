@@ -10,6 +10,8 @@ import me.beeliebub.tweaks.protection.region.RegionFlag;
 import me.beeliebub.tweaks.protection.region.RegionNames;
 import me.beeliebub.tweaks.utils.GeometryUtil;
 import me.beeliebub.tweaks.utils.InventoryUtil;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
 import org.bukkit.World;
@@ -204,6 +206,10 @@ final class ClaimSubcommand implements RegionSubcommand {
         } else {
             player.sendMessage(Messages.PROTECTION.claimSuccess(name, chunks, cost));
         }
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(ctx.plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.PROTECTION_CLAIM, () ->
+                "[Protection] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
+                        + " created region " + name + " covering " + chunks + " chunk(s)");
     }
 
     @Override

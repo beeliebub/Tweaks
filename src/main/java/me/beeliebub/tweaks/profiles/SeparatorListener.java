@@ -1,6 +1,9 @@
 package me.beeliebub.tweaks.profiles;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.HotPathEventBuffer;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.utils.InventoryUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -212,5 +215,11 @@ public class SeparatorListener implements Listener {
         storage.savePlayerInventoriesAsync(uuid);
 
         player.sendMessage(Messages.PROFILES.profileSwitched(toProfile));
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) {
+            String actorName = player.getName();
+            eventLog.logHot(LoggingPaths.PROFILES_SWITCH,
+                    new HotPathEventBuffer.HotKey(uuid, "profile:" + toProfile, null), actorName);
+        }
     }
 }

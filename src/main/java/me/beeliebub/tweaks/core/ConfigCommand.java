@@ -7,6 +7,7 @@ import me.beeliebub.tweaks.core.config.ConfigSetting;
 import me.beeliebub.tweaks.core.config.ConfigValueEditor;
 import me.beeliebub.tweaks.core.config.EditResult;
 import me.beeliebub.tweaks.core.config.EditorType;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
@@ -51,8 +52,15 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
     private final ConfigValueEditor valueEditor;
 
     public ConfigCommand(Tweaks plugin, ResourceHuntItems resourceHuntItems, WorldProfileTable worldProfileTable) {
+        this(plugin, resourceHuntItems, worldProfileTable, (path, value) -> {});
+    }
+
+    public ConfigCommand(Tweaks plugin, ResourceHuntItems resourceHuntItems,
+                         WorldProfileTable worldProfileTable,
+                         java.util.function.BiConsumer<String, Boolean> loggingBooleanChanged) {
         this.plugin = plugin;
-        this.valueEditor = new ConfigValueEditor(plugin, resourceHuntItems, worldProfileTable);
+        this.valueEditor = new ConfigValueEditor(plugin, resourceHuntItems, worldProfileTable,
+                loggingBooleanChanged);
     }
 
     @Override
@@ -242,22 +250,38 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
                         ? valueEditor.listAdd(setting, args[2])
                         : valueEditor.listRemove(setting, args[2]);
                 sendResult(sender, result);
+                logLoggingChange(sender, setting, args[2], result);
             }
             case NUMBER_MAP -> {
                 if (args.length < 3) {
                     sender.sendMessage(Messages.CONFIG.mapUsage(label, pathKey));
                     return;
                 }
-                sendResult(sender, valueEditor.mapPut(setting, args[1], args[2]));
+                EditResult result = valueEditor.mapPut(setting, args[1], args[2]);
+                sendResult(sender, result);
             }
             default -> {
                 if (args.length < 2) {
                     sender.sendMessage(Messages.CONFIG.scalarUsage(label, pathKey));
                     return;
                 }
-                sendResult(sender, valueEditor.applyScalar(setting, args[1]));
+                EditResult result = valueEditor.applyScalar(setting, args[1]);
+                sendResult(sender, result);
+                logLoggingChange(sender, setting, args[1], result);
             }
         }
+    }
+
+    private void logLoggingChange(CommandSender sender, ConfigSetting setting, String value,
+                                  EditResult result) {
+        if (!(result instanceof EditResult.Ok) || !setting.path().startsWith("logging.")) return;
+        ConsoleEventLog eventLog = plugin.getConsoleEventLog();
+        if (eventLog == null) return;
+        String actorName = sender instanceof Player player ? player.getName() : null;
+        java.util.UUID actorId = sender instanceof Player player ? player.getUniqueId() : null;
+        eventLog.log(me.beeliebub.tweaks.logging.LoggingPaths.CORE_CONFIG_CHANGED, () ->
+                "[Core] " + ConsoleEventLog.actorLabel(actorName, actorId)
+                        + " changed " + setting.displayName() + " to " + value);
     }
 
     private static String normalizeMob(String raw) {

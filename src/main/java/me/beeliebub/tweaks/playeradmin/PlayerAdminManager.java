@@ -4,6 +4,9 @@ import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.tab.TabManager;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.HotPathEventBuffer;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -107,6 +110,10 @@ public class PlayerAdminManager implements Listener {
         initTrailEffects();
     }
 
+    Tweaks plugin() {
+        return plugin;
+    }
+
     // ============================================================
     // Lifecycle
     // ============================================================
@@ -166,6 +173,13 @@ public class PlayerAdminManager implements Listener {
                 if (last == null) continue;
                 if (now - last >= afkAutoMillis) {
                     enterAfk(player);
+                    ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+                    if (eventLog != null) {
+                        UUID actorId = player.getUniqueId();
+                        String actorName = player.getName();
+                        eventLog.logHot(LoggingPaths.PLAYERADMIN_AFK,
+                                new HotPathEventBuffer.HotKey(actorId, "<server>", null), actorName);
+                    }
                 }
             } catch (RuntimeException error) {
                 plugin.getLogger().log(Level.WARNING,

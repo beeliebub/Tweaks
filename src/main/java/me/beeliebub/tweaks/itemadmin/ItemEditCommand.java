@@ -3,6 +3,8 @@ package me.beeliebub.tweaks.itemadmin;
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.utils.ColorUtil;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
@@ -13,6 +15,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -30,6 +33,15 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> LORE_ACTIONS = List.of("add", "remove");
     private static final List<String> NAME_SUBCOMMANDS = List.of("off", "blank");
+    private final JavaPlugin plugin;
+
+    public ItemEditCommand() {
+        this(null);
+    }
+
+    public ItemEditCommand(JavaPlugin plugin) {
+        this.plugin = plugin;
+    }
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
@@ -95,6 +107,7 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
                 item.setItemMeta(meta);
 
                 player.sendMessage(Messages.ITEM_ADMIN.itemEditLoreAdded(index + 1, parsed));
+                log(player, "edited lore line " + (index + 1));
             }
             case "remove" -> {
                 if (lore.isEmpty()) {
@@ -110,6 +123,7 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
                 item.setItemMeta(meta);
 
                 player.sendMessage(Messages.ITEM_ADMIN.itemEditLoreRemoved(lineNumber, removed));
+                log(player, "removed lore line " + lineNumber);
             }
             default -> sendLoreUsage(player, label);
         }
@@ -149,6 +163,7 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
                 meta.displayName(null);
                 item.setItemMeta(meta);
                 player.sendMessage(Messages.ITEM_ADMIN.itemEditNameRemoved());
+                log(player, "removed item name");
                 return true;
             }
             if (args[0].equalsIgnoreCase("blank")) {
@@ -157,6 +172,7 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
                 meta.addItemFlags(ItemFlag.values());
                 item.setItemMeta(meta);
                 player.sendMessage(Messages.ITEM_ADMIN.itemEditNameBlanked());
+                log(player, "blanked item name");
                 return true;
             }
         }
@@ -167,6 +183,7 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
         item.setItemMeta(meta);
 
         player.sendMessage(Messages.ITEM_ADMIN.itemEditNameSet(name));
+        log(player, "set item name");
         return true;
     }
 
@@ -186,7 +203,15 @@ public class ItemEditCommand implements CommandExecutor, TabCompleter {
         }
         item.setAmount(item.getMaxStackSize());
         player.sendMessage(Messages.ITEM_ADMIN.itemMoreSuccess(item.getMaxStackSize()));
+        log(player, "set held stack to max size");
         return true;
+    }
+
+    private void log(Player player, String detail) {
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.ITEMADMIN_EDIT, () ->
+                "[ItemAdmin] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
+                        + " " + detail);
     }
 
     @Override
