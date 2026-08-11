@@ -29,7 +29,7 @@ public final class ItemAdminBootstrap {
         plugin.getServer().getPluginManager().registerEvents(invSeeCommand, plugin);
 
         // /lore /name /more - admin item-edit commands, dispatched via one class.
-        ItemEditCommand itemEditCommand = new ItemEditCommand();
+        ItemEditCommand itemEditCommand = new ItemEditCommand(plugin);
         for (String label : new String[]{"lore", "name", "more"}) {
             plugin.getCommand(label).setExecutor(itemEditCommand);
             plugin.getCommand(label).setTabCompleter(itemEditCommand);
@@ -46,7 +46,7 @@ public final class ItemAdminBootstrap {
 
         // /condense depends on ResourceHunt for the resource_hunt_counted PDC plumbing,
         // so it has to be registered after the hunt is constructed.
-        CondenseCommand condenseCommand = new CondenseCommand(services.resourceHunt());
+        CondenseCommand condenseCommand = new CondenseCommand(plugin, services.resourceHunt());
         plugin.getCommand("condense").setExecutor(condenseCommand);
         plugin.getCommand("condense").setTabCompleter(condenseCommand);
     }

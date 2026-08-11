@@ -7,6 +7,8 @@ import me.beeliebub.tweaks.protection.region.FlagTarget;
 import me.beeliebub.tweaks.protection.region.ProtectionManager;
 import me.beeliebub.tweaks.protection.region.Region;
 import me.beeliebub.tweaks.protection.region.RegionFlag;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.command.CommandSender;
@@ -99,6 +101,7 @@ final class RegionFlagEditor {
                 return 0;
             }
             sender.sendMessage(Messages.PROTECTION.text(Text.MATERIAL_LIST_CLEARED, name, flag.name()));
+            logFlagMutation(protection, sender, name, flag, "cleared material list");
             return 1;
         }
 
@@ -112,6 +115,7 @@ final class RegionFlagEditor {
                 return 0;
             }
             sender.sendMessage(Messages.PROTECTION.text(Text.ENTITY_LIST_CLEARED, name, flag.name()));
+            logFlagMutation(protection, sender, name, flag, "cleared entity list");
             return 1;
         }
 
@@ -125,6 +129,7 @@ final class RegionFlagEditor {
         }
         sender.sendMessage(Messages.PROTECTION.text(Text.FLAG_REMOVED, name,
                 flag.name(), target.toKey()));
+        logFlagMutation(protection, sender, name, flag, "removed rule for " + target.toKey());
         return 1;
     }
 
@@ -193,6 +198,7 @@ final class RegionFlagEditor {
         }
         sender.sendMessage(Messages.PROTECTION.text(Text.MATERIAL_SET,
                 name, flag.name(), materials.size(), materials.size() == 1 ? "" : "s"));
+        logFlagMutation(protection, sender, name, flag, "set " + materials.size() + " material(s)");
         return 1;
     }
 
@@ -211,6 +217,7 @@ final class RegionFlagEditor {
         }
         sender.sendMessage(Messages.PROTECTION.text(Text.ENTITY_SET,
                 name, flag.name(), entities.size(), entities.size() == 1 ? "" : "s"));
+        logFlagMutation(protection, sender, name, flag, "set " + entities.size() + " entit(ies)");
         return 1;
     }
 
@@ -245,7 +252,20 @@ final class RegionFlagEditor {
         }
         sender.sendMessage(Messages.PROTECTION.text(Text.BOOLEAN_SET,
                 name, flag.name(), target.toKey(), value));
+        logFlagMutation(protection, sender, name, flag,
+                "set " + target.toKey() + " to " + value);
         return 1;
+    }
+
+    private static void logFlagMutation(ProtectionManager protection, CommandSender sender,
+                                         String region, RegionFlag flag, String detail) {
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(protection.plugin());
+        if (eventLog == null) return;
+        String actorName = sender instanceof org.bukkit.entity.Player player ? player.getName() : null;
+        java.util.UUID actorId = sender instanceof org.bukkit.entity.Player player ? player.getUniqueId() : null;
+        eventLog.log(LoggingPaths.PROTECTION_FLAG, () ->
+                "[Protection] " + ConsoleEventLog.actorLabel(actorName, actorId)
+                        + " changed " + flag.name() + " on region " + region + ": " + detail);
     }
 
     static RegionFlag parseFlagToken(CommandSender sender, String token) {

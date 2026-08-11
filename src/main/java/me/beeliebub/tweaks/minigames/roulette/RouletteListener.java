@@ -4,6 +4,8 @@ import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
 import me.beeliebub.tweaks.lottery.LotteryManager;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.ranks.RankManager;
 import me.beeliebub.tweaks.utils.GeometryUtil;
@@ -508,6 +510,11 @@ public final class RouletteListener implements Listener {
         admin.sendMessage(Messages.MINIGAMES.rouletteBoardRegistered(
                 String.format(Locale.ROOT, "%.1f, %.1f, %.1f", center.x(), center.y(), center.z()),
                 pending.minBet(), pending.maxBet()));
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.ROULETTE_BOARD, () ->
+                "[Roulette] " + ConsoleEventLog.actorLabel(admin.getName(), admin.getUniqueId())
+                        + " created board at " + describeLocation(center) + " with bets $"
+                        + pending.minBet() + "-$" + pending.maxBet());
     }
 
     // ---- Removal handler ----------------------------------------------------------------
@@ -532,6 +539,10 @@ public final class RouletteListener implements Listener {
             boardStore.unpersistBoard(board);
             boardStore.unregisterControl(board);
             admin.sendMessage(Messages.MINIGAMES.rouletteBoardRemoved());
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null) eventLog.log(LoggingPaths.ROULETTE_BOARD, () ->
+                    "[Roulette] " + ConsoleEventLog.actorLabel(admin.getName(), admin.getUniqueId())
+                            + " removed board at " + describeLocation(board.center()));
         } catch (RuntimeException e) {
             plugin.getLogger().log(Level.SEVERE, "Roulette: error while removing board at "
                     + describeLocation(board.center()) + " — its chunk tickets will still be released.", e);

@@ -17,7 +17,7 @@ import java.util.Map;
  * original 16-entry {@code USAGE_ENTRIES} declaration order exactly (confirmed against the git
  * history predating this registry class; pinned by {@code RegionSubcommandRegistryTest}):
  * {@code claim, clear, wand, select, unclaim, addmember, removemember, addmanager, removemanager,
- * flag, unflag, flags, info, setparent, unsetparent, gui}.
+ * flag, unflag, flags, info, setparent, unsetparent, gui, list, tp, togglebypass}.
  */
 final class RegionSubcommandRegistry {
 
@@ -41,6 +41,9 @@ final class RegionSubcommandRegistry {
         register(new ParentSubcommands.SetParent());
         register(new ParentSubcommands.UnsetParent());
         register(new GuiSubcommand());
+        register(new RegionAdminSubcommands.ListRegions());
+        register(new RegionAdminSubcommands.Tp());
+        register(new RegionAdminSubcommands.ToggleBypass());
     }
 
     private void register(RegionSubcommand handler) {
@@ -61,6 +64,7 @@ final class RegionSubcommandRegistry {
         int shown = 0;
         for (RegionSubcommand handler : ordered) {
             if (!handler.visibleInUsage()) continue;
+            if (!handler.visibleTo(ctx, sender)) continue;
             for (RegionUsageEntry entry : handler.usage()) {
                 if (entry.permission() != null && !ctx.hasPerm(sender, entry.permission())) continue;
                 sender.sendMessage(Messages.PROTECTION.usageLine(entry.syntax(), entry.description()));
@@ -76,9 +80,7 @@ final class RegionSubcommandRegistry {
         List<String> out = new ArrayList<>();
         for (RegionSubcommand handler : ordered) {
             if (!handler.visibleInUsage()) continue;
-            if (handler.permission() == null || ctx.hasPerm(sender, handler.permission())) {
-                out.add(handler.name());
-            }
+            if (handler.visibleTo(ctx, sender)) out.add(handler.name());
         }
         return out;
     }

@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.deathinventory;
 
 import me.beeliebub.tweaks.utils.YamlStore;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -31,13 +33,19 @@ public final class DeathInventoryManager {
         dir.mkdirs();
         File file = new File(dir, System.currentTimeMillis() + ".yml");
 
-        YamlStore.saveNow(plugin, file, "death inventory", cfg -> {
+        boolean saved = YamlStore.saveNow(plugin, file, "death inventory", cfg -> {
             for (int i = 0; i < contents.length; i++) {
                 if (contents[i] != null) {
                     cfg.set("slots." + i, contents[i]);
                 }
             }
         });
+        if (saved) {
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null) eventLog.log(LoggingPaths.DEATHINVENTORY_CAPTURED, () ->
+                    "[DeathInventory] " + ConsoleEventLog.actorLabel(null, playerUuid)
+                            + " inventory captured as " + file.getName());
+        }
     }
 
     // Returns saved death records sorted newest-first.

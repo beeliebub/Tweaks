@@ -10,6 +10,9 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.inventory.ItemStack;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.HotPathEventBuffer;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -238,6 +241,7 @@ public class LootingQualityListener implements Listener {
         int lootingLevel = quality.level();
         int rerolls = quality.tier().getRerolls();
         ThreadLocalRandom random = ThreadLocalRandom.current();
+        boolean changed = false;
 
         for (LootDropInfo info : possibleDrops) {
             // Check condition (e.g. Drowned must hold a Trident to drop one)
@@ -282,12 +286,22 @@ public class LootingQualityListener implements Listener {
 
             // Apply best result
             if (bestCount > currentCount) {
+                changed = true;
                 if (existingDrop != null) {
                     existingDrop.setAmount(bestCount);
                 } else {
                     // Item didn't initially drop, but successfully rolled via our plugin. Add it!
                     event.getDrops().add(new ItemStack(info.item(), bestCount));
                 }
+            }
+        }
+        if (changed) {
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(registry.plugin());
+            if (eventLog != null) {
+                String actorName = killer.getName();
+                eventLog.logHot(LoggingPaths.ENCHANTMENTS_QUALITY,
+                        new HotPathEventBuffer.HotKey(killer.getUniqueId(),
+                                "looting:" + entity.getType().name(), null), actorName);
             }
         }
     }

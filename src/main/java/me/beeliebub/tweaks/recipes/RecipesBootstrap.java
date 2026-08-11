@@ -12,7 +12,7 @@ public final class RecipesBootstrap {
 
     public static void register(Tweaks plugin, Services services) {
         // Resource Rupee currency (renamed emerald + emerald block with crafting grid conversion)
-        ResourceRupee resourceRupee = new ResourceRupee();
+        ResourceRupee resourceRupee = new ResourceRupee(plugin);
         plugin.getServer().getPluginManager().registerEvents(resourceRupee, plugin);
     }
 }

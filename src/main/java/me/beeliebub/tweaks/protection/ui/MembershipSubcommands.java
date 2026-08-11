@@ -6,6 +6,8 @@ import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.core.ProtectionMessages.Text;
 import me.beeliebub.tweaks.protection.region.Region;
 import me.beeliebub.tweaks.utils.OfflinePlayerResolver;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
@@ -131,6 +133,7 @@ final class MembershipSubcommands {
             }
             sender.sendMessage(Messages.PROTECTION.text(add
                     ? Text.MEMBER_GROUP_ADD : Text.MEMBER_GROUP_REMOVE, groupName, name));
+            logMembership(ctx, sender, name, groupName, add ? "added member group" : "removed member group");
             return;
         }
 
@@ -147,6 +150,7 @@ final class MembershipSubcommands {
             }
             sender.sendMessage(Messages.PROTECTION.text(Text.MEMBER_SUCCESS,
                     add ? "Added" : "Removed", target, add ? "to" : "from", name));
+            logMembership(ctx, sender, name, target, add ? "added member" : "removed member");
         });
     }
 
@@ -199,6 +203,7 @@ final class MembershipSubcommands {
             }
             sender.sendMessage(Messages.PROTECTION.text(add
                     ? Text.MANAGER_GROUP_ADD : Text.MANAGER_GROUP_REMOVE, groupName, name));
+            logMembership(ctx, sender, name, groupName, add ? "added manager group" : "removed manager group");
             return;
         }
 
@@ -221,7 +226,19 @@ final class MembershipSubcommands {
             sender.sendMessage(Messages.PROTECTION.text(Text.MANAGER_SUCCESS,
                     add ? "Promoted" : "Demoted", target,
                     add ? "to manager on" : "from manager on", name));
+            logMembership(ctx, sender, name, target, add ? "added manager" : "removed manager");
         });
+    }
+
+    private static void logMembership(RegionCommandContext ctx, CommandSender sender,
+                                       String region, String target, String action) {
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(ctx.plugin);
+        if (eventLog == null) return;
+        String actorName = sender instanceof org.bukkit.entity.Player player ? player.getName() : null;
+        java.util.UUID actorId = sender instanceof org.bukkit.entity.Player player ? player.getUniqueId() : null;
+        eventLog.log(LoggingPaths.PROTECTION_MEMBER, () ->
+                "[Protection] " + ConsoleEventLog.actorLabel(actorName, actorId)
+                        + " " + action + " " + target + " on region " + region);
     }
 
     private static void resolveTarget(RegionCommandContext ctx, CommandSender sender, String input,

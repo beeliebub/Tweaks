@@ -4,6 +4,8 @@ import me.beeliebub.tweaks.blocklog.BlockLogData.ChestLogEntry;
 import me.beeliebub.tweaks.blocklog.BlockLogData.ChunkLogStore;
 import me.beeliebub.tweaks.blocklog.BlockLogData.LogAction;
 import me.beeliebub.tweaks.permissions.Permissions;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -227,7 +229,14 @@ public final class BlockLogSystem implements CommandExecutor, Listener {
     @EventHandler
     public void onChunkLoad(ChunkLoadEvent event) {
         long cutoff = System.currentTimeMillis() - retentionMillis();
-        pruneChunk(event.getChunk(), cutoff);
+        int removed = pruneChunk(event.getChunk(), cutoff);
+        if (removed > 0) {
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin instanceof org.bukkit.plugin.java.JavaPlugin javaPlugin
+                    ? javaPlugin : null);
+            if (eventLog != null) eventLog.log(LoggingPaths.BLOCKLOG_PURGED, () ->
+                    "[BlockLog] (console) purged " + removed + " expired entry(s) from chunk "
+                            + event.getChunk().getChunkKey());
+        }
     }
 
     // Package-private (not private) so BlockLogRetentionConfigTest can exercise the clamp/live-read
@@ -278,6 +287,11 @@ public final class BlockLogSystem implements CommandExecutor, Listener {
                     .append(Component.text("Inspector mode enabled. ", NamedTextColor.YELLOW))
                     .append(Component.text("Punch a chest to view its log.", NamedTextColor.GRAY)));
         }
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin instanceof org.bukkit.plugin.java.JavaPlugin javaPlugin
+                ? javaPlugin : null);
+        if (eventLog != null) eventLog.log(LoggingPaths.BLOCKLOG_INSPECTOR, () ->
+                "[BlockLog] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
+                        + " toggled inspector " + (inspectors.contains(player.getUniqueId()) ? "on" : "off"));
         player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 0.6f, 1.2f);
     }
 

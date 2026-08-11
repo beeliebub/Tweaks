@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.worldmanagement;
 
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.bossbar.BossBar;
@@ -234,7 +236,9 @@ public class MoonSystem implements Listener, CommandExecutor {
     private void activate(long day) {
         active = true;
         activationDay = day;
-        plugin.getLogger().info("Blood Moon has risen.");
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.WORLDMANAGEMENT_RISEN,
+                () -> "[WorldManagement] (console) Blood Moon has risen.");
 
         bossBar = BossBar.bossBar(
                 Component.text("Blood Moon", NamedTextColor.RED, TextDecoration.BOLD),
@@ -252,7 +256,9 @@ public class MoonSystem implements Listener, CommandExecutor {
     private void deactivate() {
         active = false;
         scheduledDay = -1L;
-        plugin.getLogger().info("Blood Moon has ended.");
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.WORLDMANAGEMENT_ENDED,
+                () -> "[WorldManagement] (console) Blood Moon has ended.");
 
         if (bossBar != null) {
             for (Player player : Bukkit.getOnlinePlayers()) {

@@ -27,5 +27,5 @@ run/
 .gemini/
 /org/mockbukkit/
 build-codex-data-model/
-build-codex-data-model-full/
-build-scoped/
+build-codex-data-model-full
+build-scoped

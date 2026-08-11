@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.tests;
 import me.beeliebub.tweaks.Services;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
 import me.beeliebub.tweaks.protection.region.ProtectionManager;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,16 @@ class ServicesTest {
         services.setHouseAccount(houseAccount);
         assertSame(houseAccount, services.houseAccount());
         assertThrows(IllegalStateException.class, () -> services.setHouseAccount(mock(HouseAccount.class)));
+    }
+
+    @Test
+    void consoleEventLogIsPublishedThroughWriteOnceServiceSlot() {
+        Services services = new Services();
+        ConsoleEventLog eventLog = mock(ConsoleEventLog.class);
+        services.setConsoleEventLog(eventLog);
+        assertSame(eventLog, services.consoleEventLog());
+        assertThrows(IllegalStateException.class,
+                () -> services.setConsoleEventLog(mock(ConsoleEventLog.class)));
     }
 
     @Test

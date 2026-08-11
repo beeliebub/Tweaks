@@ -6,6 +6,8 @@ import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.action.DialogAction;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.utils.Point;
 import me.beeliebub.tweaks.profiles.StorageManager;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
@@ -226,6 +228,12 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
 
         storage.setHome(targetUUID, homeName, Point.fromLocation(player.getLocation()));
         player.sendMessage(Messages.TELEPORT.setHomeSuccess(homeName));
+        String savedHomeName = homeName;
+        UUID savedTargetUuid = targetUUID;
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.TELEPORT_HOME_SET, () ->
+                "[Teleport] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
+                        + " set home " + savedHomeName + " for " + savedTargetUuid);
     }
 
     // Live read (no constructor-time caching) so a /tconfig edit to teleport.sethome-disabled-worlds
@@ -273,6 +281,14 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
 
         storage.delHome(targetUUID, homeName);
         player.sendMessage(Messages.TELEPORT.delHomeSuccess(homeName));
+        if (!targetUUID.equals(player.getUniqueId())) {
+            String deletedHomeName = homeName;
+            UUID deletedTargetUuid = targetUUID;
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null) eventLog.log(LoggingPaths.TELEPORT_ADMIN_HOME_DELETE, () ->
+                    "[Teleport] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
+                            + " deleted home " + deletedHomeName + " for " + deletedTargetUuid);
+        }
     }
 
     private boolean handleHomes(CommandSender sender, String[] args) {
@@ -386,6 +402,10 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
         String warpName = args[0];
         storage.setWarp(warpName, Point.fromLocation(player.getLocation()));
         player.sendMessage(Messages.TELEPORT.setWarpSuccess(warpName));
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.TELEPORT_WARP_SET, () ->
+                "[Teleport] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
+                        + " set warp " + warpName);
         return true;
     }
 
@@ -405,6 +425,14 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
         }
         storage.delWarp(warpName);
         sender.sendMessage(Messages.TELEPORT.delWarpSuccess(warpName));
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) {
+            String actorName = sender instanceof Player player ? player.getName() : null;
+            UUID actorId = sender instanceof Player player ? player.getUniqueId() : null;
+            eventLog.log(LoggingPaths.TELEPORT_WARP_DELETE, () ->
+                    "[Teleport] " + ConsoleEventLog.actorLabel(actorName, actorId)
+                            + " deleted warp " + warpName);
+        }
         return true;
     }
 
@@ -658,6 +686,10 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
 
         Player teleporting = request.here() ? player : requester;
         Player destination = request.here() ? requester : player;
+        String teleportingName = teleporting.getName();
+        UUID teleportingId = teleporting.getUniqueId();
+        String destinationName = destination.getName();
+        UUID destinationId = destination.getUniqueId();
 
         boolean enteringResourceFromOutside =
                 ResourceHunt.isResourceWorld(destination.getWorld().getKey().asString())
@@ -678,8 +710,12 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
 
         teleporting.teleportAsync(destination.getLocation()).thenAccept(success -> {
             if (success) {
-                teleporting.sendMessage(Messages.TELEPORT.tpaTeleportSuccess(destination.getName()));
-                destination.sendMessage(Messages.TELEPORT.tpaDestinationNotice(teleporting.getName()));
+                teleporting.sendMessage(Messages.TELEPORT.tpaTeleportSuccess(destinationName));
+                destination.sendMessage(Messages.TELEPORT.tpaDestinationNotice(teleportingName));
+                ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+                if (eventLog != null) eventLog.log(LoggingPaths.TELEPORT_TPA_ACCEPTED, () ->
+                        "[Teleport] " + ConsoleEventLog.actorLabel(destinationName, destinationId)
+                                + " accepted TPA for " + ConsoleEventLog.actorLabel(teleportingName, teleportingId));
             } else {
                 teleporting.sendMessage(Messages.TELEPORT.teleportFailed());
             }

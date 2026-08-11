@@ -11,6 +11,8 @@ import me.beeliebub.tweaks.itemadmin.ItemAdminBootstrap;
 import me.beeliebub.tweaks.minigames.MinigamesBootstrap;
 import me.beeliebub.tweaks.minigames.blackjack.BlackjackListener;
 import me.beeliebub.tweaks.lottery.LotteryManager;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingBootstrap;
 import me.beeliebub.tweaks.permissions.PermissionManager;
 import me.beeliebub.tweaks.permissions.PermissionsBootstrap;
 import me.beeliebub.tweaks.playeradmin.PlayerAdminBootstrap;
@@ -101,6 +103,11 @@ public class Tweaks extends JavaPlugin {
         return services.lotteryManager;
     }
 
+    /** Null-tolerant access for event instrumentation during partial boot/teardown. */
+    public ConsoleEventLog getConsoleEventLog() {
+        return services == null ? null : services.consoleEventLog;
+    }
+
     public SkyblockBootstrap.Runtime getSkyblockRuntime() {
         return services.skyblockRuntime;
     }
@@ -140,6 +147,10 @@ public class Tweaks extends JavaPlugin {
             // Load config.yml and initialize data storage
             saveDefaultConfig();
             reconcileConfigDefaults();
+
+            // Tier 0 - console event logging must be published before every feature that can emit
+            // an event. LoggingBootstrap reads no Services state; later tiers may use its slot.
+            LoggingBootstrap.register(this, services);
 
             // Tier 1 - foundation state
             ProfilesBootstrap.register(this, services);
@@ -208,6 +219,9 @@ public class Tweaks extends JavaPlugin {
         runShutdownStep("lottery", () -> me.beeliebub.tweaks.lottery.LotteryBootstrap.shutdown(this, services.lotteryManager));
         runShutdownStep("minigames", () -> MinigamesBootstrap.shutdown(this, services.blackjackListener, services.rouletteListener));
         runShutdownStep("skyblock", () -> SkyblockBootstrap.shutdown(this, services.skyblockRuntime));
+        // Logging tears down last so every earlier participant's shutdown records are still
+        // admitted and flushed.
+        runShutdownStep("logging", () -> LoggingBootstrap.shutdown(services.consoleEventLog));
     }
 
     private void runShutdownStep(String name, Runnable step) {

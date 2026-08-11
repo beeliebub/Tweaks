@@ -5,6 +5,8 @@ import me.beeliebub.tweaks.economy.BalanceMutationResult;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
 import me.beeliebub.tweaks.lottery.LotteryManager;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.ranks.RankManager;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -164,6 +166,12 @@ public final class BlackjackSessionManager {
                 creditOrRouteToHouse(playerId, player.getName(), bet, "failed-game refund");
             }
             player.sendMessage(Messages.MINIGAMES.blackjackStartFailed(bet > 0));
+        } else {
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null) eventLog.log(LoggingPaths.BLACKJACK_BET, () ->
+                    "[Blackjack] " + ConsoleEventLog.actorLabel(player.getName(), playerId)
+                            + " placed a $" + bet + " bet at table " + tableCenter.getBlockX()
+                            + "," + tableCenter.getBlockY() + "," + tableCenter.getBlockZ());
         }
     }
 
@@ -281,6 +289,13 @@ public final class BlackjackSessionManager {
         player.sendMessage(settlement.summaryMessage());
         player.sendMessage(Messages.MINIGAMES.blackjackFinalValues(game.playerValue(), game.dealerValue()));
         player.sendMessage(Messages.MINIGAMES.blackjackClearBoard());
+
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.BLACKJACK_SETTLED, () ->
+                "[Blackjack] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
+                        + " settled " + game.result().name().toLowerCase(java.util.Locale.ROOT)
+                        + " for bet $" + game.bet() + ", payout $" + settlement.payoutAmount()
+                        + ", rakeback $" + settlement.rakebackAmount());
 
         try {
             // Re-render so dealer's hole card is revealed.

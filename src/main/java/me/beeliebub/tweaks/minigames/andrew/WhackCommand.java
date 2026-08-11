@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.minigames.andrew;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.minigames.RewardManager;
 import org.bukkit.Location;
@@ -186,7 +188,17 @@ public class WhackCommand implements CommandExecutor, TabCompleter {
             plugin.getServer().getPluginManager().registerEvents(registeredGame, plugin);
         }
 
+        boolean wasRunning = game.getState() == WhackGame.State.RUNNING;
         game.start();
+        if (!wasRunning) {
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null) {
+                String actorName = player.getName();
+                UUID actorId = player.getUniqueId();
+                eventLog.log(LoggingPaths.WHACK_STARTED, () -> "[Whack] "
+                        + ConsoleEventLog.actorLabel(actorName, actorId) + " started a session");
+            }
+        }
     }
 
     private void handlePause(Player player) {

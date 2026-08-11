@@ -37,8 +37,10 @@ public class QualityRegistry {
 
     // quality Enchantment -> base enchant name (reverse lookup)
     private final Map<Enchantment, String> enchantToName = new HashMap<>();
+    private final Tweaks plugin;
 
     public QualityRegistry(Tweaks plugin) {
+        this.plugin = plugin;
         Registry<Enchantment> registry = RegistryAccess.registryAccess()
                 .getRegistry(RegistryKey.ENCHANTMENT);
 
@@ -58,6 +60,10 @@ public class QualityRegistry {
         int total = variants.values().stream().mapToInt(Map::size).sum();
         plugin.getLogger().info("Loaded " + total + " quality enchantment variants across "
                 + variants.size() + " enchantment types.");
+    }
+
+    Tweaks plugin() {
+        return plugin;
     }
 
     // Match a base enchantment's key name to a supported enchant name (for enchant table).

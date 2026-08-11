@@ -54,6 +54,16 @@ interface RegionSubcommand {
         return true;
     }
 
+    /**
+     * Whether this subcommand should be advertised to {@code sender} - in {@code /region} tab
+     * completion and the root usage listing. Defaults to the static {@link #permission()} check;
+     * override when a handler's authorization depends on more than one node or on runtime state
+     * the permission system cannot express (e.g. a per-world config allowance).
+     */
+    default boolean visibleTo(RegionCommandContext ctx, CommandSender sender) {
+        return permission() == null || ctx.hasPerm(sender, permission());
+    }
+
     /** Usage line(s) for {@code /region} root help and per-subcommand usage errors. */
     List<RegionUsageEntry> usage();
 

@@ -12,6 +12,7 @@ import me.beeliebub.tweaks.minigames.roulette.RouletteListener;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import me.beeliebub.tweaks.lottery.LotteryManager;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
 import me.beeliebub.tweaks.permissions.PermissionManager;
 import me.beeliebub.tweaks.playeradmin.PlayerAdminManager;
 import me.beeliebub.tweaks.profiles.StorageManager;
@@ -56,6 +57,7 @@ import org.bukkit.Material;
  */
 public final class Services {
 
+    ConsoleEventLog consoleEventLog;
     StorageManager storageManager;
     WorldProfileTable worldProfileTable;
     EconomyManager economyManager;
@@ -83,6 +85,16 @@ public final class Services {
     SkyblockEconomy skyblockEconomy;
     TabManager tabManager;
     TeleportCommandManager teleportCommandManager;
+
+    public void setConsoleEventLog(ConsoleEventLog consoleEventLog) {
+        if (this.consoleEventLog != null) throw new IllegalStateException("consoleEventLog already published");
+        this.consoleEventLog = consoleEventLog;
+    }
+
+    public ConsoleEventLog consoleEventLog() {
+        if (consoleEventLog == null) throw new IllegalStateException("consoleEventLog not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
+        return consoleEventLog;
+    }
 
     public void setStorageManager(StorageManager storageManager) {
         if (this.storageManager != null) throw new IllegalStateException("storageManager already published");

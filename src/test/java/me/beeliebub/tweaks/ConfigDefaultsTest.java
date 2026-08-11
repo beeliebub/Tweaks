@@ -109,10 +109,23 @@ class ConfigDefaultsTest {
     @Test
     void lotteryReseedAmountIsRestoredFromBundledDefault() {
         writeLiveFile("lottery.reseed-amount", null);
+        writeLiveFile("lottery.pot-multiplier", null);
 
         plugin.reconcileConfigDefaults();
 
         assertEquals(10000, readLiveFile().getInt("lottery.reseed-amount", -1));
+        assertEquals(0.6D, readLiveFile().getDouble("lottery.pot-multiplier", -1.0D));
+    }
+
+    @Test
+    void customizedLotteryFallbackBaseSurvivesMultiplierReconciliation() {
+        writeLiveFile("lottery.reseed-amount", 12_345L);
+        writeLiveFile("lottery.pot-multiplier", null);
+
+        plugin.reconcileConfigDefaults();
+
+        assertEquals(12_345L, readLiveFile().getLong("lottery.reseed-amount", -1L));
+        assertEquals(0.6D, readLiveFile().getDouble("lottery.pot-multiplier", -1.0D));
     }
 
     @Test

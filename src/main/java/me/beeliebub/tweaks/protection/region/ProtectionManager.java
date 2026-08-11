@@ -65,6 +65,7 @@ public final class ProtectionManager {
     private final ConcurrentHashMap<String, Region> regions;
     private final ConcurrentHashMap<String, Set<String>> pendingStamps;
     private final Set<String> orphanedRegions;
+    private final Set<UUID> protectionBypass = ConcurrentHashMap.newKeySet();
 
     private final Tweaks plugin;
     private RegionWriter writer;
@@ -142,6 +143,24 @@ public final class ProtectionManager {
 
     public Tweaks plugin() {
         return plugin;
+    }
+
+    /** Toggles the in-memory protection bypass for one player session. */
+    public synchronized boolean toggleProtectionBypass(UUID playerId) {
+        if (playerId == null) return false;
+        if (protectionBypass.remove(playerId)) return false;
+        protectionBypass.add(playerId);
+        return true;
+    }
+
+    /** Returns whether the player has explicitly enabled the session bypass. */
+    public boolean isProtectionBypassEnabled(UUID playerId) {
+        return playerId != null && protectionBypass.contains(playerId);
+    }
+
+    /** Clears session state when a player joins or quits. */
+    public void clearProtectionBypass(UUID playerId) {
+        if (playerId != null) protectionBypass.remove(playerId);
     }
 
     public ConcurrentHashMap<String, Region> regions() {
@@ -525,6 +544,15 @@ public final class ProtectionManager {
         return resolved;
     }
 
+    /** Returns one stable region id for an audit record without touching disk or Bukkit registries. */
+    public String loggingRegionId(Location loc) {
+        List<Region> applicable = regionsAt(loc);
+        if (!applicable.isEmpty()) return applicable.getFirst().id();
+        World world = loc == null ? null : loc.getWorld();
+        Region global = world == null ? null : globalRegion(world);
+        return global == null ? "<wilderness>" : global.id();
+    }
+
     // Permission check for `actor` performing an action governed by `flag`
     // at `loc`. Returns true if every leaf region individually permits the
     // actor.
@@ -551,11 +579,13 @@ public final class ProtectionManager {
     // Pass actor=null for actor-less events (TNT, creeper, etc.) — then only
     // the DEFAULT target can permit the action.
     public boolean isAllowed(Location loc, UUID actor, RegionFlag flag) {
+        if (isProtectionBypassEnabled(actor)) return true;
         return flagResolver.isAllowed(loc, actor, flag);
     }
 
     /** Evaluates a previously resolved region list without repeating the chunk-pointer lookup. */
     public boolean isAllowed(List<Region> applicable, Location loc, UUID actor, RegionFlag flag) {
+        if (isProtectionBypassEnabled(actor)) return true;
         return flagResolver.isAllowed(applicable, loc, actor, flag);
     }
 
@@ -569,6 +599,7 @@ public final class ProtectionManager {
     // the leaf (members allowed, non-members blocked). All leaves must permit.
     public boolean isBlockActionAllowed(
             Location loc, UUID actor, Material material, RegionFlag baseFlag) {
+        if (isProtectionBypassEnabled(actor)) return true;
         return flagResolver.isBlockActionAllowed(loc, actor, material, baseFlag);
     }
 
@@ -625,6 +656,10 @@ public final class ProtectionManager {
     // "don't grief" default holds everywhere except where an admin has
     // explicitly written the override.
     public boolean isExplicitlyAllowed(Location loc, UUID actor, RegionFlag flag) {
+        // This method returns the positive verdict that causes listeners to
+        // cancel an event (for example, invincibility). A bypass therefore
+        // returns false so the player is not affected by the region rule.
+        if (isProtectionBypassEnabled(actor)) return false;
         return flagResolver.isExplicitlyAllowed(loc, actor, flag);
     }
 

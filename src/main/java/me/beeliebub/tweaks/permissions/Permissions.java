@@ -126,7 +126,7 @@ public final class Permissions {
      */
     public static final String HOUSE_ADMIN = "tweaks.admin.house";
 
-    /** Allows drawing and administering the server-wide lottery. */
+    /** Allows drawing and administering the server-wide lottery; viewing entries is public. */
     public static final String LOTTERY_ADMIN = "tweaks.admin.lottery";
 
     /**
@@ -150,9 +150,11 @@ public final class Permissions {
     public static final String ADMIN_PERMISSIONS = "tweaks.admin.permissions";
 
     /**
-     * Permission gate for paid/purchasable protection actions: claim, setparent, and unsetparent.
-     * Players with this permission can perform region operations that may incur Resource Rupee
-     * costs and counted against the per-player chunk-claim limit.
+     * Permission gate for paid/purchasable protection actions: setparent and unsetparent always,
+     * plus claim except in worlds listed under {@code protection.public-claim-worlds}. A public
+     * world waives only the claim permission check for non-admins; public non-admin claims still
+     * pay and count against the per-player chunk limit, while admins retain their free/unlimited
+     * bypass. Players without this permission cannot use setparent or unsetparent in any world.
      */
     public static final String PROTECTION_PURCHASEABLE = "tweaks.protection.purchaseable";
 
@@ -180,6 +182,12 @@ public final class Permissions {
      * Grants full administrative access over all regions, bypassing limits and ownership checks.
      */
     public static final String PROTECTION_ADMIN = "tweaks.protection.admin";
+
+    /**
+     * Allows opting into the session-only in-world protection bypass through
+     * {@code /region togglebypass}.
+     */
+    public static final String PROTECTION_BYPASS = "tweaks.protection.bypass";
 
     /**
      * Allows viewing and restoring player death inventories via /deathinventory.
@@ -273,7 +281,7 @@ public final class Permissions {
         register(m, ADMIN_LOGS, "tools", "Toggle chest interaction log inspector mode.");
         register(m, ADMIN_BALANCE, "tools", "View and modify player balances.");
         register(m, HOUSE_ADMIN, "tools", "View and administer the server-wide casino house account.");
-        register(m, LOTTERY_ADMIN, "tools", "Draw and administer the server-wide lottery.");
+        register(m, LOTTERY_ADMIN, "tools", "Draw and administer the server-wide lottery; viewing entries is public.");
         register(m, ADMIN_ITEM_EDIT, "tools", "Edit item display names and lore.");
         register(m, ADMIN_GUI_COPY, "tools", "Save a chest's contents as a GUI layout YAML file.");
         register(m, ADMIN_GAMEMODE, "tools", "Switch gamemodes through commands.");
@@ -308,6 +316,7 @@ public final class Permissions {
         register(m, PROTECTION_FLAG, "protection", "Set and unset region protection flags.");
         register(m, PROTECTION_INFO, "protection", "Select regions and view their information and flags.");
         register(m, PROTECTION_ADMIN, "protection", "Administer all regions while bypassing ownership and limits.");
+        register(m, PROTECTION_BYPASS, "protection", "Opt into the session-only in-world protection bypass.");
 
         // ranks — rank editing and assignment
         register(m, ADMIN_RANKS, "ranks", "Edit rank definitions.");

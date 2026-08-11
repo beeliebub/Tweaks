@@ -5,6 +5,8 @@ import me.beeliebub.tweaks.economy.BalanceMutationResult;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
 import me.beeliebub.tweaks.lottery.LotteryManager;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.ranks.RankManager;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -288,6 +290,11 @@ final class RouletteSessionManager {
 
         player.sendMessage(Messages.MINIGAMES.rouletteBetPlaced(
                 ref.type().name(), betTargetToken(ref), stake, bet.payoutMultiplier()));
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.ROULETTE_BET, () ->
+                "[Roulette] " + ConsoleEventLog.actorLabel(player.getName(), playerId)
+                        + " placed a $" + stake + " " + ref.type().name().toLowerCase(java.util.Locale.ROOT)
+                        + " bet on " + betTargetToken(ref));
     }
 
     private static String betTargetToken(RouletteBoardStore.SegmentRef ref) {
@@ -595,6 +602,11 @@ final class RouletteSessionManager {
                 }
             }
         }
+
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) eventLog.log(LoggingPaths.ROULETTE_SETTLED, () ->
+                "[Roulette] (console) settled pocket " + pocket + " (" + RouletteWheel.colorOf(pocket)
+                        + ") for " + bets.size() + " bet(s), house credit $" + settlement.houseCredit());
 
         String colorName = RouletteWheel.colorOf(pocket).name();
         int dozen = RouletteWheel.dozenOf(pocket);

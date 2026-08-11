@@ -5,6 +5,8 @@ import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
 import me.beeliebub.tweaks.economy.HousePayOutcome;
 import me.beeliebub.tweaks.economy.HousePaymentService;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.utils.YamlStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -26,9 +28,11 @@ public final class LotteryManager {
 
     private static final String STORE_KEY = "lottery";
     private static final String BASELINE_KEY = "baseline";
+    private static final String FALLBACK_KEY = "fallback";
     private static final String ENTRANTS_KEY = "entrants";
     private static final String PENDING_KEY = "pending_award";
-    private static final long DEFAULT_RESEED_AMOUNT = 10_000L;
+    private static final long DEFAULT_FALLBACK_BASE = 10_000L;
+    private static final double DEFAULT_POT_MULTIPLIER = 0.6D;
     private static final int MAX_REPLAY_ATTEMPTS = 3;
 
     private final Tweaks plugin;
@@ -45,6 +49,7 @@ public final class LotteryManager {
 
     private final Set<UUID> entrants = new HashSet<>();
     private long baseline;
+    private long fallback;
     private PendingAward pendingAward;
 
     public LotteryManager(Tweaks plugin, HouseAccount houseAccount,
@@ -55,15 +60,16 @@ public final class LotteryManager {
         this.economyManager = Objects.requireNonNull(economyManager, "economyManager");
         this.store = new YamlStore(plugin, new File(plugin.getDataFolder(), "lottery"), "lottery state");
         boolean existingFile = store.exists(STORE_KEY);
+        long fallbackBase = configuredFallbackBase();
         this.loadFuture = store.readAsync(STORE_KEY)
-                .thenCompose(config -> initialize(config, existingFile))
+                .thenCompose(config -> initialize(config, existingFile, fallbackBase))
                 .exceptionally(error -> {
                     failLoad("Lottery state failed to load safely; draws and entries remain disabled", error);
                     return null;
                 });
     }
 
-    private CompletableFuture<Void> initialize(YamlConfiguration config, boolean existingFile) {
+    private CompletableFuture<Void> initialize(YamlConfiguration config, boolean existingFile, long fallbackBase) {
         ParsedState parsed;
         try {
             parsed = parse(config, existingFile);
@@ -79,13 +85,14 @@ public final class LotteryManager {
             synchronized (stateLock) {
                 entrants.addAll(parsed.entrants());
                 baseline = parsed.baseline() != null ? parsed.baseline() : houseAccount.balance();
+                fallback = parsed.fallback() != null ? parsed.fallback() : fallbackBase;
                 pendingAward = parsed.pendingAward();
             }
-            CompletableFuture<Void> baselineWrite = parsed.baseline() == null
+            CompletableFuture<Void> stateWrite = parsed.baseline() == null || parsed.fallback() == null
                     ? persistSnapshot()
                     : CompletableFuture.completedFuture(null);
-            if (pendingAward == null) return baselineWrite;
-            return baselineWrite.thenCompose(ignoredWrite -> housePaymentService.whenReady())
+            if (pendingAward == null) return stateWrite;
+            return stateWrite.thenCompose(ignoredWrite -> housePaymentService.whenReady())
                     .thenCompose(ignoredReady -> replayPendingAward());
         }).thenRun(() -> {
             if (!loadFailed.get()) loaded.set(true);
@@ -102,6 +109,15 @@ public final class LotteryManager {
             if (parsedBaseline < 0) throw new IllegalArgumentException("baseline must not be negative");
         } else if (existingFile) {
             throw new IllegalArgumentException("existing lottery state has no baseline");
+        }
+
+        Long parsedFallback = null;
+        if (config.contains(FALLBACK_KEY)) {
+            if (!config.isInt(FALLBACK_KEY) && !config.isLong(FALLBACK_KEY)) {
+                throw new IllegalArgumentException("fallback must be an integral value");
+            }
+            parsedFallback = config.getLong(FALLBACK_KEY);
+            if (parsedFallback < 0) throw new IllegalArgumentException("fallback must not be negative");
         }
 
         Set<UUID> parsedEntrants = new HashSet<>();
@@ -133,13 +149,9 @@ public final class LotteryManager {
             }
             long amount = section.getLong("amount");
             if (amount < 1) throw new IllegalArgumentException("pending_award amount must be positive");
-            Long reseedTo = null;
             if (section.contains("reseed_to")) {
-                if (!section.isLong("reseed_to") && !section.isInt("reseed_to")) {
-                    throw new IllegalArgumentException("pending_award reseed_to must be integral");
-                }
-                reseedTo = section.getLong("reseed_to");
-                if (reseedTo < 1) throw new IllegalArgumentException("pending_award reseed_to must be positive");
+                plugin.getLogger().warning("Lottery pending award " + section.getString("payment_id")
+                        + " contains reseed_to from a superseded payout rule; discarding it.");
             }
             List<UUID> awardEntrants = new ArrayList<>();
             if (section.contains("entrants")) {
@@ -167,6 +179,16 @@ public final class LotteryManager {
                     throw new IllegalArgumentException("pending_award new_baseline must not be negative");
                 }
             }
+            Long newFallback = null;
+            if (section.contains("new_fallback")) {
+                if (!section.isLong("new_fallback") && !section.isInt("new_fallback")) {
+                    throw new IllegalArgumentException("pending_award new_fallback must be integral");
+                }
+                newFallback = section.getLong("new_fallback");
+                if (newFallback < 0) {
+                    throw new IllegalArgumentException("pending_award new_fallback must not be negative");
+                }
+            }
             int attempts = 0;
             if (section.contains("attempts")) {
                 if (!section.isInt("attempts") && !section.isLong("attempts")) {
@@ -179,9 +201,9 @@ public final class LotteryManager {
                 attempts = (int) parsedAttempts;
             }
             parsedPending = new PendingAward(section.getString("payment_id"), winner, amount,
-                    reseedTo, section.getLong("created_at"), List.copyOf(awardEntrants), newBaseline, attempts);
+                    section.getLong("created_at"), List.copyOf(awardEntrants), newBaseline, newFallback, attempts);
         }
-        return new ParsedState(parsedBaseline, parsedEntrants, parsedPending);
+        return new ParsedState(parsedBaseline, parsedFallback, parsedEntrants, parsedPending);
     }
 
     private void failLoad(String message, Throwable error) {
@@ -204,9 +226,18 @@ public final class LotteryManager {
         }
     }
 
-    public List<UUID> entrantSnapshot() {
+    public EntrantPage entrantSnapshot(int limit) {
         synchronized (stateLock) {
-            return List.copyOf(entrants);
+            int total = entrants.size();
+            int shownLimit = Math.max(0, limit);
+            List<UUID> shown = new ArrayList<>(Math.min(total, shownLimit));
+            if (shownLimit > 0) {
+                for (UUID entrant : entrants) {
+                    if (shown.size() >= shownLimit) break;
+                    shown.add(entrant);
+                }
+            }
+            return new EntrantPage(List.copyOf(shown), total);
         }
     }
 
@@ -216,11 +247,20 @@ public final class LotteryManager {
         }
     }
 
+    public long fallback() {
+        synchronized (stateLock) {
+            return fallback;
+        }
+    }
+
     public boolean enter(UUID playerId) {
         Objects.requireNonNull(playerId, "playerId");
         synchronized (stateLock) {
             if (!isLoaded() || !entrants.add(playerId)) return false;
             persistSnapshot();
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null) eventLog.log(LoggingPaths.LOTTERY_ENTERED, () ->
+                    "[Lottery] " + ConsoleEventLog.actorLabel(null, playerId) + " entered the draw");
             return true;
         }
     }
@@ -241,9 +281,26 @@ public final class LotteryManager {
         }
     }
 
+    public CompletableFuture<Boolean> setFallback(long value) {
+        if (value < 0) throw new IllegalArgumentException("fallback must not be negative");
+        synchronized (stateLock) {
+            if (!isLoaded()) return CompletableFuture.completedFuture(false);
+            long previous = fallback;
+            fallback = value;
+            return persistSnapshot().handle((ignored, error) -> {
+                if (error == null) return true;
+                synchronized (stateLock) {
+                    if (fallback == value) fallback = previous;
+                }
+                throw new java.util.concurrent.CompletionException(error);
+            });
+        }
+    }
+
     public LotteryMath.PotOutcome currentPot() {
         synchronized (stateLock) {
-            return LotteryMath.calculate(entrants.size(), houseAccount.balance(), baseline, reseedAmount());
+            return LotteryMath.calculate(entrants.size(), houseAccount.balance(), baseline, fallback,
+                    potMultiplier());
         }
     }
 
@@ -253,6 +310,7 @@ public final class LotteryManager {
 
         try {
             DrawContext context;
+            RollInContext rollIn = null;
             synchronized (stateLock) {
                 if (pendingAward != null) {
                     drawInFlight.set(false);
@@ -261,25 +319,85 @@ public final class LotteryManager {
                             HousePayOutcome.FAILED));
                 }
                 List<UUID> snapshot = List.copyOf(entrants);
-                LotteryMath.PotOutcome outcome = LotteryMath.calculate(snapshot.size(), houseAccount.balance(),
-                        baseline, reseedAmount());
-                if (outcome instanceof LotteryMath.PotOutcome.Refused refused) {
+                if (snapshot.isEmpty()) {
                     drawInFlight.set(false);
-                    return CompletableFuture.completedFuture(DrawResult.refused(refused.reason()));
+                    return CompletableFuture.completedFuture(DrawResult.notEnough(0, 0, fallback, baseline));
                 }
-                LotteryMath.PotOutcome.Payable payable = (LotteryMath.PotOutcome.Payable) outcome;
-                UUID winner = snapshot.get(random.nextInt(snapshot.size()));
-                PendingAward award = new PendingAward(UUID.randomUUID().toString(), winner, payable.pot(),
-                        payable.capBound() ? payable.newHouseBalance() : null, System.currentTimeMillis(),
-                        snapshot, payable.newBaseline(), 0);
-                pendingAward = award;
-                context = new DrawContext(award);
+                if (snapshot.size() == 1) {
+                    long previousFallback = fallback;
+                    long previousBaseline = baseline;
+                    long houseBalance = houseAccount.balance();
+                    long profit = 0;
+                    try {
+                        long growth = Math.subtractExact(houseBalance, baseline);
+                        if (growth > 0) profit = growth;
+                    } catch (ArithmeticException error) {
+                        plugin.getLogger().log(Level.WARNING,
+                                "Lottery single-entry roll-in could not calculate House growth", error);
+                    }
+                    long newFallback = fallback;
+                    if (profit > 0) {
+                        try {
+                            newFallback = Math.addExact(fallback, profit);
+                        } catch (ArithmeticException error) {
+                            plugin.getLogger().log(Level.SEVERE,
+                                    "Lottery fallback overflow while rolling in House growth", error);
+                            profit = 0;
+                        }
+                    }
+                    fallback = newFallback;
+                    baseline = houseBalance;
+                    rollIn = new RollInContext(profit, fallback, baseline,
+                            previousFallback, previousBaseline);
+                }
+                if (rollIn != null) {
+                    context = null;
+                } else {
+                    long fallbackAtDrawTime = fallback;
+                    LotteryMath.PotOutcome outcome = LotteryMath.calculate(snapshot.size(), houseAccount.balance(),
+                            baseline, fallbackAtDrawTime, potMultiplier());
+                    if (outcome instanceof LotteryMath.PotOutcome.Refused refused) {
+                        drawInFlight.set(false);
+                        return CompletableFuture.completedFuture(DrawResult.refused(refused.reason()));
+                    }
+                    LotteryMath.PotOutcome.Payable payable = (LotteryMath.PotOutcome.Payable) outcome;
+                    UUID winner = snapshot.get(random.nextInt(snapshot.size()));
+                    PendingAward award = new PendingAward(UUID.randomUUID().toString(), winner, payable.pot(),
+                            System.currentTimeMillis(), snapshot, payable.newBaseline(),
+                            configuredFallbackBase(), 0);
+                    pendingAward = award;
+                    context = new DrawContext(award, fallbackAtDrawTime);
+                }
             }
 
+            if (rollIn != null) {
+                RollInContext completedRollIn = rollIn;
+                return persistSnapshot().<DrawResult>handle((ignored, error) -> {
+                    if (error == null) {
+                        return DrawResult.notEnough(1, completedRollIn.rolledIn(), completedRollIn.fallback(),
+                                completedRollIn.baseline());
+                    }
+                    synchronized (stateLock) {
+                        if (fallback == completedRollIn.fallback()) fallback = completedRollIn.previousFallback();
+                        if (baseline == completedRollIn.baseline()) baseline = completedRollIn.previousBaseline();
+                    }
+                    throw new java.util.concurrent.CompletionException(error);
+                }).whenComplete((result, error) -> drawInFlight.set(false));
+            }
+
+            DrawContext completedContext = context;
             return persistSnapshot()
-                    .thenCompose(ignored -> housePaymentService.pay(context.award().paymentId(),
-                            context.award().winner(), context.award().amount()))
-                    .thenCompose(payment -> finishAward(context, payment))
+                    .thenCompose(ignored -> {
+                        PendingAward award = completedContext.award();
+                        if (wouldFallBelowFloor(houseAccount.balance(), award.amount(),
+                                completedContext.fallbackAtDrawTime())) {
+                            return abandonAward(award)
+                                    .thenApply(ignoredAbandon -> DrawResult.refused(
+                                            LotteryMath.RefusalReason.HOUSE_AT_FLOOR));
+                        }
+                        return housePaymentService.pay(award.paymentId(), award.winner(), award.amount())
+                                .thenCompose(payment -> finishAward(completedContext, payment));
+                    })
                     .whenComplete((result, error) -> drawInFlight.set(false));
         } catch (RuntimeException error) {
             drawInFlight.set(false);
@@ -290,8 +408,7 @@ public final class LotteryManager {
     private CompletableFuture<DrawResult> finishAward(DrawContext context, HousePayOutcome payment) {
         return switch (classify(payment)) {
             case SETTLED -> commitAward(context.award(), false)
-                    .thenApply(ignored -> DrawResult.awarded(context.award().winner(), context.award().amount(),
-                            context.award().reseedTo() != null));
+                    .thenApply(ignored -> DrawResult.awarded(context.award().winner(), context.award().amount()));
             case ABANDONED -> abandonAward(context.award())
                     .thenApply(ignored -> DrawResult.paymentAbandoned(context.award().winner(),
                             context.award().amount(), payment, context.award().entrants().size()));
@@ -401,48 +518,44 @@ public final class LotteryManager {
     }
 
     private CompletableFuture<Void> commitAward(PendingAward award, boolean retainPending) {
-        CompletableFuture<Void> reseed = CompletableFuture.completedFuture(null);
-        if (award.reseedTo() != null && houseAccount.balance() < award.reseedTo()) {
-            long reseedTo = award.reseedTo();
-            houseAccount.set(reseedTo);
-            plugin.getLogger().info("Lottery paid a 100% draw; reseeding the House to $" + reseedTo);
-            reseed = houseAccount.flush();
+        Snapshot previous;
+        synchronized (stateLock) {
+            previous = new Snapshot(baseline, fallback, new ArrayList<>(entrants), pendingAward);
+            entrants.removeAll(award.entrants());
+            if (award.newBaseline() != null) baseline = award.newBaseline();
+            if (award.newFallback() != null) fallback = award.newFallback();
+            if (!retainPending) pendingAward = null;
         }
-        return reseed.thenCompose(ignored -> {
-            Snapshot previous;
+        return persistSnapshot().handle((ignoredSnapshot, error) -> {
+            if (error == null) return null;
             synchronized (stateLock) {
-                previous = new Snapshot(baseline, new ArrayList<>(entrants), pendingAward);
-                entrants.removeAll(award.entrants());
-                if (award.newBaseline() != null) baseline = award.newBaseline();
-                if (!retainPending) pendingAward = null;
-            }
-            return persistSnapshot().handle((ignoredSnapshot, error) -> {
-                if (error == null) return null;
-                synchronized (stateLock) {
-                    // Preserve entries added while the award was in flight. Only restore the
-                    // recorded entrants and the fields this award owns; an admin baseline edit
-                    // or a new entrant must not be lost while the failed write is unwinding.
-                    entrants.addAll(previous.entrants());
-                    if (award.newBaseline() == null || baseline == award.newBaseline()) {
-                        baseline = previous.baseline();
-                    }
-                    if (pendingAward == null
-                            || pendingAward.paymentId().equals(award.paymentId())) {
-                        pendingAward = previous.pendingAward();
-                    }
+                // Preserve entries added while the award was in flight. Only restore the
+                // recorded entrants and the fields this award owns; an admin baseline or fallback
+                // edit or a new entrant must not be lost while the failed write is unwinding.
+                entrants.addAll(previous.entrants());
+                if (award.newBaseline() == null || baseline == award.newBaseline()) {
+                    baseline = previous.baseline();
                 }
-                throw new java.util.concurrent.CompletionException(error);
-            });
+                if (award.newFallback() == null || fallback == award.newFallback()) {
+                    fallback = previous.fallback();
+                }
+                if (pendingAward == null
+                        || pendingAward.paymentId().equals(award.paymentId())) {
+                    pendingAward = previous.pendingAward();
+                }
+            }
+            throw new java.util.concurrent.CompletionException(error);
         });
     }
 
     private CompletableFuture<Void> persistSnapshot() {
         Snapshot snapshot;
         synchronized (stateLock) {
-            snapshot = new Snapshot(baseline, new ArrayList<>(entrants), pendingAward);
+            snapshot = new Snapshot(baseline, fallback, new ArrayList<>(entrants), pendingAward);
         }
         return store.writeAsync(STORE_KEY, config -> {
             config.set(BASELINE_KEY, snapshot.baseline());
+            config.set(FALLBACK_KEY, snapshot.fallback());
             config.set(ENTRANTS_KEY, snapshot.entrants().stream().map(UUID::toString).toList());
             if (snapshot.pendingAward() != null) {
                 PendingAward award = snapshot.pendingAward();
@@ -450,12 +563,12 @@ public final class LotteryManager {
                 section.set("payment_id", award.paymentId());
                 section.set("winner", award.winner().toString());
                 section.set("amount", award.amount());
-                if (award.reseedTo() != null) section.set("reseed_to", award.reseedTo());
                 section.set("created_at", award.createdAt());
                 if (!award.entrants().isEmpty()) {
                     section.set("entrants", award.entrants().stream().map(UUID::toString).toList());
                 }
                 if (award.newBaseline() != null) section.set("new_baseline", award.newBaseline());
+                if (award.newFallback() != null) section.set("new_fallback", award.newFallback());
                 section.set("attempts", award.attempts());
             }
         });
@@ -466,9 +579,21 @@ public final class LotteryManager {
                 : failedFuture(new IllegalStateException("Lottery state did not load safely")));
     }
 
-    private long reseedAmount() {
-        long value = plugin.getConfig().getLong("lottery.reseed-amount", DEFAULT_RESEED_AMOUNT);
-        return value > 0 ? value : DEFAULT_RESEED_AMOUNT;
+    public long configuredFallbackBase() {
+        long value = plugin.getConfig().getLong("lottery.reseed-amount", DEFAULT_FALLBACK_BASE);
+        return value > 0 ? value : DEFAULT_FALLBACK_BASE;
+    }
+
+    private double potMultiplier() {
+        return plugin.getConfig().getDouble("lottery.pot-multiplier", DEFAULT_POT_MULTIPLIER);
+    }
+
+    private static boolean wouldFallBelowFloor(long balance, long amount, long fallback) {
+        try {
+            return Math.subtractExact(balance, amount) < fallback;
+        } catch (ArithmeticException error) {
+            return true;
+        }
     }
 
     private static <T> CompletableFuture<T> failedFuture(Throwable error) {
@@ -477,24 +602,34 @@ public final class LotteryManager {
         return failed;
     }
 
-    private record ParsedState(Long baseline, Set<UUID> entrants, PendingAward pendingAward) {
+    public record EntrantPage(List<UUID> shown, int total) {
+        public EntrantPage {
+            shown = List.copyOf(shown);
+        }
     }
 
-    private record Snapshot(long baseline, List<UUID> entrants, PendingAward pendingAward) {
+    private record ParsedState(Long baseline, Long fallback, Set<UUID> entrants, PendingAward pendingAward) {
     }
 
-    private record DrawContext(PendingAward award) {
+    private record Snapshot(long baseline, long fallback, List<UUID> entrants, PendingAward pendingAward) {
     }
 
-    private record PendingAward(String paymentId, UUID winner, long amount, Long reseedTo, long createdAt,
-                                List<UUID> entrants, Long newBaseline, int attempts) {
+    private record DrawContext(PendingAward award, long fallbackAtDrawTime) {
+    }
+
+    private record RollInContext(long rolledIn, long fallback, long baseline,
+                                 long previousFallback, long previousBaseline) {
+    }
+
+    private record PendingAward(String paymentId, UUID winner, long amount, long createdAt,
+                                List<UUID> entrants, Long newBaseline, Long newFallback, int attempts) {
         PendingAward {
             entrants = List.copyOf(entrants);
         }
 
         PendingAward withAttempts(int nextAttempts) {
-            return new PendingAward(paymentId, winner, amount, reseedTo, createdAt,
-                    entrants, newBaseline, nextAttempts);
+            return new PendingAward(paymentId, winner, amount, createdAt,
+                    entrants, newBaseline, newFallback, nextAttempts);
         }
     }
 
@@ -511,7 +646,7 @@ public final class LotteryManager {
     }
 
     public sealed interface DrawResult permits DrawResult.NotReady, DrawResult.InFlight,
-            DrawResult.Refused, DrawResult.Awarded, DrawResult.PaymentAbandoned,
+            DrawResult.Refused, DrawResult.NotEnoughEntrants, DrawResult.Awarded, DrawResult.PaymentAbandoned,
             DrawResult.PaymentPending, DrawResult.PaymentStuck {
         record NotReady() implements DrawResult {
         }
@@ -522,7 +657,11 @@ public final class LotteryManager {
         record Refused(LotteryMath.RefusalReason reason) implements DrawResult {
         }
 
-        record Awarded(UUID winner, long amount, boolean capBound) implements DrawResult {
+        record NotEnoughEntrants(int entrantCount, long rolledIn, long fallback, long baseline)
+                implements DrawResult {
+        }
+
+        record Awarded(UUID winner, long amount) implements DrawResult {
         }
 
         record PaymentAbandoned(UUID winner, long amount, HousePayOutcome outcome, int entrantCount)
@@ -542,8 +681,12 @@ public final class LotteryManager {
 
         static Refused refused(LotteryMath.RefusalReason reason) { return new Refused(reason); }
 
-        static Awarded awarded(UUID winner, long amount, boolean capBound) {
-            return new Awarded(winner, amount, capBound);
+        static NotEnoughEntrants notEnough(int entrantCount, long rolledIn, long fallback, long baseline) {
+            return new NotEnoughEntrants(entrantCount, rolledIn, fallback, baseline);
+        }
+
+        static Awarded awarded(UUID winner, long amount) {
+            return new Awarded(winner, amount);
         }
 
         static PaymentAbandoned paymentAbandoned(UUID winner, long amount, HousePayOutcome outcome, int entrantCount) {

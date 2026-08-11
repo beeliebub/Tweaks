@@ -1,5 +1,8 @@
 package me.beeliebub.tweaks.xpbottle;
 
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.HotPathEventBuffer;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import io.papermc.paper.datacomponent.DataComponentTypes;
 import io.papermc.paper.potion.PotionMix;
 import net.kyori.adventure.text.Component;
@@ -213,6 +216,8 @@ public class XpBottleListener implements Listener {
 
         String uuidStr = stand.getPersistentDataContainer().get(brewerKey, PersistentDataType.STRING);
         Player brewer = uuidStr != null ? Bukkit.getPlayer(UUID.fromString(uuidStr)) : null;
+        String brewerNameSnapshot = brewer == null ? null : brewer.getName();
+        UUID brewerIdSnapshot = brewer == null ? null : brewer.getUniqueId();
 
         // Always clear the tag — the next brew must come from a fresh player click (prevents
         // hopper-fed automation from re-using a stale tracked player).
@@ -269,6 +274,8 @@ public class XpBottleListener implements Listener {
         final int finalCost = costPerBottle;
         final boolean[] finalBrewedSlots = brewedSlots;
         final Material expectedIngredientType = ingredient.getType();
+        final String finalBrewerName = brewerNameSnapshot;
+        final UUID finalBrewerId = brewerIdSnapshot;
 
         Bukkit.getScheduler().runTask(plugin, () -> {
             // Verify the brewing stand still exists. Use getState() instanceof check so this
@@ -293,6 +300,12 @@ public class XpBottleListener implements Listener {
                 } else {
                     liveInv.setItem(i, new ItemStack(Material.GLASS_BOTTLE));
                 }
+            }
+
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null && finalBrewerId != null) {
+                eventLog.logHot(LoggingPaths.XPBOTTLE_BOTTLED,
+                        new HotPathEventBuffer.HotKey(finalBrewerId, "bottled", null), finalBrewerName);
             }
 
             // Ingredient handling. Cancelling left the original stack untouched, so we replicate
@@ -336,7 +349,14 @@ public class XpBottleListener implements Listener {
         int orbs = xpBottle.getStoredOrbs(item);
         if (orbs <= 0) return;
         Player player = event.getPlayer();
+        String actorName = player.getName();
+        UUID actorId = player.getUniqueId();
         new ExperienceManager(player).changeExp(orbs);
         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.5f, 1.0f);
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) {
+            eventLog.logHot(LoggingPaths.XPBOTTLE_RELEASED,
+                    new HotPathEventBuffer.HotKey(actorId, "released", null), actorName);
+        }
     }
 }

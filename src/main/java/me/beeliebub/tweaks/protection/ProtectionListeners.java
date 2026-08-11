@@ -3,6 +3,9 @@ package me.beeliebub.tweaks.protection;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.core.ProtectionMessages.Text;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.HotPathEventBuffer;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.protection.region.ProtectionManager;
 import me.beeliebub.tweaks.protection.region.RegionFlag;
 import me.beeliebub.tweaks.protection.ui.RegionSelection;
@@ -28,8 +31,11 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.inventory.ItemStack;
@@ -76,6 +82,16 @@ public final class ProtectionListeners implements Listener {
         this.plugin = plugin;
         this.protection = protection;
         this.selections = selections;
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        protection.clearProtectionBypass(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        protection.clearProtectionBypass(event.getPlayer().getUniqueId());
     }
 
     // ─── ChunkListener (lazy stamp + orphan cleanup) ──────────────────────────
@@ -132,6 +148,9 @@ public final class ProtectionListeners implements Listener {
                 event.getBlock().getType(),
                 RegionFlag.BLOCK_BREAK)) {
             event.setCancelled(true);
+            notifyAdminBypassHint(event.getPlayer());
+            logDenied(LoggingPaths.PROTECTION_BLOCK_BREAK, event.getPlayer(),
+                    event.getBlock().getLocation(), RegionFlag.BLOCK_BREAK);
         }
     }
 
@@ -153,6 +172,9 @@ public final class ProtectionListeners implements Listener {
                 event.getBlock().getType(),
                 RegionFlag.BLOCK_PLACE)) {
             event.setCancelled(true);
+            notifyAdminBypassHint(event.getPlayer());
+            logDenied(LoggingPaths.PROTECTION_BLOCK_PLACE, event.getPlayer(),
+                    event.getBlock().getLocation(), RegionFlag.BLOCK_PLACE);
         }
     }
 
@@ -203,6 +225,9 @@ public final class ProtectionListeners implements Listener {
                 event.getPlayer().getUniqueId(),
                 needed)) {
             event.setCancelled(true);
+            notifyAdminBypassHint(event.getPlayer());
+            logDenied(LoggingPaths.PROTECTION_CONTAINER, event.getPlayer(),
+                    block.getLocation(), needed);
         }
     }
 
@@ -307,6 +332,21 @@ public final class ProtectionListeners implements Listener {
         if (!protection.isAllowed(to, player.getUniqueId(), RegionFlag.ENTRY)) {
             event.setCancelled(true);
             player.sendActionBar(Messages.PROTECTION.text(Text.ENTRY_DENIED));
+            notifyAdminBypassHint(player);
+            logDenied(LoggingPaths.PROTECTION_ENTRY, player, to, RegionFlag.ENTRY);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onPlayerTeleport(PlayerTeleportEvent event) {
+        Player player = event.getPlayer();
+        Location destination = event.getTo();
+        if (destination == null) return;
+        if (!protection.isAllowed(destination, player.getUniqueId(), RegionFlag.ENTRY)) {
+            event.setCancelled(true);
+            player.sendActionBar(Messages.PROTECTION.text(Text.ENTRY_DENIED));
+            notifyAdminBypassHint(player);
+            logDenied(LoggingPaths.PROTECTION_ENTRY, player, destination, RegionFlag.ENTRY);
         }
     }
 
@@ -328,6 +368,21 @@ public final class ProtectionListeners implements Listener {
     private boolean isWand(ItemStack item) {
         if (item == null) return false;
         return item.getType() == plugin.getProtectionSelectionTool();
+    }
+
+    private void logDenied(String path, Player player, Location location, RegionFlag flag) {
+        ConsoleEventLog eventLog = plugin.getConsoleEventLog();
+        if (eventLog == null || !eventLog.enabled(path)) return;
+        eventLog.logHot(path, new HotPathEventBuffer.HotKey(
+                        player.getUniqueId(), protection.loggingRegionId(location), flag),
+                player.getName());
+    }
+
+    private void notifyAdminBypassHint(Player player) {
+        if (player.hasPermission(me.beeliebub.tweaks.permissions.Permissions.PROTECTION_ADMIN)
+                && !protection.isProtectionBypassEnabled(player.getUniqueId())) {
+            player.sendActionBar(Messages.PROTECTION.text(Text.BYPASS_REQUIRED));
+        }
     }
 
     private static void announce(Player player, Text label, long chunkKey, RegionSelection sel) {

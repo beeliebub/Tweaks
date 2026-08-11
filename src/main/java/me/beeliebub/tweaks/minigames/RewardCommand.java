@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.minigames;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.utils.OfflinePlayerResolver;
 import org.bukkit.Bukkit;
@@ -239,6 +241,17 @@ public class RewardCommand implements CommandExecutor, TabCompleter {
         }
 
         rewardManager.clearPendingRewards(player.getUniqueId());
+        int finalTotalGiven = totalGiven;
+
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(rewardManager.plugin());
+        if (eventLog != null) {
+            String actorName = player.getName();
+            UUID actorId = player.getUniqueId();
+            String claimedRewards = String.join(",", pending);
+            eventLog.log(LoggingPaths.WHACK_REWARD, () -> "[Whack] "
+                    + ConsoleEventLog.actorLabel(actorName, actorId) + " claimed rewards "
+                    + claimedRewards + " (" + finalTotalGiven + " item stack(s))");
+        }
 
         if (totalGiven > 0) {
             player.sendMessage(Messages.MINIGAMES.rewardClaimedWithOverflowWarning());

@@ -3,6 +3,8 @@ package me.beeliebub.tweaks.ranks;
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.economy.BalanceCommand;
 import me.beeliebub.tweaks.economy.EconomyManager;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -57,6 +59,10 @@ public class RankupCommand implements CommandExecutor {
         double remaining = economyManager.getBalance(uuid);
         player.sendMessage(Messages.rankupSuccess(rankManager.getRankDisplayComponent(next),
                 BalanceCommand.formatBalance(remaining)));
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(rankManager.plugin());
+        if (eventLog != null) eventLog.log(LoggingPaths.RANKS_PURCHASED, () ->
+                "[Ranks] " + ConsoleEventLog.actorLabel(player.getName(), uuid)
+                        + " purchased rank " + next + " for " + BalanceCommand.formatBalance(cost));
         return true;
     }
 }

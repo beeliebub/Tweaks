@@ -10,10 +10,15 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 
 import java.util.ArrayList;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Locale;
+import java.io.File;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.function.BiConsumer;
 import java.util.logging.Level;
 
 /**
@@ -48,11 +53,19 @@ public final class ConfigValueEditor {
     private final Tweaks plugin;
     private final ResourceHuntItems resourceHuntItems;
     private final WorldProfileTable worldProfileTable;
+    private final BiConsumer<String, Boolean> loggingBooleanChanged;
 
     public ConfigValueEditor(Tweaks plugin, ResourceHuntItems resourceHuntItems, WorldProfileTable worldProfileTable) {
+        this(plugin, resourceHuntItems, worldProfileTable, (path, value) -> {});
+    }
+
+    public ConfigValueEditor(Tweaks plugin, ResourceHuntItems resourceHuntItems,
+                             WorldProfileTable worldProfileTable,
+                             BiConsumer<String, Boolean> loggingBooleanChanged) {
         this.plugin = plugin;
         this.resourceHuntItems = resourceHuntItems;
         this.worldProfileTable = worldProfileTable;
+        this.loggingBooleanChanged = loggingBooleanChanged == null ? (path, value) -> {} : loggingBooleanChanged;
     }
 
     private EditResult guarded(Supplier<EditResult> action) {
@@ -77,8 +90,9 @@ public final class ConfigValueEditor {
             if (newMax <= 0) {
                 return new EditResult.Invalid(Messages.COMMANDS.configMaxHomesMustBePositive());
             }
-            plugin.getConfig().set("max-homes", newMax);
-            plugin.saveConfig();
+            if (!writeAndVerify("max-homes", newMax)) {
+                return new EditResult.Invalid(Messages.CONFIG.saveFailed("Max Homes"));
+            }
             return new EditResult.Ok(Messages.COMMANDS.configMaxHomesUpdated(newMax));
         });
     }
@@ -94,8 +108,9 @@ public final class ConfigValueEditor {
             if (newMax < 1) {
                 return new EditResult.Invalid(Messages.COMMANDS.configMaxChunksMustBePositive());
             }
-            plugin.getConfig().set("max_chunks", newMax);
-            plugin.saveConfig();
+            if (!writeAndVerify("max_chunks", newMax)) {
+                return new EditResult.Invalid(Messages.CONFIG.saveFailed("Max Chunks"));
+            }
             return new EditResult.Ok(Messages.COMMANDS.configMaxChunksUpdated(newMax));
         });
     }
@@ -111,8 +126,9 @@ public final class ConfigValueEditor {
             if (chance < 0.0 || chance > 100.0) {
                 return new EditResult.Invalid(Messages.COMMANDS.configEggDropChanceRange());
             }
-            plugin.getConfig().set("egg-collector-drop-chance", chance);
-            plugin.saveConfig();
+            if (!writeAndVerify("egg-collector-drop-chance", chance)) {
+                return new EditResult.Invalid(Messages.CONFIG.saveFailed("Egg Collector Drop Chance"));
+            }
             return new EditResult.Ok(Messages.COMMANDS.configEggDropChanceUpdated(chance));
         });
     }
@@ -154,8 +170,10 @@ public final class ConfigValueEditor {
             changed = list.removeIf(s -> s.equalsIgnoreCase(mob));
         }
 
-        plugin.getConfig().set(configKey, list);
-        plugin.saveConfig();
+        if (!writeAndVerify(configKey, list)) {
+            return new EditResult.Invalid(Messages.CONFIG.saveFailed(
+                    spawnerEggFeature ? "Spawner Egg Disabled Mobs" : "Egg Collector Disabled Mobs"));
+        }
 
         return new EditResult.Ok(Messages.COMMANDS.configMobToggleResult(
                 spawnerEggFeature, mob, normalizedAction.equals("disable"), changed));
@@ -229,8 +247,9 @@ public final class ConfigValueEditor {
             return new EditResult.Invalid(Messages.CONFIG.outOfRange(setting.displayName(), setting.min(), setting.max()));
         }
         Object value = integral ? (int) parsed : parsed;
-        plugin.getConfig().set(setting.path(), value);
-        plugin.saveConfig();
+        if (!writeAndVerify(setting.path(), value)) {
+            return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
+        }
         return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), String.valueOf(value)));
     }
 
@@ -244,8 +263,9 @@ public final class ConfigValueEditor {
         if (outOfBounds(setting, parsed)) {
             return new EditResult.Invalid(Messages.CONFIG.outOfRange(setting.displayName(), setting.min(), setting.max()));
         }
-        plugin.getConfig().set(setting.path(), parsed);
-        plugin.saveConfig();
+        if (!writeAndVerify(setting.path(), parsed)) {
+            return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
+        }
         return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), String.valueOf(parsed)));
     }
 
@@ -258,8 +278,12 @@ public final class ConfigValueEditor {
             return new EditResult.Invalid(Messages.CONFIG.invalidBoolean());
         }
         boolean value = Boolean.parseBoolean(rawValue);
-        plugin.getConfig().set(setting.path(), value);
-        plugin.saveConfig();
+        if (!writeAndVerify(setting.path(), value)) {
+            return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
+        }
+        if (setting.path().startsWith("logging.")) {
+            loggingBooleanChanged.accept(setting.path(), value);
+        }
         return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), String.valueOf(value)));
     }
 
@@ -281,8 +305,9 @@ public final class ConfigValueEditor {
         if (mat == null || mat.isAir() || !mat.isItem()) {
             return new EditResult.Invalid(Messages.COMMANDS.configUnknownMaterial(String.valueOf(rawValue)));
         }
-        plugin.getConfig().set(setting.path(), mat.name());
-        plugin.saveConfig();
+        if (!writeAndVerify(setting.path(), mat.name())) {
+            return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
+        }
         // protection.selection-tool is also cached live in Services (the one overwritable field -
         // see its Javadoc) so ProtectionListeners' wand check doesn't need its own live re-read.
         if (setting.path().equals(PROTECTION_SELECTION_TOOL_PATH)) {
@@ -296,8 +321,9 @@ public final class ConfigValueEditor {
         if (key == null) {
             return new EditResult.Invalid(Messages.CONFIG.invalidNamespacedKey(String.valueOf(rawValue)));
         }
-        plugin.getConfig().set(setting.path(), key.toString());
-        plugin.saveConfig();
+        if (!writeAndVerify(setting.path(), key.toString())) {
+            return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
+        }
         return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), key.toString()));
     }
 
@@ -342,8 +368,9 @@ public final class ConfigValueEditor {
             changed = list.removeIf(s -> s.equalsIgnoreCase(value));
         }
 
-        plugin.getConfig().set(setting.path(), list);
-        plugin.saveConfig();
+        if (!writeAndVerify(setting.path(), list)) {
+            return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
+        }
         return new EditResult.Ok(adding
                 ? Messages.CONFIG.listEntryAdded(setting.displayName(), value, changed)
                 : Messages.CONFIG.listEntryRemoved(setting.displayName(), value, changed));
@@ -386,10 +413,81 @@ public final class ConfigValueEditor {
             if (Double.isNaN(value) || Double.isInfinite(value)) {
                 return new EditResult.Invalid(Messages.invalidDecimal());
             }
-            plugin.getConfig().set(setting.path() + "." + rawKey, value);
-            plugin.saveConfig();
+            String path = setting.path() + "." + rawKey;
+            if (!writeAndVerify(path, value)) {
+                return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
+            }
             return new EditResult.Ok(Messages.CONFIG.mapEntryUpdated(setting.displayName(), rawKey, value));
         });
+    }
+
+    /**
+     * Persists one config value and confirms it by loading the file independently of the live
+     * configuration object. Bukkit's {@code saveConfig()} swallows its {@code IOException}, so
+     * an in-memory re-read would report success even when the old value is still on disk.
+     */
+    private boolean writeAndVerify(String path, Object value) {
+        Object previous = plugin.getConfig().get(path);
+        plugin.getConfig().set(path, value);
+        plugin.saveConfig();
+
+        File configFile = new File(plugin.getDataFolder(), "config.yml");
+        if (configFile.isFile()) {
+            var persisted = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(configFile)
+                    .get(path);
+            if (configurationValuesEqual(value, persisted)) {
+                return true;
+            }
+        }
+
+        plugin.getConfig().set(path, previous);
+        return false;
+    }
+
+    private static boolean configurationValuesEqual(Object expected, Object actual) {
+        if (expected instanceof Number expectedNumber && actual instanceof Number actualNumber) {
+            return numericValuesEqual(expectedNumber, actualNumber);
+        }
+        if (expected instanceof List<?> expectedList && actual instanceof List<?> actualList) {
+            if (expectedList.size() != actualList.size()) return false;
+            for (int i = 0; i < expectedList.size(); i++) {
+                if (!configurationValuesEqual(expectedList.get(i), actualList.get(i))) return false;
+            }
+            return true;
+        }
+        return Objects.equals(expected, actual);
+    }
+
+    private static boolean numericValuesEqual(Number expected, Number actual) {
+        if (isFloatingPoint(expected) || isFloatingPoint(actual)) {
+            double expectedDouble = expected.doubleValue();
+            double actualDouble = actual.doubleValue();
+            if (!Double.isFinite(expectedDouble) || !Double.isFinite(actualDouble)) {
+                return Double.compare(expectedDouble, actualDouble) == 0;
+            }
+            return decimalValue(expected).compareTo(decimalValue(actual)) == 0;
+        }
+        return integralValue(expected).equals(integralValue(actual));
+    }
+
+    private static boolean isFloatingPoint(Number value) {
+        return value instanceof Float || value instanceof Double || value instanceof BigDecimal;
+    }
+
+    private static BigDecimal decimalValue(Number value) {
+        if (value instanceof BigDecimal decimal) return decimal;
+        if (value instanceof BigInteger integer) return new BigDecimal(integer);
+        if (value instanceof Byte || value instanceof Short
+                || value instanceof Integer || value instanceof Long) {
+            return BigDecimal.valueOf(value.longValue());
+        }
+        return new BigDecimal(value.toString());
+    }
+
+    private static BigInteger integralValue(Number value) {
+        if (value instanceof BigInteger integer) return integer;
+        if (value instanceof BigDecimal decimal) return decimal.toBigIntegerExact();
+        return BigInteger.valueOf(value.longValue());
     }
 
     // ------------------------------------------------------------ world-profiles (special-cased,

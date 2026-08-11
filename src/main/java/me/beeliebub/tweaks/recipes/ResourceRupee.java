@@ -1,16 +1,22 @@
 package me.beeliebub.tweaks.recipes;
 
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.HotPathEventBuffer;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.PrepareItemCraftEvent;
 import org.bukkit.inventory.CraftingInventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.List;
 
@@ -35,6 +41,16 @@ public final class ResourceRupee implements Listener {
     public static final String RUPEE_NAME = "Resource Rupee";
     public static final String RUPEE_BLOCK_NAME = "Resource Rupee Block";
     public static final String LORE_LINE = "...the Wanderer's Path...";
+
+    private final JavaPlugin plugin;
+
+    public ResourceRupee() {
+        this(null);
+    }
+
+    public ResourceRupee(JavaPlugin plugin) {
+        this.plugin = plugin;
+    }
 
     // Intercepts vanilla emerald <-> emerald-block crafting when all ingredients carry the
     // Resource Rupee marker, swapping the vanilla result for the currency variant so the marker
@@ -69,6 +85,38 @@ public final class ResourceRupee implements Listener {
         if (nonEmpty == 1 && rupeeBlocks == 1) {
             inv.setResult(createRupee(9));
         }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCraft(CraftItemEvent event) {
+        if (plugin == null || !(event.getWhoClicked() instanceof org.bukkit.entity.Player player)) return;
+        String conversion = conversionType(event.getInventory().getMatrix());
+        if (conversion == null) return;
+
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog == null) return;
+        String actorName = player.getName();
+        java.util.UUID actorId = player.getUniqueId();
+        ItemStack result = event.getRecipe().getResult();
+        int resultAmount = result == null ? 0 : result.getAmount();
+        eventLog.logHot(LoggingPaths.RECIPES_CURRENCY,
+                new HotPathEventBuffer.HotKey(actorId, conversion + " x" + resultAmount, null), actorName);
+    }
+
+    private String conversionType(ItemStack[] matrix) {
+        if (matrix == null) return null;
+        int rupees = 0;
+        int rupeeBlocks = 0;
+        int nonEmpty = 0;
+        for (ItemStack stack : matrix) {
+            if (stack == null || stack.getType().isAir()) continue;
+            nonEmpty++;
+            if (isRupee(stack)) rupees++;
+            else if (isRupeeBlock(stack)) rupeeBlocks++;
+        }
+        if (nonEmpty == 9 && rupees == 9) return "rupees-to-block";
+        if (nonEmpty == 1 && rupeeBlocks == 1) return "block-to-rupees";
+        return null;
     }
 
     public ItemStack createRupee(int amount) {

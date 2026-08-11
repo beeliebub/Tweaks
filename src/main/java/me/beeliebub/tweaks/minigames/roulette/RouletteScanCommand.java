@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.minigames.roulette;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.permissions.Permissions;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -97,8 +99,11 @@ public final class RouletteScanCommand implements CommandExecutor {
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     // Log before messaging: a disconnected/edge-case player's sendMessage must not
                     // be able to suppress this audit line for a write that genuinely succeeded.
-                    plugin.getLogger().info(senderName + " ran /roulettescan (" + segments.size()
-                            + " segments found) -> " + target.getAbsolutePath());
+                    ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+                    if (eventLog != null) eventLog.log(LoggingPaths.ROULETTE_SCAN,
+                            () -> "[Roulette] " + ConsoleEventLog.actorLabel(senderName, player.getUniqueId())
+                                    + " ran /roulettescan (" + segments.size()
+                                    + " segments found) -> " + target.getAbsolutePath());
                     player.sendMessage(Messages.MINIGAMES.rouletteScanResult(summary));
                 });
             } catch (IOException e) {

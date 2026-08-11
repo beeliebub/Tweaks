@@ -3,101 +3,134 @@ package me.beeliebub.tweaks.tests.lottery;
 import me.beeliebub.tweaks.lottery.LotteryMath;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class LotteryMathTest {
 
-    private static final long RESEED = 10_000L;
+    private static final long FALLBACK = 10_000L;
+    private static final double MULTIPLIER = 0.6D;
 
     @Test
-    void calculatesHalfGrowthAgainstTheNewHouseTotal() {
-        LotteryMath.PotOutcome.Payable outcome = payable(1, 30_000, 20_000);
-        assertEquals(15_000, outcome.pot());
-        assertEquals(15_000, outcome.newHouseBalance());
-        assertEquals(15_000, outcome.newBaseline());
-        assertEquals(false, outcome.capBound());
+    void calculatesTheConfiguredFormulaAndPostDrawBaseline() {
+        LotteryMath.PotOutcome.Payable outcome = payable(5, 100_000, 80_000, FALLBACK, MULTIPLIER);
+
+        assertEquals(12_600, outcome.pot());
+        assertEquals(87_400, outcome.newHouseBalance());
+        assertEquals(87_400, outcome.newBaseline());
     }
 
     @Test
-    void capsOvergrowthAtTheWholeHouseBalance() {
-        LotteryMath.PotOutcome.Payable outcome = payable(1, 30_000, 10_000);
-        assertEquals(30_000, outcome.pot());
-        assertEquals(RESEED, outcome.newHouseBalance());
-        assertEquals(RESEED, outcome.newBaseline());
-        assertEquals(true, outcome.capBound());
+    void entrantCountBonusScalesThePot() {
+        LotteryMath.PotOutcome.Payable two = payable(2, 20_000, 10_000, 1_000, MULTIPLIER);
+        LotteryMath.PotOutcome.Payable fifty = payable(50, 20_000, 10_000, 1_000, MULTIPLIER);
+
+        assertEquals(6_120, two.pot());
+        assertEquals(9_000, fifty.pot());
     }
 
     @Test
-    void zeroBaselinePaysTheWholeHouseAndReseeds() {
-        LotteryMath.PotOutcome.Payable outcome = payable(1, 500, 0);
-        assertEquals(500, outcome.pot());
-        assertEquals(RESEED, outcome.newHouseBalance());
-        assertEquals(RESEED, outcome.newBaseline());
+    void clampsThePotAtTheLiveFallbackFloor() {
+        LotteryMath.PotOutcome.Payable outcome = payable(5, 100_000, 80_000, 95_000, MULTIPLIER);
+
+        assertEquals(5_000, outcome.pot());
+        assertEquals(95_000, outcome.newHouseBalance());
+        assertEquals(95_000, outcome.newBaseline());
     }
 
     @Test
-    void refusesInvalidAndDegenerateInputs() {
-        assertReason(0, 1_000, 500, LotteryMath.RefusalReason.NO_ENTRANTS);
-        assertReason(1, 0, 500, LotteryMath.RefusalReason.EMPTY_HOUSE);
-        assertReason(1, 1_000, -1, LotteryMath.RefusalReason.INVALID_BASELINE);
-        assertReason(1, 1_000, 1_000, LotteryMath.RefusalReason.NO_GROWTH);
-        assertReason(1, 900, 1_000, LotteryMath.RefusalReason.NO_GROWTH);
+    void refusesFewerThanTwoEntrants() {
+        assertReason(0, 100_000, 80_000, FALLBACK, MULTIPLIER,
+                LotteryMath.RefusalReason.NOT_ENOUGH_ENTRANTS);
+        assertReason(1, 100_000, 80_000, FALLBACK, MULTIPLIER,
+                LotteryMath.RefusalReason.NOT_ENOUGH_ENTRANTS);
     }
 
     @Test
-    void usesExactIntegerArithmeticNearLongMaximum() {
+    void evaluatesRefusalsInTheSpecifiedOrder() {
+        assertReason(1, 100_000, -1, FALLBACK, MULTIPLIER,
+                LotteryMath.RefusalReason.NOT_ENOUGH_ENTRANTS);
+        assertReason(2, 100_000, -1, FALLBACK, MULTIPLIER,
+                LotteryMath.RefusalReason.INVALID_BASELINE);
+        assertReason(2, 10_000, 10_000, 10_000, MULTIPLIER,
+                LotteryMath.RefusalReason.HOUSE_AT_FLOOR);
+        assertReason(2, 9_000, 10_000, 10_000, MULTIPLIER,
+                LotteryMath.RefusalReason.HOUSE_AT_FLOOR);
+        assertReason(2, 100_000, 100_000, FALLBACK, MULTIPLIER,
+                LotteryMath.RefusalReason.NO_GROWTH);
+    }
+
+    @Test
+    void rejectsNegativeFallbackAsAnInvalidConfiguration() {
+        assertThrows(IllegalArgumentException.class,
+                () -> LotteryMath.calculate(2, 100_000, 80_000, -1, MULTIPLIER));
+    }
+
+    @Test
+    void refusesWhenTheFlooredPotIsZero() {
+        assertReason(2, 10_001, 10_000, FALLBACK, 0.0D,
+                LotteryMath.RefusalReason.POT_ROUNDS_TO_ZERO);
+    }
+
+    @Test
+    void usesExactBigDecimalArithmeticNearLongMaximum() {
         long balance = Long.MAX_VALUE - 1;
         long baseline = Long.MAX_VALUE / 2;
-        LotteryMath.PotOutcome.Payable outcome = payable(1, balance, baseline);
-        long expected = java.math.BigInteger.valueOf(balance - baseline)
-                .multiply(java.math.BigInteger.valueOf(balance))
-                .divide(java.math.BigInteger.valueOf(baseline))
+        int entrants = 2;
+
+        LotteryMath.PotOutcome.Payable outcome = payable(entrants, balance, baseline, 0, MULTIPLIER);
+        long expected = BigDecimal.valueOf(MULTIPLIER)
+                .multiply(BigDecimal.valueOf(balance - baseline))
+                .multiply(BigDecimal.ONE.add(new BigDecimal("0.01").multiply(BigDecimal.valueOf(entrants))))
+                .setScale(0, RoundingMode.FLOOR)
                 .longValueExact();
+
         assertEquals(expected, outcome.pot());
-        assertEquals(RESEED, outcome.newHouseBalance());
+        assertEquals(balance - expected, outcome.newHouseBalance());
+        assertEquals(balance - expected, outcome.newBaseline());
     }
 
     @Test
-    void reseedingBreaksTheRepeatedFullDrawLoop() {
-        LotteryMath.PotOutcome.Payable first = payable(1, 20_000, 10_000);
-        assertEquals(RESEED, first.newBaseline());
-        assertReason(1, first.newHouseBalance(), first.newBaseline(), LotteryMath.RefusalReason.NO_GROWTH);
+    void clampsAFormulaThatExceedsLongMaximumBeforeConverting() {
+        LotteryMath.PotOutcome.Payable outcome = payable(Integer.MAX_VALUE, Long.MAX_VALUE, 0, 0, 10.0D);
+
+        assertEquals(Long.MAX_VALUE, outcome.pot());
+        assertEquals(0, outcome.newHouseBalance());
+        assertEquals(0, outcome.newBaseline());
     }
 
     @Test
-    void reproducesTheFailedDrawIncidentAndItsArmedFollowUp() {
-        LotteryMath.PotOutcome.Payable failedDraw = payable(2, 114_130, 69_420);
-        assertEquals(73_505, failedDraw.pot());
-        assertEquals(40_625, failedDraw.newBaseline());
-        assertEquals(false, failedDraw.capBound());
-
-        LotteryMath.PotOutcome.Payable followUp = payable(1, 114_130, 40_625);
-        assertEquals(114_130, followUp.pot());
-        assertEquals(true, followUp.capBound());
+    void acceptsFiniteMultipliersAcrossTheConfiguredRange() {
+        assertReason(2, 20_000, 10_000, 1_000, 0.0D,
+                LotteryMath.RefusalReason.POT_ROUNDS_TO_ZERO);
+        assertEquals(10_200, payable(2, 20_000, 10_000, 1_000, 1.0D).pot());
+        assertEquals(12_240, payable(2, 20_000, 10_000, 1_000, 1.2D).pot());
     }
 
     @Test
-    void ASubFullDrawBelowTheReseedAmountDoesNotReseedUntilTheNextCap() {
-        LotteryMath.PotOutcome.Payable first = payable(1, 1_500, 1_000);
-        assertEquals(750, first.pot());
-        assertEquals(750, first.newHouseBalance());
-        assertEquals(750, first.newBaseline());
-        LotteryMath.PotOutcome.Payable second = payable(1, 1_500, 750);
-        assertEquals(1_500, second.pot());
-        assertEquals(RESEED, second.newBaseline());
-        assertEquals(true, second.capBound());
+    void rejectsNonFiniteOrNegativeMultipliers() {
+        assertThrows(IllegalArgumentException.class,
+                () -> LotteryMath.calculate(2, 20_000, 10_000, 1_000, Double.NaN));
+        assertThrows(IllegalArgumentException.class,
+                () -> LotteryMath.calculate(2, 20_000, 10_000, 1_000, Double.POSITIVE_INFINITY));
+        assertThrows(IllegalArgumentException.class,
+                () -> LotteryMath.calculate(2, 20_000, 10_000, 1_000, -0.1D));
     }
 
-    private static LotteryMath.PotOutcome.Payable payable(int entrants, long balance, long baseline) {
+    private static LotteryMath.PotOutcome.Payable payable(int entrants, long balance, long baseline,
+                                                           long fallback, double multiplier) {
         return assertInstanceOf(LotteryMath.PotOutcome.Payable.class,
-                LotteryMath.calculate(entrants, balance, baseline, RESEED));
+                LotteryMath.calculate(entrants, balance, baseline, fallback, multiplier));
     }
 
-    private static void assertReason(int entrants, long balance, long baseline,
-                                     LotteryMath.RefusalReason reason) {
+    private static void assertReason(int entrants, long balance, long baseline, long fallback,
+                                     double multiplier, LotteryMath.RefusalReason reason) {
         LotteryMath.PotOutcome.Refused refused = assertInstanceOf(LotteryMath.PotOutcome.Refused.class,
-                LotteryMath.calculate(entrants, balance, baseline, RESEED));
+                LotteryMath.calculate(entrants, balance, baseline, fallback, multiplier));
         assertEquals(reason, refused.reason());
     }
 }

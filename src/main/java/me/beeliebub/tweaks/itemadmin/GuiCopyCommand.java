@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.itemadmin;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.logging.ConsoleEventLog;
+import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.utils.GuiCopyJavaGenerator;
 import org.bukkit.Location;
@@ -109,6 +111,9 @@ public class GuiCopyCommand implements CommandExecutor, TabCompleter {
 
         File outputFile = new File(copiesFolder, name + ".yml");
         boolean overwriting = outputFile.exists();
+        String copyName = name;
+        String actorName = player.getName();
+        java.util.UUID actorId = player.getUniqueId();
 
         CompletableFuture.runAsync(() -> {
             YamlConfiguration yaml = new YamlConfiguration();
@@ -130,11 +135,15 @@ public class GuiCopyCommand implements CommandExecutor, TabCompleter {
 
             try {
                 yaml.save(outputFile);
+                ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+                if (eventLog != null) eventLog.log(LoggingPaths.ITEMADMIN_GUI_COPY, () ->
+                        "[ItemAdmin] " + ConsoleEventLog.actorLabel(actorName, actorId)
+                                + " saved GUI copy " + copyName + " (" + size + " slots)");
             } catch (IOException e) {
-                plugin.getLogger().log(Level.SEVERE, "Failed to save guicopy '" + name + "'", e);
+                plugin.getLogger().log(Level.SEVERE, "Failed to save guicopy '" + copyName + "'", e);
             }
         }).exceptionally(error -> {
-            plugin.getLogger().log(Level.SEVERE, "Failed to generate guicopy '" + name + "'", error);
+            plugin.getLogger().log(Level.SEVERE, "Failed to generate guicopy '" + copyName + "'", error);
             return null;
         });
 

@@ -138,7 +138,7 @@ commands:
     usage: /house <balance|add|remove|set|pay>
   lottery:
     description: View the server-wide lottery and administer draws.
-    usage: /lottery <info|draw|entries|baseline <amount>>
+    usage: /lottery info | entries | draw | baseline <amount> | fallback [<amount>]
     aliases: [lot]
   ranks:
     description: List all ranks, or edit them (admin).
@@ -168,6 +168,9 @@ commands:
       /region flags [name] | info [name]
       /region setparent <child> <parent> | unsetparent <child>
       /region gui [name]
+      /region list [player|page] [page]
+      /region tp <name> [world]
+      /region togglebypass
     aliases: [rg]
   skyblock:
     description: Travel to your Skyblock island or its spawn.
