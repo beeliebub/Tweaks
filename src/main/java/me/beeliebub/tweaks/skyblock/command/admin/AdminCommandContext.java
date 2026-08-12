@@ -10,10 +10,13 @@ import me.beeliebub.tweaks.skyblock.challenge.ChallengeAdminService;
 import me.beeliebub.tweaks.permissions.Permissions;
 import org.bukkit.Material;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.nio.file.Path;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /** Shared state and small command primitives for the console-safe administrator handlers. */
 public final class AdminCommandContext {
@@ -64,9 +67,42 @@ public final class AdminCommandContext {
     }
 
     public boolean report(CommandSender sender, boolean success, String subject, String message) {
-        sender.sendMessage(success ? Messages.SKYBLOCK.saved(subject)
-                : Messages.SKYBLOCK.invalidInput(message == null || message.isBlank() ? "operation rejected" : message));
+        return report(sender, success, subject, message, CompletableFuture.completedFuture(null));
+    }
+
+    public boolean report(CommandSender sender, boolean success, String subject, String message,
+                          CompletableFuture<Void> persistence) {
+        if (!success) {
+            sender.sendMessage(Messages.SKYBLOCK.invalidInput(message == null || message.isBlank()
+                    ? "operation rejected" : message));
+            return true;
+        }
+        CompletableFuture<Void> durable = persistence == null
+                ? CompletableFuture.completedFuture(null) : persistence;
+        durable.whenComplete((ignored, error) -> plugin.getServer().getScheduler().runTask(plugin, () -> {
+            if (!plugin.isEnabled() || !reportingActorUsable(sender)) return;
+            if (error != null) {
+                Throwable cause = unwrap(error);
+                sender.sendMessage(Messages.SKYBLOCK.invalidInput(cause.getMessage() == null
+                        ? "persistence failed" : cause.getMessage()));
+                return;
+            }
+            sender.sendMessage(Messages.SKYBLOCK.saved(subject));
+        }));
         return true;
+    }
+
+    private boolean reportingActorUsable(CommandSender sender) {
+        return !(sender instanceof Player player) || actorUsable(player);
+    }
+
+    private static Throwable unwrap(Throwable error) {
+        Throwable cause = error;
+        while ((cause instanceof CompletionException || cause instanceof java.util.concurrent.ExecutionException)
+                && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause;
     }
 
     public boolean invalid(CommandSender sender, String value) {

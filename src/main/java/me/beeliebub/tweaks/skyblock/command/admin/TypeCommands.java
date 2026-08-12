@@ -35,14 +35,14 @@ public final class TypeCommands {
                     "Islands using this type retain their state but new islands cannot use it.",
                     AdminArgumentParser.hasTrailingConfirm(args))) return true;
             TypeRegistry.DeleteResult result = context.typeAdmin.deleteType(args[2]);
-            return context.report(sender, result.deleted(), "island type", result.reason());
+            return context.report(sender, result.deleted(), "island type", result.reason(), result.persistence());
         }
         if (action.equals("create") && args.length >= 3
                 && (args.length < 5 || !looksLikeDifficultyList(args[4]))) {
             String displayName = args.length == 3 ? args[2] : AdminCommandContext.join(args, 3);
             TypeAdminService.EditResult result = context.typeAdmin.createType(new IslandType(args[2], displayName,
                     Set.of(), "", List.of(), "PLAINS", Set.of()));
-            return context.report(sender, result.success(), "island type", result.message());
+            return context.report(sender, result.success(), "island type", result.message(), result.persistence());
         }
         if ((action.equals("create") || action.equals("edit")) && args.length >= 5) {
             Set<String> difficulties = new LinkedHashSet<>(Arrays.asList(args[4].toLowerCase(Locale.ROOT).split(",")));
@@ -51,17 +51,17 @@ public final class TypeCommands {
             if (action.equals("create")) {
                 TypeAdminService.EditResult result = context.typeAdmin.createType(new IslandType(args[2], args[3], difficulties,
                         template, List.of(), biome, Set.of()));
-                return context.report(sender, result.success(), "island type", result.message());
+                return context.report(sender, result.success(), "island type", result.message(), result.persistence());
             }
             TypeAdminService.EditResult result = context.typeAdmin.updateType(args[2], current -> new IslandType(current.id(), args[3],
                     difficulties, args.length >= 6 ? template : current.templateId(), current.kit(),
                     args.length >= 7 ? biome : current.biome(), current.allowedChallengeIds()));
-            return context.report(sender, result.success(), "island type", result.message());
+            return context.report(sender, result.success(), "island type", result.message(), result.persistence());
         }
         if (action.equals("allowed") && args.length >= 4) {
             TypeAdminService.EditResult result = context.typeAdmin.setAllowedChallenges(args[2],
                     new LinkedHashSet<>(Arrays.asList(args).subList(3, args.length)));
-            return context.report(sender, result.success(), "allowed challenges", result.message());
+            return context.report(sender, result.success(), "allowed challenges", result.message(), result.persistence());
         }
         return context.invalidUsage(sender, "types");
     }
@@ -79,13 +79,13 @@ public final class TypeCommands {
                     "Island types using this difficulty will no longer offer it.",
                     AdminArgumentParser.hasTrailingConfirm(args))) return true;
             TypeRegistry.DeleteResult result = context.typeAdmin.deleteDifficulty(args[2]);
-            return context.report(sender, result.deleted(), "difficulty", result.reason());
+            return context.report(sender, result.deleted(), "difficulty", result.reason(), result.persistence());
         }
         if (action.equals("create") && args.length >= 3 && (args.length < 5 || !isDouble(args[4]))) {
             String displayName = args.length == 3 ? args[2] : AdminCommandContext.join(args, 3);
             TypeAdminService.EditResult result = context.typeAdmin.createDifficulty(new IslandDifficulty(args[2], displayName,
                     context.runtime.typeRegistry().difficulties().size()));
-            return context.report(sender, result.success(), "difficulty", result.message());
+            return context.report(sender, result.success(), "difficulty", result.message(), result.persistence());
         }
         if ((action.equals("create") || action.equals("edit")) && (args.length == 5 || args.length == 6)) {
             double multiplier = AdminArgumentParser.requireDouble(args[4]);
@@ -93,7 +93,7 @@ public final class TypeCommands {
                     : context.runtime.typeRegistry().difficulties().size();
             TypeAdminService.EditResult result = context.typeAdmin.registerDifficulty(
                     new IslandDifficulty(args[2], args[3], order, multiplier));
-            return context.report(sender, result.success(), "difficulty", result.message());
+            return context.report(sender, result.success(), "difficulty", result.message(), result.persistence());
         }
         return context.invalidUsage(sender, "difficulties");
     }
@@ -132,7 +132,7 @@ public final class TypeCommands {
             default -> null;
         };
         if (result == null) return context.invalid(sender, "type field " + field);
-        return context.report(sender, result.success(), "island type", result.message());
+        return context.report(sender, result.success(), "island type", result.message(), result.persistence());
     }
 
     private boolean setDifficultyField(CommandSender sender, String[] args) {
@@ -151,7 +151,7 @@ public final class TypeCommands {
                 default -> throw new IllegalArgumentException("unknown difficulty field " + args[3]);
             };
             TypeAdminService.EditResult result = context.typeAdmin.registerDifficulty(next);
-            return context.report(sender, result.success(), "difficulty", result.message());
+            return context.report(sender, result.success(), "difficulty", result.message(), result.persistence());
         } catch (RuntimeException error) {
             return context.invalid(sender, error.getMessage() == null ? "difficulty" : error.getMessage());
         }

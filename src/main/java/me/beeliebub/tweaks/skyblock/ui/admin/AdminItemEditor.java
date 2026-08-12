@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.skyblock.ui.admin;
 
+import me.beeliebub.tweaks.core.Messages;
 import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -16,6 +17,7 @@ import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,7 +47,8 @@ public final class AdminItemEditor implements Listener {
         List<ItemStack> values = initial == null ? List.of() : initial;
         if (values.size() > size) throw new IllegalArgumentException("Too many items for editor");
         Session session = new Session(player, access, onSave);
-        Inventory inventory = Bukkit.createInventory(session, size, title == null ? Component.text("Items") : title);
+        Inventory inventory = Bukkit.createInventory(session, size,
+                title == null ? Messages.SKYBLOCK.text("Items", NamedTextColor.AQUA) : title);
         session.inventory = inventory;
         for (int index = 0; index < values.size(); index++) {
             ItemStack item = values.get(index);

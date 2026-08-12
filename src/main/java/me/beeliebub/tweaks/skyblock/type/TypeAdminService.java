@@ -8,6 +8,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.UnaryOperator;
 
 /** Dialog-free type and difficulty authoring operations. */
@@ -27,9 +28,9 @@ public final class TypeAdminService {
     }
 
     /** Raw upsert used by registry loading; command and GUI paths should use create/update methods. */
-    public void registerType(IslandType type) {
+    public CompletableFuture<Void> registerType(IslandType type) {
         registry.registerType(type);
-        registry.saveAsync();
+        return registry.saveAsync();
     }
 
     public EditResult createType(IslandType type) {
@@ -37,8 +38,7 @@ public final class TypeAdminService {
         if (registry.type(type.id()).isPresent()) return EditResult.failure("type already exists");
         try {
             registry.registerType(type);
-            registry.saveAsync();
-            return EditResult.success("saved");
+            return EditResult.success("saved", registry.saveAsync());
         } catch (RuntimeException error) {
             return failure(error);
         }
@@ -51,8 +51,7 @@ public final class TypeAdminService {
             IslandType next = Objects.requireNonNull(mutator.apply(current), "updated type");
             if (!current.id().equals(next.id())) return EditResult.failure("type id cannot change");
             registry.registerType(next);
-            registry.saveAsync();
-            return EditResult.success("saved");
+            return EditResult.success("saved", registry.saveAsync());
         } catch (RuntimeException error) {
             return failure(error);
         }
@@ -93,8 +92,7 @@ public final class TypeAdminService {
         if (difficulty == null) return EditResult.failure("difficulty is required");
         try {
             registry.registerDifficulty(difficulty);
-            registry.saveAsync();
-            return EditResult.success("saved");
+            return EditResult.success("saved", registry.saveAsync());
         } catch (RuntimeException error) {
             return failure(error);
         }
@@ -109,15 +107,17 @@ public final class TypeAdminService {
     public TypeRegistry.DeleteResult deleteType(String id) {
         if (!backupSucceeded()) return new TypeRegistry.DeleteResult(false, 0, "registry backup failed");
         TypeRegistry.DeleteResult result = registry.deleteType(id, islands);
-        if (result.deleted()) registry.saveAsync();
-        return result;
+        return result.deleted()
+                ? new TypeRegistry.DeleteResult(result.deleted(), result.references(), result.reason(), registry.saveAsync())
+                : result;
     }
 
     public TypeRegistry.DeleteResult deleteDifficulty(String id) {
         if (!backupSucceeded()) return new TypeRegistry.DeleteResult(false, 0, "registry backup failed");
         TypeRegistry.DeleteResult result = registry.deleteDifficulty(id, islands);
-        if (result.deleted()) registry.saveAsync();
-        return result;
+        return result.deleted()
+                ? new TypeRegistry.DeleteResult(result.deleted(), result.references(), result.reason(), registry.saveAsync())
+                : result;
     }
 
     private boolean backupSucceeded() {
@@ -134,8 +134,19 @@ public final class TypeAdminService {
         return EditResult.failure(error.getMessage() == null ? "type rejected" : error.getMessage());
     }
 
-    public record EditResult(boolean success, String message) {
-        static EditResult success(String message) { return new EditResult(true, message); }
+    public record EditResult(boolean success, String message, CompletableFuture<Void> persistence) {
+        public EditResult(boolean success, String message) {
+            this(success, message, CompletableFuture.completedFuture(null));
+        }
+
+        public EditResult {
+            persistence = persistence == null ? CompletableFuture.completedFuture(null) : persistence;
+        }
+
+        static EditResult success(String message, CompletableFuture<Void> persistence) {
+            return new EditResult(true, message, persistence);
+        }
+
         static EditResult failure(String message) { return new EditResult(false, message); }
     }
 }

@@ -86,9 +86,8 @@ public final class IslandScreens {
         buttons.add(button("Force delete", "Delete this island", target -> AdminConfirm.open(target, "island " + id, island.memberCount(),
                 "The island, wallet, and member inventories will be removed.", () -> openIslands(target), actor -> {
                     SkyblockAdminService.Result result = admin.forceDelete(runtime.islandManager().byId(id).orElse(null));
-                    report(actor, result, "island deletion");
-                    openIslands(actor);
-                }, this::guard)));
+                    context.report(actor, result, "island deletion", this::openIslands);
+                }, this::guard, context::reportGuardFailure)));
         show(player, Messages.SKYBLOCK.text("Island: " + id, NamedTextColor.AQUA),
                 List.of("Owner: " + Bukkit.getOfflinePlayer(island.owner()).getName(), "Members: " + island.memberCount(),
                         "Type: " + island.typeId(), "Size: " + island.size()), buttons, this::openIslands);
@@ -98,10 +97,9 @@ public final class IslandScreens {
         List<ActionButton> buttons = new ArrayList<>();
         Island island = runtime.islandManager().byId(id).orElse(null);
         if (island == null) { openIslands(player); return; }
-        for (IslandSize size : IslandSize.values()) if (size.chunks() > island.size().chunks()) buttons.add(button(size.name(), "Increase to " + size.name(), target -> {
+        for (IslandSize size : IslandSize.values()) if (size.chunks() > island.size().chunks()) buttons.add(mutationButton(size.name(), "Increase to " + size.name(), target -> {
             SkyblockAdminService.Result result = admin.setSize(runtime.islandManager().byId(id).orElse(null), size);
-            report(target, result, "island size");
-            islandDetail(target, id);
+            context.report(target, result, "island size", next -> islandDetail(next, id));
         }));
         show(player, Messages.SKYBLOCK.text("Resize Island", NamedTextColor.AQUA), List.of("Only larger sizes are available."), buttons,
                 target -> islandDetail(target, id));
@@ -112,7 +110,7 @@ public final class IslandScreens {
         if (island == null) { openIslands(player); return; }
         List<ActionButton> buttons = runtime.challengeRegistry().challenges().stream()
                 .filter(challenge -> runtime.challengeRegistry().availableTo(challenge, island))
-                .map(challenge -> button(challenge.id(), challenge.displayName(), target -> {
+                .map(challenge -> mutationButton(challenge.id(), challenge.displayName(), target -> {
                     SkyblockAdminService.Result result = admin.forceComplete(
                             runtime.islandManager().byId(id).orElse(null), challenge.id(), target);
                     if (result.success()) {
@@ -122,7 +120,7 @@ public final class IslandScreens {
                     }
                     target.sendMessage(result.success() ? Messages.SKYBLOCK.challengeClaimed(challenge.id())
                             : Messages.SKYBLOCK.invalidInput(result.message()));
-                    islandDetail(target, id);
+                    if (result.success()) islandDetail(target, id);
                 })).toList();
         show(player, Messages.SKYBLOCK.text("Complete Challenge", NamedTextColor.AQUA),
                 List.of("Choose an available challenge for this island type."), buttons,
@@ -142,7 +140,7 @@ public final class IslandScreens {
     private ActionButton button(String label, String tooltip, Consumer<Player> action) {
         return context.button(label, tooltip, action);
     }
-    private void report(Player player, Object result, String subject) {
-        context.report(player, result, subject);
+    private ActionButton mutationButton(String label, String tooltip, Consumer<Player> action) {
+        return context.mutationButton(label, tooltip, action);
     }
 }

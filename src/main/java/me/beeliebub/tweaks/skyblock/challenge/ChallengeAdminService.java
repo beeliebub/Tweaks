@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 /** Dialog-free authoring operations for challenge definitions. */
 public final class ChallengeAdminService {
@@ -35,8 +36,7 @@ public final class ChallengeAdminService {
         if (registry.challenge(challenge.id()).isPresent()) return new EditResult(false, "challenge already exists");
         try {
             registry.register(challenge);
-            registry.saveAsync();
-            return new EditResult(true, "Counters start at zero; blocks placed before this challenge existed are untainted.");
+            return saved("Counters start at zero; blocks placed before this challenge existed are untainted.");
         } catch (RuntimeException error) {
             return new EditResult(false, error.getMessage() == null ? "challenge rejected" : error.getMessage());
         }
@@ -44,16 +44,16 @@ public final class ChallengeAdminService {
     public EditResult delete(String id) {
         if (!backupSucceeded()) return new EditResult(false, "registry backup failed");
         ChallengeRegistry.DeleteResult result = registry.deleteChallenge(id);
-        if (result.deleted()) registry.saveAsync();
-        return new EditResult(result.deleted(), result.deleted() ? "deleted"
-                : result.reason() + (result.references() == 0 ? "" : " (" + result.references() + " reference(s))"));
+        return result.deleted() ? saved("deleted") : new EditResult(false,
+                result.reason() + (result.references() == 0 ? "" : " (" + result.references() + " reference(s))"));
     }
 
     public EditResult createCategory(ChallengeCategory category) {
+        if (category == null) return new EditResult(false, "category is required");
+        if (registry.category(category.id()).isPresent()) return new EditResult(false, "category already exists");
         try {
             registry.registerCategory(category);
-            registry.saveAsync();
-            return new EditResult(true, "category saved");
+            return saved("category saved");
         } catch (RuntimeException error) {
             return new EditResult(false, error.getMessage() == null ? "category rejected" : error.getMessage());
         }
@@ -62,9 +62,8 @@ public final class ChallengeAdminService {
     public EditResult deleteCategory(String id) {
         if (!backupSucceeded()) return new EditResult(false, "registry backup failed");
         ChallengeRegistry.DeleteResult result = registry.deleteCategory(id);
-        if (result.deleted()) registry.saveAsync();
-        return new EditResult(result.deleted(), result.deleted()
-                ? result.reason() : result.reason() + " (" + result.references() + " reference(s))");
+        return result.deleted() ? saved(result.reason()) : new EditResult(false,
+                result.reason() + " (" + result.references() + " reference(s))");
     }
 
     public EditResult addRequirement(String id, ChallengeRequirement requirement) {
@@ -142,8 +141,7 @@ public final class ChallengeAdminService {
             registry.register(new Challenge(challenge.id(), categoryId, challenge.displayName(), challenge.description(),
                     challenge.requirements(), challenge.prerequisites(), challenge.anyOfGroups(), challenge.rewards(),
                     challenge.typeIds()));
-            registry.saveAsync();
-            return new EditResult(true, "challenge saved");
+            return saved("challenge saved");
         } catch (RuntimeException error) {
             return failure(error);
         }
@@ -161,8 +159,7 @@ public final class ChallengeAdminService {
         if (category == null) return new EditResult(false, "unknown challenge category");
         try {
             registry.registerCategory(new ChallengeCategory(category.id(), category.displayName(), order));
-            registry.saveAsync();
-            return new EditResult(true, "category saved");
+            return saved("category saved");
         } catch (RuntimeException error) {
             return failure(error);
         }
@@ -173,8 +170,7 @@ public final class ChallengeAdminService {
         if (category == null) return new EditResult(false, "unknown challenge category");
         try {
             registry.registerCategory(new ChallengeCategory(category.id(), displayName, order));
-            registry.saveAsync();
-            return new EditResult(true, "category saved");
+            return saved("category saved");
         } catch (RuntimeException error) {
             return failure(error);
         }
@@ -207,8 +203,7 @@ public final class ChallengeAdminService {
             registry.register(new Challenge(challenge.id(), challenge.categoryId(), displayName,
                     description, challenge.requirements(), challenge.prerequisites(), challenge.anyOfGroups(),
                     challenge.rewards(), challenge.typeIds()));
-            registry.saveAsync();
-            return new EditResult(true, "challenge saved");
+            return saved("challenge saved");
         } catch (RuntimeException error) {
             return new EditResult(false, error.getMessage() == null ? "challenge rejected" : error.getMessage());
         }
@@ -221,8 +216,7 @@ public final class ChallengeAdminService {
             registry.register(new Challenge(challenge.id(), challenge.categoryId(), displayName,
                     challenge.description(), challenge.requirements(), challenge.prerequisites(), challenge.anyOfGroups(),
                     challenge.rewards(), challenge.typeIds()));
-            registry.saveAsync();
-            return new EditResult(true, "challenge saved");
+            return saved("challenge saved");
         } catch (RuntimeException error) {
             return new EditResult(false, error.getMessage() == null ? "challenge rejected" : error.getMessage());
         }
@@ -235,8 +229,7 @@ public final class ChallengeAdminService {
             registry.register(new Challenge(challenge.id(), challenge.categoryId(), challenge.displayName(),
                     description, challenge.requirements(), challenge.prerequisites(), challenge.anyOfGroups(),
                     challenge.rewards(), challenge.typeIds()));
-            registry.saveAsync();
-            return new EditResult(true, "challenge saved");
+            return saved("challenge saved");
         } catch (RuntimeException error) {
             return new EditResult(false, error.getMessage() == null ? "challenge rejected" : error.getMessage());
         }
@@ -272,8 +265,7 @@ public final class ChallengeAdminService {
         try {
             registry.register(new Challenge(current.id(), current.categoryId(), current.displayName(),
                     current.description(), requirements, prerequisites, groups, rewards, typeIds));
-            registry.saveAsync();
-            return new EditResult(true, "challenge saved");
+            return saved("challenge saved");
         } catch (RuntimeException error) {
             return new EditResult(false, error.getMessage() == null ? "challenge rejected" : error.getMessage());
         }
@@ -292,8 +284,20 @@ public final class ChallengeAdminService {
         return from >= 0 && to >= 0 && from < size && to < size;
     }
 
+    private EditResult saved(String message) {
+        return new EditResult(true, message, registry.saveAsync());
+    }
+
     private static EditResult failure(RuntimeException error) {
         return new EditResult(false, error.getMessage() == null ? "challenge rejected" : error.getMessage());
     }
-    public record EditResult(boolean success, String message) { }
+    public record EditResult(boolean success, String message, CompletableFuture<Void> persistence) {
+        public EditResult(boolean success, String message) {
+            this(success, message, CompletableFuture.completedFuture(null));
+        }
+
+        public EditResult {
+            persistence = persistence == null ? CompletableFuture.completedFuture(null) : persistence;
+        }
+    }
 }

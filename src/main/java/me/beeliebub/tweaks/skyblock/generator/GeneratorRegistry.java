@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -62,7 +63,7 @@ public final class GeneratorRegistry {
                         outputs.put(material, Double.parseDouble(String.valueOf(entry.getValue())));
                     }
                 }
-                loaded.put(id.toLowerCase(), new GeneratorTier(id, name, outputs));
+                loaded.put(id.toLowerCase(Locale.ROOT), new GeneratorTier(id, name, outputs));
             } catch (RuntimeException error) {
                 logger.log(Level.WARNING, "Skipping malformed Skyblock generator tier: " + raw, error);
             }
@@ -76,7 +77,7 @@ public final class GeneratorRegistry {
     }
 
     public synchronized Optional<GeneratorTier> tier(String id) {
-        return id == null ? Optional.empty() : Optional.ofNullable(tiers.get(id.toLowerCase()));
+        return id == null ? Optional.empty() : Optional.ofNullable(tiers.get(id.toLowerCase(Locale.ROOT)));
     }
 
     public synchronized Collection<GeneratorTier> tiers() {
@@ -113,7 +114,7 @@ public final class GeneratorRegistry {
 
     public synchronized DeleteResult delete(String id, IslandManager islands) {
         if (id == null || "default".equalsIgnoreCase(id)) return new DeleteResult(false, 0, "default tier is protected");
-        GeneratorTier tier = tiers.get(id.toLowerCase());
+        GeneratorTier tier = tiers.get(id.toLowerCase(Locale.ROOT));
         if (tier == null) return new DeleteResult(false, 0, "unknown tier");
         long uses = islands == null ? 0 : islands.all().stream().filter(i -> tier.id().equals(i.generatorTierId())).count();
         if (uses > 0) return new DeleteResult(false, uses, "tier is in use");
@@ -121,5 +122,14 @@ public final class GeneratorRegistry {
         return new DeleteResult(true, 0, "deleted");
     }
 
-    public record DeleteResult(boolean deleted, long references, String reason) { }
+    public record DeleteResult(boolean deleted, long references, String reason,
+                               CompletableFuture<Void> persistence) {
+        public DeleteResult(boolean deleted, long references, String reason) {
+            this(deleted, references, reason, CompletableFuture.completedFuture(null));
+        }
+
+        public DeleteResult {
+            persistence = persistence == null ? CompletableFuture.completedFuture(null) : persistence;
+        }
+    }
 }

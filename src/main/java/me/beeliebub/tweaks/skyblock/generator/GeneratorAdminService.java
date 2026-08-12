@@ -7,6 +7,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.util.Objects;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /** Dialog-free generator tier authoring operations. */
 public final class GeneratorAdminService {
@@ -30,15 +31,15 @@ public final class GeneratorAdminService {
             catch (RuntimeException ignored) { return new GeneratorRegistry.DeleteResult(false, 0, "registry backup failed"); }
         }
         GeneratorRegistry.DeleteResult result = registry.delete(id, islands);
-        if (result.deleted()) registry.saveAsync();
-        return result;
+        return result.deleted()
+                ? new GeneratorRegistry.DeleteResult(result.deleted(), result.references(), result.reason(), registry.saveAsync())
+                : result;
     }
     public EditResult register(GeneratorTier tier) {
         if (tier == null) return EditResult.failure("generator tier is required");
         try {
             registry.register(tier);
-            registry.saveAsync();
-            return EditResult.success("saved");
+            return EditResult.success("saved", registry.saveAsync());
         } catch (RuntimeException error) {
             return EditResult.failure(error.getMessage() == null ? "generator tier rejected" : error.getMessage());
         }
@@ -88,8 +89,19 @@ public final class GeneratorAdminService {
         return register(new GeneratorTier(current.id(), displayName, current.outputs()));
     }
 
-    public record EditResult(boolean success, String message) {
-        static EditResult success(String message) { return new EditResult(true, message); }
+    public record EditResult(boolean success, String message, CompletableFuture<Void> persistence) {
+        public EditResult(boolean success, String message) {
+            this(success, message, CompletableFuture.completedFuture(null));
+        }
+
+        public EditResult {
+            persistence = persistence == null ? CompletableFuture.completedFuture(null) : persistence;
+        }
+
+        static EditResult success(String message, CompletableFuture<Void> persistence) {
+            return new EditResult(true, message, persistence);
+        }
+
         static EditResult failure(String message) { return new EditResult(false, message); }
     }
 }

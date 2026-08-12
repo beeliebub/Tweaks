@@ -3,6 +3,8 @@ package me.beeliebub.tweaks.skyblock;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.Objects;
 
 /**
@@ -99,16 +101,25 @@ public final class SkyblockConfig {
     }
 
     /** Persists the paired defaults together so a type and difficulty are updated as one change. */
-    public void setDefaults(String typeId, String difficultyId) {
+    public boolean setDefaults(String typeId, String difficultyId) {
         FileConfiguration config = config();
         config.set(DEFAULT_TYPE_PATH, configuredValue(typeId, DEFAULT_TYPE));
         config.set(DEFAULT_DIFFICULTY_PATH, configuredValue(difficultyId, DEFAULT_DIFFICULTY));
-        plugin.saveConfig();
+        try {
+            config.save(new File(plugin.getDataFolder(), "config.yml"));
+            return true;
+        } catch (IOException | RuntimeException ignored) {
+            return false;
+        }
     }
 
     /** Explicitly named alias used by the admin authoring surface. */
-    public void setDefaultSelection(String typeId, String difficultyId) {
-        setDefaults(typeId, difficultyId);
+    public boolean setDefaultSelection(String typeId, String difficultyId) {
+        try {
+            return setDefaults(typeId, difficultyId);
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 
     public int islandY() {

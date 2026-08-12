@@ -77,7 +77,7 @@ public final class WorldScreens {
                             actor.sendMessage(failure == null ? Messages.SKYBLOCK.saved("template") : Messages.SKYBLOCK.invalidInput(failure.getMessage()));
                             openTemplates(actor);
                         }));
-                    }, this::guard)));
+                    }, this::guard, context::reportGuardFailure)));
             show(player, Messages.SKYBLOCK.text("Template: " + id, NamedTextColor.AQUA),
                     List.of(template.width() + "x" + template.height() + "x" + template.depth(),
                             "Block entities: " + template.blockEntities().size()), buttons, this::openTemplates);
@@ -96,14 +96,14 @@ public final class WorldScreens {
         TemplateCapture.CaptureEstimate estimate;
         try { estimate = templateAdmin.estimate(bounds, runtime.world().getMinHeight(), runtime.world().getMaxHeight()); }
         catch (RuntimeException error) { player.sendMessage(Messages.SKYBLOCK.invalidInput("template selection")); openTemplates(player); return; }
-        input(player, "Capture Template", List.of("id"), List.of("Estimated volume: " + estimate.width() + "x" + estimate.height()
+        input(player, "Capture Template", List.of("identifier"), List.of("Estimated volume: " + estimate.width() + "x" + estimate.height()
                 + "x" + estimate.depth() + " = " + estimate.estimatedBlocks() + " blocks."), (target, values) -> {
             if (!templateCaptures.add(target.getUniqueId())) {
                 target.sendMessage(Messages.SKYBLOCK.invalidInput("template capture already in progress"));
                 return;
             }
             try {
-                String templateId = targetValue(values, "id");
+                String templateId = targetValue(values, "identifier");
                 Island.SpawnOffset offset = new Island.SpawnOffset(8, 0, 8);
                 var template = templateAdmin.capture(BukkitTemplateSupport.source(runtime.world()), bounds,
                         runtime.world().getMinHeight(), runtime.world().getMaxHeight(), templateId, offset);
@@ -132,13 +132,12 @@ public final class WorldScreens {
         List<ActionButton> buttons = new ArrayList<>();
         buttons.add(button("Get selection wand", "Give the configured region-selection wand",
                 target -> { regionWand.give(target); openSpawn(target); }));
-        buttons.add(button("Record Spawn", "Use the current wand selection and player location", this::recordSpawn));
+         buttons.add(mutationButton("Record Spawn", "Use the current wand selection and player location", this::recordSpawn));
         if (data != null) buttons.add(button("Clear Spawn", "Use the vanilla fallback after clearing", target -> AdminConfirm.open(target,
                 "Skyblock spawn", 0, "The recorded spawn and bounds will be removed.", () -> openSpawn(target), actor -> {
                     SkyblockAdminService.Result result = admin.clearSpawn();
-                    report(actor, result, "spawn");
-                    openSpawn(actor);
-                }, this::guard)));
+                    context.report(actor, result, "spawn", this::openSpawn);
+                }, this::guard, context::reportGuardFailure)));
         List<String> body = new ArrayList<>(selectionSummary(player));
         body.add(data == null ? "Not recorded." : "Recorded bounds: " + data.bounds());
         show(player, Messages.SKYBLOCK.text("Spawn", NamedTextColor.AQUA), body, buttons, hub);
@@ -155,8 +154,7 @@ public final class WorldScreens {
         var location = player.getLocation();
         SkyblockAdminService.Result result = admin.recordSpawn(new SkyblockSpawn.SpawnData(runtime.world().getKey().asString(), bounds,
                 location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch()));
-        report(player, result, "spawn");
-        openSpawn(player);
+        context.report(player, result, "spawn", this::openSpawn);
     }
 
     private boolean guard(Player player) { return context.guard(player); }
@@ -172,8 +170,8 @@ public final class WorldScreens {
     private ActionButton button(String label, String tooltip, Consumer<Player> action) {
         return context.button(label, tooltip, action);
     }
-    private void report(Player player, Object result, String subject) {
-        context.report(player, result, subject);
+    private ActionButton mutationButton(String label, String tooltip, Consumer<Player> action) {
+        return context.mutationButton(label, tooltip, action);
     }
     private static IslandGrid.ChunkBounds bounds(RegionSelection selection) {
         int minX = Math.min(GeometryUtil.chunkX(selection.pos1()), GeometryUtil.chunkX(selection.pos2()));

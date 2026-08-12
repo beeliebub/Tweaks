@@ -14,6 +14,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -101,11 +102,11 @@ public final class TypeRegistry {
     }
 
     public Optional<IslandDifficulty> difficulty(String id) {
-        return id == null ? Optional.empty() : Optional.ofNullable(difficulties.get(id.toLowerCase()));
+        return id == null ? Optional.empty() : Optional.ofNullable(difficulties.get(id.toLowerCase(Locale.ROOT)));
     }
 
     public Optional<IslandType> type(String id) {
-        return id == null ? Optional.empty() : Optional.ofNullable(types.get(id.toLowerCase()));
+        return id == null ? Optional.empty() : Optional.ofNullable(types.get(id.toLowerCase(Locale.ROOT)));
     }
 
     public List<IslandDifficulty> difficulties() {
@@ -182,7 +183,15 @@ public final class TypeRegistry {
         return new DeleteResult(true, 0, "deleted");
     }
 
-    public record DeleteResult(boolean deleted, long references, String reason) {
+    public record DeleteResult(boolean deleted, long references, String reason,
+                               CompletableFuture<Void> persistence) {
+        public DeleteResult(boolean deleted, long references, String reason) {
+            this(deleted, references, reason, CompletableFuture.completedFuture(null));
+        }
+
+        public DeleteResult {
+            persistence = persistence == null ? CompletableFuture.completedFuture(null) : persistence;
+        }
     }
 
     private static int number(Object raw, int fallback) {

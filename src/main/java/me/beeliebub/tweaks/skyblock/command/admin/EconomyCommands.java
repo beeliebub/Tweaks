@@ -31,7 +31,7 @@ public final class EconomyCommands {
             if (outputAction.equals("set") && args.length == 6) {
                 GeneratorAdminService.EditResult result = context.generatorAdmin.setOutput(args[3],
                         AdminCommandContext.requiredMaterial(args[4]), AdminArgumentParser.requireDouble(args[5]));
-                return context.report(sender, result.success(), "generator output", result.message());
+                return context.report(sender, result.success(), "generator output", result.message(), result.persistence());
             }
             if (outputAction.equals("remove") && args.length >= 5 && args.length <= 6) {
                 Material material = AdminCommandContext.requiredMaterial(args[4]);
@@ -39,13 +39,13 @@ public final class EconomyCommands {
                         + args[3] + " " + material.name(), 0, "The selected generator output will be removed.",
                         AdminArgumentParser.hasTrailingConfirm(args))) return true;
                 GeneratorAdminService.EditResult result = context.generatorAdmin.removeOutput(args[3], material);
-                return context.report(sender, result.success(), "generator output", result.message());
+                return context.report(sender, result.success(), "generator output", result.message(), result.persistence());
             }
         }
         if (action.equals("set") && args.length >= 5 && args[3].equalsIgnoreCase("name")) {
             GeneratorAdminService.EditResult result = context.generatorAdmin.setDisplayName(args[2],
                     AdminCommandContext.join(args, 4));
-            return context.report(sender, result.success(), "generator tier", result.message());
+            return context.report(sender, result.success(), "generator tier", result.message(), result.persistence());
         }
         if (action.equals("delete") && args.length >= 3 && args.length <= 4) {
             long references = context.runtime.islandManager().all().stream()
@@ -54,15 +54,14 @@ public final class EconomyCommands {
                     "Islands using this generator tier must be moved before deletion.",
                     AdminArgumentParser.hasTrailingConfirm(args))) return true;
             GeneratorRegistry.DeleteResult result = context.generatorAdmin.delete(args[2]);
-            sender.sendMessage(result.deleted() ? Messages.SKYBLOCK.saved("generator tier")
-                    : Messages.SKYBLOCK.invalidInput(result.reason() + " (" + result.references() + " reference(s))"));
-            return true;
+            return context.report(sender, result.deleted(), "generator tier",
+                    result.reason() + " (" + result.references() + " reference(s))", result.persistence());
         }
         if (action.equals("create") && args.length >= 3
                 && (args.length < 6 || !isMaterial(args[4]) || !isDouble(args[5]))) {
             GeneratorAdminService.EditResult result = context.generatorAdmin.create(args[2],
                     args.length == 3 ? args[2] : AdminCommandContext.join(args, 3));
-            return context.report(sender, result.success(), "generator tier", result.message());
+            return context.report(sender, result.success(), "generator tier", result.message(), result.persistence());
         }
         if ((action.equals("create") || action.equals("edit")) && args.length >= 6 && (args.length - 4) % 2 == 0) {
             Map<Material, Double> outputs = new LinkedHashMap<>();
@@ -72,7 +71,7 @@ public final class EconomyCommands {
             }
             GeneratorAdminService.EditResult result = context.generatorAdmin.register(
                     new GeneratorTier(args[2], args[3], outputs));
-            return context.report(sender, result.success(), "generator tier", result.message());
+            return context.report(sender, result.success(), "generator tier", result.message(), result.persistence());
         }
         return context.invalidUsage(sender, "generators");
     }
@@ -88,12 +87,12 @@ public final class EconomyCommands {
                     "The shop entry will no longer be buyable or sellable.",
                     AdminArgumentParser.hasTrailingConfirm(args))) return true;
             ShopAdminService.DeleteResult result = context.shopAdmin.deleteDetailed(material);
-            return context.report(sender, result.success(), "shop entry", result.message());
+            return context.report(sender, result.success(), "shop entry", result.message(), result.persistence());
         }
         if (action.equals("set") && args.length == 6) {
             ShopAdminService.EditResult result = context.shopAdmin.set(AdminCommandContext.requiredMaterial(args[2]),
                     args[3], AdminArgumentParser.requireDouble(args[4]), AdminArgumentParser.requireDouble(args[5]));
-            return context.report(sender, result.success(), "shop entry", result.message());
+            return context.report(sender, result.success(), "shop entry", result.message(), result.persistence());
         }
         return context.invalidUsage(sender, "shop");
     }

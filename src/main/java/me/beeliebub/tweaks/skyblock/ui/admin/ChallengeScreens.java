@@ -24,34 +24,27 @@ import org.bukkit.Material;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.plugin.java.JavaPlugin;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.UUID;
 import java.util.function.Consumer;
 
 @SuppressWarnings("UnstableApiUsage")
 public final class ChallengeScreens {
     private final AdminScreenContext context;
-    private final JavaPlugin plugin;
     private final SkyblockBootstrap.Runtime runtime;
     private final ChallengeAdminService challengeAdmin;
     private final AdminItemEditor itemEditor;
-    private final Set<UUID> setupWizards;
     private final Consumer<Player> hub;
 
     ChallengeScreens(AdminScreenContext context, Consumer<Player> hub) {
         this.context = context;
-        this.plugin = context.plugin;
         this.runtime = context.runtime;
         this.challengeAdmin = context.challengeAdmin;
         this.itemEditor = context.itemEditor;
-        this.setupWizards = context.setupWizards;
         this.hub = hub;
     }
 
@@ -81,18 +74,18 @@ public final class ChallengeScreens {
                 button("Edit category", "Edit display name and order", target -> input(target, "Challenge Category",
                         List.of("name", "order"), List.of(), (actor, values) -> {
                             try {
-                                report(actor, challengeAdmin.editCategory(id, targetValue(values, "name"),
-                                        Integer.parseInt(targetValue(values, "order"))), "challenge category");
+                                reportAndThen(actor, challengeAdmin.editCategory(id, targetValue(values, "name"),
+                                        Integer.parseInt(targetValue(values, "order"))), "challenge category",
+                                        this::openChallenges);
                             } catch (RuntimeException error) {
                                 actor.sendMessage(Messages.SKYBLOCK.invalidInput("challenge category"));
                             }
-                            afterChallengeSave(actor, () -> openChallenges(actor));
                         }, actor -> categoryDetail(actor, id))),
                 button("Delete", "Delete this category", target -> AdminConfirm.open(target, "category " + id, references,
                         "Challenges in this category must be moved before deletion.", () -> openChallenges(target), actor -> {
-                            report(actor, challengeAdmin.deleteCategory(id), "challenge category");
-                            afterChallengeSave(actor, () -> openChallenges(actor));
-                        }, this::guard)));
+                            reportAndThen(actor, challengeAdmin.deleteCategory(id), "challenge category",
+                                    this::openChallenges);
+                        }, this::guard, context::reportGuardFailure)));
         show(player, Messages.SKYBLOCK.text("Category: " + id, NamedTextColor.AQUA),
                 List.of(category.displayName(), "Order: " + category.order(), "Challenges: " + references), buttons,
                 this::openChallenges);
@@ -149,9 +142,9 @@ public final class ChallengeScreens {
                 runtime.challengeRegistry().challengeReferenceCount(id), "Completed island state is retained, but future definitions cannot use this challenge.",
                 () -> challengesIn(target, categoryId, filter, page), actor -> {
                     ChallengeAdminService.EditResult result = challengeAdmin.delete(id);
-                    report(actor, result, "challenge");
-                    afterChallengeSave(actor, id, categoryId, filter, page);
-                }, this::guard)));
+                    reportAndThen(actor, result, "challenge",
+                            next -> challengesIn(next, categoryId, filter, page));
+                }, this::guard, context::reportGuardFailure)));
         show(player, Messages.SKYBLOCK.text("Challenge: " + id, NamedTextColor.AQUA),
                 List.of(challenge.displayName(), challenge.description(), "Category: " + challenge.categoryId(),
                         "Requirements: " + challenge.requirements().size(), "Rewards: " + challenge.rewards().size()),
@@ -176,21 +169,21 @@ public final class ChallengeScreens {
         for (int index = 0; index < challenge.requirements().size(); index++) {
             int current = index;
             ChallengeRequirement requirement = challenge.requirements().get(index);
-            buttons.add(button("Remove " + (index + 1), SkyblockDescriptions.requirement(requirement), target -> {
-                report(target, challengeAdmin.removeRequirement(id, current), "challenge requirement");
-                afterChallengeSave(target, () -> requirementsScreen(target, id, category, filter, page));
+            buttons.add(mutationButton("Remove " + (index + 1), SkyblockDescriptions.requirement(requirement), target -> {
+                reportAndThen(target, challengeAdmin.removeRequirement(id, current), "challenge requirement",
+                        next -> requirementsScreen(next, id, category, filter, page));
             }));
-            if (index > 0) buttons.add(button("Move " + (index + 1) + " up", "Reorder this requirement",
+            if (index > 0) buttons.add(mutationButton("Move " + (index + 1) + " up", "Reorder this requirement",
                     target -> {
-                        report(target, challengeAdmin.moveRequirement(id, current, current - 1), "challenge requirement");
-                        afterChallengeSave(target, () -> requirementsScreen(target, id, category, filter, page));
+                        reportAndThen(target, challengeAdmin.moveRequirement(id, current, current - 1), "challenge requirement",
+                                next -> requirementsScreen(next, id, category, filter, page));
                     }));
             buttons.add(button("Edit " + (index + 1), "Replace this requirement in place",
                     target -> editRequirementChoice(target, id, category, filter, page, current, requirement)));
-            if (index + 1 < challenge.requirements().size()) buttons.add(button("Move " + (index + 1) + " down",
+            if (index + 1 < challenge.requirements().size()) buttons.add(mutationButton("Move " + (index + 1) + " down",
                     "Reorder this requirement", target -> {
-                        report(target, challengeAdmin.moveRequirement(id, current, current + 1), "challenge requirement");
-                        afterChallengeSave(target, () -> requirementsScreen(target, id, category, filter, page));
+                        reportAndThen(target, challengeAdmin.moveRequirement(id, current, current + 1), "challenge requirement",
+                                next -> requirementsScreen(next, id, category, filter, page));
                     }));
         }
         buttons.add(button("Add", "Add a tracked or possession requirement", target -> addRequirementChoice(target, id, category, filter, page)));
@@ -262,12 +255,12 @@ public final class ChallengeScreens {
                         ChallengeRequirement requirement = new ChallengeRequirement.Tracked(
                                 new TrackKey(trackCategory, identifier),
                                 Long.parseLong(targetValue(values, "amount")));
-                        report(target, edit ? challengeAdmin.editRequirement(id, index, requirement)
-                                : challengeAdmin.addRequirement(id, requirement), "challenge requirement");
+                        reportAndThen(target, edit ? challengeAdmin.editRequirement(id, index, requirement)
+                                : challengeAdmin.addRequirement(id, requirement), "challenge requirement",
+                                next -> requirementsScreen(next, id, category, filter, page));
                     } catch (RuntimeException error) {
                         target.sendMessage(Messages.SKYBLOCK.invalidInput("tracked requirement"));
                     }
-                    afterChallengeSave(target, () -> requirementsScreen(target, id, category, filter, page));
                 }, target -> requirementsScreen(target, id, category, filter, page));
     }
 
@@ -290,25 +283,25 @@ public final class ChallengeScreens {
         input(player, "Edit Possession Requirement", List.of("amount"),
                 List.of("Material: " + material.name()), (target, values) -> {
                     try {
-                        report(target, challengeAdmin.editRequirement(id, index,
+                        reportAndThen(target, challengeAdmin.editRequirement(id, index,
                                 new ChallengeRequirement.Possession(material,
-                                        Long.parseLong(targetValue(values, "amount")))), "challenge requirement");
+                                        Long.parseLong(targetValue(values, "amount")))), "challenge requirement",
+                                next -> requirementsScreen(next, id, category, filter, page));
                     } catch (RuntimeException error) {
                         target.sendMessage(Messages.SKYBLOCK.invalidInput("possession requirement"));
                     }
-                    afterChallengeSave(target, () -> requirementsScreen(target, id, category, filter, page));
                 }, target -> requirementsScreen(target, id, category, filter, page));
     }
 
     private void possessionAmount(Material material, Player player, String id, String category, String filter, int page) {
         input(player, "Possession Amount", List.of("amount"), List.of("Material: " + material.name()), (target, values) -> {
             try {
-                report(target, challengeAdmin.addRequirement(id, new ChallengeRequirement.Possession(material,
-                        Long.parseLong(targetValue(values, "amount")))), "challenge requirement");
+                reportAndThen(target, challengeAdmin.addRequirement(id, new ChallengeRequirement.Possession(material,
+                        Long.parseLong(targetValue(values, "amount")))), "challenge requirement",
+                        next -> requirementsScreen(next, id, category, filter, page));
             } catch (RuntimeException error) {
                 target.sendMessage(Messages.SKYBLOCK.invalidInput("possession requirement"));
             }
-            afterChallengeSave(target, () -> requirementsScreen(target, id, category, filter, page));
         }, target -> materialPicker(target, "Possession Material", picked -> possessionAmount(picked, target, id, category, filter, page),
                 back -> requirementsScreen(back, id, category, filter, page), 0, ""));
     }
@@ -316,7 +309,8 @@ public final class ChallengeScreens {
     private void materialPicker(Player player, String title, Consumer<Material> selected, Consumer<Player> back,
                                 int pageNumber, String filter) {
         if (!guard(player)) return;
-        List<Material> materials = Arrays.stream(Material.values()).filter(material -> !material.isAir()).toList();
+        List<Material> materials = Arrays.stream(Material.values())
+                .filter(material -> !material.name().endsWith("_AIR") && material != Material.AIR).toList();
         AdminPage.Page<Material> page = AdminPage.create(materials, pageNumber, filter, material -> material.name());
         List<ActionButton> buttons = new ArrayList<>();
         for (Material material : page.values()) buttons.add(button(material.name(), "Choose this material", target -> selected.accept(material)));
@@ -333,13 +327,12 @@ public final class ChallengeScreens {
     }
 
     private void createCategory(Player player) {
-        input(player, "Create Category", List.of("id", "name", "order"), List.of("Category ids are lowercase."), (target, values) -> {
+        input(player, "Create Category", List.of("identifier", "name", "order"), List.of("Category ids are lowercase."), (target, values) -> {
             try {
                 ChallengeAdminService.EditResult result = challengeAdmin.createCategory(new ChallengeCategory(
-                        targetValue(values, "id"), targetValue(values, "name"), Integer.parseInt(targetValue(values, "order"))));
-                report(target, result, "challenge category");
+                        targetValue(values, "identifier"), targetValue(values, "name"), Integer.parseInt(targetValue(values, "order"))));
+                reportAndThen(target, result, "challenge category", this::openChallenges);
             } catch (RuntimeException error) { target.sendMessage(Messages.SKYBLOCK.invalidInput("challenge category")); }
-            openChallenges(target);
         }, this::openChallenges);
     }
 
@@ -351,27 +344,31 @@ public final class ChallengeScreens {
             createCategory(player);
             return;
         }
-        input(player, "Create Challenge", List.of("id", "name", "description"),
+        input(player, "Create Challenge", List.of("identifier", "name", "description"),
                 List.of("Category: " + category + ". Change it from the detail screen if needed."), (target, values) -> {
-            ChallengeAdminService.EditResult result = challengeAdmin.create(new Challenge(targetValue(values, "id"),
-                    category, targetValue(values, "name"), targetValue(values, "description"),
-                    List.of(), List.of(), List.of(), List.of(), Set.of()));
-            report(target, result, "challenge");
-            openChallenges(target);
+            try {
+                ChallengeAdminService.EditResult result = challengeAdmin.create(new Challenge(targetValue(values, "identifier"),
+                        category, targetValue(values, "name"), targetValue(values, "description"),
+                        List.of(), List.of(), List.of(), List.of(), Set.of()));
+                reportAndThen(target, result, "challenge", this::openChallenges);
+            } catch (RuntimeException error) {
+                target.sendMessage(Messages.SKYBLOCK.invalidInput(
+                        error.getMessage() == null ? "challenge" : error.getMessage()));
+            }
         }, this::openChallenges);
     }
 
     private void editChallengeText(Player player, String id, String category, String filter, int page) {
         input(player, "Challenge Text", List.of("name", "description"), List.of(), (target, values) -> {
-            report(target, challengeAdmin.editText(id, targetValue(values, "name"), targetValue(values, "description")), "challenge");
-            afterChallengeSave(target, id, category, filter, page);
+            reportAndThen(target, challengeAdmin.editText(id, targetValue(values, "name"), targetValue(values, "description")),
+                    "challenge", next -> challengeDetail(next, id, category, filter, page));
         }, target -> challengeDetail(target, id, category, filter, page));
     }
 
     private void editChallengeCategory(Player player, String id, String category, String filter, int page) {
         List<ActionButton> buttons = runtime.challengeRegistry().categories().stream().map(value -> button(value.id(), value.displayName(), target -> {
-            report(target, challengeAdmin.setCategory(id, value.id()), "challenge category");
-            afterChallengeSave(target, id, category, filter, page);
+            reportAndThen(target, challengeAdmin.setCategory(id, value.id()), "challenge category",
+                    next -> challengeDetail(next, id, category, filter, page));
         })).toList();
         show(player, Messages.SKYBLOCK.text("Challenge Category", NamedTextColor.AQUA),
                 List.of("Choose an existing category."), buttons,
@@ -395,9 +392,9 @@ public final class ChallengeScreens {
                 typeGatingPicker(target, id, category, filter, page, next);
             }));
         }
-        buttons.add(button("Save", "Save challenge type gating", target -> {
-            report(target, challengeAdmin.setTypes(id, selected), "challenge type gating");
-            afterChallengeSave(target, id, category, filter, page);
+        buttons.add(mutationButton("Save", "Save challenge type gating", target -> {
+            reportAndThen(target, challengeAdmin.setTypes(id, selected), "challenge type gating",
+                    next -> challengeDetail(next, id, category, filter, page));
         }));
         show(player, Messages.SKYBLOCK.text("Challenge Type Gating", NamedTextColor.AQUA),
                 List.of("No selected types means the challenge is available to every type."), buttons,
@@ -422,9 +419,9 @@ public final class ChallengeScreens {
                 prerequisitePicker(target, id, category, filter, page, next);
             }));
         }
-        buttons.add(button("Save", "Save prerequisites; cycles are rejected", target -> {
-            report(target, challengeAdmin.setPrerequisites(id, new ArrayList<>(selected)), "challenge prerequisites");
-            afterChallengeSave(target, id, category, filter, page);
+        buttons.add(mutationButton("Save", "Save prerequisites; cycles are rejected", target -> {
+            reportAndThen(target, challengeAdmin.setPrerequisites(id, new ArrayList<>(selected)), "challenge prerequisites",
+                    next -> challengeDetail(next, id, category, filter, page));
         }));
         show(player, Messages.SKYBLOCK.text("Prerequisites", NamedTextColor.AQUA),
                 List.of("Select the challenges that must be complete first."), buttons,
@@ -438,11 +435,11 @@ public final class ChallengeScreens {
         for (int index = 0; index < challenge.anyOfGroups().size(); index++) {
             int current = index;
             Challenge.PrerequisiteGroup group = challenge.anyOfGroups().get(index);
-            buttons.add(button("Remove group " + (index + 1), group.required() + " of " + group.challengeIds(), target -> {
+            buttons.add(mutationButton("Remove group " + (index + 1), group.required() + " of " + group.challengeIds(), target -> {
                 List<Challenge.PrerequisiteGroup> groups = new ArrayList<>(challenge.anyOfGroups());
                 groups.remove(current);
-                report(target, challengeAdmin.setAnyOfGroups(id, groups), "challenge prerequisites");
-                afterChallengeSave(target, () -> anyOfScreen(target, id, category, filter, page));
+                reportAndThen(target, challengeAdmin.setAnyOfGroups(id, groups), "challenge prerequisites",
+                        next -> anyOfScreen(next, id, category, filter, page));
             }));
         }
         buttons.add(button("Add group", "Select challenge ids and the required count", target -> anyOfGroupPicker(target, id, category, filter, page,
@@ -469,11 +466,11 @@ public final class ChallengeScreens {
                         Challenge current = runtime.challengeRegistry().challenge(id).orElseThrow();
                         List<Challenge.PrerequisiteGroup> groups = new ArrayList<>(current.anyOfGroups());
                         groups.add(new Challenge.PrerequisiteGroup(Integer.parseInt(targetValue(values, "required")), selected));
-                        report(actor, challengeAdmin.setAnyOfGroups(id, groups), "challenge prerequisites");
+                        reportAndThen(actor, challengeAdmin.setAnyOfGroups(id, groups), "challenge prerequisites",
+                                next -> anyOfScreen(next, id, category, filter, page));
                     } catch (RuntimeException error) {
                         actor.sendMessage(Messages.SKYBLOCK.invalidInput("any-of group"));
                     }
-                    afterChallengeSave(actor, () -> anyOfScreen(actor, id, category, filter, page));
                 }, actor -> anyOfGroupPicker(actor, id, category, filter, page, selected))));
         show(player, Messages.SKYBLOCK.text("Select Any-of Challenges", NamedTextColor.AQUA),
                 List.of("Select at least one challenge."), buttons,
@@ -498,17 +495,17 @@ public final class ChallengeScreens {
         for (int index = 0; index < challenge.rewards().size(); index++) {
             int current = index;
             ChallengeReward reward = challenge.rewards().get(index);
-            buttons.add(button("Remove " + (index + 1), SkyblockDescriptions.reward(reward), target -> {
-                report(target, challengeAdmin.removeReward(id, current), "challenge reward");
-                afterChallengeSave(target, () -> rewardsScreen(target, id, category, filter, page));
+            buttons.add(mutationButton("Remove " + (index + 1), SkyblockDescriptions.reward(reward), target -> {
+                reportAndThen(target, challengeAdmin.removeReward(id, current), "challenge reward",
+                        next -> rewardsScreen(next, id, category, filter, page));
             }));
-            if (index > 0) buttons.add(button("Move " + (index + 1) + " up", "Reorder this reward", target -> {
-                report(target, challengeAdmin.moveReward(id, current, current - 1), "challenge reward");
-                afterChallengeSave(target, () -> rewardsScreen(target, id, category, filter, page));
+            if (index > 0) buttons.add(mutationButton("Move " + (index + 1) + " up", "Reorder this reward", target -> {
+                reportAndThen(target, challengeAdmin.moveReward(id, current, current - 1), "challenge reward",
+                        next -> rewardsScreen(next, id, category, filter, page));
             }));
-            if (index + 1 < challenge.rewards().size()) buttons.add(button("Move " + (index + 1) + " down", "Reorder this reward", target -> {
-                report(target, challengeAdmin.moveReward(id, current, current + 1), "challenge reward");
-                afterChallengeSave(target, () -> rewardsScreen(target, id, category, filter, page));
+            if (index + 1 < challenge.rewards().size()) buttons.add(mutationButton("Move " + (index + 1) + " down", "Reorder this reward", target -> {
+                reportAndThen(target, challengeAdmin.moveReward(id, current, current + 1), "challenge reward",
+                        next -> rewardsScreen(next, id, category, filter, page));
             }));
             buttons.add(button("Edit " + (index + 1), "Replace this reward in place",
                     target -> editRewardChoice(target, id, category, filter, page, current, reward)));
@@ -520,10 +517,10 @@ public final class ChallengeScreens {
     }
 
     private void sizeRewardChoice(Player player, String id, String category, String filter, int page) {
-        List<ActionButton> buttons = Arrays.stream(IslandSize.values()).map(size -> button(size.name(),
+        List<ActionButton> buttons = Arrays.stream(IslandSize.values()).map(size -> mutationButton(size.name(),
                 "Add a " + size.name() + " size upgrade", target -> {
-                    report(target, challengeAdmin.addReward(id, new ChallengeReward.SizeUpgrade(size)), "challenge reward");
-                    afterChallengeSave(target, () -> rewardsScreen(target, id, category, filter, page));
+                    reportAndThen(target, challengeAdmin.addReward(id, new ChallengeReward.SizeUpgrade(size)), "challenge reward",
+                            next -> rewardsScreen(next, id, category, filter, page));
                 })).toList();
         show(player, Messages.SKYBLOCK.text("Size Reward", NamedTextColor.AQUA),
                 List.of("Choose the size upgrade."), buttons,
@@ -536,22 +533,20 @@ public final class ChallengeScreens {
             input(player, "Edit Money Reward", List.of("amount"),
                     List.of("Current amount: " + money.amount()), (target, values) -> {
                         try {
-                            report(target, challengeAdmin.editReward(id, index,
+                            reportAndThen(target, challengeAdmin.editReward(id, index,
                                     new ChallengeReward.Money(Double.parseDouble(targetValue(values, "amount")))),
-                                    "challenge reward");
+                                    "challenge reward", next -> rewardsScreen(next, id, category, filter, page));
                         } catch (RuntimeException error) {
                             target.sendMessage(Messages.SKYBLOCK.invalidInput("money reward"));
                         }
-                        afterChallengeSave(target, () -> rewardsScreen(target, id, category, filter, page));
                     }, target -> rewardsScreen(target, id, category, filter, page));
             return;
         }
         if (current instanceof ChallengeReward.SizeUpgrade size) {
-            List<ActionButton> buttons = Arrays.stream(IslandSize.values()).map(value -> button(value.name(),
+            List<ActionButton> buttons = Arrays.stream(IslandSize.values()).map(value -> mutationButton(value.name(),
                     value == size.size() ? "Current size" : "Replace with this size", target -> {
-                        report(target, challengeAdmin.editReward(id, index, new ChallengeReward.SizeUpgrade(value)),
-                                "challenge reward");
-                        afterChallengeSave(target, () -> rewardsScreen(target, id, category, filter, page));
+                        reportAndThen(target, challengeAdmin.editReward(id, index, new ChallengeReward.SizeUpgrade(value)),
+                                "challenge reward", next -> rewardsScreen(next, id, category, filter, page));
                     })).toList();
             show(player, Messages.SKYBLOCK.text("Edit Size Reward", NamedTextColor.AQUA),
                     List.of("Current: " + size.size().name()), buttons,
@@ -559,11 +554,11 @@ public final class ChallengeScreens {
             return;
         }
         if (current instanceof ChallengeReward.GeneratorUnlock generator) {
-            List<ActionButton> buttons = runtime.generatorRegistry().tiers().stream().map(tier -> button(tier.id(),
+            List<ActionButton> buttons = runtime.generatorRegistry().tiers().stream().map(tier -> mutationButton(tier.id(),
                     tier.id().equals(generator.tierId()) ? "Current generator tier" : tier.displayName(), target -> {
-                        report(target, challengeAdmin.editReward(id, index,
-                                new ChallengeReward.GeneratorUnlock(tier.id())), "challenge reward");
-                        afterChallengeSave(target, () -> rewardsScreen(target, id, category, filter, page));
+                        reportAndThen(target, challengeAdmin.editReward(id, index,
+                                new ChallengeReward.GeneratorUnlock(tier.id())), "challenge reward",
+                                next -> rewardsScreen(next, id, category, filter, page));
                     })).toList();
             show(player, Messages.SKYBLOCK.text("Edit Generator Reward", NamedTextColor.AQUA),
                     List.of("Current: " + generator.tierId()), buttons,
@@ -575,9 +570,9 @@ public final class ChallengeScreens {
     }
 
     private void generatorRewardChoice(Player player, String id, String category, String filter, int page) {
-        List<ActionButton> buttons = runtime.generatorRegistry().tiers().stream().map(tier -> button(tier.id(), tier.displayName(), target -> {
-            report(target, challengeAdmin.addReward(id, new ChallengeReward.GeneratorUnlock(tier.id())), "challenge reward");
-            afterChallengeSave(target, () -> rewardsScreen(target, id, category, filter, page));
+        List<ActionButton> buttons = runtime.generatorRegistry().tiers().stream().map(tier -> mutationButton(tier.id(), tier.displayName(), target -> {
+            reportAndThen(target, challengeAdmin.addReward(id, new ChallengeReward.GeneratorUnlock(tier.id())), "challenge reward",
+                    next -> rewardsScreen(next, id, category, filter, page));
         })).toList();
         show(player, Messages.SKYBLOCK.text("Generator Reward", NamedTextColor.AQUA),
                 List.of("Choose the tier to unlock."), buttons,
@@ -593,9 +588,9 @@ public final class ChallengeScreens {
                     case "size" -> new ChallengeReward.SizeUpgrade(IslandSize.valueOf(value.toUpperCase(Locale.ROOT)));
                     default -> new ChallengeReward.GeneratorUnlock(value);
                 };
-                report(target, challengeAdmin.addReward(id, reward), "challenge reward");
+                reportAndThen(target, challengeAdmin.addReward(id, reward), "challenge reward",
+                        next -> rewardsScreen(next, id, category, filter, page));
             } catch (RuntimeException error) { target.sendMessage(Messages.SKYBLOCK.invalidInput("challenge reward")); }
-            afterChallengeSave(target, () -> rewardsScreen(target, id, category, filter, page));
         }, target -> editReward(target, id, category, filter, page));
     }
 
@@ -613,28 +608,15 @@ public final class ChallengeScreens {
                 this::guard, items -> {
                     try {
                         ChallengeReward reward = new ChallengeReward.Items(items);
-                        report(player, index < 0 ? challengeAdmin.addReward(id, reward)
-                                : challengeAdmin.editReward(id, index, reward), "challenge reward");
+                        reportAndThen(player, index < 0 ? challengeAdmin.addReward(id, reward)
+                                : challengeAdmin.editReward(id, index, reward), "challenge reward",
+                                next -> rewardsScreen(next, id, category, filter, page));
                     }
                     catch (RuntimeException error) { player.sendMessage(Messages.SKYBLOCK.invalidInput("item reward")); }
-                    afterChallengeSave(player, () -> rewardsScreen(player, id, category, filter, page));
                 });
     }
 
-    private void afterChallengeSave(Player player, String id, String category, String filter, int page) {
-        afterChallengeSave(player, () -> challengeDetail(player, id, category, filter, page));
-    }
-
-    private void afterChallengeSave(Player player, Runnable next) {
-        if (setupWizards.contains(player.getUniqueId())) return;
-        runtime.challengeRegistry().flush().whenComplete((ignored, error) -> plugin.getServer().getScheduler().runTask(plugin,
-                () -> {
-                    if (guard(player) && next != null) next.run();
-                }));
-    }
-
     private boolean guard(Player player) { return context.guard(player); }
-    private void advanceSetup(Player player, boolean success) { context.advanceSetup(player, success); }
     private void input(Player player, String title, List<String> keys, List<String> body,
                        AdminScreenContext.InputAction save, Consumer<Player> cancel) {
         context.input(player, title, keys, body, save, cancel);
@@ -646,7 +628,10 @@ public final class ChallengeScreens {
     private ActionButton button(String label, String tooltip, Consumer<Player> action) {
         return context.button(label, tooltip, action);
     }
-    private void report(Player player, Object result, String subject) {
-        context.report(player, result, subject);
+    private ActionButton mutationButton(String label, String tooltip, Consumer<Player> action) {
+        return context.mutationButton(label, tooltip, action);
+    }
+    private void reportAndThen(Player player, Object result, String subject, Consumer<Player> next) {
+        context.report(player, result, subject, next);
     }
 }

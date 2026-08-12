@@ -248,7 +248,7 @@ public final class ChallengeCommands {
     }
 
     private boolean report(CommandSender sender, ChallengeAdminService.EditResult result, String subject) {
-        return context.report(sender, result.success(), subject, result.message());
+        return context.report(sender, result.success(), subject, result.message(), result.persistence());
     }
 
     private static ChallengeRequirement parseRequirement(String kind, String identifier, String amount) {

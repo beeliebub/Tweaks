@@ -16,8 +16,6 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.plugin.java.JavaPlugin;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -27,7 +25,6 @@ import java.util.function.Consumer;
 @SuppressWarnings("UnstableApiUsage")
 public final class EconomyScreens {
     private final AdminScreenContext context;
-    private final JavaPlugin plugin;
     private final SkyblockBootstrap.Runtime runtime;
     private final GeneratorAdminService generatorAdmin;
     private final ShopAdminService shopAdmin;
@@ -36,7 +33,6 @@ public final class EconomyScreens {
 
     EconomyScreens(AdminScreenContext context, Consumer<Player> hub) {
         this.context = context;
-        this.plugin = context.plugin;
         this.runtime = context.runtime;
         this.generatorAdmin = context.generatorAdmin;
         this.shopAdmin = context.shopAdmin;
@@ -65,8 +61,8 @@ public final class EconomyScreens {
         }
         buttons.add(button("Display name", tier.displayName(), opener -> input(opener, "Generator Display Name",
                 List.of("name"), List.of("Current: " + tier.displayName()), (actor, values) -> {
-                    report(actor, generatorAdmin.setDisplayName(id, targetValue(values, "name")), "generator tier");
-                    generatorDetail(actor, id);
+                    reportAndThen(actor, generatorAdmin.setDisplayName(id, targetValue(values, "name")),
+                            "generator tier", next -> generatorDetail(next, id));
                 }, back -> generatorDetail(back, id))));
         buttons.add(button("Add output", "Choose a material and weight", target -> materialPicker(target, "Generator Material",
                 material -> generatorOutputWeight(material, target, id), back -> generatorDetail(back, id), 0, "")));
@@ -75,9 +71,8 @@ public final class EconomyScreens {
                 if (!tier.id().equals("default")) buttons.add(button("Delete tier", "Delete this tier", target -> AdminConfirm.open(target,
                 "generator " + id, references, "Islands using this tier cannot use it after deletion.", () -> openGenerators(target), actor -> {
                     GeneratorRegistry.DeleteResult result = generatorAdmin.delete(id);
-                    report(actor, result, "generator tier");
-                    openGenerators(actor);
-                }, this::guard)));
+                    reportAndThen(actor, result, "generator tier", this::openGenerators);
+                }, this::guard, context::reportGuardFailure)));
         show(player, Messages.SKYBLOCK.text("Generator: " + id, NamedTextColor.AQUA),
                 List.of("Weighted outputs; total weight: " + total), buttons, this::openGenerators);
     }
@@ -90,9 +85,9 @@ public final class EconomyScreens {
                 button("Remove", "Remove this material from the output table", target -> AdminConfirm.open(target,
                         "generator output " + material.name(), 0, "The tier must retain at least one output.",
                         () -> generatorDetail(target, id), actor -> {
-                            report(actor, generatorAdmin.removeOutput(id, material), "generator output");
-                            generatorDetail(actor, id);
-                        }, this::guard)));
+                            reportAndThen(actor, generatorAdmin.removeOutput(id, material), "generator output",
+                                    next -> generatorDetail(next, id));
+                        }, this::guard, context::reportGuardFailure)));
         show(player, Messages.SKYBLOCK.text("Generator Output: " + material.name(), NamedTextColor.AQUA),
                 List.of("Weight: " + tier.outputs().get(material)), buttons, target -> generatorDetail(target, id));
     }
@@ -100,22 +95,26 @@ public final class EconomyScreens {
     private void generatorOutputWeight(Material material, Player player, String id) {
         input(player, "Generator Output", List.of("weight"), List.of("Material: " + material.name()), (target, values) -> {
             try {
-                report(target, generatorAdmin.setOutput(id, material, Double.parseDouble(targetValue(values, "weight"))),
-                        "generator output");
+                reportAndThen(target, generatorAdmin.setOutput(id, material,
+                                Double.parseDouble(targetValue(values, "weight"))), "generator output",
+                        next -> generatorDetail(next, id));
             } catch (RuntimeException error) {
-                target.sendMessage(Messages.SKYBLOCK.invalidInput("generator output"));
+                target.sendMessage(Messages.SKYBLOCK.invalidInput(
+                        error.getMessage() == null ? "generator output" : error.getMessage()));
             }
-            generatorDetail(target, id);
         }, target -> generatorDetail(target, id));
     }
 
     private void generatorInput(Player player, boolean edit) {
-        input(player, "Generator Tier", List.of("id", "name"), List.of("The new tier starts empty; add an output before using it."), (target, values) -> {
+        input(player, "Generator Tier", List.of("identifier", "name"), List.of("The new tier starts empty; add an output before using it."), (target, values) -> {
             try {
-                String id = targetValue(values, "id");
-                report(target, generatorAdmin.create(id, targetValue(values, "name")), "generator tier");
-                generatorDetail(target, id);
-            } catch (RuntimeException error) { target.sendMessage(Messages.SKYBLOCK.invalidInput("generator tier")); }
+                String id = targetValue(values, "identifier");
+                reportAndThen(target, generatorAdmin.create(id, targetValue(values, "name")), "generator tier",
+                        next -> generatorDetail(next, id));
+            } catch (RuntimeException error) {
+                target.sendMessage(Messages.SKYBLOCK.invalidInput(
+                        error.getMessage() == null ? "generator tier" : error.getMessage()));
+            }
         }, this::openGenerators);
     }
 
@@ -156,9 +155,8 @@ public final class EconomyScreens {
                 "shop " + material.name(), 0, "The material will no longer be buyable or sellable.",
                 () -> shopDetail(target, material), actor -> {
                     ShopAdminService.DeleteResult result = shopAdmin.deleteDetailed(material);
-                    report(actor, result.success(), "shop entry", result.message());
-                    openShop(actor);
-                }, this::guard)));
+                    reportAndThen(actor, result, "shop entry", this::openShop);
+                }, this::guard, context::reportGuardFailure)));
         show(player, Messages.SKYBLOCK.text("Shop: " + material.name(), NamedTextColor.AQUA),
                 List.of(SkyblockDescriptions.shopEntry(entry)), actions, this::openShop);
     }
@@ -174,13 +172,14 @@ public final class EconomyScreens {
                         "Use -1 to disable a direction; at least one direction must remain enabled."),
                 (target, values) -> {
                     try {
-                        report(target, shopAdmin.set(material, targetValue(values, "category"),
+                        reportAndThen(target, shopAdmin.set(material, targetValue(values, "category"),
                                 Double.parseDouble(targetValue(values, "buy")),
-                                Double.parseDouble(targetValue(values, "sell"))), "shop entry");
+                                Double.parseDouble(targetValue(values, "sell"))), "shop entry",
+                                this::openShop);
                     } catch (RuntimeException error) {
-                        target.sendMessage(Messages.SKYBLOCK.invalidInput("shop entry"));
+                        target.sendMessage(Messages.SKYBLOCK.invalidInput(
+                                error.getMessage() == null ? "shop entry" : error.getMessage()));
                     }
-                    openShop(target);
                 }, this::openShop);
     }
 
@@ -202,7 +201,8 @@ public final class EconomyScreens {
     private void materialPicker(Player player, String title, Consumer<Material> selected, Consumer<Player> back,
                                 int pageNumber, String filter) {
         if (!guard(player)) return;
-        List<Material> materials = Arrays.stream(Material.values()).filter(material -> !material.isAir()).toList();
+        List<Material> materials = Arrays.stream(Material.values())
+                .filter(material -> !material.name().endsWith("_AIR") && material != Material.AIR).toList();
         AdminPage.Page<Material> page = AdminPage.create(materials, pageNumber, filter, material -> material.name());
         List<ActionButton> buttons = new ArrayList<>();
         for (Material material : page.values()) {
@@ -237,12 +237,7 @@ public final class EconomyScreens {
     private ActionButton button(String label, String tooltip, Consumer<Player> action) {
         return context.button(label, tooltip, action);
     }
-    private void report(Player player, Object result, String subject) {
-        context.report(player, result, subject);
-    }
-
-    private void report(Player player, boolean success, String subject, String message) {
-        player.sendMessage(success ? Messages.SKYBLOCK.saved(subject) : Messages.SKYBLOCK.invalidInput(message));
-        context.advanceSetup(player, success);
+    private void reportAndThen(Player player, Object result, String subject, Consumer<Player> next) {
+        context.report(player, result, subject, next);
     }
 }

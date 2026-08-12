@@ -32,10 +32,13 @@ public final class ShopGUI {
         List<ActionButton> buttons = new ArrayList<>();
         for (String category : new TreeSet<>(catalog.entries().stream().filter(ShopCatalog.Entry::buyable)
                 .map(ShopCatalog.Entry::category).toList())) {
-            buttons.add(button(category, "View purchasable items",
-                    target -> { if (service.canUse(target)) openCategory(target, category, 0); }));
+            buttons.add(button(category, "View purchasable items", target -> {
+                if (service.canUse(target)) openCategory(target, category, 0);
+                else target.sendMessage(Messages.SKYBLOCK.invalidInput("shop is unavailable"));
+            }));
         }
-        if (buttons.isEmpty()) buttons.add(button("Shop empty", "No buyable items are configured", ignored -> { }));
+        if (buttons.isEmpty()) buttons.add(button("Shop empty", "No buyable items are configured",
+                target -> target.sendMessage(Messages.SKYBLOCK.invalidInput("no buyable shop items are configured"))));
         show(player, "Skyblock Shop", List.of("Choose a category."), buttons, null);
     }
 
@@ -48,8 +51,10 @@ public final class ShopGUI {
         List<ActionButton> buttons = new ArrayList<>();
         for (int index = start; index < end; index++) {
             ShopCatalog.Entry entry = entries.get(index);
-            buttons.add(button(entry.material().name(), "Buy for " + entry.buyPrice() + " each",
-                    target -> { if (service.canUse(target)) openQuantity(target, category, entry); }));
+            buttons.add(button(entry.material().name(), "Buy for " + entry.buyPrice() + " each", target -> {
+                if (service.canUse(target)) openQuantity(target, category, entry);
+                else target.sendMessage(Messages.SKYBLOCK.invalidInput("shop is unavailable"));
+            }));
         }
         if (current > 0) buttons.add(button("Previous", "Previous page", target -> openCategory(target, category, current - 1)));
         if (current + 1 < pages) buttons.add(button("Next", "Next page", target -> openCategory(target, category, current + 1)));
@@ -62,7 +67,10 @@ public final class ShopGUI {
         for (int amount : List.of(1, 16, 64)) {
             buttons.add(button("Buy " + amount, "Total " + entry.buyPrice() * amount,
                     target -> {
-                        if (!service.canUse(target)) return;
+                        if (!service.canUse(target)) {
+                            target.sendMessage(Messages.SKYBLOCK.invalidInput("shop is unavailable"));
+                            return;
+                        }
                         ShopService.BuyResult result = service.buy(target, entry.material(), amount);
                         target.sendMessage(result.success() ? Messages.SKYBLOCK.purchased(entry.material().name(), amount, result.price())
                                 : Messages.SKYBLOCK.invalidInput(result.message()));
@@ -78,17 +86,28 @@ public final class ShopGUI {
                 .tooltip(Messages.SKYBLOCK.text(tooltip, NamedTextColor.GRAY))
                 .action(DialogAction.customClick((view, audience) -> {
                     if (audience instanceof Player player) action.accept(player);
-                }, ClickCallback.Options.builder().build())).build();
+                }, ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).build())).build();
     }
 
     private static void show(Player player, String title, List<String> lines, List<ActionButton> buttons,
                              java.util.function.Consumer<Player> back) {
+        List<ActionButton> actions = buttons == null ? new ArrayList<>() : new ArrayList<>(buttons);
         ActionButton backButton = back == null ? null : button("Back", "Return", back);
+        if (actions.isEmpty() && backButton != null) {
+            actions.add(backButton);
+            backButton = null;
+        }
+        if (actions.isEmpty()) {
+            actions.add(button("Close", "No shop actions are available",
+                    target -> target.sendMessage(Messages.SKYBLOCK.invalidInput("no shop actions are available"))));
+        }
+        ActionButton finalBackButton = backButton;
         DialogBase base = DialogBase.builder(Messages.SKYBLOCK.text(title, NamedTextColor.GREEN, TextDecoration.BOLD))
                 .body(lines.stream().map(line -> DialogBody.plainMessage(
                         Messages.SKYBLOCK.text(line, NamedTextColor.WHITE))).toList())
-                .canCloseWithEscape(true).pause(false).build();
+                .canCloseWithEscape(true).pause(false)
+                .afterAction(DialogBase.DialogAfterAction.NONE).build();
         player.showDialog(Dialog.create(builder -> builder.empty().base(base)
-                .type(DialogType.multiAction(buttons, backButton, 2))));
+                .type(DialogType.multiAction(actions, finalBackButton, 2))));
     }
 }

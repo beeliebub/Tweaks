@@ -4,6 +4,7 @@ import me.beeliebub.tweaks.skyblock.admin.SkyblockRegistryBackup;
 import org.bukkit.Material;
 import org.bukkit.plugin.java.JavaPlugin;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 /** Dialog-free shop catalog authoring operations. */
 public final class ShopAdminService {
@@ -23,20 +24,13 @@ public final class ShopAdminService {
         }
         try {
             catalog.set(new ShopCatalog.Entry(material, category, buy, sell));
-            catalog.saveAsync();
-            return new EditResult(true, "saved");
+            return new EditResult(true, "saved", catalog.saveAsync());
         } catch (RuntimeException error) {
             return new EditResult(false, error.getMessage() == null ? "shop entry rejected" : error.getMessage());
         }
     }
-    public boolean delete(Material material) {
-        if (backup != null) {
-            try { backup.writeNow(); }
-            catch (RuntimeException ignored) { return false; }
-        }
-        boolean removed = catalog.remove(material);
-        if (removed) catalog.saveAsync();
-        return removed;
+    public DeleteResult delete(Material material) {
+        return deleteDetailed(material);
     }
 
     public DeleteResult deleteDetailed(Material material) {
@@ -45,10 +39,28 @@ public final class ShopAdminService {
             catch (RuntimeException error) { return new DeleteResult(false, "registry backup failed"); }
         }
         boolean removed = catalog.remove(material);
-        if (removed) catalog.saveAsync();
-        return new DeleteResult(removed, removed ? "deleted" : "unknown material");
+        return removed
+                ? new DeleteResult(true, "deleted", catalog.saveAsync())
+                : new DeleteResult(false, "unknown material");
     }
 
-    public record EditResult(boolean success, String message) { }
-    public record DeleteResult(boolean success, String message) { }
+    public record EditResult(boolean success, String message, CompletableFuture<Void> persistence) {
+        public EditResult(boolean success, String message) {
+            this(success, message, CompletableFuture.completedFuture(null));
+        }
+
+        public EditResult {
+            persistence = persistence == null ? CompletableFuture.completedFuture(null) : persistence;
+        }
+    }
+
+    public record DeleteResult(boolean success, String message, CompletableFuture<Void> persistence) {
+        public DeleteResult(boolean success, String message) {
+            this(success, message, CompletableFuture.completedFuture(null));
+        }
+
+        public DeleteResult {
+            persistence = persistence == null ? CompletableFuture.completedFuture(null) : persistence;
+        }
+    }
 }

@@ -26,12 +26,19 @@ dependencies {
     testImplementation("org.yaml:snakeyaml:2.3")
     // TODO(26.2-upgrade): Replace this locally-published build with mockbukkit-v26.2:x.x.x
     //   once a confirmed artifact is published to Maven Central or the Sonatype snapshot repo.
-    //   As of 2026-07-26, 26.2 support is only an unmerged draft branch upstream
+    //   As of 2026-08-11, 26.2 support is only an unmerged draft branch upstream
     //   (MockBukkit/MockBukkit upgrade/v26.2, PR #1592) with no version tag yet, so it's
     //   built from source and installed via `./gradlew publishToMavenLocal` in a checkout
     //   of that branch (cloned to ../MockBukkit), then consumed here via mavenLocal().
     //   Check: https://s01.oss.sonatype.org/content/repositories/snapshots/org/mockbukkit/mockbukkit/
     //   and: https://search.maven.org/search?q=g:org.mockbukkit.mockbukkit
+    //
+    //   The `dev-<hash>` suffix is MockBukkit's own build stamping its HEAD commit; it is NOT a
+    //   content hash. Uncommitted edits in that checkout republish under this exact same
+    //   coordinate, so bumping the string below is not how you pick up MockBukkit changes —
+    //   re-running `./gradlew publishToMavenLocal` over there is. Gradle keeps no copy of a
+    //   mavenLocal artifact under ~/.gradle, so the republished jar takes effect on the next
+    //   build here with no cache eviction needed. Only edit this string when HEAD moves.
     testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v26.2:dev-f4a02d43")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 

@@ -42,7 +42,10 @@ public final class IslandGUI {
                                 return;
                             }
                             var result = creation.begin(target, type.id(), difficulty.id(), completed -> {
-                                if (!creation.canUse(target)) return;
+                                if (!creation.canUse(target)) {
+                                    target.sendMessage(Messages.SKYBLOCK.invalidInput("island creation is unavailable"));
+                                    return;
+                                }
                                 if (completed.status() == IslandCreationService.Status.COMPLETED) {
                                     target.sendMessage(Messages.SKYBLOCK.created(completed.island().displayName()));
                                 } else if (completed.status() == IslandCreationService.Status.FAILED) {
@@ -55,12 +58,14 @@ public final class IslandGUI {
                         }));
             }
         }
-        if (buttons.isEmpty()) buttons.add(button("No choices", "No valid island types are configured", ignored -> { }));
+        if (buttons.isEmpty()) buttons.add(button("No choices", "No valid island types are configured",
+                target -> target.sendMessage(Messages.SKYBLOCK.invalidInput("no valid island types are configured"))));
         DialogBase base = DialogBase.builder(Messages.SKYBLOCK.text("Create Skyblock Island", NamedTextColor.GREEN,
                         TextDecoration.BOLD))
                 .body(List.of(DialogBody.plainMessage(Messages.SKYBLOCK.text(
                         "Choose an island type and difficulty.", NamedTextColor.WHITE))))
-                .canCloseWithEscape(true).pause(false).build();
+                .canCloseWithEscape(true).pause(false)
+                .afterAction(DialogBase.DialogAfterAction.NONE).build();
         player.showDialog(Dialog.create(builder -> builder.empty().base(base)
                 .type(DialogType.multiAction(buttons, null, 2))));
     }
@@ -70,6 +75,6 @@ public final class IslandGUI {
                 .tooltip(Messages.SKYBLOCK.text(tooltip, NamedTextColor.GRAY))
                 .action(DialogAction.customClick((view, audience) -> {
                     if (audience instanceof Player target) action.accept(target);
-                }, ClickCallback.Options.builder().build())).build();
+                }, ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).build())).build();
     }
 }

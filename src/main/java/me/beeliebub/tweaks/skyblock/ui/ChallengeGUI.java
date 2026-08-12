@@ -37,10 +37,13 @@ public final class ChallengeGUI {
     public void open(Player player, Island island) {
         List<ActionButton> buttons = new ArrayList<>();
         for (ChallengeCategory category : registry.categories()) {
-            buttons.add(button(category.displayName(), "View challenges in this category",
-                    target -> { if (service.canUse(island, target)) openCategory(target, island, category.id(), 0); }));
+            buttons.add(button(category.displayName(), "View challenges in this category", target -> {
+                if (service.canUse(island, target)) openCategory(target, island, category.id(), 0);
+                else target.sendMessage(Messages.SKYBLOCK.invalidInput("challenges are unavailable"));
+            }));
         }
-        if (buttons.isEmpty()) buttons.add(button("No challenges", "The challenge registry is empty", ignored -> { }));
+        if (buttons.isEmpty()) buttons.add(button("No challenges", "The challenge registry is empty",
+                target -> target.sendMessage(Messages.SKYBLOCK.invalidInput("no challenges are configured"))));
         show(player, "Skyblock Challenges", List.of("Choose a category."), buttons, null);
     }
 
@@ -53,8 +56,10 @@ public final class ChallengeGUI {
         List<ActionButton> buttons = new ArrayList<>();
         for (int index = start; index < end; index++) {
             Challenge challenge = challenges.get(index);
-            buttons.add(button(challenge.displayName(), challenge.description(),
-                    target -> { if (service.canUse(island, target)) openDetail(target, island, challenge); }));
+            buttons.add(button(challenge.displayName(), challenge.description(), target -> {
+                if (service.canUse(island, target)) openDetail(target, island, challenge);
+                else target.sendMessage(Messages.SKYBLOCK.invalidInput("challenges are unavailable"));
+            }));
         }
         if (current > 0) buttons.add(button("Previous", "Previous page", target -> openCategory(target, island, categoryId, current - 1)));
         if (current + 1 < pages) buttons.add(button("Next", "Next page", target -> openCategory(target, island, categoryId, current + 1)));
@@ -76,7 +81,10 @@ public final class ChallengeGUI {
         if (readiness.ready()) {
             buttons.add(button("Claim", "Claim this challenge",
                     target -> {
-                        if (!service.canUse(island, target)) return;
+                        if (!service.canUse(island, target)) {
+                            target.sendMessage(Messages.SKYBLOCK.invalidInput("challenges are unavailable"));
+                            return;
+                        }
                         ChallengeService.ClaimResult result = service.claim(island, challenge.id(), target);
                         target.sendMessage(result.claimed() ? Messages.SKYBLOCK.challengeClaimed(challenge.id())
                                 : Messages.SKYBLOCK.challengeLocked(result.reason()));
@@ -92,17 +100,28 @@ public final class ChallengeGUI {
                                 ? "Skyblock challenge" : tooltip, NamedTextColor.GRAY))
                 .action(DialogAction.customClick((view, audience) -> {
                     if (audience instanceof Player player) action.accept(player);
-                }, ClickCallback.Options.builder().build())).build();
+                }, ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).build())).build();
     }
 
     private static void show(Player player, String title, List<String> lines, List<ActionButton> buttons,
                              java.util.function.Consumer<Player> back) {
+        List<ActionButton> actions = buttons == null ? new ArrayList<>() : new ArrayList<>(buttons);
         ActionButton backButton = back == null ? null : button("Back", "Return", back);
+        if (actions.isEmpty() && backButton != null) {
+            actions.add(backButton);
+            backButton = null;
+        }
+        if (actions.isEmpty()) {
+            actions.add(button("Close", "No challenge actions are available",
+                    target -> target.sendMessage(Messages.SKYBLOCK.invalidInput("no challenge actions are available"))));
+        }
+        ActionButton finalBackButton = backButton;
         DialogBase base = DialogBase.builder(Messages.SKYBLOCK.text(title, NamedTextColor.GREEN, TextDecoration.BOLD))
                 .body(lines.stream().map(line -> DialogBody.plainMessage(
                         Messages.SKYBLOCK.text(line, NamedTextColor.WHITE))).toList())
-                .canCloseWithEscape(true).pause(false).build();
+                .canCloseWithEscape(true).pause(false)
+                .afterAction(DialogBase.DialogAfterAction.NONE).build();
         player.showDialog(Dialog.create(builder -> builder.empty().base(base)
-                .type(DialogType.multiAction(buttons, backButton, 2))));
+                .type(DialogType.multiAction(actions, finalBackButton, 2))));
     }
 }

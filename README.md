@@ -301,6 +301,11 @@ the CLI forms below are the equivalent authoring operations. All administrator c
 `tweaks.admin.skyblock`. A player running `/isadmin` must stand in the configured Skyblock world;
 console can run console-safe registry and status operations.
 
+The administrator Dialog retains callbacks long enough to explain stale clicks: offline, permission,
+and wrong-world failures are reported separately, duplicate submissions are applied at most once,
+and registry edits say **Saved** only after their YAML write completes. A failed write is reported as
+an error and does not advance the wizard or reopen the edited screen.
+
 1. **Create and map the world (`world`).** Create or load the target namespaced world, then run
    `/tconfig world-profiles add jass:skyblock skyblock Skyblock AQUA` (replace the world key if
    needed). The `skyblock` profile must be exclusive to this world. Restart after changing the

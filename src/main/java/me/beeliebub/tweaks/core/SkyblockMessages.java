@@ -31,6 +31,14 @@ public final class SkyblockMessages {
         return Component.text("You do not have permission to administer Skyblock.", NamedTextColor.RED);
     }
 
+    public Component adminOffline() {
+        return Component.text("You must be online to use that Skyblock administrator action.", NamedTextColor.RED);
+    }
+
+    public Component adminAlreadySubmitted() {
+        return Component.text("That Skyblock administrator action was already submitted.", NamedTextColor.YELLOW);
+    }
+
     public Component unavailable(String worldKey, String profileCommand) {
         return Component.text("Skyblock is unavailable: world '" + worldKey
                 + "' needs its own world profile. Configure it with " + profileCommand + ".",
