@@ -8,7 +8,7 @@ public enum HousePaymentResult {
     ALREADY_APPLIED,
     /** A receipt for this payment id already existed with a different amount. Nothing was mutated. */
     REJECTED_MISMATCH,
-    /** The recipient's balance is non-finite, or adding {@code amount} would not change it exactly. */
+    /** The recipient's resulting whole-dollar balance would fall outside the supported range. */
     REJECTED_UNREPRESENTABLE,
     /** The receipt/balance mutation was accepted in memory but the durable write failed. */
     REJECTED_WRITE_FAILED

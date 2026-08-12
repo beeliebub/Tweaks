@@ -4,6 +4,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,6 +41,7 @@ public final class HousePaymentService {
     private final AtomicBoolean shuttingDown = new AtomicBoolean();
     private final CompletableFuture<Void> readyFuture = new CompletableFuture<>();
     private final Map<String, CompletableFuture<HousePayOutcome>> inFlight = new ConcurrentHashMap<>();
+    private final Set<String> retainReceiptFor = ConcurrentHashMap.newKeySet();
 
     public HousePaymentService(JavaPlugin plugin, HouseAccount houseAccount, EconomyManager economyManager) {
         this.plugin = plugin;
@@ -59,6 +61,22 @@ public final class HousePaymentService {
 
     /** Initiates a payment using a durable caller-supplied id, preserving replay idempotency. */
     public CompletableFuture<HousePayOutcome> pay(String paymentId, UUID recipient, long amount) {
+        return payInternal(paymentId, recipient, amount, retainReceiptFor.remove(paymentId));
+    }
+
+    /**
+     * Marks a caller-owned payment id so the next {@link #pay(String, UUID, long)} retains its
+     * receipt until the caller's own durable state commit completes. Lottery uses this because its
+     * award file is a second recovery consumer of the receipt.
+     */
+    public void retainReceiptForPayment(String paymentId) {
+        Objects.requireNonNull(paymentId, "paymentId");
+        if (paymentId.isBlank()) throw new IllegalArgumentException("paymentId must not be blank");
+        retainReceiptFor.add(paymentId);
+    }
+
+    private CompletableFuture<HousePayOutcome> payInternal(String paymentId, UUID recipient, long amount,
+                                                            boolean retainReceipt) {
         Objects.requireNonNull(paymentId, "paymentId");
         Objects.requireNonNull(recipient, "recipient");
         if (paymentId.isBlank()) throw new IllegalArgumentException("paymentId must not be blank");
@@ -71,13 +89,25 @@ public final class HousePaymentService {
         }
 
         CompletableFuture<HousePayOutcome> future = inFlight.computeIfAbsent(paymentId,
-                ignored -> startPayment(paymentId, recipient, amount));
+                ignored -> startPayment(paymentId, recipient, amount, retainReceipt));
         future.whenComplete((value, error) -> inFlight.remove(paymentId, future));
         return future;
     }
 
     /** Resumes a retained debit without entering the debit path a second time. */
     public CompletableFuture<HousePayOutcome> resumePendingPayment(String paymentId, UUID recipient, long amount) {
+        return resumePendingPayment(paymentId, recipient, amount, retainReceiptFor.remove(paymentId));
+    }
+
+    /** Resumes a caller-owned payment while retaining its receipt until that owner commits. */
+    public CompletableFuture<HousePayOutcome> resumePendingPaymentRetainingReceipt(String paymentId,
+                                                                                     UUID recipient,
+                                                                                     long amount) {
+        return resumePendingPayment(paymentId, recipient, amount, true);
+    }
+
+    private CompletableFuture<HousePayOutcome> resumePendingPayment(String paymentId, UUID recipient,
+                                                                      long amount, boolean retainReceipt) {
         Objects.requireNonNull(paymentId, "paymentId");
         Objects.requireNonNull(recipient, "recipient");
         if (paymentId.isBlank()) throw new IllegalArgumentException("paymentId must not be blank");
@@ -87,29 +117,35 @@ public final class HousePaymentService {
         HouseJournalEntry entry = houseAccount.pendingPayments().get(paymentId);
         if (entry == null) return CompletableFuture.completedFuture(HousePayOutcome.FAILED);
         CompletableFuture<HousePayOutcome> future = inFlight.computeIfAbsent(paymentId,
-                ignored -> startRetainedPayment(paymentId, recipient, amount, entry));
+                ignored -> startRetainedPayment(paymentId, recipient, amount, entry, retainReceipt));
         future.whenComplete((value, error) -> inFlight.remove(paymentId, future));
         return future;
     }
 
-    private CompletableFuture<HousePayOutcome> startPayment(String paymentId, UUID recipient, long amount) {
-        HouseJournalEntry existing = houseAccount.pendingPayments().get(paymentId);
+    private CompletableFuture<HousePayOutcome> startPayment(String paymentId, UUID recipient, long amount,
+                                                             boolean retainReceipt) {
+        HouseJournalEntry existing = houseAccount.journalEntries().get(paymentId);
         CompletableFuture<HousePayOutcome> payment;
         if (existing != null) {
-            if (!existing.recipient().equals(recipient) || existing.amount() != amount) {
+            if (existing.state() != HousePaymentState.DEBIT_DURABLE) {
+                payment = CompletableFuture.completedFuture(HousePayOutcome.NEEDS_RECONCILIATION);
+                plugin.getLogger().severe("House payment " + paymentId
+                        + " is already retained in terminal journal state " + existing.state()
+                        + "; refusing to reuse its id");
+            } else if (!existing.recipient().equals(recipient) || existing.amount() != amount) {
                 payment = houseAccount.markNeedsReconciliation(paymentId).thenApply(ignored -> {
                     plugin.getLogger().severe("House payment " + paymentId
                             + " was requested with details that differ from its retained journal entry");
                     return HousePayOutcome.NEEDS_RECONCILIATION;
                 });
             } else {
-                payment = resolvePayment(paymentId, recipient, amount);
+                payment = resolvePayment(paymentId, recipient, amount, retainReceipt);
             }
         } else {
             payment = houseAccount.beginPayment(paymentId, recipient, amount)
                     .thenCompose(begin -> begin == HouseBeginPaymentOutcome.INSUFFICIENT_FUNDS
                             ? CompletableFuture.completedFuture(HousePayOutcome.INSUFFICIENT_FUNDS)
-                            : resolvePayment(paymentId, recipient, amount));
+                            : resolvePayment(paymentId, recipient, amount, retainReceipt));
         }
         return payment.exceptionally(error -> {
             plugin.getLogger().log(Level.SEVERE, "House payment " + paymentId + " failed unexpectedly; "
@@ -119,7 +155,8 @@ public final class HousePaymentService {
     }
 
     private CompletableFuture<HousePayOutcome> startRetainedPayment(String paymentId, UUID recipient,
-                                                                      long amount, HouseJournalEntry entry) {
+                                                                      long amount, HouseJournalEntry entry,
+                                                                      boolean retainReceipt) {
         CompletableFuture<HousePayOutcome> payment;
         if (!entry.recipient().equals(recipient) || entry.amount() != amount) {
             payment = houseAccount.markNeedsReconciliation(paymentId).thenApply(ignored -> {
@@ -128,7 +165,7 @@ public final class HousePaymentService {
                 return HousePayOutcome.NEEDS_RECONCILIATION;
             });
         } else {
-            payment = resolvePayment(paymentId, recipient, amount);
+            payment = resolvePayment(paymentId, recipient, amount, retainReceipt);
         }
         return payment.exceptionally(error -> {
             plugin.getLogger().log(Level.SEVERE, "Replay of house payment " + paymentId
@@ -145,7 +182,17 @@ public final class HousePaymentService {
      * there were any.
      */
     public CompletableFuture<Void> replayPendingPayments() {
+        return replayPendingPayments(Set.of());
+    }
+
+    /**
+     * Replays the durable journal, retaining receipts owned by another recovery consumer until
+     * that consumer has committed its own state. Ordinary payments are still compacted and pruned
+     * in the normal settlement path.
+     */
+    public CompletableFuture<Void> replayPendingPayments(Set<String> retainReceiptIds) {
         if (!replayStarted.compareAndSet(false, true)) return readyFuture;
+        Set<String> retained = Set.copyOf(retainReceiptIds);
         Map<String, HouseJournalEntry> pending = houseAccount.pendingPayments();
         if (pending.isEmpty()) {
             ready.set(true);
@@ -154,7 +201,7 @@ public final class HousePaymentService {
         }
         plugin.getLogger().info("Replaying " + pending.size() + " pending house payment(s) from a prior crash/shutdown");
         CompletableFuture<?>[] replays = pending.entrySet().stream()
-                .map(entry -> replayOne(entry.getKey(), entry.getValue()))
+                .map(entry -> replayOne(entry.getKey(), entry.getValue(), retained.contains(entry.getKey())))
                 .toArray(CompletableFuture[]::new);
         CompletableFuture.allOf(replays).whenComplete((v, err) -> {
             ready.set(true);
@@ -169,11 +216,12 @@ public final class HousePaymentService {
         return readyFuture;
     }
 
-    private CompletableFuture<HousePayOutcome> replayOne(String paymentId, HouseJournalEntry entry) {
+    private CompletableFuture<HousePayOutcome> replayOne(String paymentId, HouseJournalEntry entry,
+                                                          boolean retainReceipt) {
         plugin.getLogger().warning("Replaying house payment " + paymentId + " -> " + entry.recipient()
                 + " (" + entry.amount() + ")");
         CompletableFuture<HousePayOutcome> future = inFlight.computeIfAbsent(paymentId, ignored ->
-                resolvePayment(paymentId, entry.recipient(), entry.amount())
+                resolvePayment(paymentId, entry.recipient(), entry.amount(), retainReceipt)
                         .exceptionally(error -> {
                             plugin.getLogger().log(Level.SEVERE, "Replay of house payment " + paymentId + " failed; "
                                     + "will be retried on next startup", error);
@@ -185,15 +233,31 @@ public final class HousePaymentService {
 
     // Resumes a payment from immediately after the debit: credit the recipient, then resolve the
     // journal entry according to the credit's outcome. Shared by both the fresh pay() path and replay.
-    private CompletableFuture<HousePayOutcome> resolvePayment(String paymentId, UUID recipient, long amount) {
+    private CompletableFuture<HousePayOutcome> resolvePayment(String paymentId, UUID recipient, long amount,
+                                                               boolean retainReceipt) {
         return economyManager.applyHousePayment(recipient, paymentId, amount)
-                .thenCompose(result -> settle(paymentId, result));
+                .thenCompose(result -> settle(paymentId, recipient, result, retainReceipt));
     }
 
-    private CompletableFuture<HousePayOutcome> settle(String paymentId, HousePaymentResult result) {
+    private CompletableFuture<HousePayOutcome> settle(String paymentId, UUID recipient,
+                                                      HousePaymentResult result, boolean retainReceipt) {
         return switch (result) {
             case APPLIED, ALREADY_APPLIED -> houseAccount.completePayment(paymentId)
-                    .thenApply(v -> HousePayOutcome.SUCCESS);
+                    .thenCompose(v -> {
+                        if (retainReceipt) return CompletableFuture.completedFuture(HousePayOutcome.SUCCESS);
+                        // Compact the journal before pruning the receipt. A crash in between leaves
+                        // an orphaned receipt that the legacy sweep can remove; pruning first would
+                        // leave DEBIT_DURABLE without its idempotency receipt and double-credit on replay.
+                        return economyManager.clearHousePaymentReceipts(recipient, java.util.Set.of(paymentId))
+                                .handle((ignored, error) -> {
+                                    if (error != null) {
+                                        plugin.getLogger().log(Level.WARNING,
+                                                "House payment " + paymentId
+                                                        + " resolved but its receipt could not be pruned", error);
+                                    }
+                                    return HousePayOutcome.SUCCESS;
+                                });
+                    });
             case REJECTED_UNREPRESENTABLE -> houseAccount.refundPayment(paymentId)
                     .thenApply(v -> HousePayOutcome.UNREPRESENTABLE_REFUNDED);
             case REJECTED_MISMATCH -> houseAccount.markNeedsReconciliation(paymentId).thenApply(v -> {
@@ -209,6 +273,13 @@ public final class HousePaymentService {
                 yield CompletableFuture.completedFuture(HousePayOutcome.WRITE_FAILED_RETAINED);
             }
         };
+    }
+
+    /** Prunes a caller-owned receipt after that caller's durable state commit. */
+    public CompletableFuture<Void> pruneResolvedReceipt(UUID recipient, String paymentId) {
+        Objects.requireNonNull(recipient, "recipient");
+        Objects.requireNonNull(paymentId, "paymentId");
+        return economyManager.clearHousePaymentReceipts(recipient, Set.of(paymentId));
     }
 
     /** Rejects any new payment submitted after this call. Does not affect payments already in flight. */

@@ -46,6 +46,7 @@ public final class LotteryManager {
     private final AtomicBoolean loadFailed = new AtomicBoolean();
     private final AtomicBoolean drawInFlight = new AtomicBoolean();
     private final CompletableFuture<Void> loadFuture;
+    private final CompletableFuture<Set<String>> paymentIntentIdsFuture = new CompletableFuture<>();
 
     private final Set<UUID> entrants = new HashSet<>();
     private long baseline;
@@ -64,6 +65,7 @@ public final class LotteryManager {
         this.loadFuture = store.readAsync(STORE_KEY)
                 .thenCompose(config -> initialize(config, existingFile, fallbackBase))
                 .exceptionally(error -> {
+                    paymentIntentIdsFuture.complete(Set.of());
                     failLoad("Lottery state failed to load safely; draws and entries remain disabled", error);
                     return null;
                 });
@@ -74,12 +76,14 @@ public final class LotteryManager {
         try {
             parsed = parse(config, existingFile);
         } catch (IllegalArgumentException error) {
+            paymentIntentIdsFuture.complete(Set.of());
             failLoad("Lottery state is malformed; refusing to overwrite it", error);
             return CompletableFuture.completedFuture(null);
         }
 
         return houseAccount.whenLoaded().thenCompose(ignored -> {
             if (!houseAccount.isLoaded()) {
+                paymentIntentIdsFuture.complete(Set.of());
                 return failedFuture(new IllegalStateException("House account did not load safely"));
             }
             synchronized (stateLock) {
@@ -88,6 +92,8 @@ public final class LotteryManager {
                 fallback = parsed.fallback() != null ? parsed.fallback() : fallbackBase;
                 pendingAward = parsed.pendingAward();
             }
+            paymentIntentIdsFuture.complete(pendingAward == null
+                    ? Set.of() : Set.of(pendingAward.paymentId()));
             CompletableFuture<Void> stateWrite = parsed.baseline() == null || parsed.fallback() == null
                     ? persistSnapshot()
                     : CompletableFuture.completedFuture(null);
@@ -218,6 +224,11 @@ public final class LotteryManager {
 
     public CompletableFuture<Void> whenLoaded() {
         return loadFuture;
+    }
+
+    /** Completes once the persisted award intent is known, before payment replay begins. */
+    public CompletableFuture<Set<String>> paymentIntentIds() {
+        return paymentIntentIdsFuture;
     }
 
     public int entrantCount() {
@@ -395,6 +406,7 @@ public final class LotteryManager {
                                     .thenApply(ignoredAbandon -> DrawResult.refused(
                                             LotteryMath.RefusalReason.HOUSE_AT_FLOOR));
                         }
+                        housePaymentService.retainReceiptForPayment(award.paymentId());
                         return housePaymentService.pay(award.paymentId(), award.winner(), award.amount())
                                 .thenCompose(payment -> finishAward(completedContext, payment));
                     })
@@ -408,6 +420,7 @@ public final class LotteryManager {
     private CompletableFuture<DrawResult> finishAward(DrawContext context, HousePayOutcome payment) {
         return switch (classify(payment)) {
             case SETTLED -> commitAward(context.award(), false)
+                    .thenCompose(ignored -> pruneResolvedReceipt(context.award()))
                     .thenApply(ignored -> DrawResult.awarded(context.award().winner(), context.award().amount()));
             case ABANDONED -> abandonAward(context.award())
                     .thenApply(ignored -> DrawResult.paymentAbandoned(context.award().winner(),
@@ -448,14 +461,16 @@ public final class LotteryManager {
                                 + ") has no receipt or retained House debit; abandoning it without re-paying.");
                         return abandonAward(award);
                     }
-                    return housePaymentService.resumePendingPayment(award.paymentId(), award.winner(), award.amount())
+                    housePaymentService.retainReceiptForPayment(award.paymentId());
+                    return housePaymentService.resumePendingPayment(
+                                    award.paymentId(), award.winner(), award.amount())
                             .thenCompose(payment -> finishReplayedAward(award, payment));
                 });
     }
 
     private CompletableFuture<Void> finishReplayedAward(PendingAward award, HousePayOutcome payment) {
         return switch (classify(payment)) {
-            case SETTLED -> commitAward(award, false);
+            case SETTLED -> commitAward(award, false).thenCompose(ignored -> pruneResolvedReceipt(award));
             case ABANDONED -> {
                 plugin.getLogger().warning("Lottery award replay for " + award.winner() + " ($"
                         + award.amount() + ") resolved as " + payment + "; entries and baseline were kept.");
@@ -469,6 +484,19 @@ public final class LotteryManager {
                 yield commitAward(award, false);
             }
         };
+    }
+
+    private CompletableFuture<Void> pruneResolvedReceipt(PendingAward award) {
+        CompletableFuture<Void> prune = housePaymentService.pruneResolvedReceipt(
+                award.winner(), award.paymentId());
+        return prune.handle((ignored, error) -> {
+            if (error != null) {
+                plugin.getLogger().log(Level.WARNING,
+                        "Lottery award " + award.paymentId()
+                                + " committed but its recipient receipt could not be pruned", error);
+            }
+            return null;
+        });
     }
 
     private CompletableFuture<Void> handleReplayFailure(PendingAward award, Throwable error) {

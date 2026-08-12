@@ -364,9 +364,9 @@ public final class MinigameMessages {
         return Messages.MM.deserialize("<red>You cannot afford a bet of $" + bet + ". Your balance is $" + balance + ".</red>");
     }
 
-    /** Explains that a Blackjack balance cannot represent the requested stake exactly. */
+    /** Explains that a Blackjack balance is outside the supported range for the requested stake. */
     public Component blackjackBalanceUnrepresentable() {
-        return Messages.MM.deserialize("<red>Your balance is too large to represent this Blackjack stake exactly. "
+        return Messages.MM.deserialize("<red>Your balance is outside the supported range for this Blackjack stake. "
                 + "Ask an administrator to adjust it before playing.</red>");
     }
 
@@ -614,9 +614,9 @@ public final class MinigameMessages {
                 + ". Your balance is $" + balance + ".</red>");
     }
 
-    /** Explains that a Roulette balance cannot represent the requested stake exactly. */
+    /** Explains that a Roulette balance is outside the supported range for the requested stake. */
     public Component rouletteBalanceUnrepresentable() {
-        return Messages.MM.deserialize("<red>Your balance is too large to represent this Roulette stake exactly. "
+        return Messages.MM.deserialize("<red>Your balance is outside the supported range for this Roulette stake. "
                 + "Ask an administrator to adjust it before betting.</red>");
     }
 

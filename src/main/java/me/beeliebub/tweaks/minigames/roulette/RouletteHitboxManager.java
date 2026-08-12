@@ -27,14 +27,12 @@ final class RouletteHitboxManager {
     /** Tag every plugin-owned hitbox carries, alongside its own segment tag. */
     static final String HITBOX_TAG = "roulette_hitbox";
 
-    private static final float MIN_HITBOX_WIDTH = 0.1f;
-    private static final float HITBOX_HEIGHT = 0.25f;
-
     private RouletteHitboxManager() {}
 
     /**
-     * Spawns one {@code Interaction} per scanned segment, sized from that segment's own measured
-     * scale, and returns the UUID -&gt; {@link RouletteBoardStore.SegmentRef} map to register.
+     * Spawns one {@code Interaction} per scanned segment, sized and positioned to match that
+     * segment's floating marker, and returns the UUID -&gt; {@link RouletteBoardStore.SegmentRef} map
+     * to register.
      *
      * <p>If any single segment fails to spawn, every entity already spawned by this call is
      * removed and {@code null} is returned — a half-spawned board (some hitboxes live, none
@@ -52,13 +50,12 @@ final class RouletteHitboxManager {
         try {
             for (RouletteSegmentScanner.SegmentScan segment : segments) {
                 RouletteGeometry.Vec3 c = segment.centroid();
-                Location at = new Location(world, c.x(), c.y(), c.z());
-                float width = (float) Math.max(MIN_HITBOX_WIDTH,
-                        Math.max(segment.scale().x(), segment.scale().z()));
+                float size = hitboxSize();
+                Location at = new Location(world, c.x(), hitboxAnchorY(c.y()), c.z());
 
                 Interaction interaction = world.spawn(at, Interaction.class, i -> {
-                    i.setInteractionWidth(width);
-                    i.setInteractionHeight(HITBOX_HEIGHT);
+                    i.setInteractionWidth(size);
+                    i.setInteractionHeight(size);
                     i.setPersistent(false);
                     i.setResponsive(true);
                     i.addScoreboardTag(HITBOX_TAG);
@@ -79,6 +76,22 @@ final class RouletteHitboxManager {
             }
             return null;
         }
+    }
+
+    /** Returns the marker-sized interaction footprint shared by the marker and its click target. */
+    static float hitboxSize() {
+        return RouletteRenderer.MARKER_SCALE;
+    }
+
+    /**
+     * Positions the bottom of the interaction box so its centre is the marker's spawn Y. The
+     * marker turns toward the viewer through billboard rendering while the interaction remains
+     * axis-aligned, so the match is exact in footprint but not from every viewing angle. The
+     * deliberately small target is governed by one shared scale; increase that constant if the
+     * target needs to be easier to click rather than desynchronizing the two entities.
+     */
+    static double hitboxAnchorY(double centroidY) {
+        return centroidY + RouletteRenderer.SEGMENT_MARKER_LIFT - (hitboxSize() / 2.0);
     }
 
     /**

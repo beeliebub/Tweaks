@@ -4,6 +4,6 @@ package me.beeliebub.tweaks.economy;
 public enum BalanceMutationResult {
     /** The requested balance change was applied and queued for persistence. */
     APPLIED,
-    /** The balance could not represent the requested change without losing precision. */
+    /** The resulting whole-dollar balance would fall outside the supported range. */
     REJECTED_UNREPRESENTABLE
 }

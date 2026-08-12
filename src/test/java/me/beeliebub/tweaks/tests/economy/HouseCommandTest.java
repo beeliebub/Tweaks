@@ -82,14 +82,14 @@ class HouseCommandTest {
         PlayerMock admin = server.addPlayer();
         PlayerMock target = server.addPlayer();
         admin.addAttachment(plugin, Permissions.HOUSE_ADMIN, true);
-        plugin.getEconomyManager().setBalance(target.getUniqueId(), 0.0D);
+        plugin.getEconomyManager().setBalance(target.getUniqueId(), 0L);
         house.set(500L);
 
         command.onCommand(admin, bukkitCommand, "house", new String[]{"pay", target.getName(), "125"});
         drainHousePayment();
 
         assertEquals(375L, house.balance());
-        assertEquals(125.0D, plugin.getEconomyManager().getBalance(target.getUniqueId()));
+        assertEquals(125L, plugin.getEconomyManager().getBalance(target.getUniqueId()));
         MessageAssert.assertMessageSent(admin, "Paid $125");
     }
 

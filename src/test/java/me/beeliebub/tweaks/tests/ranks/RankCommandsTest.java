@@ -106,13 +106,13 @@ class RankCommandsTest {
         drainMessages(player);
 
         // Set balance explicitly after addPlayer to control state (join event grants 100).
-        em.setBalance(uuid, 5000.0);
+        em.setBalance(uuid, 5000L);
         em.setRank(uuid, 0);
 
         rankupCmd.onCommand(player, bukkitCmd, "rankup", new String[0]);
 
         assertEquals(1, em.getRank(uuid), "rank should advance to 1");
-        assertEquals(5000.0 - rm.getRankCost(1), em.getBalance(uuid), 0.001,
+        assertEquals(5000L - (long) Math.floor(rm.getRankCost(1)), em.getBalance(uuid),
                 "balance should be reduced by cost of rank 1");
         MessageAssert.assertMessageSent(player, "Congratulations");
     }
@@ -123,7 +123,7 @@ class RankCommandsTest {
         UUID uuid = player.getUniqueId();
         drainMessages(player);
 
-        em.setBalance(uuid, 10000.0);
+        em.setBalance(uuid, 10000L);
         em.setRank(uuid, 0);
 
         rankupCmd.onCommand(player, bukkitCmd, "rankup", new String[0]);
@@ -139,13 +139,13 @@ class RankCommandsTest {
         UUID uuid = player.getUniqueId();
         drainMessages(player);
 
-        em.setBalance(uuid, 10.0);   // far below rank-1 cost of 1000
+        em.setBalance(uuid, 10L);   // far below rank-1 cost of 1000
         em.setRank(uuid, 0);
 
         rankupCmd.onCommand(player, bukkitCmd, "rankup", new String[0]);
 
         assertEquals(0, em.getRank(uuid), "rank must remain unchanged on insufficient funds");
-        assertEquals(10.0, em.getBalance(uuid), 0.001,
+        assertEquals(10L, em.getBalance(uuid),
                 "balance must not change on failed rankup");
         MessageAssert.assertMessageSent(player, "Insufficient");
     }
@@ -159,12 +159,12 @@ class RankCommandsTest {
         drainMessages(player);
 
         em.setRank(uuid, 10);
-        em.setBalance(uuid, 999999.0);
+        em.setBalance(uuid, 999999L);
 
         rankupCmd.onCommand(player, bukkitCmd, "rankup", new String[0]);
 
         assertEquals(10, em.getRank(uuid), "rank must stay at max");
-        assertEquals(999999.0, em.getBalance(uuid), 0.001,
+        assertEquals(999999L, em.getBalance(uuid),
                 "balance must not change at max rank");
         MessageAssert.assertMessageSent(player, "maximum rank");
     }
@@ -237,11 +237,59 @@ class RankCommandsTest {
         drainMessages(player);
 
         em.setRank(uuid, 4);
-        em.setBalance(uuid, 1_000_000.0);
+        em.setBalance(uuid, 1_000_000L);
 
         rankupCmd.onCommand(player, bukkitCmd, "rankup", new String[0]);
 
         assertEquals(5, em.getRank(uuid), "should advance from rank 4 to rank 5");
+    }
+
+    @Test
+    void rankupFloorsFractionalConfiguredCost() {
+        PlayerMock player = server.addPlayer();
+        UUID uuid = player.getUniqueId();
+        drainMessages(player);
+
+        rm.setRankCost(1, 1000.9D);
+        em.setBalance(uuid, 1001L);
+        em.setRank(uuid, 0);
+
+        rankupCmd.onCommand(player, bukkitCmd, "rankup", new String[0]);
+
+        assertEquals(1, em.getRank(uuid));
+        assertEquals(1L, em.getBalance(uuid));
+    }
+
+    @Test
+    void rankupRefusesNonFiniteConfiguredCost() {
+        PlayerMock player = server.addPlayer();
+        UUID uuid = player.getUniqueId();
+        drainMessages(player);
+
+        rm.setRankCost(1, Double.NaN);
+        em.setBalance(uuid, 5000L);
+        em.setRank(uuid, 0);
+
+        rankupCmd.onCommand(player, bukkitCmd, "rankup", new String[0]);
+
+        assertEquals(0, em.getRank(uuid));
+        assertEquals(5000L, em.getBalance(uuid));
+    }
+
+    @Test
+    void rankupRefusesNegativeConfiguredCostWithoutCreditingPlayer() {
+        PlayerMock player = server.addPlayer();
+        UUID uuid = player.getUniqueId();
+        drainMessages(player);
+
+        rm.setRankCost(1, -100.0D);
+        em.setBalance(uuid, 500L);
+        em.setRank(uuid, 0);
+
+        rankupCmd.onCommand(player, bukkitCmd, "rankup", new String[0]);
+
+        assertEquals(0, em.getRank(uuid));
+        assertEquals(500L, em.getBalance(uuid));
     }
 
     // ---- Helpers ------------------------------------------------------------

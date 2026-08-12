@@ -246,9 +246,9 @@ final class RouletteSessionManager {
         }
 
         // The only getBalance call in this whole class, for the clicking (therefore online) player.
-        double balance = economyManager.getBalance(playerId);
+        long balance = economyManager.getBalance(playerId);
         if (balance < stake) {
-            player.sendMessage(Messages.MINIGAMES.rouletteInsufficientFunds(stake, (long) balance));
+            player.sendMessage(Messages.MINIGAMES.rouletteInsufficientFunds(stake, balance));
             return;
         }
 

@@ -633,9 +633,11 @@ When you join, you'll see a message like:
 | `/house add\|remove\|set <amount>` | Adjust the casino house account. Admin permission required. |
 | `/house pay <player> <amount>` | Transfer house funds to an online or known offline player. Admin permission required. |
 
-Balance mutations reject non-finite or inexact values instead of silently rounding them. A casino
-stake that cannot be debited exactly is refused; a rejected payout, rakeback, or refund is routed
-to the House account and logged for recovery.
+Balances are whole-dollar values. `/balance set|add|remove` reject decimal inputs rather than
+rounding them, and a mutation is rejected without changing the balance when its result would leave
+the supported `±2^53` range. Legacy persisted fractions are floored on load; non-finite or
+out-of-range legacy values are clamped and logged. A rejected casino stake is refused; a rejected
+payout, rakeback, or refund is routed to the House account and logged for recovery.
 
 #### Lottery
 
@@ -649,9 +651,11 @@ growth into the fallback and advances the baseline without paying anyone; the ti
 
 The pot is paid from the House through a durable payment intent and house-payment journal; an
 unpaid draw keeps its entries and baseline, while an in-flight payment resumes from its retained
-House debit on the next startup. Only a committed draw removes the recorded entrants, so entries
-added during payment remain. The live fallback is stored with lottery state, resets to the configured
-base after a successful draw, and can be viewed or changed with `/lottery fallback`.
+House debit on the next startup. A successful payment completes the House journal before its
+recipient receipt is pruned; the ready-gated join sweep removes only receipts with no matching
+full-journal entry. Only a committed draw removes the recorded entrants, so entries added during
+payment remain. The live fallback is stored with lottery state, resets to the configured base after
+a successful draw, and can be viewed or changed with `/lottery fallback`.
 
 | Command | What it does |
 |---|---|
@@ -835,9 +839,11 @@ Both commands are player-only and only affect the executing player; if you're al
 
 Console event records are opt-in and console-only. Every `logging.*` switch in `config.yml` starts
 disabled, so enable only the event families you need. Use `/tconfig logging.<feature>.<event>
-<true|false>`, `/tconfig list logging-core` (or another logging category), or the `/tconfig gui`
-to manage them. A confirmed `/tconfig` save updates the running logger immediately; editing
-`config.yml` by hand while the server is running requires a restart.
+<true|false>`, `/tconfig list logging` to print all 20 logging categories, `/tconfig list
+logging-core` (or another logging category), or the `/tconfig gui`'s main-menu **Logging** tab.
+The GUI shows the 20 logging categories over two pages. A confirmed `/tconfig` save updates the
+running logger immediately; editing `config.yml` by hand while the server is running requires a
+restart.
 
 The logger covers economy, minigames, lottery, protection administration, permissions, ranks,
 teleports, player administration, profiles, item administration, death inventories, block logs,
@@ -899,8 +905,9 @@ The standard casino experience. Play against an automated dealer at tables with 
 - **Rules**: Standard 52-card deck (reshuffled every game); Dealer stands on all 17s; Blackjack pays 3:2.
 - **Dealer Mannequin**: A 'LimeLush' visual mannequin appears on the dealer side at game end. It celebrates on dealer wins and performs a death animation on player wins.
 - **Rakeback**: Losing hands grant a small percentage of the bet back, based on your [Rank](#ranks).
-- **Balance safety**: A stake that cannot be represented exactly is refused; rejected payouts or
-  rakeback are routed to the House account for recovery rather than discarded.
+- **Balance safety**: A stake whose whole-dollar debit would leave the supported balance range is
+  refused; rejected payouts or rakeback are routed to the House account for recovery rather than
+  discarded.
 - **Free/Practice Tables**: Admins can create tables with **bet 0** (use `free` or `0` as the bet argument). These tables display **"Bet: FREE"** on the hologram, perform no currency transfers, and skip rakeback entirely — ideal for learning the game.
 
 #### General Mechanics
@@ -927,14 +934,20 @@ An in-world roulette wheel — a real physical build the server team constructed
 - **Bet families**: **Straight-up** on a single pocket (1-36, pays 36:1; pocket **0**/Green pays **50:1**), a **dozen/thirds** (1st/2nd/3rd twelve, pays 3:1), or a **colour** (red/black, pays 2:1). A win credits exactly `stake × odds` — your wagered stake itself is never returned on top of that, even on a win. Green **0** loses every dozen/colour bet — there is no odd/even, high/low, or column betting on this board.
 - **Labeled bets**: Every clickable segment shows a floating label with its bet description and odds (e.g. "Straight: 18 (Black)" — 36:1, "Dozen: 1st (1-12)" — 3:1, "Red"/"Black" — 2:1, "Straight: 0 (Green)" — 50:1, shown in green) for as long as the board is active. Labels hide during the spin and reappear once the result is shown. Colors alternate strictly by parity (odd = red, even = black).
 - **Color-coded segments**: Each clickable segment is itself a colored block matching its bet — red/black/green wool for straight-up and colour bets, grey/yellow/orange terracotta for the 1st/2nd/3rd dozen — so the betting area is visually readable at a glance. These also hide during the spin and reappear with the labels.
+- **Marker geometry**: Each colored `ItemDisplay` marker and its invisible clickable hitbox use the
+  same scale and center, so the visual target and interaction footprint line up. Markers use a
+  vertical billboard to face viewers; the hitboxes remain axis-aligned, so the display orientation
+  does not rotate the clickable box.
 - **Sticky stake**: Set your wager once with `/roulette stake <amount>`, then every segment you click wagers that amount. Multiple bets in the same round are allowed and stack — including clicking more than one physical segment of the same dozen, which places two independent bets.
 - **Shared round**: The first bet on an idle board opens a **30-second** betting window for everyone nearby — there's no host and no spin button for players. Once the window closes, the wheel spins, a ball orbits and settles into the winning pocket, and the round settles automatically.
 - **Bets are final**: There is no un-betting, no refund on quitting mid-round, and winnings are still credited to your balance even if you log off before the wheel stops.
-- **Balance safety**: A stake that cannot be represented exactly is refused; rejected winnings,
-  rakeback, or shutdown refunds are routed to the House account for recovery rather than discarded.
+- **Balance safety**: A stake whose whole-dollar debit would leave the supported balance range is
+  refused; rejected winnings, rakeback, or shutdown refunds are routed to the House account for
+  recovery rather than discarded.
 - **Settlement summary**: Your personal result message shows the amount wagered and the amount actually won (winnings only, not your returned stake) — e.g. a $100 stake winning at 36:1 shows wagered $100, won $3,600.
 - **Big win announcements**: If your winnings reach 8x your wager, the whole server is notified.
-- **House balance**: A hologram over each wheel shows the single server-wide house balance — the same account Blackjack's losses feed.
+- **House balance**: A hologram over each wheel shows the single server-wide house balance — the same
+  account Blackjack's losses and each Roulette player's net losses feed.
 
 #### Board Construction (Admin)
 
@@ -1231,6 +1244,7 @@ When an action occurs, the system checks rules in this order:
 | `/lottery fallback [<amount>]` | `tweaks.admin.lottery` | View or set the live lottery fallback floor. |
 | `/tconfig` / `/tconfig gui` | `tweaks.admin.config` | Open the admin config Dialog GUI (players only; console gets plain usage). |
 | `/tconfig list [category]` | `tweaks.admin.config` | Print every registered setting and its current value. |
+| `/tconfig list logging` | `tweaks.admin.config` | Print the 20 logging categories and their current values. |
 | `/tconfig max_homes <int>` | `tweaks.admin.config` | Set global max homes per player. |
 | `/tconfig max_chunks <int>` | `tweaks.admin.config` | Set global max chunk claims per player. |
 | `/tconfig egg_collector_drop_chance <0.0-100.0>` | `tweaks.admin.config` | Set the base Egg Collector drop chance. |
@@ -1323,7 +1337,7 @@ The plugin generates a `config.yml` on first startup. Custom enchantments requir
 
 On every startup, any key present in the bundled default `config.yml` but missing from your live file is automatically added back with its default value (an admin-modified value is never overwritten, and an explicit empty list you've saved stays empty — only a genuinely absent key is filled in).
 
-A growing set of settings — spanning General, Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Xp Bottle, and Console Event Logging — is also editable at runtime without touching `config.yml` by hand, via `/tconfig`. Six have dedicated CLI forms (see the [Commands Reference](#commands-reference) table above); the rest use the generic `/tconfig <path> <value>` grammar. Run `/tconfig gui` in-game for a Dialog-based editor with the same categories, or `/tconfig list [category]` to print every registered setting and its current value from the console or in chat.
+A growing set of settings — spanning General, Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Xp Bottle, and Console Event Logging — is also editable at runtime without touching `config.yml` by hand, via `/tconfig`. Six have dedicated CLI forms (see the [Commands Reference](#commands-reference) table above); the rest use the generic `/tconfig <path> <value>` grammar. Run `/tconfig gui` in-game for a Dialog-based editor with the same categories and a main-menu **Logging** tab, or `/tconfig list [category]` to print every registered setting and its current value from the console or in chat. `/tconfig list logging` filters that output to the 20 logging categories; the GUI shows them over two pages.
 
 ### Console logging settings
 

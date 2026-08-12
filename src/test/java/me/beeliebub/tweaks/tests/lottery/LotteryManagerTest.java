@@ -10,6 +10,7 @@ import me.beeliebub.tweaks.lottery.LotteryManager;
 import me.beeliebub.tweaks.lottery.LotteryMath;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
@@ -18,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -44,6 +47,11 @@ class LotteryManagerTest {
 
     @TempDir
     File dataFolder;
+
+    @AfterEach
+    void drainAsyncWrites() {
+        ForkJoinPool.commonPool().awaitQuiescence(2, TimeUnit.SECONDS);
+    }
 
     @Test
     void moneyNeutralPaymentLeavesEntrantsBaselineAndDiskUnchanged() throws Exception {
@@ -442,6 +450,8 @@ class LotteryManagerTest {
         when(house.balance()).thenReturn(HOUSE_BALANCE);
         when(house.pendingPayments()).thenReturn(Map.of());
         when(payment.whenReady()).thenReturn(CompletableFuture.completedFuture(null));
+        when(payment.pruneResolvedReceipt(any(UUID.class), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(null));
         when(economy.hasHousePaymentReceipt(any(UUID.class), anyString()))
                 .thenReturn(CompletableFuture.completedFuture(false));
         Logger logger = plugin.getLogger();

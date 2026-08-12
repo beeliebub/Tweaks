@@ -72,13 +72,13 @@ class TabManagerTest {
         UUID uuid = player.getUniqueId();
         EconomyManager em = plugin.getEconomyManager();
 
-        em.setBalance(uuid, 500.0);
+        em.setBalance(uuid, 500L);
 
         Component listName = player.playerListName();
         assertNotNull(listName, "playerListName must be set after setBalance");
 
         String plain = plain(listName);
-        String expected = BalanceCommand.formatBalance(500.0); // "$500"
+        String expected = BalanceCommand.formatBalance(500L); // "$500"
         assertTrue(plain.contains(expected),
                 "Tab plain text '" + plain + "' should contain '" + expected + "'");
     }
@@ -100,11 +100,11 @@ class TabManagerTest {
         UUID uuid = player.getUniqueId();
         EconomyManager em = plugin.getEconomyManager();
 
-        em.setBalance(uuid, 500.0);
+        em.setBalance(uuid, 500L);
         em.setBalanceHidden(uuid, true);
 
         String plain = plain(player.playerListName());
-        String formatted = BalanceCommand.formatBalance(500.0); // "$500"
+        String formatted = BalanceCommand.formatBalance(500L); // "$500"
         assertFalse(plain.contains(formatted),
                 "Tab plain text '" + plain + "' should NOT contain '" + formatted
                         + "' when balance is hidden");

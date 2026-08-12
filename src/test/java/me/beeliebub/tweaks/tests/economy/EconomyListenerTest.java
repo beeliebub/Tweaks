@@ -51,7 +51,7 @@ class EconomyListenerTest {
         EconomyManager em = plugin.getEconomyManager();
 
         // Day-1 multiplier = 1.0, rank bonus = 0.0 → reward = 100.0
-        assertEquals(100.0, em.getBalance(uuid), 0.001,
+        assertEquals(100L, em.getBalance(uuid),
                 "balance should equal the base reward on first login");
         assertEquals(1, em.getLoginStreak(uuid),
                 "streak should be 1 after first login");
@@ -68,12 +68,12 @@ class EconomyListenerTest {
 
         // First login.
         listener.onJoin(new PlayerJoinEvent(player, Component.empty()));
-        double balanceAfterFirst = em.getBalance(uuid);
+        long balanceAfterFirst = em.getBalance(uuid);
 
         // Immediately fire a second join — still within 24 hours.
         listener.onJoin(new PlayerJoinEvent(player, Component.empty()));
 
-        assertEquals(balanceAfterFirst, em.getBalance(uuid), 0.001,
+        assertEquals(balanceAfterFirst, em.getBalance(uuid),
                 "no second reward should be granted within 24 hours");
         assertEquals(1, em.getLoginStreak(uuid),
                 "streak should not increment on same-day login");
@@ -92,14 +92,14 @@ class EconomyListenerTest {
         long past = System.currentTimeMillis() - (72L * 60 * 60 * 1000);
         em.setLastLogin(uuid, past);
         em.setLoginStreak(uuid, 5);
-        em.setBalance(uuid, 0.0);
+        em.setBalance(uuid, 0L);
 
         listener.onJoin(new PlayerJoinEvent(player, Component.empty()));
 
         assertEquals(1, em.getLoginStreak(uuid),
                 "streak must reset to 1 after more than 48 hours of absence");
         // Day-1 multiplier → 100.0
-        assertEquals(100.0, em.getBalance(uuid), 0.001,
+        assertEquals(100L, em.getBalance(uuid),
                 "reward should be the base amount when streak resets");
     }
 
@@ -115,14 +115,14 @@ class EconomyListenerTest {
         long yesterday = System.currentTimeMillis() - (25L * 60 * 60 * 1000);
         em.setLastLogin(uuid, yesterday);
         em.setLoginStreak(uuid, 3);
-        em.setBalance(uuid, 0.0);
+        em.setBalance(uuid, 0L);
 
         listener.onJoin(new PlayerJoinEvent(player, Component.empty()));
 
         assertEquals(4, em.getLoginStreak(uuid),
                 "streak should increment by 1 for a consecutive-day login");
         // Day-4 multiplier = 1.3 → reward = 130.0
-        assertEquals(130.0, em.getBalance(uuid), 0.001,
+        assertEquals(130L, em.getBalance(uuid),
                 "reward should reflect the day-4 streak multiplier");
     }
 
@@ -152,8 +152,28 @@ class EconomyListenerTest {
         // First login triggers reward
         listener.onJoin(new PlayerJoinEvent(player, Component.empty()));
 
-        // Base reward is 100.0. formatBalance(100.0) should be "$100".
+        // Base reward is 100. formatBalance(100) should be "$100".
         // Expected message part: "+$100"
         me.beeliebub.tweaks.tests.MessageAssert.assertMessageSent(player, "Daily reward: +$100 (Day 1 streak)");
+    }
+
+    @Test
+    void fractionalDailyRewardIsFlooredBeforeCredit() {
+        plugin.getConfig().set("economy.daily-reward-base", 100.9D);
+        PlayerMock player = server.addPlayer();
+
+        assertEquals(100L, plugin.getEconomyManager().getBalance(player.getUniqueId()));
+    }
+
+    @Test
+    void nonFiniteDailyRewardIsSkippedWithoutUpdatingLoginState() {
+        plugin.getConfig().set("economy.streak-multipliers.1", Double.POSITIVE_INFINITY);
+        PlayerMock player = server.addPlayer();
+        UUID uuid = player.getUniqueId();
+        EconomyManager em = plugin.getEconomyManager();
+
+        assertEquals(0L, em.getBalance(uuid));
+        assertEquals(0, em.getLoginStreak(uuid));
+        assertEquals(0L, em.getLastLogin(uuid));
     }
 }

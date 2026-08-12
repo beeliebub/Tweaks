@@ -139,9 +139,9 @@ public final class BlackjackSessionManager {
 
         int bet = table.bet();
         if (bet > 0) {
-            double balance = economyManager.getBalance(playerId);
+            long balance = economyManager.getBalance(playerId);
             if (balance < bet) {
-                player.sendMessage(Messages.MINIGAMES.blackjackCannotAfford(bet, (long) balance));
+                player.sendMessage(Messages.MINIGAMES.blackjackCannotAfford(bet, balance));
                 return;
             }
             BalanceMutationResult debit;
@@ -282,8 +282,13 @@ public final class BlackjackSessionManager {
             creditOrRouteToHouse(player.getUniqueId(), player.getName(), settlement.rakebackAmount(), "rakeback");
         }
         if (settlement.houseWinnings() > 0) {
-            houseAccount.credit(settlement.houseWinnings());
-            enterLottery(player.getUniqueId(), settlement.houseWinnings(), "blackjack settlement");
+            if (houseAccount.credit(settlement.houseWinnings())) {
+                enterLottery(player.getUniqueId(), settlement.houseWinnings(), "blackjack settlement");
+            } else {
+                plugin.getLogger().severe("Blackjack: could not record house winnings of $"
+                        + settlement.houseWinnings() + " for " + player.getUniqueId()
+                        + "; lottery entry was not created.");
+            }
         }
 
         player.sendMessage(settlement.summaryMessage());
@@ -418,8 +423,13 @@ public final class BlackjackSessionManager {
                     int bet = session.game.bet();
                     endSession(playerId);
                     if (bet > 0) {
-                        houseAccount.credit(bet);
-                        enterLottery(playerId, bet, "blackjack inactivity forfeiture");
+                        if (houseAccount.credit(bet)) {
+                            enterLottery(playerId, bet, "blackjack inactivity forfeiture");
+                        } else {
+                            plugin.getLogger().severe("Blackjack inactivity forfeiture of $"
+                                    + bet + " for " + playerId
+                                    + " could not be recorded; lottery entry was not created.");
+                        }
                     }
 
                     var player = Bukkit.getPlayer(playerId);

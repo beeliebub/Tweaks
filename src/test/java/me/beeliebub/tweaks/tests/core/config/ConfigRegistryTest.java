@@ -9,9 +9,12 @@ import org.junit.jupiter.api.Test;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -87,5 +90,21 @@ class ConfigRegistryTest {
                 }
             }
         }
+    }
+
+    @Test
+    void menuGroupsPreserveTheFullRegistryOrder() {
+        List<ConfigCategory> main = ConfigRegistry.mainMenuCategories();
+        List<ConfigCategory> logging = ConfigRegistry.loggingCategories();
+        assertEquals(12, main.size(), "the main menu must retain all twelve existing categories");
+        assertEquals(20, logging.size(), "logging categories must paginate as twenty categories over two pages");
+        assertFalse(main.stream().anyMatch(category -> category.group() == ConfigCategory.Group.LOGGING));
+        assertTrue(main.stream().allMatch(category -> category.group() == ConfigCategory.Group.MAIN));
+        assertTrue(logging.stream().allMatch(category -> category.group() == ConfigCategory.Group.LOGGING));
+        assertFalse(logging.isEmpty());
+
+        List<ConfigCategory> recombined = new ArrayList<>(main);
+        recombined.addAll(logging);
+        assertEquals(ConfigRegistry.categories(), recombined);
     }
 }

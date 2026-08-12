@@ -127,6 +127,7 @@ public class Tweaks extends JavaPlugin {
             ProfilesBootstrap.register(this, services);
             EconomyBootstrap.register(this, services);
             me.beeliebub.tweaks.lottery.LotteryBootstrap.register(this, services);
+            EconomyBootstrap.startPaymentReplay(this, services);
             RanksBootstrap.register(this, services);
             EconomyBootstrap.registerRankAwareListener(this, services);
             PermissionsBootstrap.register(this, services);

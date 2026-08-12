@@ -105,7 +105,7 @@ class BlackjackInactivityTimeoutTest {
      */
     private BlackjackGame registerMidHandGame(BlackjackSessionManager sessionManager, UUID playerId) {
         // Deduct the bet once (simulating the production flow).
-        economyManager.setBalance(playerId, (double) BET);
+        economyManager.setBalance(playerId, BET);
         economyManager.removeBalance(playerId, BET);
 
         for (int i = 0; i < 20; i++) {
@@ -139,7 +139,7 @@ class BlackjackInactivityTimeoutTest {
                 "Session must be active after registration");
 
         // Record the balance with the bet already deducted.
-        double balanceAfterBet = economyManager.getBalance(playerId);
+        long balanceAfterBet = economyManager.getBalance(playerId);
 
         // Back-date: game has been idle for TIMEOUT + 1 second.
         long simulatedNow = System.currentTimeMillis();
@@ -153,7 +153,7 @@ class BlackjackInactivityTimeoutTest {
                 "Session must be removed after sweeping an over-threshold idle game");
 
         // No payout must be credited (bet was already deducted; forfeited on eviction).
-        assertEquals(balanceAfterBet, economyManager.getBalance(playerId), 1e-9,
+        assertEquals(balanceAfterBet, economyManager.getBalance(playerId),
                 "Balance must be unchanged (no payout) when a game is ended for inactivity");
         assertEquals(BET, houseAccount.balance(), "The forfeited wager must be credited to the house");
     }

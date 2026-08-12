@@ -6,7 +6,7 @@ public enum HousePayOutcome {
     SUCCESS,
     /** The house balance is less than the requested amount; nothing was debited. */
     INSUFFICIENT_FUNDS,
-    /** The recipient's balance could not represent the credit exactly; the house was refunded. */
+    /** The recipient's balance could not accept the credit within the supported range; the house was refunded. */
     UNREPRESENTABLE_REFUNDED,
     /** A receipt already existed under this payment id with a different amount; needs a manual look. */
     NEEDS_RECONCILIATION,

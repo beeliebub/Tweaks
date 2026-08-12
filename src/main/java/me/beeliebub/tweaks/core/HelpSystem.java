@@ -613,6 +613,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 gray("Manage plugin configuration at runtime."),
                 cmd("/tconfig gui", "Open the admin config GUI (players only)."),
                 cmd("/tconfig list [category]", "Print every setting and its current value."),
+                cmd("/tconfig list logging", "Print the 20 logging categories and their current values."),
                 cmd("/tconfig max_homes <int>", "Set global max homes per player."),
                 cmd("/tconfig max_chunks <int>", "Set global max chunk claims per player."),
                 cmd("/tconfig egg_collector_drop_chance <%>", "Set base egg drop chance."),
@@ -621,6 +622,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/tconfig resourceitems <add|remove> <item>", "Manage resource world allowed items."),
                 cmd("/tconfig world-profiles <list|add|remove|edit>", "Manage world-key -> profile/tag/color mappings (see /help profiles)."),
                 cmd("/tconfig logging.<feature>.<event> <true|false>", "Toggle one console-only event record."),
+                white("The GUI main menu has a Logging tab with 20 categories over two pages."),
                 white("Logging records are disabled by default; a confirmed CLI/GUI save applies immediately, while hand edits require a restart."),
                 cmd("/tconfig <path> <value>", "Generic setter for any other registered setting (Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Xp Bottle categories)."),
                 white("Ranks: /ranks edit  ·  Permissions: /tprm  ·  Whack: /whack"),
@@ -750,6 +752,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 yellow("Green 0 loses every Dozen/Colour bet — no odd/even, high/low, or columns."),
                 yellow("A win pays exactly stake x odds — your wagered stake is never returned on top."),
                 white("Segments are color-coded blocks (red/black/green wool, dozen terracotta) with a floating odds label."),
+                white("Each colored marker and clickable hitbox share one scale and center; markers billboard vertically while hitboxes stay axis-aligned."),
                 aqua("How a round works:"),
                 white("The first bet on an idle wheel opens a 30-second window for everyone nearby."),
                 white("When it closes, the wheel spins, the ball settles, and the round pays out."),
@@ -1004,7 +1007,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/balance set <player> <amount>", "Set a player's balance."),
                 cmd("/balance add <player> <amount>", "Grant funds."),
                 cmd("/balance remove <player> <amount>", "Deduct funds."),
-                white("Balance changes that cannot be represented exactly are rejected without changing the balance."),
+                white("Balances are whole-dollar values; decimal admin inputs and mutations outside the supported range are rejected without changing the balance."),
                 red("Permission: tweaks.admin.balance.")
         ), Material.EMERALD, 22, ColorUtil.HELP_GRAD_ECONOMY, List.of("daily_rewards", "ranks", "lottery")));
 

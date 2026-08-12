@@ -7,9 +7,8 @@ import java.util.Optional;
 
 /**
  * Single static ordered category -&gt; settings table backing both {@code /tconfig}'s CLI path
- * grammar and its Dialog GUI. Every later phase of the config-migration plan only appends entries
- * here, plus its own package's live-read conversion - this file's structure (the record types it's
- * built from) does not need to grow again per phase.
+ * grammar and its Dialog GUI. The complete flat registry remains the source of truth; menu-specific
+ * views are filtered projections so CLI lookup and output retain the full ordered list.
  *
  * <p>{@link #EGGDROP_SENTINEL_PATH}, {@link #SPAWNEREGG_SENTINEL_PATH}, and
  * {@link #RESOURCEITEMS_SENTINEL_PATH} mark the three pre-existing legacy settings whose mutation
@@ -186,6 +185,18 @@ public final class ConfigRegistry {
 
     public static List<ConfigCategory> categories() {
         return allCategories();
+    }
+
+    public static List<ConfigCategory> mainMenuCategories() {
+        return allCategories().stream()
+                .filter(category -> category.group() == ConfigCategory.Group.MAIN)
+                .toList();
+    }
+
+    public static List<ConfigCategory> loggingCategories() {
+        return allCategories().stream()
+                .filter(category -> category.group() == ConfigCategory.Group.LOGGING)
+                .toList();
     }
 
     public static Optional<ConfigCategory> category(String key) {

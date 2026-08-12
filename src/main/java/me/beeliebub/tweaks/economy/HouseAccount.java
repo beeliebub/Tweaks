@@ -18,8 +18,8 @@ import java.util.logging.Level;
 /**
  * Server-wide casino house balance. Gameplay may only add to this account; administration owns
  * the debit and set paths. The account is represented as whole dollars because casino wagers are
- * integral amounts. Player balances remain {@code double}s, so a transfer crosses that boundary
- * exactly once in {@link HouseCommand}, where the whole-dollar amount is widened to a double.
+ * integral amounts. Player balances are also whole dollars, so a transfer stays integral across
+ * both account boundaries.
  *
  * <p>Also owns the durable payment journal for {@code /house pay}: {@link #beginPayment} records a
  * {@code DEBIT_DURABLE} intent in the <em>same</em> {@code house.yml} snapshot as the debit, so the
@@ -319,6 +319,13 @@ public final class HouseAccount {
                 if (entry.state() == HousePaymentState.DEBIT_DURABLE) pending.put(id, entry);
             });
             return Map.copyOf(pending);
+        }
+    }
+
+    /** Snapshot of every journal entry, including terminal entries retained for reconciliation. */
+    public Map<String, HouseJournalEntry> journalEntries() {
+        synchronized (stateLock) {
+            return Map.copyOf(journal);
         }
     }
 

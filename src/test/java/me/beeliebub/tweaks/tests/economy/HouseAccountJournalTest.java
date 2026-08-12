@@ -143,6 +143,8 @@ class HouseAccountJournalTest {
         house.markNeedsReconciliation("pay-1").get();
 
         assertTrue(house.pendingPayments().isEmpty(), "a NEEDS_RECONCILIATION entry must never be auto-replayed");
+        assertEquals("NEEDS_RECONCILIATION", house.journalEntries().get("pay-1").state().name(),
+                "the full journal snapshot must retain terminal entries for receipt cleanup");
         assertEquals(400L, house.balance(), "reconciliation must not move money");
     }
 }

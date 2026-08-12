@@ -249,7 +249,7 @@ public final class HouseCommand implements CommandExecutor, TabCompleter {
     private Long parsePositiveAmount(CommandSender sender, String input) {
         try {
             long amount = Long.parseLong(input);
-            if (amount <= 0 || amount > EconomyManager.MAX_EXACT_DOUBLE_INTEGER) {
+            if (amount <= 0 || amount > EconomyManager.MAX_BALANCE) {
                 sender.sendMessage(Messages.houseInvalidAmount(input));
                 return null;
             }

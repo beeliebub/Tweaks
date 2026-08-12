@@ -59,7 +59,7 @@ class BalanceCommandTest {
         UUID uuid = player.getUniqueId();
         drainMessages(player);
 
-        em.setBalance(uuid, 1234.0);
+        em.setBalance(uuid, 1234L);
         cmd.onCommand(player, bukkitCmd, "balance", new String[0]);
 
         // Should contain the formatted $1,234
@@ -103,12 +103,12 @@ class BalanceCommandTest {
         drainMessages(target);
 
         admin.addAttachment(plugin, Permissions.ADMIN_BALANCE, true);
-        em.setBalance(targetId, 0.0);
+        em.setBalance(targetId, 0L);
 
         cmd.onCommand(admin, bukkitCmd, "balance",
                 new String[]{"add", target.getName(), "500"});
 
-        assertEquals(500.0, em.getBalance(targetId), 0.001,
+        assertEquals(500L, em.getBalance(targetId),
                 "balance should increase by the added amount");
         MessageAssert.assertMessageSent(admin, target.getName());
     }
@@ -126,7 +126,7 @@ class BalanceCommandTest {
         cmd.onCommand(admin, bukkitCmd, "balance",
                 new String[]{"set", target.getName(), "999"});
 
-        assertEquals(999.0, em.getBalance(targetId), 0.001,
+        assertEquals(999L, em.getBalance(targetId),
                 "balance should be exactly the set amount");
     }
 
@@ -139,12 +139,12 @@ class BalanceCommandTest {
         drainMessages(target);
 
         admin.addAttachment(plugin, Permissions.ADMIN_BALANCE, true);
-        em.setBalance(targetId, 300.0);
+        em.setBalance(targetId, 300L);
 
         cmd.onCommand(admin, bukkitCmd, "balance",
                 new String[]{"remove", target.getName(), "100"});
 
-        assertEquals(200.0, em.getBalance(targetId), 0.001,
+        assertEquals(200L, em.getBalance(targetId),
                 "balance should decrease by the removed amount");
     }
 
@@ -175,13 +175,13 @@ class BalanceCommandTest {
 
         noPerms.setOp(false);
         UUID targetId = target.getUniqueId();
-        em.setBalance(targetId, 100.0);
+        em.setBalance(targetId, 100L);
 
         cmd.onCommand(noPerms, bukkitCmd, "balance",
                 new String[]{"add", target.getName(), "9999"});
 
         // Balance must be unchanged.
-        assertEquals(100.0, em.getBalance(targetId), 0.001,
+        assertEquals(100L, em.getBalance(targetId),
                 "balance must not change when sender lacks ADMIN_BALANCE");
         MessageAssert.assertMessageSent(noPerms, "permission");
     }
@@ -202,20 +202,36 @@ class BalanceCommandTest {
     }
 
     @Test
-    void adminAddReportsUnrepresentableStoredBalance() {
+    void adminAddReportsBalanceOutsideSupportedRange() {
         PlayerMock admin = server.addPlayer();
         PlayerMock target = server.addPlayer();
         drainMessages(admin);
         drainMessages(target);
 
         admin.addAttachment(plugin, Permissions.ADMIN_BALANCE, true);
-        em.setBalance(target.getUniqueId(), Math.pow(2, 53));
+        em.setBalance(target.getUniqueId(), EconomyManager.MAX_BALANCE);
 
         cmd.onCommand(admin, bukkitCmd, "balance",
                 new String[]{"add", target.getName(), "1"});
 
-        assertEquals(Math.pow(2, 53), em.getBalance(target.getUniqueId()));
-        MessageAssert.assertMessageSent(admin, "cannot represent");
+        assertEquals(EconomyManager.MAX_BALANCE, em.getBalance(target.getUniqueId()));
+        MessageAssert.assertMessageSent(admin, "outside the supported range");
+    }
+
+    @Test
+    void decimalAdminAmountIsRejected() {
+        PlayerMock admin = server.addPlayer();
+        PlayerMock target = server.addPlayer();
+        drainMessages(admin);
+        drainMessages(target);
+
+        admin.addAttachment(plugin, Permissions.ADMIN_BALANCE, true);
+        em.setBalance(target.getUniqueId(), 0L);
+        cmd.onCommand(admin, bukkitCmd, "balance",
+                new String[]{"set", target.getName(), "1.5"});
+
+        assertEquals(0L, em.getBalance(target.getUniqueId()));
+        MessageAssert.assertMessageSent(admin, "Invalid amount");
     }
 
     // ---- Helpers ------------------------------------------------------------

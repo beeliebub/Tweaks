@@ -90,7 +90,7 @@ public class TabManager implements Listener {
 
         // Balance (omitted when hidden).
         if (!economyManager.isBalanceHidden(uuid)) {
-            double balance = economyManager.getBalance(uuid);
+            long balance = economyManager.getBalance(uuid);
             name = name.append(Component.text(
                     " " + BalanceCommand.formatBalance(balance), NamedTextColor.YELLOW));
         }
