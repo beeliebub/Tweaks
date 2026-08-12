@@ -668,10 +668,10 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         List<HelpArticle> articles = new ArrayList<>();
 
         articles.add(new HelpArticle("skyblock_islands", "Skyblock Islands", List.of(
-                gray("A separated island world with one protected grid slot per island."),
+                gray("A separated island world with one protected grid slot per island; slots within 1,000 blocks of chunk 0,0 are reserved for spawn."),
                 cmd("/island create", "Create an island using the configured default type and difficulty."),
                 cmd("/island create <type> <difficulty>", "Create an island with an explicit configured pair."),
-                cmd("/island create gui", "Choose an available type and difficulty in the island picker."),
+                cmd("/island create gui", "Choose a difficulty, then a compatible island type; Back returns to the difficulty list."),
                 cmd("/island home [name]", "Return to your island home or a named home."),
                 cmd("/island sethome <name>", "Save a named home inside your island."),
                 cmd("/island homes buy", "Buy an additional island home slot."),
@@ -725,11 +725,12 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
 
         articles.add(new HelpArticle("skyblock_admin", "Skyblock Administration", List.of(
                 gray("Administrators have guarded tools for the configured Skyblock world."),
+                cmd("/isadmin", "Open the authoring hub as a player, or print the admin help catalogue from console."),
                 cmd("/isadmin gui", "Open the complete authoring hub and clear its setup checklist."),
                 cmd("/isadmin help [topic]", "Print the complete create-then-set syntax catalogue."),
                 cmd("/isadmin status", "Print every setup check and its current state."),
-                cmd("/isadmin spawn", "Record the current wand-selected Skyblock spawn."),
-                cmd("/isadmin clearspawn [confirm]", "Preview or confirm clearing the recorded spawn."),
+                cmd("/isadmin spawn", "Record a selection containing chunk 0,0 and create the managed skyblock-spawn region."),
+                cmd("/isadmin clearspawn [confirm]", "Preview or confirm removing the managed region and recovery record."),
                 cmd("/isadmin island list", "List loaded islands."),
                 cmd("/isadmin island inspect <owner|id>", "Inspect one island."),
                 cmd("/isadmin island force-delete <owner|id> [confirm]", "Preview or confirm durable deletion."),
@@ -984,7 +985,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("- Members list: hover '(N entries)' for full names."),
                 white("- Active flag rules (including targeted rules)."),
                 white("- Mob-spawn entity lists (ALLOW/DENY_MOB_SPAWN)."),
-                yellow("Skyblock islands use dedicated protection regions; manage them with /island."),
+                yellow("Skyblock islands use dedicated protection regions; manage them with /island. The skyblock-spawn region is managed with /isadmin spawn."),
                 yellow("Aliases: /rg i, /rg am, /rg rm"),
                 red("Requires permission: " + Permissions.PROTECTION_INFO + ".")
         ), Material.BOOK, 22, ColorUtil.HELP_GRAD_PROTECTION_PURCHASEABLE,

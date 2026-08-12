@@ -73,4 +73,34 @@ class IslandGridTest {
         assertEquals(-1, grid.slotContaining(0, 35));
         assertTrue(grid.findSlotContaining(0, 35).isEmpty());
     }
+
+    @Test
+    void originSlotsAreExcludedAndFirstAllocatableSlotIsNine() {
+        IslandGrid grid = new IslandGrid();
+
+        for (int index = 0; index <= 8; index++) {
+            assertTrue(grid.isSpawnExcluded(index), "origin ring slot " + index + " must be excluded");
+        }
+        assertFalse(grid.isSpawnExcluded(9));
+        assertEquals(9, grid.firstAllocatableIndex());
+        assertEquals(70, grid.slotForIndex(9).centerChunkX());
+        assertEquals(-35, grid.slotForIndex(9).centerChunkZ());
+    }
+
+    @Test
+    void exclusionScanFailsWhenAllConfiguredSlotsAreReserved() {
+        IslandGrid grid = new IslandGrid(35, 8);
+
+        assertThrows(IllegalStateException.class, grid::firstAllocatableIndex);
+    }
+
+    @Test
+    void exclusionUsesStrictChebyshevBoundary() {
+        IslandGrid boundary = new IslandGrid(62, 2);
+        assertFalse(boundary.isSpawnExcluded(1));
+
+        IslandGrid diagonal = new IslandGrid(55, 2);
+        assertTrue(diagonal.isSpawnExcluded(1));
+        assertTrue(diagonal.isSpawnExcluded(2));
+    }
 }

@@ -6,6 +6,7 @@ import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.profiles.StorageManager;
 import me.beeliebub.tweaks.profiles.WorldProfileTable;
 import me.beeliebub.tweaks.protection.region.ProtectionManager;
+import me.beeliebub.tweaks.protection.region.Region;
 import me.beeliebub.tweaks.protection.ui.RegionSelectionManager;
 import me.beeliebub.tweaks.skyblock.command.IslandAdminCommand;
 import me.beeliebub.tweaks.skyblock.command.admin.SkyblockAdminServices;
@@ -55,7 +56,6 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
-import org.bukkit.event.Listener;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Duration;
@@ -201,7 +201,12 @@ public final class SkyblockBootstrap {
                 config.maxHomes() + config.maxHomesPurchasable());
         SkyblockEconomy economy = new SkyblockEconomy(plugin, islandManager);
         economy.preload();
-        SkyblockSpawn spawn = new SkyblockSpawn(plugin);
+        SkyblockSpawn spawn = new SkyblockSpawn(plugin, spawnWorld -> {
+            Region region = regionBridge.spawnRegion(spawnWorld);
+            if (region == null || region.bounds() == null) return null;
+            return new IslandGrid.ChunkBounds(region.bounds().minChunkX(), region.bounds().minChunkZ(),
+                    region.bounds().maxChunkX(), region.bounds().maxChunkZ());
+        });
         IslandDeletionStore deletionStore = new IslandDeletionStore(plugin);
         IslandDeletionService deletion = createDeletionService(plugin, world, grid, config,
                 deletionStore, islandManager, regionBridge, visits, spawn, pendingWipeStore, storage,
@@ -244,6 +249,7 @@ public final class SkyblockBootstrap {
         services.setSkyblockManager(islandManager);
         services.setSkyblockEconomy(economy);
         services.setSkyblockRuntime(runtime);
+        reconcileSpawnRegion(plugin, runtime);
         if (services.tabManagerOrNull() != null) {
             services.tabManagerOrNull().setSkyblockBalanceProvider(worldKey, player -> islandManager.forPlayer(player.getUniqueId())
                     .map(island -> java.util.OptionalDouble.of(economy.balance(island)))
@@ -417,7 +423,17 @@ public final class SkyblockBootstrap {
                         return runtime.islandManager().islandAt(location).isPresent();
                     }
                 },
-                player -> player.sendMessage(Messages.SKYBLOCK.invalidInput("/region is disabled in Skyblock")),
+                new SkyblockWorldListener.MessageFacade() {
+                    @Override
+                    public void regionDenied(Player player) {
+                        player.sendMessage(Messages.SKYBLOCK.invalidInput("/region is disabled in Skyblock"));
+                    }
+
+                    @Override
+                    public void spawnRegionDenied(Player player) {
+                        player.sendMessage(Messages.SKYBLOCK.spawnRegionCommandDenied());
+                    }
+                },
                 runtime.visits());
         WipeApplyListener.ProfileWiper profileWiper = new WipeApplyListener.ProfileWiper() {
             @Override
@@ -502,9 +518,14 @@ public final class SkyblockBootstrap {
 
             @Override
             public Optional<ContainmentListener.ContainmentArea> spawnRegion(World world) {
-                if (world != runtime.world() || runtime.spawn().data().isEmpty()) return Optional.empty();
+                if (world != runtime.world() || runtime.spawn() == null || runtime.regionBridge() == null) {
+                    return Optional.empty();
+                }
+                Region live = runtime.regionBridge().spawnRegion(world);
+                if (live == null || live.bounds() == null) return Optional.empty();
+                IslandGrid.ChunkBounds bounds = runtime.spawn().permittedBounds(world);
                 return Optional.of(new ContainmentListener.ContainmentArea(null, world,
-                        runtime.spawn().data().get().bounds(), runtime.spawn().location(world)));
+                        bounds, runtime.spawn().location(world)));
             }
 
             @Override
@@ -533,8 +554,97 @@ public final class SkyblockBootstrap {
                 || runtime.spawn().contains(location.getChunk())) return false;
         int slot = runtime.islandManager().slotFor(location);
         if (slot < 0 || runtime.islandManager().islandAt(location).isPresent()) return false;
+        if (runtime.grid().isSpawnExcluded(slot)) return false;
         return runtime.grid().contains(slot, IslandSize.LARGE, location.getBlockX() >> 4,
                 location.getBlockZ() >> 4);
+    }
+
+    /** Reconciles the durable spawn record with the live protection claim after bootstrap. */
+    private static void reconcileSpawnRegion(Tweaks plugin, Runtime runtime) {
+        if (runtime.spawn() == null || runtime.regionBridge() == null || runtime.world() == null) return;
+        SkyblockSpawn spawn = runtime.spawn();
+        final Region live;
+        final SkyblockSpawn.SpawnData recorded;
+        try {
+            live = runtime.regionBridge().spawnRegion(runtime.world());
+            recorded = spawn.data().orElse(null);
+        } catch (RuntimeException error) {
+            plugin.getLogger().log(Level.WARNING, "Skyblock spawn reconciliation could not inspect its state", error);
+            return;
+        }
+        if (recorded == null && live == null) return;
+
+        if (recorded != null && !matchesWorld(recorded.worldKey(), runtime.world())) {
+            plugin.getLogger().warning("Skyblock spawn record names world '" + recorded.worldKey()
+                    + "' but the configured world is '" + runtime.world().getName()
+                    + "'; refusing cross-world recovery.");
+            return;
+        }
+
+        if (recorded == null) {
+            plugin.getLogger().warning("Skyblock spawn region '" + IslandRegionBridge.SPAWN_REGION_ID
+                    + "' exists without a spawn record in world '" + runtime.world().getName() + "'.");
+            return;
+        }
+
+        if (live == null) {
+            if (recorded.owner() == null) {
+                plugin.getLogger().warning("Skyblock spawn record in world '" + runtime.world().getName()
+                        + "' has no owner; refusing to recreate region '"
+                        + IslandRegionBridge.SPAWN_REGION_ID + "'.");
+                return;
+            }
+            try {
+                java.util.concurrent.atomic.AtomicReference<CompletableFuture<Void>> pending =
+                        new java.util.concurrent.atomic.AtomicReference<>();
+                ProtectionManager.ClaimResult result = runtime.regionBridge().claimSpawn(runtime.world(), recorded,
+                        recorded.bounds(), null, pending);
+                if (result != ProtectionManager.ClaimResult.OK) {
+                    plugin.getLogger().warning("Skyblock spawn region recovery failed: " + result);
+                } else if (pending.get() != null) {
+                    pending.get().whenComplete((ignored, error) -> {
+                        if (error != null) plugin.getLogger().log(Level.WARNING,
+                                "Skyblock spawn region recovery stamping failed", error);
+                    });
+                }
+            } catch (RuntimeException error) {
+                plugin.getLogger().log(Level.WARNING, "Skyblock spawn region recovery failed", error);
+            }
+            return;
+        }
+
+        if (live.bounds() == null) {
+            plugin.getLogger().warning("Skyblock spawn region '" + IslandRegionBridge.SPAWN_REGION_ID
+                    + "' has no bounds in world '" + runtime.world().getName() + "'.");
+            return;
+        }
+        IslandGrid.ChunkBounds liveBounds = new IslandGrid.ChunkBounds(live.bounds().minChunkX(),
+                live.bounds().minChunkZ(), live.bounds().maxChunkX(), live.bounds().maxChunkZ());
+        if (!liveBounds.equals(recorded.bounds()) || !Objects.equals(live.owner(), recorded.owner())) {
+            UUID owner = live.owner() == null ? recorded.owner() : live.owner();
+            if (owner == null) {
+                plugin.getLogger().warning("Skyblock spawn reconciliation found an ownerless live region; keeping the record unchanged.");
+                return;
+            }
+            try {
+                SkyblockSpawn.SpawnData reconciled = new SkyblockSpawn.SpawnData(
+                        recorded.worldKey(), liveBounds, owner, recorded.x(), recorded.y(), recorded.z(),
+                        recorded.yaw(), recorded.pitch());
+                spawn.record(reconciled).whenComplete((ignored, error) -> {
+                    if (error != null) plugin.getLogger().log(Level.WARNING,
+                            "Skyblock spawn record reconciliation failed", error);
+                });
+                plugin.getLogger().info("Skyblock spawn recovery record reconciled to live region bounds and owner in world '"
+                        + runtime.world().getName() + "'.");
+            } catch (RuntimeException error) {
+                plugin.getLogger().log(Level.WARNING, "Skyblock spawn record reconciliation failed", error);
+            }
+        }
+    }
+
+    private static boolean matchesWorld(String configuredKey, World world) {
+        return configuredKey.equalsIgnoreCase(world.getKey().asString())
+                || configuredKey.equalsIgnoreCase(world.getName());
     }
 
     private static World findLoadedWorld(Tweaks plugin, String worldKey) {
@@ -567,6 +677,9 @@ public final class SkyblockBootstrap {
         if (runtime.deletionTask() != null) runtime.deletionTask().cancel();
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(SHUTDOWN_TIMEOUT_SECONDS);
         boolean interrupted = awaitFlush(plugin, "island", runtime.islandStore().shutdown(), deadline, false);
+        if (runtime.spawn() != null) {
+            interrupted |= awaitFlush(plugin, "spawn", runtime.spawn().flush(), deadline, interrupted);
+        }
         if (runtime.deletion() != null) {
             interrupted |= awaitFlush(plugin, "deletion", runtime.deletion().flush(), deadline, interrupted);
         }

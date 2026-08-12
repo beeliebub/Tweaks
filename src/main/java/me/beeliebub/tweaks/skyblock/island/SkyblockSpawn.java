@@ -11,23 +11,37 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
-/** Admin-recorded Skyblock spawn region and point, with vanilla-world fallback. */
+/** Admin-recorded Skyblock spawn point with live-region bounds and vanilla fallback. */
 public final class SkyblockSpawn {
 
     private final Store store;
+    private final Function<World, IslandGrid.ChunkBounds> boundsSource;
     private volatile SpawnData data;
+    private volatile CompletableFuture<Void> lastPersistence = CompletableFuture.completedFuture(null);
 
     public SkyblockSpawn() {
-        this(new MemoryStore());
+        this(new MemoryStore(), ignored -> null);
     }
 
     public SkyblockSpawn(JavaPlugin plugin) {
-        this(new YamlStoreStore(Objects.requireNonNull(plugin, "plugin")));
+        this(new YamlStoreStore(Objects.requireNonNull(plugin, "plugin")), ignored -> null);
     }
 
     public SkyblockSpawn(Store store) {
+        this(store, ignored -> null);
+    }
+
+    public SkyblockSpawn(JavaPlugin plugin, Function<World, IslandGrid.ChunkBounds> boundsSource) {
+        this(new YamlStoreStore(Objects.requireNonNull(plugin, "plugin")), boundsSource);
+    }
+
+    public SkyblockSpawn(Store store, Function<World, IslandGrid.ChunkBounds> boundsSource) {
         this.store = Objects.requireNonNull(store, "store");
+        this.boundsSource = Objects.requireNonNull(boundsSource, "boundsSource");
         this.data = store.load().orElse(null);
     }
 
@@ -48,13 +62,8 @@ public final class SkyblockSpawn {
             return false;
         }
         SpawnData current = data;
-        if (current != null) {
-            return matchesWorld(current.worldKey(), chunk.getWorld())
-                    && current.bounds().contains(chunk.getX(), chunk.getZ());
-        }
-        Location vanillaSpawn = chunk.getWorld().getSpawnLocation();
-        return (vanillaSpawn.getBlockX() >> 4) == chunk.getX()
-                && (vanillaSpawn.getBlockZ() >> 4) == chunk.getZ();
+        if (current != null && !matchesWorld(current.worldKey(), chunk.getWorld())) return false;
+        return permittedBounds(chunk.getWorld()).contains(chunk.getX(), chunk.getZ());
     }
 
     public Location location(World world) {
@@ -64,18 +73,21 @@ public final class SkyblockSpawn {
     public Location destination(World world) {
         Objects.requireNonNull(world, "world");
         SpawnData current = data;
-        if (current == null || !matchesWorld(current.worldKey(), world)) {
+        IslandGrid.ChunkBounds live = boundsSource.apply(world);
+        if (live == null) {
             return world.getSpawnLocation().clone();
         }
-        return current.location(world);
+        if (current != null && current.owner() != null && matchesWorld(current.worldKey(), world)
+                && live.contains(chunkOf(current.x()), chunkOf(current.z()))) {
+            return current.location(world);
+        }
+        return world.getSpawnLocation().clone();
     }
 
     public IslandGrid.ChunkBounds permittedBounds(World world) {
         Objects.requireNonNull(world, "world");
-        SpawnData current = data;
-        if (current != null && matchesWorld(current.worldKey(), world)) {
-            return current.bounds();
-        }
+        IslandGrid.ChunkBounds live = boundsSource.apply(world);
+        if (live != null) return live;
         Location spawn = world.getSpawnLocation();
         int chunkX = spawn.getBlockX() >> 4;
         int chunkZ = spawn.getBlockZ() >> 4;
@@ -94,30 +106,41 @@ public final class SkyblockSpawn {
                 location.getBlockX() >> 4, location.getBlockZ() >> 4);
     }
 
-    public void record(SpawnData next) {
+    public CompletableFuture<Void> record(SpawnData next) {
         Objects.requireNonNull(next, "next");
         data = next;
-        store.save(next);
+        lastPersistence = persistence(store.save(next));
+        return lastPersistence;
     }
 
-    public void record(String worldKey, IslandGrid.ChunkBounds bounds, Point point) {
+    public CompletableFuture<Void> record(String worldKey, IslandGrid.ChunkBounds bounds, Point point) {
         Objects.requireNonNull(point, "point");
-        record(new SpawnData(worldKey, bounds, point.x(), point.y(), point.z(), point.yaw(), point.pitch()));
+        return record(new SpawnData(worldKey, bounds, point.x(), point.y(), point.z(), point.yaw(), point.pitch()));
     }
 
-    public void record(World world, IslandGrid.ChunkBounds bounds, Location point) {
+    public CompletableFuture<Void> record(World world, IslandGrid.ChunkBounds bounds, Location point) {
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(point, "point");
         if (point.getWorld() != world) {
             throw new IllegalArgumentException("Skyblock spawn point must be in the recorded world");
         }
-        record(new SpawnData(world.getKey().asString(), bounds, point.getX(), point.getY(), point.getZ(),
+        return record(new SpawnData(world.getKey().asString(), bounds, point.getX(), point.getY(), point.getZ(),
                 point.getYaw(), point.getPitch()));
     }
 
-    public void clear() {
+    public CompletableFuture<Void> clear() {
         data = null;
-        store.clear();
+        lastPersistence = persistence(store.clear());
+        return lastPersistence;
+    }
+
+    /** Returns the latest spawn-file operation for bounded lifecycle waits and command reporting. */
+    public CompletableFuture<Void> flush() {
+        return lastPersistence;
+    }
+
+    private static CompletableFuture<Void> persistence(CompletableFuture<Void> future) {
+        return future == null ? CompletableFuture.completedFuture(null) : future;
     }
 
     private static boolean matchesWorld(String configuredKey, World world) {
@@ -125,16 +148,24 @@ public final class SkyblockSpawn {
                 || configuredKey.equalsIgnoreCase(world.getName());
     }
 
-    public record SpawnData(String worldKey, IslandGrid.ChunkBounds bounds,
+    private static int chunkOf(double coordinate) {
+        return (int) Math.floor(Math.floor(coordinate) / 16.0D);
+    }
+
+    /**
+     * Recovery record for a spawn claim. The bounds are retained so bootstrap can rebuild a lost
+     * protection region; live enforcement always reads the protection region instead.
+     */
+    public record SpawnData(String worldKey, IslandGrid.ChunkBounds bounds, UUID owner,
                             double x, double y, double z, float yaw, float pitch) {
+        public SpawnData(String worldKey, IslandGrid.ChunkBounds bounds,
+                         double x, double y, double z, float yaw, float pitch) {
+            this(worldKey, bounds, null, x, y, z, yaw, pitch);
+        }
+
         public SpawnData {
             if (worldKey == null || worldKey.isBlank() || bounds == null) {
                 throw new IllegalArgumentException("Spawn world and bounds are required");
-            }
-            int chunkX = (int) Math.floor(Math.floor(x) / 16.0D);
-            int chunkZ = (int) Math.floor(Math.floor(z) / 16.0D);
-            if (!bounds.contains(chunkX, chunkZ)) {
-                throw new IllegalArgumentException("Spawn point must be inside its recorded bounds");
             }
         }
 
@@ -146,9 +177,9 @@ public final class SkyblockSpawn {
     public interface Store {
         Optional<SpawnData> load();
 
-        void save(SpawnData data);
+        CompletableFuture<Void> save(SpawnData data);
 
-        void clear();
+        CompletableFuture<Void> clear();
     }
 
     private static final class MemoryStore implements Store {
@@ -160,13 +191,15 @@ public final class SkyblockSpawn {
         }
 
         @Override
-        public void save(SpawnData data) {
+        public CompletableFuture<Void> save(SpawnData data) {
             value = data;
+            return CompletableFuture.completedFuture(null);
         }
 
         @Override
-        public void clear() {
+        public CompletableFuture<Void> clear() {
             value = null;
+            return CompletableFuture.completedFuture(null);
         }
     }
 
@@ -186,13 +219,13 @@ public final class SkyblockSpawn {
         }
 
         @Override
-        public void save(SpawnData data) {
-            store.writeAsync("spawn", yaml -> write(yaml, data));
+        public CompletableFuture<Void> save(SpawnData data) {
+            return store.writeAsync("spawn", yaml -> write(yaml, data));
         }
 
         @Override
-        public void clear() {
-            store.deleteAsync("spawn");
+        public CompletableFuture<Void> clear() {
+            return store.deleteAsync("spawn");
         }
 
         private Optional<SpawnData> read(YamlConfiguration yaml) {
@@ -204,7 +237,17 @@ public final class SkyblockSpawn {
                 IslandGrid.ChunkBounds bounds = new IslandGrid.ChunkBounds(
                         yaml.getInt("bounds.min-x"), yaml.getInt("bounds.min-z"),
                         yaml.getInt("bounds.max-x"), yaml.getInt("bounds.max-z"));
-                return Optional.of(new SpawnData(world, bounds, yaml.getDouble("x"), yaml.getDouble("y"),
+                UUID owner = null;
+                String ownerText = yaml.getString("owner");
+                if (ownerText != null && !ownerText.isBlank()) {
+                    try {
+                        owner = UUID.fromString(ownerText);
+                    } catch (IllegalArgumentException error) {
+                        plugin.getLogger().warning("Malformed Skyblock spawn owner '" + ownerText
+                                + "'; keeping the legacy ownerless spawn record");
+                    }
+                }
+                return Optional.of(new SpawnData(world, bounds, owner, yaml.getDouble("x"), yaml.getDouble("y"),
                         yaml.getDouble("z"), (float) yaml.getDouble("yaw"),
                         (float) yaml.getDouble("pitch")));
             } catch (RuntimeException error) {
@@ -216,6 +259,7 @@ public final class SkyblockSpawn {
 
         private static void write(YamlConfiguration yaml, SpawnData value) {
             yaml.set("world", value.worldKey());
+            yaml.set("owner", value.owner() == null ? null : value.owner().toString());
             yaml.set("bounds.min-x", value.bounds().minChunkX());
             yaml.set("bounds.min-z", value.bounds().minChunkZ());
             yaml.set("bounds.max-x", value.bounds().maxChunkX());

@@ -77,7 +77,10 @@ public final class IslandAdminCommand implements CommandExecutor, org.bukkit.com
         }
         if (args.length > 0 && args[0].equalsIgnoreCase("help")) return help(sender, args);
         if (args.length > 0 && args[0].equalsIgnoreCase("status")) return status(sender);
-        if (args.length == 0 || args[0].equalsIgnoreCase("spawn")) {
+        if (args.length == 0) {
+            return player == null ? help(sender, args) : openGui(sender, player);
+        }
+        if (args[0].equalsIgnoreCase("spawn")) {
             return player == null ? context.invalid(sender, "spawn requires an in-game administrator")
                     : worldCommands.spawn(player);
         }
@@ -87,9 +90,7 @@ public final class IslandAdminCommand implements CommandExecutor, org.bukkit.com
             return context.report(sender, result.success(), "registries", result.message());
         }
         if (args[0].equalsIgnoreCase("gui")) {
-            if (player == null) return context.invalid(sender, "gui requires an in-game administrator");
-            gui.open(player);
-            return true;
+            return openGui(sender, player);
         }
         if (args[0].equalsIgnoreCase("island")) return islandCommands.handle(sender, player, args);
         if (args[0].equalsIgnoreCase("templates")) return worldCommands.templates(sender, args);
@@ -98,6 +99,12 @@ public final class IslandAdminCommand implements CommandExecutor, org.bukkit.com
             return registry(sender, args, registry);
         }
         return context.invalid(sender, args[0]);
+    }
+
+    private boolean openGui(CommandSender sender, Player player) {
+        if (player == null) return context.invalid(sender, "gui requires an in-game administrator");
+        gui.open(player);
+        return true;
     }
 
     private boolean help(CommandSender sender, String[] args) {
@@ -122,9 +129,7 @@ public final class IslandAdminCommand implements CommandExecutor, org.bukkit.com
                 "The recorded Skyblock spawn and its bounds will be removed.",
                 AdminArgumentParser.hasTrailingConfirm(args))) return true;
         var result = context.admin.clearSpawn();
-        sender.sendMessage(result.success() ? Messages.SKYBLOCK.saved("spawn fallback")
-                : Messages.SKYBLOCK.invalidInput(result.message()));
-        return true;
+        return context.report(sender, result.success(), "spawn fallback", result.message(), result.persistence());
     }
 
     private boolean registry(CommandSender sender, String[] args, String registry) {

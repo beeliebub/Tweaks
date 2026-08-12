@@ -182,7 +182,7 @@ commands:
       aliases: [is]
   isadmin:
       description: Administer Skyblock islands and progression.
-      usage: /isadmin <help [topic]|status|spawn|clearspawn [confirm]|gui|island|templates|types|difficulties|challenges|generators|shop|reload>
+      usage: /isadmin [help [topic]|status|spawn|clearspawn [confirm]|gui|island|templates|types|difficulties|challenges|generators|shop|reload]
   sell:
     description: Sell sellable items from your Skyblock inventory.
     usage: /sell [item|all]

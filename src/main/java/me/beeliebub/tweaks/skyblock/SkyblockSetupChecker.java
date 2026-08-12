@@ -5,6 +5,7 @@ import me.beeliebub.tweaks.skyblock.challenge.ChallengeRequirement;
 import me.beeliebub.tweaks.skyblock.economy.ShopCatalog;
 import me.beeliebub.tweaks.skyblock.generator.GeneratorTier;
 import me.beeliebub.tweaks.skyblock.island.SkyblockSpawn;
+import me.beeliebub.tweaks.protection.region.Region;
 import me.beeliebub.tweaks.skyblock.type.IslandType;
 import me.beeliebub.tweaks.skyblock.type.IslandDifficulty;
 
@@ -45,11 +46,21 @@ public final class SkyblockSetupChecker {
         checks.add(advisory("sethome", "/sethome disabled", "teleport.sethome-disabled-worlds"));
 
         SkyblockSpawn spawn = runtime.spawn();
-        boolean hasSpawn = spawn != null && spawn.isRecorded();
-        checks.add(check("spawn", "Spawn recorded", hasSpawn ? SkyblockSetupStatus.State.SATISFIED
-                        : SkyblockSetupStatus.State.INCOMPLETE,
-                hasSpawn ? spawn.data().map(value -> value.bounds().toString()).orElse("recorded")
-                        : "Record a spawn with the region wand.", "spawn"));
+        boolean hasRecord = spawn != null && spawn.isRecorded();
+        SkyblockSpawn.SpawnData spawnData = hasRecord ? spawn.data().orElse(null) : null;
+        Region spawnRegion = runtime.regionBridge() == null || runtime.world() == null
+                ? null : runtime.regionBridge().spawnRegion(runtime.world());
+        boolean claimed = spawnRegion != null && spawnRegion.bounds() != null;
+        boolean originContained = claimed
+                ? spawnRegion.bounds().contains(0, 0)
+                : spawnData != null && spawnData.bounds().contains(0, 0);
+        SkyblockSetupStatus.State spawnState = hasRecord && originContained && claimed
+                ? SkyblockSetupStatus.State.SATISFIED : SkyblockSetupStatus.State.INCOMPLETE;
+        String spawnReason = !hasRecord ? "Record a spawn with the region wand."
+                : !originContained ? "Recorded spawn bounds must contain chunk 0,0; re-record spawn."
+                : !claimed ? "The skyblock-spawn protection region is missing; re-record spawn."
+                : spawnRegion.bounds().toString();
+        checks.add(check("spawn", "Spawn recorded and claimed", spawnState, spawnReason, "spawn"));
 
         List<String> templateIds = templateIds();
         checks.add(check("templates", "At least one template", templateIds.isEmpty()

@@ -9,12 +9,14 @@ import me.beeliebub.tweaks.skyblock.economy.ShopCatalog;
 import me.beeliebub.tweaks.skyblock.generator.GeneratorAdminService;
 import me.beeliebub.tweaks.skyblock.generator.GeneratorRegistry;
 import me.beeliebub.tweaks.skyblock.generator.GeneratorTier;
+import me.beeliebub.tweaks.skyblock.island.IslandCreationService;
 import me.beeliebub.tweaks.skyblock.island.IslandManager;
 import me.beeliebub.tweaks.skyblock.type.IslandDifficulty;
 import me.beeliebub.tweaks.skyblock.type.IslandType;
 import me.beeliebub.tweaks.skyblock.type.TypeAdminService;
 import me.beeliebub.tweaks.skyblock.type.TypeRegistry;
 import me.beeliebub.tweaks.skyblock.ui.admin.AdminScreenContext;
+import me.beeliebub.tweaks.skyblock.ui.IslandGUI;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -47,11 +49,77 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SkyblockDialogTargetedTest {
+    @Test
+    void islandCreationDialogFiltersEmptyDifficultiesAndRequeriesTypes() {
+        try (SkyblockDialogFixture fixture = new SkyblockDialogFixture()) {
+            IslandDifficulty empty = new IslandDifficulty("empty", "Empty", 1);
+            IslandDifficulty hard = new IslandDifficulty("hard", "Hard", 2);
+            IslandType hardType = new IslandType("hard-type", "Hard Type",
+                    java.util.Set.of("hard"), "", List.of(), "PLAINS", java.util.Set.of());
+            when(fixture.typeRegistry.difficulties()).thenReturn(List.of(fixture.normal, empty, hard));
+            when(fixture.typeRegistry.typesFor("empty")).thenReturn(List.of());
+            when(fixture.typeRegistry.typesFor("hard")).thenReturn(List.of(hardType));
+
+            IslandCreationService creation = mock(IslandCreationService.class);
+            when(creation.canUse(fixture.admin)).thenReturn(true);
+            when(creation.begin(any(), eq("default"), eq("normal"), any()))
+                    .thenReturn(IslandCreationService.CreationResult.failed("expected validation"));
+
+            new IslandGUI(fixture.typeRegistry, creation).open(fixture.admin);
+            assertEquals(List.of("Normal", "Hard"), DialogTestHelper.buttons(
+                    DialogTestHelper.requireDialog(fixture.admin)).stream()
+                    .map(DialogTestHelper::label).toList());
+
+            clickNamed(fixture, "Normal");
+            assertEquals(List.of("Default", "Back"), DialogTestHelper.buttons(
+                    DialogTestHelper.requireDialog(fixture.admin)).stream()
+                    .map(DialogTestHelper::label).toList());
+            clickNamed(fixture, "Default");
+            verify(creation).begin(any(), eq("default"), eq("normal"), any());
+
+            new IslandGUI(fixture.typeRegistry, creation).open(fixture.admin);
+            clickNamed(fixture, "Hard");
+            assertEquals(List.of("Hard Type", "Back"), DialogTestHelper.buttons(
+                    DialogTestHelper.requireDialog(fixture.admin)).stream()
+                    .map(DialogTestHelper::label).toList());
+        }
+    }
+
+    @Test
+    void islandCreationDialogOffersBackWhenTypesDisappearAfterDifficultySelection() {
+        try (SkyblockDialogFixture fixture = new SkyblockDialogFixture()) {
+            when(fixture.typeRegistry.typesFor("normal"))
+                    .thenReturn(List.of(fixture.defaultType), List.of(), List.of(fixture.defaultType));
+            IslandCreationService creation = mock(IslandCreationService.class);
+
+            new IslandGUI(fixture.typeRegistry, creation).open(fixture.admin);
+            clickNamed(fixture, "Normal");
+
+            assertEquals(List.of("No choices", "Back"), DialogTestHelper.buttons(
+                    DialogTestHelper.requireDialog(fixture.admin)).stream()
+                    .map(DialogTestHelper::label).toList());
+            clickNamed(fixture, "Back");
+            assertTrue(DialogTestHelper.buttons(DialogTestHelper.requireDialog(fixture.admin)).stream()
+                    .map(DialogTestHelper::label).toList().contains("Normal"));
+        }
+    }
+
+    private static void clickNamed(SkyblockDialogFixture fixture, String label) {
+        var dialog = DialogTestHelper.requireDialog(fixture.admin);
+        var button = DialogTestHelper.buttons(dialog).stream()
+                .filter(candidate -> label.equals(DialogTestHelper.label(candidate)))
+                .findFirst().orElseThrow();
+        DialogTestHelper.click(fixture.admin, button);
+        DialogTestHelper.pump(fixture.server);
+    }
+
     @Test
     void everySuccessfulRegistryMutationCarriesItsExactWriteFuture() {
         CompletableFuture<Void> typeWrite = new CompletableFuture<>();

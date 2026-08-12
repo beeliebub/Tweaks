@@ -158,7 +158,7 @@ There are three creation forms:
 |---|---|
 | `/island create` | Creates an island using `skyblock.default-type` and `skyblock.default-difficulty`. |
 | `/island create <type> <difficulty>` | Creates an island with that configured type/difficulty pair. The difficulty must be allowed by the type. |
-| `/island create gui` | Opens a picker containing the configured types and their available difficulties. |
+| `/island create gui` | Opens a two-step picker: choose a difficulty, then a compatible island type. |
 
 A type chooses the template, starting kit, biome, allowed challenges, and available difficulties.
 A difficulty supplies the progression multiplier: a base tracked or possession requirement is
@@ -172,7 +172,9 @@ can be fixed instead of silently creating the wrong island.
 
 ### Your Island
 
-An island occupies a slot in the configured grid. Its protection footprint follows the island size:
+An island occupies a slot in the configured grid. Slots whose centre is within 1,000 blocks of
+chunk 0,0 are reserved for the Skyblock spawn; at the default pitch, allocation begins at slot 9
+and existing spiral geometry is unchanged. Its protection footprint follows the island size:
 `SMALL`, `MEDIUM`, or `LARGE`. Size increases are normally challenge rewards; an administrator can
 also increase a live island with `/isadmin island size <owner|id> <size>`. The live-island admin
 surface does not edit ownership, members, wallets, progression, or generator assignments.
@@ -296,8 +298,10 @@ is not reusable while terrain cleanup is in progress.
 
 ### Skyblock Setup Guide
 
-This is the zero-to-playable path for an administrator. Use `/isadmin gui` for the Dialog surface;
-the CLI forms below are the equivalent authoring operations. All administrator commands require
+This is the zero-to-playable path for an administrator. A player may use bare `/isadmin` or
+`/isadmin gui` for the Dialog surface; bare `/isadmin` does not consume a pending wand selection.
+Console receives the `/isadmin` help catalogue. The CLI forms below are the equivalent authoring operations;
+all administrator commands require
 `tweaks.admin.skyblock`. A player running `/isadmin` must stand in the configured Skyblock world;
 console can run console-safe registry and status operations.
 
@@ -319,9 +323,12 @@ an error and does not advance the wizard or reopen the edited screen.
    informational. Use **Run Setup** to open the first actionable screen in order.
 3. **Record spawn (`spawn`).** Run `/region wand` or press **Get selection wand** on the Spawn
    screen. In the configured Skyblock world, set both selection corners around the spawn area, then
-   run `/isadmin spawn` or press **Record Spawn**. The checklist entry is `spawn`; the recorded
-   player location must be inside the selected chunk bounds. **Clear Spawn** or
-   `/isadmin clearspawn` then `/isadmin clearspawn confirm` removes the record and restores the
+   run `/isadmin spawn` or press **Record Spawn**. The selection must contain chunk 0,0 and the
+   recorded player location must be inside the selected chunk bounds. This creates the managed
+   `skyblock-spawn` protection region owned by the recording administrator, with PVP and mob
+   spawning disabled and invincibility enabled. Its live region bounds are authoritative; the
+   `spawn.yml` bounds are recovery data only. **Clear Spawn** or `/isadmin clearspawn` then
+   `/isadmin clearspawn confirm` removes both the region and recovery record and restores the
    world fallback.
 4. **Capture a starter template (`templates`).** Build the starter island inside a selected region,
    select both corners with the wand, and run `/isadmin templates save starter`, or use Templates →
@@ -431,12 +438,13 @@ deletions write a bounded backup under `plugins/Tweaks/skyblock/backups/` before
 
 | Form | Worked example | Notes |
 |---|---|---|
+| `/isadmin` | `/isadmin` | Player-only shortcut to the authoring hub; console receives help. It does not consume a wand selection. |
 | `/isadmin help [topic]` | `/isadmin help challenges` | Prints the declarative syntax catalogue; `/isadmin help` prints all topics. |
 | `/isadmin status` | `/isadmin status` | Console-safe checklist with state, reason, and target screen. |
-| `/isadmin spawn` | `/isadmin spawn` | Player-only after a complete in-world wand selection. |
-| `/isadmin clearspawn [confirm]` | `/isadmin clearspawn confirm` | First run previews; confirmation restores the world fallback. |
+| `/isadmin spawn` | `/isadmin spawn` | Player-only after a complete in-world selection containing chunk 0,0; creates or replaces `skyblock-spawn`. |
+| `/isadmin clearspawn [confirm]` | `/isadmin clearspawn confirm` | First run previews; confirmation removes the managed region and record, restoring the world fallback. |
 | `/isadmin reload` | `/isadmin reload` | Reloads types, challenges, generators, and shop registries. |
-| `/isadmin gui` | `/isadmin gui` | Player-only complete authoring hub. |
+| `/isadmin gui` | `/isadmin gui` | Player-only complete authoring hub; equivalent to bare `/isadmin`. |
 | `/isadmin island list` | `/isadmin island list` | List live islands; console-safe. |
 | `/isadmin island inspect <owner\|id>` | `/isadmin island inspect Alex` | Inspect by owner name or 32-character island id. |
 | `/isadmin island teleport <owner\|id>` | `/isadmin island teleport 0123456789abcdef0123456789abcdef` | Player-only teleport to the island spawn. |
@@ -549,7 +557,7 @@ held stack when adding a shop material.
 | `/skyblock help` | `/skyblock help` | Accepted travel alias. |
 | `/island create` | `/island create` | Use configured default type/difficulty. |
 | `/island create <type> <difficulty>` | `/island create starter normal` | Use an explicit allowed pair. |
-| `/island create gui` | `/island create gui` | Open the type/difficulty picker. |
+| `/island create gui` | `/island create gui` | Choose a difficulty, then a compatible type; Back returns to the difficulty list. |
 | `/island home [name]` | `/island home mine` | Go to the island spawn or a named home. |
 | `/island sethome <name>` | `/island sethome mine` | Save a home inside the island. |
 | `/island homes buy` | `/island homes buy` | Buy one available home slot. |
@@ -613,7 +621,7 @@ Skyblock persistence lives below `plugins/Tweaks/skyblock/`:
 | Path | Contents |
 |---|---|
 | `islands/` | One YAML record per island: owner, members, slot, size, type/difficulty, homes, counters, completed challenges, and generator tier. |
-| `spawn.yml` | Recorded spawn point and selected chunk bounds. |
+| `spawn.yml` | Recorded spawn point, recording owner, and recovery chunk bounds; live `skyblock-spawn` region bounds are authoritative. |
 | `templates/` | Lossless captured template payloads and block entities. |
 | `deletions/` | Durable deletion cursors; records remain until ejection, unclaim, terrain sweep, profile/wallet cleanup, and final slot release finish. |
 | `balances/` | Per-island wallet snapshots. |
@@ -1593,7 +1601,8 @@ Territory is claimed in **full-chunk increments**.
     lowercased, and must match `^[a-z0-9_-]{1,32}$`; `__global__`, `_deleted`, and `_legacy` are
     reserved. Existing legacy names are loaded unchanged.
     - **Overlap Prevention**: You cannot claim territory that overlaps an existing region in the same world unless you own it.
-    - **Per-World Uniqueness**: Region names are unique per world. Two regions can share a name (e.g., "home") if they are in different worlds.
+     - **Per-World Uniqueness**: Region names are unique per world. Two regions can share a name (e.g., "home") if they are in different worlds.
+     - **Skyblock spawn**: `skyblock-spawn` is managed by `/isadmin spawn` and `/isadmin clearspawn`; in-world `/region` commands naming that id are refused.
     - **Public Claim Worlds**: An admin can add namespaced world keys (for example, `minecraft:overworld`) to `protection.public-claim-worlds` so any non-admin player can claim there without `tweaks.protection.purchaseable`. Public non-admin claims still incur the normal cost, global per-player chunk limit, and overlap/geometry checks; admins retain their free/unlimited bypass, and removing a world never changes existing claims. Public claim access does not grant `unclaim`, `info`, `flag`, or `member`, so those companion permissions are still required for a fully self-service claim.
 3.  **Visuals**: Use `/region info` while standing in a claim to see its boundaries and details.
 4.  **Restore Selection**: Use `/region select <name>` to restore the selection wand boundaries to match an existing region you own.
@@ -1819,8 +1828,9 @@ When an action occurs, the system checks rules in this order:
 | `/creative` | `tweaks.admin.gamemode` | Switch your gamemode to Creative. |
 | `/resource settarget [p] <t>` | `tweaks.admin.resource.settarget.self/other` | Override a player's Resource Hunt target. |
 | `/displaychest [hand\|off]` | `tweaks.admin.displaychest` | Toggle display chest setup/removal mode. |
+| `/isadmin` / `/isadmin gui` | `tweaks.admin.skyblock` | Open the player authoring hub; bare console invocation prints help. |
 | `/isadmin help [topic]` / `/isadmin status` | `tweaks.admin.skyblock` | Show the complete authoring syntax or the readiness checklist. |
-| `/isadmin gui` / `/isadmin reload` | `tweaks.admin.skyblock` | Open the GUI or reload the four editable registries. |
+| `/isadmin reload` | `tweaks.admin.skyblock` | Reload the four editable registries. |
 | `/isadmin spawn` / `/isadmin clearspawn [confirm]` | `tweaks.admin.skyblock` | Record or confirmed-clear the wand-selected Skyblock spawn. |
 | `/isadmin island <list\|inspect\|teleport\|size\|force-complete\|force-delete>` | `tweaks.admin.skyblock` | Inspect and administer live islands within the documented boundary. |
 | `/isadmin templates <list\|save\|preview\|delete>` | `tweaks.admin.skyblock` | Capture, inspect, and confirmed-delete templates. |

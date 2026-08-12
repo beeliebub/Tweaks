@@ -22,8 +22,6 @@ import me.beeliebub.tweaks.skyblock.type.TypeAdminService;
 import me.beeliebub.tweaks.skyblock.type.TypeRegistry;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.jetbrains.annotations.NotNull;
-
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -356,7 +354,7 @@ public final class AdminScreenContext {
                 return new Outcome(result.deleted(), result.reason(), "delete", result.persistence());
             }
             if (rawResult instanceof me.beeliebub.tweaks.skyblock.command.admin.SkyblockAdminService.Result result) {
-                return new Outcome(result.success(), result.message(), "change");
+                return new Outcome(result.success(), result.message(), "change", result.persistence());
             }
             if (rawResult instanceof Boolean value) {
                 return new Outcome(value, value ? "saved" : "rejected", "change");

@@ -4,6 +4,7 @@ import static me.beeliebub.tweaks.skyblock.ui.admin.AdminScreenContext.targetVal
 
 import io.papermc.paper.registry.data.dialog.ActionButton;
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.protection.region.Region;
 import me.beeliebub.tweaks.protection.ui.RegionSelection;
 import me.beeliebub.tweaks.protection.ui.RegionWand;
 import me.beeliebub.tweaks.skyblock.SkyblockBootstrap;
@@ -22,7 +23,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -129,6 +129,7 @@ public final class WorldScreens {
     public void openSpawn(Player player) {
         if (!guard(player)) return;
         SkyblockSpawn.SpawnData data = runtime.spawn().data().orElse(null);
+        Region live = runtime.regionBridge() == null ? null : runtime.regionBridge().spawnRegion(runtime.world());
         List<ActionButton> buttons = new ArrayList<>();
         buttons.add(button("Get selection wand", "Give the configured region-selection wand",
                 target -> { regionWand.give(target); openSpawn(target); }));
@@ -139,7 +140,10 @@ public final class WorldScreens {
                     context.report(actor, result, "spawn", this::openSpawn);
                 }, this::guard, context::reportGuardFailure)));
         List<String> body = new ArrayList<>(selectionSummary(player));
-        body.add(data == null ? "Not recorded." : "Recorded bounds: " + data.bounds());
+        body.add(live != null && live.bounds() != null
+                ? Messages.SKYBLOCK.spawnLiveBounds(live.bounds().toString())
+                : data == null ? Messages.SKYBLOCK.spawnNotRecorded()
+                : Messages.SKYBLOCK.spawnRecoveryOnly());
         show(player, Messages.SKYBLOCK.text("Spawn", NamedTextColor.AQUA), body, buttons, hub);
     }
 
@@ -153,6 +157,7 @@ public final class WorldScreens {
         IslandGrid.ChunkBounds bounds = bounds(selection);
         var location = player.getLocation();
         SkyblockAdminService.Result result = admin.recordSpawn(new SkyblockSpawn.SpawnData(runtime.world().getKey().asString(), bounds,
+                player.getUniqueId(),
                 location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch()));
         context.report(player, result, "spawn", this::openSpawn);
     }

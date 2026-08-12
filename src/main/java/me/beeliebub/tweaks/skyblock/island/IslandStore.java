@@ -169,6 +169,7 @@ public final class IslandStore {
             try {
                 YamlConfiguration yaml = strictLoad(file);
                 if (!yaml.isSet("owner")) throw new IllegalArgumentException("owner is missing");
+                if (!yaml.isSet("slot")) throw new IllegalArgumentException("slot is missing");
                 Island island = ISLAND_CODEC.decode(id, yaml);
                 if (island != null) islands.add(island);
             } catch (RuntimeException error) {

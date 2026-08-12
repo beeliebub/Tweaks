@@ -126,6 +126,102 @@ public final class SkyblockMessages {
         return Component.text("Invalid Skyblock value: " + input, NamedTextColor.RED);
     }
 
+    public String spawnBoundsOriginError() {
+        return "spawn bounds must contain chunk 0,0";
+    }
+
+    public String spawnOwnerRequiredError() {
+        return "spawn owner is required; record spawn as an in-game administrator";
+    }
+
+    public String spawnWorldMismatchError() {
+        return "spawn point must be recorded in the configured Skyblock world";
+    }
+
+    public String spawnPointBoundsError() {
+        return "spawn point must be inside the selected bounds";
+    }
+
+    public String spawnRegionIdTakenError() {
+        return "spawn region id is already taken";
+    }
+
+    public String spawnRegionOverlapError() {
+        return "spawn bounds overlap a foreign protection region";
+    }
+
+    public String spawnRegionUnclaimError(String result) {
+        return "could not unclaim the Skyblock spawn region: " + result;
+    }
+
+    public String spawnRegionRollbackError(String result) {
+        return "could not restore the previous Skyblock spawn region: " + result;
+    }
+
+    public Component spawnRegionCommandDenied() {
+        return Component.text("The Skyblock spawn region is managed by /isadmin spawn.", NamedTextColor.RED);
+    }
+
+    public String spawnNotRecorded() {
+        return "No Skyblock spawn is recorded.";
+    }
+
+    public String spawnLiveBounds(String bounds) {
+        return "Live spawn-region bounds: " + bounds;
+    }
+
+    public String spawnRecoveryOnly() {
+        return "A recovery record exists, but the live spawn region is missing.";
+    }
+
+    public String islandCreateTitle() {
+        return "Create Skyblock Island";
+    }
+
+    public String islandDifficultyPrompt() {
+        return "Choose an island difficulty.";
+    }
+
+    public String islandDifficultyButtonTooltip() {
+        return "Choose an island type";
+    }
+
+    public String islandChooseTypeTitle() {
+        return "Choose Island Type";
+    }
+
+    public String islandChooseTypePrompt() {
+        return "Choose an island type for this difficulty.";
+    }
+
+    public String islandTypeButtonTooltip() {
+        return "Create this island type";
+    }
+
+    public String islandBackButton() {
+        return "Back";
+    }
+
+    public String islandBackTooltip() {
+        return "Return to difficulty selection";
+    }
+
+    public String islandNoChoicesButton() {
+        return "No choices";
+    }
+
+    public String islandNoChoicesTooltip() {
+        return "No valid island types are configured";
+    }
+
+    public String islandNoChoicesPrompt() {
+        return "No valid island types are configured.";
+    }
+
+    public String islandNoChoicesMessage() {
+        return "no valid island types are configured";
+    }
+
     public Component adminDescription(String description) {
         return Component.text(description, NamedTextColor.GRAY);
     }

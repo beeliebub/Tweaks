@@ -30,7 +30,15 @@ public final class IslandManager {
         this.config = config;
         this.grid = grid;
         this.store = store;
-        for (Island island : store.loadAll()) index(island);
+        for (Island island : store.loadAll()) {
+            byId.put(island.id(), island);
+            try {
+                index(island);
+            } catch (RuntimeException failure) {
+                byId.remove(island.id(), island);
+                throw failure;
+            }
+        }
     }
 
     public List<Island> all() {
@@ -130,7 +138,8 @@ public final class IslandManager {
 
     public int nextFreeSlot() {
         for (int index = 0; index <= grid.maxIndex(); index++) {
-            if (!bySlot.containsKey(index) && !blockedSlots.contains(index) && !pendingSlots.contains(index)) return index;
+            if (!grid.isSpawnExcluded(index) && !bySlot.containsKey(index)
+                    && !blockedSlots.contains(index) && !pendingSlots.contains(index)) return index;
         }
         throw new IllegalStateException("No Skyblock island slots remain below skyblock.max-slot-index");
     }

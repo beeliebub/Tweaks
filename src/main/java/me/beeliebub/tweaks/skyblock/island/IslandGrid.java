@@ -12,6 +12,7 @@ public final class IslandGrid {
 
     public static final int DEFAULT_PITCH_CHUNKS = 35;
     public static final int DEFAULT_MAX_SLOT_INDEX = 100_000;
+    public static final int SPAWN_EXCLUSION_RADIUS_BLOCKS = 1_000;
 
     private static final long BLOCKS_PER_CHUNK = 16L;
     private static final long WORLD_LIMIT = 29_999_984L;
@@ -48,6 +49,32 @@ public final class IslandGrid {
 
     public int maxIndex() {
         return maxSlotIndex;
+    }
+
+    /**
+     * Returns whether a slot's centre lies inside the fixed Skyblock spawn exclusion square.
+     *
+     * <p>Skyblock spawn is anchored to chunk 0,0, so the surrounding slots remain reserved for
+     * spawn rather than player terrain. The radius is measured to the slot centre in block
+     * coordinates, not to its footprint: the first eligible default-pitch slot therefore leaves
+     * a fully grown {@link IslandSize#LARGE} island roughly 976 blocks from the origin. A slot is
+     * excluded only when its centre is strictly inside the Chebyshev-radius square; the boundary
+     * itself remains allocatable.</p>
+     */
+    public boolean isSpawnExcluded(int slotIndex) {
+        Slot slot = slotForIndex(slotIndex);
+        long centerBlockX = (long) slot.centerChunkX() * BLOCKS_PER_CHUNK + 8L;
+        long centerBlockZ = (long) slot.centerChunkZ() * BLOCKS_PER_CHUNK + 8L;
+        long distance = Math.max(Math.abs(centerBlockX), Math.abs(centerBlockZ));
+        return distance < SPAWN_EXCLUSION_RADIUS_BLOCKS;
+    }
+
+    /** Returns the first configured slot whose centre is outside the spawn exclusion square. */
+    public int firstAllocatableIndex() {
+        for (int index = 0; index <= maxSlotIndex; index++) {
+            if (!isSpawnExcluded(index)) return index;
+        }
+        throw new IllegalStateException("No Skyblock island slots remain outside the spawn exclusion square");
     }
 
     /** Returns the centre chunk for a valid slot index. */

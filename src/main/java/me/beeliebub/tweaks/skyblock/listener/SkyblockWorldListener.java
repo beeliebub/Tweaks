@@ -51,14 +51,20 @@ public final class SkyblockWorldListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onPlayerCommandPreprocess(PlayerCommandPreprocessEvent event) {
         Player player = event.getPlayer();
-        if (!skyblockWorld.test(player.getWorld()) || regionAdmin.test(player)) {
+        if (!skyblockWorld.test(player.getWorld())) {
             return;
         }
         if (!isRegionCommand(event.getMessage())) {
             return;
         }
         event.setCancelled(true);
-        messages.regionDenied(player);
+        if (targetsSpawnRegion(event.getMessage())) {
+            messages.spawnRegionDenied(player);
+        } else if (!regionAdmin.test(player)) {
+            messages.regionDenied(player);
+        } else {
+            event.setCancelled(false);
+        }
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -99,6 +105,15 @@ public final class SkyblockWorldListener implements Listener {
         return label.equals("region") || label.equals("rg");
     }
 
+    private static boolean targetsSpawnRegion(String message) {
+        if (message == null || message.length() < 2 || message.charAt(0) != '/') return false;
+        String[] tokens = message.substring(1).trim().split("\\s+");
+        for (int index = 1; index < tokens.length; index++) {
+            if (tokens[index].equalsIgnoreCase("skyblock-spawn")) return true;
+        }
+        return false;
+    }
+
     private static Predicate<Player> permissionCheck(String permission) {
         if (permission == null || permission.isBlank()) {
             throw new IllegalArgumentException("regionAdminPermission cannot be blank");
@@ -114,5 +129,9 @@ public final class SkyblockWorldListener implements Listener {
 
     public interface MessageFacade {
         void regionDenied(Player player);
+
+        default void spawnRegionDenied(Player player) {
+            regionDenied(player);
+        }
     }
 }

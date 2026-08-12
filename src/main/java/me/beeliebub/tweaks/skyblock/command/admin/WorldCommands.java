@@ -1,8 +1,6 @@
 package me.beeliebub.tweaks.skyblock.command.admin;
 
 import me.beeliebub.tweaks.protection.ui.RegionSelection;
-import me.beeliebub.tweaks.skyblock.SkyblockBootstrap;
-import me.beeliebub.tweaks.skyblock.command.IslandAdminCommand;
 import me.beeliebub.tweaks.skyblock.island.Island;
 import me.beeliebub.tweaks.skyblock.island.IslandGrid;
 import me.beeliebub.tweaks.skyblock.island.SkyblockSpawn;
@@ -14,11 +12,13 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Template and spawn operations for {@code /isadmin}. */
 public final class WorldCommands {
     private final AdminCommandContext context;
     private final TemplateAdminService templates;
+    private final AtomicBoolean spawnInFlight = new AtomicBoolean();
 
     public WorldCommands(AdminCommandContext context) {
         this.context = context;
@@ -38,13 +38,22 @@ public final class WorldCommands {
         IslandGrid.ChunkBounds bounds = new IslandGrid.ChunkBounds(Math.min(cx1, cx2), Math.min(cz1, cz2),
                 Math.max(cx1, cx2), Math.max(cz1, cz2));
         var location = player.getLocation();
+        if (!spawnInFlight.compareAndSet(false, true)) {
+            player.sendMessage(Messages.SKYBLOCK.adminAlreadySubmitted());
+            return true;
+        }
         SkyblockSpawn.SpawnData data = new SkyblockSpawn.SpawnData(
                 context.runtime.world().getKey().asString(), bounds,
+                player.getUniqueId(),
                 location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
-        var result = context.admin.recordSpawn(data);
-        player.sendMessage(result.success() ? Messages.SKYBLOCK.saved("spawn")
-                : Messages.SKYBLOCK.invalidInput(result.message()));
-        return true;
+        try {
+            var result = context.admin.recordSpawn(data);
+            result.persistence().whenComplete((ignored, error) -> spawnInFlight.set(false));
+            return context.report(player, result.success(), "spawn", result.message(), result.persistence());
+        } catch (RuntimeException failure) {
+            spawnInFlight.set(false);
+            return context.invalid(player, failure.getMessage() == null ? "spawn" : failure.getMessage());
+        }
     }
 
     public boolean templates(CommandSender sender, String[] args) {
