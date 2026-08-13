@@ -185,7 +185,7 @@ public final class ConfigRegistry {
                     ConfigSetting.of("discord.lottery-channel-id", "discord.lottery-channel-id",
                             "Lottery Stat Voice Channel ID", EditorType.STRING),
                     ConfigSetting.bounded("discord.group-window-seconds", "discord.group-window-seconds",
-                            "Settlement Group Window Seconds", EditorType.INT, 1, 10),
+                            "Settlement Group Window Seconds", EditorType.INT, 1, 30),
                     ConfigSetting.bounded("discord.stat-refresh-seconds", "discord.stat-refresh-seconds",
                             "Stat Channel Refresh Seconds", EditorType.INT, 300, 3600)
             )),

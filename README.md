@@ -1376,7 +1376,7 @@ by lottery, Blackjack, and Roulette:
 | `discord.channel-id` | `""` | Numeric Discord text-channel ID for lottery/casino messages. |
 | `discord.house-channel-id` | `""` | Numeric Discord voice-channel ID for the House balance. |
 | `discord.lottery-channel-id` | `""` | Numeric Discord voice-channel ID for the lottery pot. |
-| `discord.group-window-seconds` | `2` | Settlement grouping window, bounded to 1–10 seconds. |
+| `discord.group-window-seconds` | `2` | Settlement grouping window, bounded to 1–30 seconds. |
 | `discord.stat-refresh-seconds` | `300` | Voice-stat refresh interval, bounded to 300–3600 seconds. |
 
 Use quoted raw numeric IDs in `config.yml`; Discord snowflakes are too large for a safe YAML

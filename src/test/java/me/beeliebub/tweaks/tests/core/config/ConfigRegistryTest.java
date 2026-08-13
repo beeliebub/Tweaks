@@ -93,6 +93,14 @@ class ConfigRegistryTest {
     }
 
     @Test
+    void discordSettlementGroupWindowAllowsThirtySecondsButNotMore() {
+        ConfigSetting setting = ConfigRegistry.byPath("discord.group-window-seconds").orElseThrow();
+
+        assertEquals(1.0, setting.min());
+        assertEquals(30.0, setting.max());
+    }
+
+    @Test
     void menuGroupsPreserveTheFullRegistryOrder() {
         List<ConfigCategory> main = ConfigRegistry.mainMenuCategories();
         List<ConfigCategory> logging = ConfigRegistry.loggingCategories();
