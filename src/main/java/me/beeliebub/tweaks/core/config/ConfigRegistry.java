@@ -177,6 +177,18 @@ public final class ConfigRegistry {
                     ConfigSetting.bounded("itemadmin.gui-copy.max-distance", "itemadmin.gui-copy.max-distance",
                             "Gui Copy Max Distance", EditorType.INT, 1, 64)
             )),
+            new ConfigCategory("discord", "Discord", List.of(
+                    ConfigSetting.of("discord.channel-id", "discord.channel-id",
+                            "Announcement Channel ID", EditorType.STRING),
+                    ConfigSetting.of("discord.house-channel-id", "discord.house-channel-id",
+                            "House Stat Voice Channel ID", EditorType.STRING),
+                    ConfigSetting.of("discord.lottery-channel-id", "discord.lottery-channel-id",
+                            "Lottery Stat Voice Channel ID", EditorType.STRING),
+                    ConfigSetting.bounded("discord.group-window-seconds", "discord.group-window-seconds",
+                            "Settlement Group Window Seconds", EditorType.INT, 1, 10),
+                    ConfigSetting.bounded("discord.stat-refresh-seconds", "discord.stat-refresh-seconds",
+                            "Stat Channel Refresh Seconds", EditorType.INT, 300, 3600)
+            )),
             new ConfigCategory("xpbottle", "Xp Bottle", List.of(
                     ConfigSetting.bounded("xpbottle.orbs-per-emerald", "xpbottle.orbs-per-emerald",
                             "Orbs Per Emerald (restart required)", EditorType.INT, 1, Integer.MAX_VALUE)

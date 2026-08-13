@@ -725,6 +725,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("- Left: Hit, Middle: Start/Clear, Right: Stand."),
                 green("Dealer Mannequin: celebrates or mourns at game end."),
                 green("Practice tables (bet: FREE) available — no currency required."),
+                white("When Discord is configured, settled wins, losses, and forfeitures appear in grouped lines."),
                 red("Requirement: 'dqc.cards' resource pack.")
         ), Material.GREEN_WOOL, 33, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack_mechanics")));
 
@@ -759,6 +760,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 red("Bets are final: no un-betting, no refund on quit."),
                 green("Winnings are credited to your balance even if you log off first."),
                 white("Your result message shows the amount wagered and the amount actually won."),
+                white("When Discord is configured, each settled bettor appears in the grouped settlement record."),
                 gold("Winning 8x your wager or more announces it to the whole server!"),
                 gold("A hologram over the wheel shows the one server-wide house balance."),
                 red("Admin:"),
@@ -1024,6 +1026,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/lottery baseline <amount>", "Set the growth baseline."),
                 cmd("/lottery fallback [<amount>]", "View or set the live fallback floor."),
                 white("If payment is abandoned, entries and baseline stay unchanged. A retained payment resumes on the next startup; a stuck payment needs House reconciliation."),
+                white("When configured, the lottery voice channel displays the live payable pot or 'waiting'."),
                 red("Admin permission: " + Permissions.LOTTERY_ADMIN + ".")
         ), Material.CHEST, 21, ColorUtil.HELP_GRAD_ECONOMY, List.of("house", "balance")));
 
@@ -1033,6 +1036,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/house balance", "View the server-wide house balance."),
                 cmd("/house add|remove|set <amount>", "Adjust the account; only set may make it negative."),
                 cmd("/house pay <player> <amount>", "Transfer house funds to an online or known offline player."),
+                white("When configured, a Discord voice channel displays the live House balance."),
                 red("Permission: " + Permissions.HOUSE_ADMIN + ".")
         ), Material.GOLD_BLOCK, 23, ColorUtil.HELP_GRAD_ECONOMY, List.of("balance", "ranks", "roulette", "lottery"), Permissions.HOUSE_ADMIN));
 

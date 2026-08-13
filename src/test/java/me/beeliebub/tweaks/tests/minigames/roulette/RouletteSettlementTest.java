@@ -53,6 +53,7 @@ class RouletteSettlementTest {
         RouletteBet lose = new RouletteBet(PLAYER, BetType.STRAIGHT, 17, 10);
         Settlement settlement = RouletteRound.computeSettlement(List.of(lose), 18, Map.of());
         assertEquals(0L, settlement.credits().get(PLAYER).payout());
+        assertEquals(10L, settlement.credits().get(PLAYER).wagered());
     }
 
     // ---- pocket 0 loses every bet family ----
@@ -134,6 +135,7 @@ class RouletteSettlementTest {
                 List.of(win, lose), 1, Map.of(PLAYER, 0.1));
         // payout = 20 (color win), wagered = 20, net = 0 -> not a net loss.
         assertEquals(0L, settlement.credits().get(PLAYER).rakeback(), "breaking even is not a net loss");
+        assertEquals(20L, settlement.credits().get(PLAYER).wagered());
         assertEquals(0L, settlement.houseCredit(), "a hedged break-even round must not feed the house");
     }
 
@@ -144,6 +146,7 @@ class RouletteSettlementTest {
         Settlement settlement = RouletteRound.computeSettlement(List.of(red, black), 1, Map.of());
 
         assertEquals(20L, settlement.credits().get(PLAYER).payout());
+        assertEquals(20L, settlement.credits().get(PLAYER).wagered());
         assertEquals(0L, settlement.houseCredit());
         assertTrue(settlement.netLosers().isEmpty());
     }

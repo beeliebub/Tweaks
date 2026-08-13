@@ -2,6 +2,8 @@ package me.beeliebub.tweaks.tests.lottery;
 
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.core.LotteryMessages;
+import me.beeliebub.tweaks.discord.DiscordAnnouncer;
+import me.beeliebub.tweaks.discord.SettlementLine;
 import me.beeliebub.tweaks.economy.HouseAccount;
 import me.beeliebub.tweaks.economy.HousePaymentService;
 import me.beeliebub.tweaks.lottery.LotteryCommand;
@@ -20,6 +22,7 @@ import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -37,6 +40,7 @@ class LotteryCommandTest {
     private HouseAccount house;
     private HousePaymentService payment;
     private LotteryCommand command;
+    private RecordingAnnouncer discord;
     private final Command bukkitCommand = mock(Command.class);
 
     @BeforeEach
@@ -56,7 +60,8 @@ class LotteryCommandTest {
                 LotteryMath.RefusalReason.NOT_ENOUGH_ENTRANTS));
         when(manager.entrantSnapshot(50)).thenReturn(new LotteryManager.EntrantPage(List.of(), 0));
         when(payment.isReady()).thenReturn(true);
-        command = new LotteryCommand(plugin, manager, house, payment);
+        discord = new RecordingAnnouncer();
+        command = new LotteryCommand(plugin, manager, house, payment, discord);
     }
 
     @AfterEach
@@ -178,6 +183,58 @@ class LotteryCommandTest {
     }
 
     @Test
+    void broadcastOutcomesMirrorExactlyOnceAndPrivateOutcomesStayPrivate() {
+        PlayerMock admin = admin();
+        PlayerMock other = server.addPlayer();
+        UUID winner = UUID.randomUUID();
+        List<LotteryManager.DrawResult> broadcastOutcomes = List.of(
+                new LotteryManager.DrawResult.NotEnoughEntrants(0, 0L, 10L, 10L),
+                new LotteryManager.DrawResult.Refused(LotteryMath.RefusalReason.NO_GROWTH),
+                new LotteryManager.DrawResult.Refused(LotteryMath.RefusalReason.NOT_ENOUGH_ENTRANTS),
+                new LotteryManager.DrawResult.PaymentAbandoned(winner, 100L,
+                        me.beeliebub.tweaks.economy.HousePayOutcome.INSUFFICIENT_FUNDS, 2),
+                new LotteryManager.DrawResult.Awarded(winner, 100L));
+        for (LotteryManager.DrawResult outcome : broadcastOutcomes) {
+            discord.cards.clear();
+            clearMessages(other);
+            when(manager.draw()).thenReturn(CompletableFuture.completedFuture(outcome));
+            command.onCommand(admin, bukkitCommand, "lottery", new String[]{"draw"});
+            server.getScheduler().performOneTick();
+            assertEquals(1, discord.cards.size(), outcome.getClass().getSimpleName());
+        }
+
+        List<LotteryManager.DrawResult> privateOutcomes = List.of(
+                new LotteryManager.DrawResult.NotReady(),
+                new LotteryManager.DrawResult.InFlight(),
+                new LotteryManager.DrawResult.Refused(LotteryMath.RefusalReason.HOUSE_AT_FLOOR),
+                new LotteryManager.DrawResult.PaymentPending("payment", winner, 100L,
+                        me.beeliebub.tweaks.economy.HousePayOutcome.NOT_READY),
+                new LotteryManager.DrawResult.PaymentStuck("payment", winner, 100L));
+        for (LotteryManager.DrawResult outcome : privateOutcomes) {
+            discord.cards.clear();
+            when(manager.draw()).thenReturn(CompletableFuture.completedFuture(outcome));
+            command.onCommand(admin, bukkitCommand, "lottery", new String[]{"draw"});
+            server.getScheduler().performOneTick();
+            assertEquals(0, discord.cards.size(), outcome.getClass().getSimpleName());
+        }
+    }
+
+    @Test
+    void announcerErrorDoesNotSuppressInGameBroadcast() {
+        PlayerMock admin = admin();
+        PlayerMock other = server.addPlayer();
+        discord.throwOnCard = true;
+        clearMessages(other);
+        when(manager.draw()).thenReturn(CompletableFuture.completedFuture(
+                new LotteryManager.DrawResult.NotEnoughEntrants(0, 0L, 10L, 10L)));
+
+        command.onCommand(admin, bukkitCommand, "lottery", new String[]{"draw"});
+        server.getScheduler().performOneTick();
+
+        MessageAssert.assertMessageSent(other, "Not enough entries to draw");
+    }
+
+    @Test
     void HouseAtFloorRefusalStaysWithTheCommandSender() {
         PlayerMock admin = admin();
         PlayerMock other = server.addPlayer();
@@ -210,6 +267,25 @@ class LotteryCommandTest {
     private static void clearMessages(PlayerMock player) {
         while (player.nextComponentMessage() != null) {
             // Drain join and setup feedback before asserting command output.
+        }
+    }
+
+    private static final class RecordingAnnouncer implements DiscordAnnouncer {
+        private final List<String> cards = new ArrayList<>();
+        private boolean throwOnCard;
+
+        @Override
+        public void announceCard(String message, int color, org.bukkit.OfflinePlayer subject) {
+            if (throwOnCard) throw new AssertionError("Discord unavailable");
+            cards.add(message);
+        }
+
+        @Override
+        public void announceSettlement(SettlementLine line) {
+        }
+
+        @Override
+        public void renameChannel(String channelId, String name) {
         }
     }
 }

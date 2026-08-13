@@ -78,7 +78,7 @@ public final class MinigamesBootstrap {
 
         BlackjackListener blackjackListener = new BlackjackListener(
                 plugin, services.economyManager(), services.houseAccount(), services.rankManager(),
-                services.lotteryManager());
+                services.lotteryManager(), services.discordAnnouncer());
         services.setBlackjackListener(blackjackListener);
         BlackjackCommand blackjackCommand = new BlackjackCommand(services.economyManager(), blackjackListener);
         plugin.getCommand("blackjack").setExecutor(blackjackCommand);
@@ -90,7 +90,7 @@ public final class MinigamesBootstrap {
         // and house credit. See minigames/roulette/CLAUDE.md.
         RouletteListener rouletteListener = new RouletteListener(
                 plugin, services.economyManager(), services.houseAccount(), services.rankManager(),
-                services.lotteryManager());
+                services.lotteryManager(), services.discordAnnouncer());
         services.setRouletteListener(rouletteListener);
         plugin.getServer().getPluginManager().registerEvents(rouletteListener, plugin);
         RouletteCommand rouletteCommand = new RouletteCommand(rouletteListener);

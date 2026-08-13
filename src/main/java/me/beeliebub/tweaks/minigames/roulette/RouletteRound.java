@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.minigames.roulette;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -115,7 +116,7 @@ public final class RouletteRound {
      * amount * multiplier} over every bet this player won this round. The wagered stake, already
      * debited at bet-placement time, is never returned as part of this figure — plus any rakeback.
      */
-    public record PlayerCredit(long payout, long rakeback) {
+    public record PlayerCredit(long payout, long rakeback, long wagered) {
     }
 
     /** Full settlement result, including players whose net round result was a loss. */
@@ -139,8 +140,8 @@ public final class RouletteRound {
      */
     public static Settlement computeSettlement(
             List<RouletteBet> bets, int pocket, Map<UUID, Double> rakebackRates) {
-        Map<UUID, Long> wageredByPlayer = new HashMap<>();
-        Map<UUID, Long> payoutByPlayer = new HashMap<>();
+        Map<UUID, Long> wageredByPlayer = new LinkedHashMap<>();
+        Map<UUID, Long> payoutByPlayer = new LinkedHashMap<>();
         for (RouletteBet bet : bets) {
             wageredByPlayer.merge(bet.player(), (long) bet.amount(), Long::sum);
             if (bet.wins(pocket)) {
@@ -149,7 +150,7 @@ public final class RouletteRound {
             }
         }
 
-        Map<UUID, PlayerCredit> credits = new HashMap<>();
+        Map<UUID, PlayerCredit> credits = new LinkedHashMap<>();
         Set<UUID> netLosers = new HashSet<>();
         long houseCredit = 0L;
         for (Map.Entry<UUID, Long> entry : wageredByPlayer.entrySet()) {
@@ -164,9 +165,10 @@ public final class RouletteRound {
                 double rate = rakebackRates.getOrDefault(player, 0.0);
                 rakeback = (long) Math.floor(-net * rate);
             }
-            credits.put(player, new PlayerCredit(payout, rakeback));
+            credits.put(player, new PlayerCredit(payout, rakeback, wagered));
         }
 
-        return new Settlement(Map.copyOf(credits), Math.max(0L, houseCredit), Set.copyOf(netLosers));
+        return new Settlement(java.util.Collections.unmodifiableMap(new LinkedHashMap<>(credits)),
+                Math.max(0L, houseCredit), Set.copyOf(netLosers));
     }
 }

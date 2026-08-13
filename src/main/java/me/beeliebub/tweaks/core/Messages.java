@@ -51,6 +51,15 @@ public final class Messages {
     /** Player-feedback factories for the server-wide lottery. */
     public static final LotteryMessages LOTTERY = new LotteryMessages();
 
+    /** Discord wording for lottery draw cards. */
+    public static final LotteryDiscordMessages LOTTERY_DISCORD = new LotteryDiscordMessages();
+
+    /** Discord wording for grouped blackjack and roulette settlement lines. */
+    public static final CasinoDiscordMessages CASINO_DISCORD = new CasinoDiscordMessages();
+
+    /** Discord wording for optional live voice-channel stat names. */
+    public static final DiscordStatMessages DISCORD_STATS = new DiscordStatMessages();
+
     /** Player-feedback factories and dialog copy for permission administration. */
     public static final PermissionMessages PERMISSIONS = new PermissionMessages();
 

@@ -3,6 +3,7 @@ package me.beeliebub.tweaks;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
 import me.beeliebub.tweaks.economy.HousePaymentService;
+import me.beeliebub.tweaks.discord.DiscordAnnouncer;
 import me.beeliebub.tweaks.enchantments.Replant;
 import me.beeliebub.tweaks.enchantments.Telekinesis;
 import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
@@ -75,6 +76,7 @@ public final class Services {
     BlackjackListener blackjackListener;
     RouletteListener rouletteListener;
     LotteryManager lotteryManager;
+    DiscordAnnouncer discordAnnouncer;
 
     public void setConsoleEventLog(ConsoleEventLog consoleEventLog) {
         if (this.consoleEventLog != null) throw new IllegalStateException("consoleEventLog already published");
@@ -303,5 +305,15 @@ public final class Services {
     public LotteryManager lotteryManager() {
         if (lotteryManager == null) throw new IllegalStateException("lotteryManager not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
         return lotteryManager;
+    }
+
+    public void setDiscordAnnouncer(DiscordAnnouncer discordAnnouncer) {
+        if (this.discordAnnouncer != null) throw new IllegalStateException("discordAnnouncer already published");
+        this.discordAnnouncer = discordAnnouncer;
+    }
+
+    public DiscordAnnouncer discordAnnouncer() {
+        if (discordAnnouncer == null) throw new IllegalStateException("discordAnnouncer not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
+        return discordAnnouncer;
     }
 }

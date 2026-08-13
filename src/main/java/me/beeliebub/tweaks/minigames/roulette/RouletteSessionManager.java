@@ -4,6 +4,8 @@ import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.economy.BalanceMutationResult;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
+import me.beeliebub.tweaks.discord.DiscordAnnouncer;
+import me.beeliebub.tweaks.discord.SettlementLine;
 import me.beeliebub.tweaks.lottery.LotteryManager;
 import me.beeliebub.tweaks.logging.ConsoleEventLog;
 import me.beeliebub.tweaks.logging.LoggingPaths;
@@ -55,6 +57,7 @@ final class RouletteSessionManager {
     private final RouletteRenderer renderer;
     private final RouletteRestPoseStore restPoseStore;
     private final LotteryManager lotteryManager;
+    private final DiscordAnnouncer discordAnnouncer;
     private final RandomGenerator rng = new SecureRandom();
 
     private final Map<UUID, Integer> stickyStakes = new HashMap<>();
@@ -68,13 +71,22 @@ final class RouletteSessionManager {
     RouletteSessionManager(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
                             RankManager rankManager, RouletteBoardStore boardStore,
                             RouletteRenderer renderer, RouletteRestPoseStore restPoseStore) {
-        this(plugin, economyManager, houseAccount, rankManager, boardStore, renderer, restPoseStore, null);
+        this(plugin, economyManager, houseAccount, rankManager, boardStore, renderer, restPoseStore,
+                null, DiscordAnnouncer.NOOP);
     }
 
     RouletteSessionManager(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
                             RankManager rankManager, RouletteBoardStore boardStore,
                             RouletteRenderer renderer, RouletteRestPoseStore restPoseStore,
                             LotteryManager lotteryManager) {
+        this(plugin, economyManager, houseAccount, rankManager, boardStore, renderer, restPoseStore,
+                lotteryManager, DiscordAnnouncer.NOOP);
+    }
+
+    RouletteSessionManager(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
+                            RankManager rankManager, RouletteBoardStore boardStore,
+                            RouletteRenderer renderer, RouletteRestPoseStore restPoseStore,
+                            LotteryManager lotteryManager, DiscordAnnouncer discordAnnouncer) {
         this.plugin = plugin;
         this.economyManager = economyManager;
         this.houseAccount = houseAccount;
@@ -83,6 +95,7 @@ final class RouletteSessionManager {
         this.renderer = renderer;
         this.restPoseStore = restPoseStore;
         this.lotteryManager = lotteryManager;
+        this.discordAnnouncer = discordAnnouncer == null ? DiscordAnnouncer.NOOP : discordAnnouncer;
 
         this.indicatorTaskId = Bukkit.getScheduler()
                 .runTaskTimer(plugin, this::tickStakeIndicators, STAKE_INDICATOR_PERIOD, STAKE_INDICATOR_PERIOD)
@@ -610,10 +623,6 @@ final class RouletteSessionManager {
 
         String colorName = RouletteWheel.colorOf(pocket).name();
         int dozen = RouletteWheel.dozenOf(pocket);
-        Map<UUID, Long> wageredByPlayer = new HashMap<>();
-        for (RouletteBet bet : bets) {
-            wageredByPlayer.merge(bet.player(), (long) bet.amount(), Long::sum);
-        }
         Set<UUID> messaged = new HashSet<>();
         for (Map.Entry<UUID, RouletteRound.PlayerCredit> entry : settlement.credits().entrySet()) {
             Player player = Bukkit.getPlayer(entry.getKey());
@@ -621,7 +630,7 @@ final class RouletteSessionManager {
                 continue; // offline bettors get nothing here — no message, no balance read
             }
             try {
-                long wagered = wageredByPlayer.getOrDefault(entry.getKey(), 0L);
+                long wagered = entry.getValue().wagered();
                 player.sendMessage(Messages.MINIGAMES.rouletteRoundOutcome(
                         pocket, colorName, wagered, entry.getValue().payout(), entry.getValue().rakeback()));
                 messaged.add(entry.getKey());
@@ -631,6 +640,22 @@ final class RouletteSessionManager {
                         + " — their credit was still applied.", e);
             }
         }
+
+        // Discord records money that actually settled, so this deliberately ignores the
+        // presentation flag used for in-world cosmetics during chunk unload and shutdown.
+        for (Map.Entry<UUID, RouletteRound.PlayerCredit> entry : settlement.credits().entrySet()) {
+            try {
+                String name = Bukkit.getOfflinePlayer(entry.getKey()).getName();
+                RouletteRound.PlayerCredit credit = entry.getValue();
+                long net = credit.payout() + credit.rakeback() - credit.wagered();
+                discordAnnouncer.announceSettlement(SettlementLine.forNet(
+                        Messages.CASINO_DISCORD.rouletteRound(
+                                name == null ? entry.getKey().toString() : name, net), net));
+            } catch (Throwable throwable) {
+                plugin.getLogger().log(Level.WARNING,
+                        "Roulette Discord settlement announcement failed for " + entry.getKey(), throwable);
+            }
+        }
         if (presentation) {
             safeRender(() -> renderer.refreshStatus(board, Messages.MINIGAMES.rouletteResultStatus(pocket, colorName)),
                     board, "post-settlement status refresh");
@@ -638,7 +663,7 @@ final class RouletteSessionManager {
                     board, "post-settlement broadcast");
             safeRender(() -> renderer.refreshHouseBalance(board), board, "post-settlement house balance refresh");
             for (Map.Entry<UUID, RouletteRound.PlayerCredit> entry : settlement.credits().entrySet()) {
-                long wagered = wageredByPlayer.getOrDefault(entry.getKey(), 0L);
+                long wagered = entry.getValue().wagered();
                 long payout = entry.getValue().payout();
                 if (isBigWin(wagered, payout, bigWinMultiplier())) {
                     announceBigWin(entry.getKey(), payout, pocket, colorName);

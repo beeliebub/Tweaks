@@ -161,6 +161,45 @@ class ConfigValueEditorTest {
         assertTrue(plain(result).contains("Max homes has been updated live to 9"));
     }
 
+    // ------------------------------------------------------------ Generic scalar (string)
+
+    @Test
+    void stringSettingWritesAndReadsBackRawValue() {
+        ConfigSetting setting = ConfigRegistry.byPath("discord.channel-id").orElseThrow();
+
+        EditResult result = editor.applyScalar(setting, "123456789012345678");
+
+        assertInstanceOf(EditResult.Ok.class, result);
+        assertEquals("123456789012345678", plugin.getConfig().getString(setting.path()));
+    }
+
+    @Test
+    void stringSettingAcceptsEmptyValueAsClear() {
+        ConfigSetting setting = ConfigRegistry.byPath("discord.channel-id").orElseThrow();
+        editor.applyScalar(setting, "123");
+
+        EditResult result = editor.applyScalar(setting, "");
+
+        assertInstanceOf(EditResult.Ok.class, result);
+        assertEquals("", plugin.getConfig().getString(setting.path()));
+    }
+
+    @Test
+    void failedStringSaveRestoresPreviousValue() {
+        ConfigSetting setting = ConfigRegistry.byPath("discord.channel-id").orElseThrow();
+        plugin.getConfig().set(setting.path(), "old");
+        plugin.saveConfig();
+        Tweaks saveBlocked = spy(plugin);
+        doNothing().when(saveBlocked).saveConfig();
+        ConfigValueEditor saveBlockedEditor = new ConfigValueEditor(saveBlocked, resourceHuntItems,
+                new WorldProfileTable(saveBlocked));
+
+        EditResult result = saveBlockedEditor.applyScalar(setting, "new");
+
+        assertInstanceOf(EditResult.Invalid.class, result);
+        assertEquals("old", plugin.getConfig().getString(setting.path()));
+    }
+
     // ------------------------------------------------------------ List add/remove idempotency
 
     @Test

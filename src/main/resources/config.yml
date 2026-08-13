@@ -148,6 +148,18 @@ lottery:
   reseed-amount: 10000
   pot-multiplier: 0.6
 
+discord:
+  # Numeric Discord channel ID for Tweaks announcements. Leave empty to disable.
+  # Must be quoted: an 18-digit ID is not safe to carry as a YAML number.
+  # Do not also add this channel to DiscordSRV's Channels map; that would make it a two-way chat bridge.
+  channel-id: ""
+  # Seconds to collect casino settlements before posting them as one grouped code block.
+  group-window-seconds: 2
+  # Voice channels whose names display live figures. Leave empty to disable each one.
+  house-channel-id: ""
+  lottery-channel-id: ""
+  stat-refresh-seconds: 300
+
 # Player ranks. Rank 0 = unranked (no name/cost/bonus). Ranks 1..10 are purchasable in order via /rankup.
 # multiplier = rank bonus applied to daily login rewards. rakeback = casino rakeback rate. Both are fractions (0.01 = 1%).
 ranks:
@@ -162,10 +174,7 @@ ranks:
   9:  { name: "IX",   cost: 200000.0, multiplier: 0.09, rakeback: 0.09 }
   10: { name: "X",    cost: 350000.0, multiplier: 0.10, rakeback: 0.10 }
 
-# The following keys are not yet read by any live code - added here now
-# so the config-defaulting reconciliation mechanism (Tweaks#reconcileConfigDefaults) has one
-# consistent set of bundled defaults to reconcile against, rather than touching config.yml again
-# in each later phase. Each key's default equals today's hardcoded Java constant.
+# Runtime-editable defaults for the live block-log and death-inventory settings.
 blocklog:
   retention-days: 30
   max-entries-per-chest: 500

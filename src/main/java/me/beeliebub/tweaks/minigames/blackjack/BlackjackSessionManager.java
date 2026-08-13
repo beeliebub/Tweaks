@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.minigames.blackjack;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.discord.DiscordAnnouncer;
+import me.beeliebub.tweaks.discord.SettlementLine;
 import me.beeliebub.tweaks.economy.BalanceMutationResult;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
@@ -41,6 +43,7 @@ public final class BlackjackSessionManager {
     private final RankManager rankManager;
     private final BlackjackRenderer renderer;
     private final LotteryManager lotteryManager;
+    private final DiscordAnnouncer discordAnnouncer;
 
     /** Per-player active game session. At most one game per player at a time. */
     private final Map<UUID, Session> sessions = new HashMap<>();
@@ -53,17 +56,24 @@ public final class BlackjackSessionManager {
 
     public BlackjackSessionManager(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
                             RankManager rankManager, BlackjackRenderer renderer) {
-        this(plugin, economyManager, houseAccount, rankManager, renderer, null);
+        this(plugin, economyManager, houseAccount, rankManager, renderer, null, DiscordAnnouncer.NOOP);
     }
 
     public BlackjackSessionManager(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
                             RankManager rankManager, BlackjackRenderer renderer, LotteryManager lotteryManager) {
+        this(plugin, economyManager, houseAccount, rankManager, renderer, lotteryManager, DiscordAnnouncer.NOOP);
+    }
+
+    public BlackjackSessionManager(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
+                            RankManager rankManager, BlackjackRenderer renderer, LotteryManager lotteryManager,
+                            DiscordAnnouncer discordAnnouncer) {
         this.plugin = plugin;
         this.economyManager = economyManager;
         this.houseAccount = houseAccount;
         this.rankManager = rankManager;
         this.renderer = renderer;
         this.lotteryManager = lotteryManager;
+        this.discordAnnouncer = discordAnnouncer == null ? DiscordAnnouncer.NOOP : discordAnnouncer;
 
         // Schedule the inactivity sweeper to run every 60 seconds (1200 ticks).
         sweepTaskId = plugin.getServer().getScheduler()
@@ -295,6 +305,22 @@ public final class BlackjackSessionManager {
         player.sendMessage(Messages.MINIGAMES.blackjackFinalValues(game.playerValue(), game.dealerValue()));
         player.sendMessage(Messages.MINIGAMES.blackjackClearBoard());
 
+        if (settlement.netChange() != 0) {
+            try {
+                discordAnnouncer.announceSettlement(SettlementLine.forNet(
+                        Messages.CASINO_DISCORD.blackjackHand(
+                                player.getName(), settlement.netChange(),
+                                game.result() == BlackjackGame.Result.PLAYER_BLACKJACK),
+                        settlement.netChange()));
+            } catch (Throwable throwable) {
+                // Discord is an optional reporting surface. The hand is already settled and the
+                // auto-clear below must still be scheduled if formatting or delivery fails.
+                plugin.getLogger().log(java.util.logging.Level.WARNING,
+                        "Blackjack Discord settlement announcement failed for " + player.getUniqueId(),
+                        throwable);
+            }
+        }
+
         ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
         if (eventLog != null) eventLog.log(LoggingPaths.BLACKJACK_SETTLED, () ->
                 "[Blackjack] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
@@ -339,7 +365,8 @@ public final class BlackjackSessionManager {
     }
 
     /** Pure result of settling a hand: amounts to credit and the player-facing summary. */
-    record Settlement(int payoutAmount, int rakebackAmount, int houseWinnings, Component summaryMessage) {}
+    record Settlement(int payoutAmount, int rakebackAmount, int houseWinnings, int netChange,
+                      Component summaryMessage) {}
 
     /**
      * Pure settlement computation — no Bukkit types, no side effects — so the payout/rakeback
@@ -362,7 +389,8 @@ public final class BlackjackSessionManager {
         }
 
         int houseWinnings = Math.max(0, bet - payoutAmount);
-        return new Settlement(payoutAmount, rakebackAmount, houseWinnings,
+        int netChange = payoutAmount + rakebackAmount - bet;
+        return new Settlement(payoutAmount, rakebackAmount, houseWinnings, netChange,
                 Messages.MINIGAMES.blackjackSettlementSummary(result.name(), bet, payoutAmount, rakebackAmount));
     }
 
@@ -435,6 +463,19 @@ public final class BlackjackSessionManager {
                     var player = Bukkit.getPlayer(playerId);
                     if (player != null) {
                         player.sendMessage(Messages.MINIGAMES.blackjackInactiveGameEnded(bet));
+                    }
+                    if (bet > 0) {
+                        try {
+                            String name = Bukkit.getOfflinePlayer(playerId).getName();
+                            long net = -((long) bet);
+                            discordAnnouncer.announceSettlement(SettlementLine.forNet(
+                                    Messages.CASINO_DISCORD.blackjackForfeited(
+                                            name == null ? playerId.toString() : name, net), net));
+                        } catch (Throwable throwable) {
+                            plugin.getLogger().log(java.util.logging.Level.WARNING,
+                                    "Blackjack Discord forfeiture announcement failed for " + playerId,
+                                    throwable);
+                        }
                     }
                 }
             } catch (RuntimeException e) {

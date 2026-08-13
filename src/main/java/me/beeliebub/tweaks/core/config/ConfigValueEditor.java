@@ -230,8 +230,17 @@ public final class ConfigValueEditor {
             case BOOLEAN -> setBoolean(setting, rawValue);
             case MATERIAL -> setMaterial(setting, rawValue);
             case NAMESPACED_KEY -> setNamespacedKey(setting, rawValue);
+            case STRING -> setString(setting, rawValue);
             default -> new EditResult.Invalid(Messages.CONFIG.notAScalarSetting(setting.displayName()));
         };
+    }
+
+    private EditResult setString(ConfigSetting setting, String rawValue) {
+        String value = rawValue == null ? "" : rawValue;
+        if (!writeAndVerify(setting.path(), value)) {
+            return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
+        }
+        return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), value));
     }
 
     private EditResult setBoundedNumber(ConfigSetting setting, String rawValue, boolean integral) {

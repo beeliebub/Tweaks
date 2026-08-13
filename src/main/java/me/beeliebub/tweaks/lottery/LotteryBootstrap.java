@@ -17,7 +17,7 @@ public final class LotteryBootstrap {
                 services.housePaymentService(), services.economyManager());
         services.setLotteryManager(manager);
         LotteryCommand command = new LotteryCommand(plugin, manager, services.houseAccount(),
-                services.housePaymentService());
+                services.housePaymentService(), services.discordAnnouncer());
         plugin.getCommand("lottery").setExecutor(command);
         plugin.getCommand("lottery").setTabCompleter(command);
     }

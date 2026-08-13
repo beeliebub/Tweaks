@@ -80,6 +80,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
 - [Commands Reference](#commands-reference)
 - [Permissions Reference](#permissions-reference)
 - [Configuration](#configuration)
+  - [Discord announcements and stat channels](#discord-announcements-and-stat-channels)
 - [Server Administration](#server-administration)
   - [Installation](#installation)
   - [Data Pack Requirement](#data-pack-requirement)
@@ -665,6 +666,12 @@ a successful draw, and can be viewed or changed with `/lottery fallback`.
 | `/lottery baseline <amount>` | Set the growth baseline. Admin permission required. |
 | `/lottery fallback [<amount>]` | View or set the live fallback floor. Admin permission required. |
 
+When DiscordSRV is installed and `discord.channel-id` is configured, each committed draw also
+posts a yellow winner card to that Discord channel. The card uses the winner's name and avatar;
+the bot needs **Manage Webhooks** for the channel. The announcement channel is addressed by its
+numeric ID and must not be added to DiscordSRV's `Channels:` map, which would make it a two-way
+chat bridge.
+
 ### Ranks
 
 Progress through the server's rank hierarchy to unlock higher daily reward bonuses and better casino rakeback rates.
@@ -910,6 +917,10 @@ The standard casino experience. Play against an automated dealer at tables with 
   discarded.
 - **Free/Practice Tables**: Admins can create tables with **bet 0** (use `free` or `0` as the bet argument). These tables display **"Bet: FREE"** on the hologram, perform no currency transfers, and skip rakeback entirely — ideal for learning the game.
 
+When DiscordSRV is installed and `discord.channel-id` is configured, each settled paid hand is
+included in a short grouped `diff` code block showing the player's signed net change. Pushes and
+free/practice hands produce no line. Inactivity forfeitures are reported as losses.
+
 #### General Mechanics
 
 - **Inactivity Timeout**: If a game sits idle for **10 minutes** (no hit/stand/deal actions), the session is evicted. Any escrowed bets are forfeited. Setup/betting phases time out after **3 minutes**.
@@ -948,6 +959,11 @@ An in-world roulette wheel — a real physical build the server team constructed
 - **Big win announcements**: If your winnings reach 8x your wager, the whole server is notified.
 - **House balance**: A hologram over each wheel shows the single server-wide house balance — the same
   account Blackjack's losses and each Roulette player's net losses feed.
+
+When DiscordSRV is installed and `discord.channel-id` is configured, every bettor gets one grouped
+`diff` line showing their signed net change, including break-even results. A big-win event is not
+duplicated with a second Discord message. Discord settlement lines are emitted for money outcomes
+even when the wheel is settling during chunk unload or shutdown.
 
 #### Board Construction (Admin)
 
@@ -1245,6 +1261,8 @@ When an action occurs, the system checks rules in this order:
 | `/tconfig` / `/tconfig gui` | `tweaks.admin.config` | Open the admin config Dialog GUI (players only; console gets plain usage). |
 | `/tconfig list [category]` | `tweaks.admin.config` | Print every registered setting and its current value. |
 | `/tconfig list logging` | `tweaks.admin.config` | Print the 20 logging categories and their current values. |
+| `/tconfig list discord` | `tweaks.admin.config` | Print the Discord announcement, grouping, and voice-stat settings. |
+| `/tconfig discord.<setting> <value>` | `tweaks.admin.config` | Edit a Discord setting; channel IDs accept a raw numeric ID or an empty value to disable that surface. |
 | `/tconfig max_homes <int>` | `tweaks.admin.config` | Set global max homes per player. |
 | `/tconfig max_chunks <int>` | `tweaks.admin.config` | Set global max chunk claims per player. |
 | `/tconfig egg_collector_drop_chance <0.0-100.0>` | `tweaks.admin.config` | Set the base Egg Collector drop chance. |
@@ -1337,7 +1355,36 @@ The plugin generates a `config.yml` on first startup. Custom enchantments requir
 
 On every startup, any key present in the bundled default `config.yml` but missing from your live file is automatically added back with its default value (an admin-modified value is never overwritten, and an explicit empty list you've saved stays empty — only a genuinely absent key is filled in).
 
-A growing set of settings — spanning General, Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Xp Bottle, and Console Event Logging — is also editable at runtime without touching `config.yml` by hand, via `/tconfig`. Six have dedicated CLI forms (see the [Commands Reference](#commands-reference) table above); the rest use the generic `/tconfig <path> <value>` grammar. Run `/tconfig gui` in-game for a Dialog-based editor with the same categories and a main-menu **Logging** tab, or `/tconfig list [category]` to print every registered setting and its current value from the console or in chat. `/tconfig list logging` filters that output to the 20 logging categories; the GUI shows them over two pages.
+A growing set of settings — spanning General, Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Xp Bottle, Discord, and Console Event Logging — is also editable at runtime without touching `config.yml` by hand, via `/tconfig`. Six have dedicated CLI forms (see the [Commands Reference](#commands-reference) table above); the rest use the generic `/tconfig <path> <value>` grammar. Run `/tconfig gui` in-game for a Dialog-based editor with the same categories and a main-menu **Logging** tab, or `/tconfig list [category]` to print every registered setting and its current value from the console or in chat. `/tconfig list logging` filters that output to the 20 logging categories; `/tconfig list discord` filters to the Discord settings.
+
+### Discord announcements and stat channels
+
+Discord integration is optional and requires DiscordSRV. Leave every Discord channel ID empty to
+disable that surface without log noise or Discord API traffic. The announcement channel is shared
+by lottery, Blackjack, and Roulette:
+
+- Lottery draws post a yellow winner card.
+- Paid Blackjack hands, inactivity forfeitures, and Roulette settlements are grouped into short
+  `diff` code blocks. Blackjack pushes/free hands are omitted; Roulette includes every bettor,
+  including a break-even result, and each line shows signed net change.
+- The House balance and lottery pot can be displayed in two separate voice-channel names. Names
+  refresh at most once per five minutes and unchanged values are not renamed, respecting Discord's
+  channel-rename rate limit. A lottery without a payable pot displays `Lottery Pot: waiting`.
+
+| Setting | Default | Description |
+|---|---:|---|
+| `discord.channel-id` | `""` | Numeric Discord text-channel ID for lottery/casino messages. |
+| `discord.house-channel-id` | `""` | Numeric Discord voice-channel ID for the House balance. |
+| `discord.lottery-channel-id` | `""` | Numeric Discord voice-channel ID for the lottery pot. |
+| `discord.group-window-seconds` | `2` | Settlement grouping window, bounded to 1–10 seconds. |
+| `discord.stat-refresh-seconds` | `300` | Voice-stat refresh interval, bounded to 300–3600 seconds. |
+
+Use quoted raw numeric IDs in `config.yml`; Discord snowflakes are too large for a safe YAML
+number. The announcement channel must not be added to DiscordSRV's `Channels:` map, because that
+map creates a two-way chat bridge. The bot needs **Manage Webhooks** on the announcement channel
+and **Manage Channel** on each configured voice channel. Incorrect IDs or permissions produce one
+startup warning after DiscordSRV is ready; empty IDs remain silent. `/tconfig` writes the same
+settings immediately, and its generic STRING editor accepts an empty value to disable a channel.
 
 ### Console logging settings
 

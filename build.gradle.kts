@@ -6,6 +6,7 @@ plugins {
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://nexus.scarsz.me/content/groups/public/")
     // MockBukkit
     maven("https://s01.oss.sonatype.org/content/repositories/snapshots/")
     // MockBukkit v26.2 (unreleased upstream; built locally from MockBukkit/MockBukkit#1592)
@@ -16,6 +17,7 @@ val mockitoAgent: Configuration by configurations.creating
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.+")
+    compileOnly("com.discordsrv:discordsrv:1.30.5")
 
     testImplementation("io.papermc.paper:paper-api:26.2.build.+")
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
