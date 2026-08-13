@@ -333,10 +333,12 @@ an error and does not advance the wizard or reopen the edited screen.
 4. **Capture a starter template (`templates`).** Build the starter island inside a selected region,
    select both corners with the wand, and run `/isadmin templates save starter`, or use Templates →
    **Capture**. Preview it with `/isadmin templates preview starter`. A capture must be in the
-   configured world, contain a complete selection, contain at least one non-air block, and fit
-   `template-max-height` and `template-max-blocks`. The shipped `default` type has no template and
-   an empty kit, so it produces an empty void island until a type is pointed at this template or a
-   kit is authored. This step satisfies `templates`.
+   configured world and contain a complete selection with at least one non-air block. It searches
+   the world's full vertical range for the build and trims to it automatically; `template-max-height`
+   bounds the height of the resulting template rather than the range searched, while
+   `template-max-blocks` limits its volume. The shipped `default` type has no template and an empty
+   kit, so it produces an empty void island until a type is pointed at this template or a kit is
+   authored. This step satisfies `templates`.
 5. **Create difficulties (`difficulties`).** Use Difficulties → **Create**, or run
    `/isadmin difficulties create hard Hard`, then
    `/isadmin difficulties set hard multiplier 1.5` and
@@ -604,7 +606,7 @@ rebuild the exclusive runtime. Other values are live reads unless the table says
 | `skyblock.save-interval-seconds` | `60` | At least `1` | No | Periodic island persistence interval. |
 | `skyblock.deletion-chunks-per-tick` | `4` | At least `1` | No | Shared terrain-cleanup budget for durable island deletion. |
 | `skyblock.containment-message-cooldown-ms` | `3000` | At least `0` | No | Cooldown for repeated containment messages. |
-| `skyblock.template-max-height` | `128` | `1` to `384` | No | Maximum vertical scan height for template capture. |
+| `skyblock.template-max-height` | `128` | `1` to `384` | No | Maximum height of the resulting captured template; the search covers the world's full vertical range. |
 | `skyblock.template-max-blocks` | `250000` | At least `1` | No | Maximum estimated blocks for one template capture. |
 | `skyblock.max-slot-index` | `100000` | At least `0` | No | Highest island grid slot that can be allocated. |
 | `skyblock.price.biome-change` | `0.0` | At least `0` | No | Island-wallet price of `/island biome`. |
@@ -655,8 +657,8 @@ difficulty multiplier.
 If an island is empty, inspect its type. A blank template plus an empty kit is intentionally a void
 island; capture a non-air template or author a kit, set the type's template/difficulties, and make
 the pair the default. If template capture refuses, confirm both wand positions are in the configured
-world, the selection is within `template-max-height`/`template-max-blocks`, and the selected volume
-contains a non-air block. If a delete is refused, the confirmation preview gives the reference
+world, the resulting template fits `template-max-height`/`template-max-blocks`, and the selected
+volume contains a non-air block. If a delete is refused, the confirmation preview gives the reference
 count; inspect and move the type/template/challenge/generator references first. A deletion already
 started is not stuck merely because the island disappears from the browser: watch `deletions/` until
 the durable cursor drains and the slot is released.

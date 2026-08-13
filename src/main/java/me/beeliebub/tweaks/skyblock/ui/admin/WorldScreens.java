@@ -199,10 +199,21 @@ public final class WorldScreens {
         IslandGrid.ChunkBounds chunkBounds = bounds(selection);
         long width = (long) chunkBounds.maxChunkX() - chunkBounds.minChunkX() + 1;
         long depth = (long) chunkBounds.maxChunkZ() - chunkBounds.minChunkZ() + 1;
-        long estimated = width * depth * 256L * (runtime.world().getMaxHeight() - runtime.world().getMinHeight());
-        return List.of("Selection: complete", "World: " + runtime.world().getKey().asString(),
-                "Chunks: " + width + " x " + depth,
-                "Estimated blocks: " + estimated,
-                "1. Review the dimensions. 2. Choose Capture when ready.");
+        TemplateCapture.CaptureEstimate estimate = null;
+        try {
+            estimate = templateAdmin.estimate(chunkBounds, runtime.world().getMinHeight(),
+                    runtime.world().getMaxHeight());
+        } catch (RuntimeException ignored) {
+            // A missing or invalid estimate must not hide the otherwise usable selection summary.
+        }
+        List<String> summary = new ArrayList<>(List.of("Selection: complete",
+                "World: " + runtime.world().getKey().asString(),
+                "Chunks: " + width + " x " + depth));
+        if (estimate != null) {
+            summary.add("Estimated blocks: " + estimate.width() + "x" + estimate.height()
+                    + "x" + estimate.depth() + " = " + estimate.estimatedBlocks() + " blocks.");
+        }
+        summary.add("1. Review the dimensions. 2. Choose Capture when ready.");
+        return summary;
     }
 }

@@ -33,6 +33,11 @@ public final class BukkitTemplateSupport {
             }
 
             @Override
+            public boolean isAirAt(int x, int y, int z) {
+                return world.getBlockAt(x, y, z).getType().isAir();
+            }
+
+            @Override
             public java.util.Map<IslandTemplate.BlockEntity, String> blockEntities(
                     int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
                 java.util.Map<IslandTemplate.BlockEntity, String> entities = new java.util.LinkedHashMap<>();

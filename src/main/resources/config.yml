@@ -303,6 +303,7 @@ skyblock:
   save-interval-seconds: 60
   deletion-chunks-per-tick: 4
   containment-message-cooldown-ms: 3000
+  # Caps the height of a captured template, not the vertical range searched for one.
   template-max-height: 128
   template-max-blocks: 250000
   max-slot-index: 100000
