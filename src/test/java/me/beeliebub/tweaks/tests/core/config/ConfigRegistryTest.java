@@ -101,6 +101,14 @@ class ConfigRegistryTest {
     }
 
     @Test
+    void discordBridgeSettingsAreRegistered() {
+        assertTrue(ConfigRegistry.byPath("discord.webhook-name").isPresent());
+        assertTrue(ConfigRegistry.byPath("discord.webhook-avatar-url").isPresent());
+        assertTrue(ConfigRegistry.byPath("discord.betting-channel-id").isPresent());
+        assertTrue(ConfigRegistry.byPath("discord.betting-enabled").isPresent());
+    }
+
+    @Test
     void menuGroupsPreserveTheFullRegistryOrder() {
         List<ConfigCategory> main = ConfigRegistry.mainMenuCategories();
         List<ConfigCategory> logging = ConfigRegistry.loggingCategories();

@@ -11,10 +11,12 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -46,8 +48,9 @@ final class RouletteBoardStore {
      *  (never accumulated onto) by a later phase's rotation animation. */
     private final Map<BoardEntry, List<RouletteSegmentScanner.SegmentScan>> restPoseByBoard = new HashMap<>();
 
-    /** Per-world cache of {@link #loadBoardsForWorld}'s deserialized result, invalidated only by
-     *  {@link #persistBoard}/{@link #unpersistBoard} — avoids re-parsing the world PDC on every
+    /** Per-world cache of {@link #loadBoardsForWorld}'s deserialized result, invalidated by every
+     *  {@link #persistBoard}, {@link #unpersistBoard}, or {@link #setDiscordDesignation} write —
+     *  avoids re-parsing the world PDC on every
      *  {@code ChunkLoadEvent}, which fires far more often than boards actually change. */
     private final Map<World, List<BoardEntry>> boardsByWorldCache = new HashMap<>();
 
@@ -74,9 +77,10 @@ final class RouletteBoardStore {
      *                      chunk footprint
      * @param control       the admin-only spin control block's location
      * @param controlFacing the control block's facing (rejects UP/DOWN at registration)
+     * @param discordEnabled whether this board is the Discord-betting designation
      */
     record BoardEntry(Location center, int minBet, int maxBet, int scanRadius,
-                       Location control, BlockFace controlFacing) {}
+                       Location control, BlockFace controlFacing, boolean discordEnabled) {}
 
     /** Associates a clicked hitbox with the board and bet it represents. */
     record SegmentRef(BoardEntry board, BetType type, int selector) {}
@@ -84,7 +88,7 @@ final class RouletteBoardStore {
     // ---- PDC serialisation --------------------------------------------------------
 
     /**
-     * Serialises to {@code worldName|cx|cy|cz|minBet|maxBet|scanRadius|ctrlX|ctrlY|ctrlZ|ctrlFacing}.
+     * Serialises to {@code worldName|cx|cy|cz|minBet|maxBet|scanRadius|ctrlX|ctrlY|ctrlZ|ctrlFacing|discordEnabled}.
      * Package-visible so tests can call it directly.
      */
     static String serializeBoard(BoardEntry entry) {
@@ -94,7 +98,8 @@ final class RouletteBoardStore {
                 + '|' + c.x() + '|' + c.y() + '|' + c.z()
                 + '|' + entry.minBet() + '|' + entry.maxBet() + '|' + entry.scanRadius()
                 + '|' + ctrl.getBlockX() + '|' + ctrl.getBlockY() + '|' + ctrl.getBlockZ()
-                + '|' + entry.controlFacing().name();
+                + '|' + entry.controlFacing().name()
+                + '|' + (entry.discordEnabled() ? '1' : '0');
     }
 
     /**
@@ -103,8 +108,8 @@ final class RouletteBoardStore {
      * currently loaded. Package-visible so tests can call it directly.
      */
     static BoardEntry deserializeBoard(String raw) {
-        String[] p = raw.split("\\|");
-        if (p.length != 11) {
+        String[] p = raw.split("\\|", -1);
+        if (p.length != 11 && p.length != 12) {
             return null;
         }
         try {
@@ -118,13 +123,22 @@ final class RouletteBoardStore {
             int minBet = Integer.parseInt(p[4]);
             int maxBet = Integer.parseInt(p[5]);
             int scanRadius = Integer.parseInt(p[6]);
+            if (!Double.isFinite(cx) || !Double.isFinite(cy) || !Double.isFinite(cz)
+                    || minBet < 1 || maxBet < minBet || scanRadius < 1) {
+                return null;
+            }
             int ctrlX = Integer.parseInt(p[7]);
             int ctrlY = Integer.parseInt(p[8]);
             int ctrlZ = Integer.parseInt(p[9]);
             BlockFace facing = BlockFace.valueOf(p[10]);
+            boolean discordEnabled = p.length == 12 && switch (p[11]) {
+                case "0" -> false;
+                case "1" -> true;
+                default -> throw new IllegalArgumentException("invalid discord designation");
+            };
             Location center = new Location(world, cx, cy, cz);
             Location control = new Location(world, ctrlX, ctrlY, ctrlZ);
-            return new BoardEntry(center, minBet, maxBet, scanRadius, control, facing);
+            return new BoardEntry(center, minBet, maxBet, scanRadius, control, facing, discordEnabled);
         } catch (IllegalArgumentException e) {
             return null;
         }
@@ -150,6 +164,11 @@ final class RouletteBoardStore {
                 plugin.getLogger().warning("Roulette: malformed board entry in world PDC (skipping): " + s);
                 continue;
             }
+            if (!entry.center().getWorld().getUID().equals(world.getUID())) {
+                plugin.getLogger().warning("Roulette: board entry names a different world than its PDC owner "
+                        + world.getName() + " (skipping): " + s);
+                continue;
+            }
             result.add(entry);
         }
         boardsByWorldCache.put(world, result);
@@ -169,6 +188,12 @@ final class RouletteBoardStore {
         if (existing.contains(serialized)) {
             return false;
         }
+        for (String raw : existing) {
+            BoardEntry candidate = deserializeBoard(raw);
+            if (candidate != null && samePhysicalBoard(candidate, entry)) {
+                return false;
+            }
+        }
         List<String> updated = new ArrayList<>(existing);
         updated.add(serialized);
         pdc.set(boardsKey, PersistentDataType.LIST.strings(), updated);
@@ -185,6 +210,107 @@ final class RouletteBoardStore {
         updated.remove(serializeBoard(entry));
         pdc.set(boardsKey, PersistentDataType.LIST.strings(), updated);
         boardsByWorldCache.remove(world);
+    }
+
+    /**
+     * Replaces the Discord designation on the persisted row for the same physical board. The
+     * complete list is written in one PDC operation so a designation change cannot leave a
+     * partially updated world row. Returns the canonical replacement identity, or {@code null}
+     * when no persisted physical row matched.
+     */
+    BoardEntry setDiscordDesignation(BoardEntry target, boolean enabled) {
+        World world = target.center().getWorld();
+        PersistentDataContainer pdc = world.getPersistentDataContainer();
+        List<String> existing = pdc.getOrDefault(boardsKey, PersistentDataType.LIST.strings(), List.of());
+        List<String> updated = new ArrayList<>(existing.size());
+        boolean found = false;
+        BoardEntry replacementEntry = null;
+        for (String raw : existing) {
+            BoardEntry candidate = deserializeBoard(raw);
+            if (!found && candidate != null && samePhysicalBoard(candidate, target)) {
+                replacementEntry = new BoardEntry(candidate.center(), candidate.minBet(), candidate.maxBet(),
+                        candidate.scanRadius(), candidate.control(), candidate.controlFacing(), enabled);
+                updated.add(serializeBoard(replacementEntry));
+                found = true;
+            } else {
+                updated.add(raw);
+            }
+        }
+        if (!found) {
+            return null;
+        }
+        // Write even when the requested value is already present: this upgrades a matching legacy
+        // row to the canonical 12-field representation and keeps the operation idempotent.
+        pdc.set(boardsKey, PersistentDataType.LIST.strings(), updated);
+        boardsByWorldCache.remove(world);
+        return replacementEntry;
+    }
+
+    /** Returns the persisted Discord-designated board, if one exists among loaded worlds. */
+    Optional<BoardEntry> designatedBoard() {
+        return selectDesignated(designatedBoards());
+    }
+
+    /** Every persisted designated row, without applying the single-board tie-breaker. */
+    List<BoardEntry> designatedBoards() {
+        List<BoardEntry> designated = new ArrayList<>();
+        for (World world : Bukkit.getWorlds()) {
+            for (BoardEntry entry : loadBoardsForWorld(world)) {
+                if (entry.discordEnabled()) {
+                    designated.add(entry);
+                }
+            }
+        }
+        return List.copyOf(designated);
+    }
+
+    /** Returns the active Discord-designated board, if one is currently registered. */
+    Optional<BoardEntry> designatedActiveBoard() {
+        return selectDesignated(activeBoards().stream()
+                .filter(BoardEntry::discordEnabled)
+                .toList());
+    }
+
+    private Optional<BoardEntry> selectDesignated(List<BoardEntry> candidates) {
+        if (candidates.isEmpty()) {
+            return Optional.empty();
+        }
+        List<BoardEntry> ordered = candidates.stream()
+                .sorted(Comparator.comparing(RouletteBoardStore::serializeBoard))
+                .toList();
+        if (ordered.size() > 1) {
+            plugin.getLogger().severe("Roulette: multiple Discord-designated boards found; using "
+                    + serializeBoard(ordered.get(0)) + " and ignoring: "
+                    + ordered.stream().skip(1).map(RouletteBoardStore::serializeBoard)
+                    .collect(java.util.stream.Collectors.joining(", ")));
+        }
+        return Optional.of(ordered.get(0));
+    }
+
+    /** Compares persisted/runtime identity without considering the designation bit. */
+    static boolean samePhysicalBoard(BoardEntry left, BoardEntry right) {
+        return left.minBet() == right.minBet()
+                && left.maxBet() == right.maxBet()
+                && left.scanRadius() == right.scanRadius()
+                && left.controlFacing() == right.controlFacing()
+                && sameLocation(left.center(), right.center())
+                && sameBlockLocation(left.control(), right.control());
+    }
+
+    private static boolean sameLocation(Location left, Location right) {
+        return left.getWorld() != null && right.getWorld() != null
+                && left.getWorld().getUID().equals(right.getWorld().getUID())
+                && Double.compare(left.x(), right.x()) == 0
+                && Double.compare(left.y(), right.y()) == 0
+                && Double.compare(left.z(), right.z()) == 0;
+    }
+
+    private static boolean sameBlockLocation(Location left, Location right) {
+        return left.getWorld() != null && right.getWorld() != null
+                && left.getWorld().getUID().equals(right.getWorld().getUID())
+                && left.getBlockX() == right.getBlockX()
+                && left.getBlockY() == right.getBlockY()
+                && left.getBlockZ() == right.getBlockZ();
     }
 
     // ---- Chunk footprint -----------------------------------------------------------

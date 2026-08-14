@@ -68,6 +68,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Whack an Andrew](#whack-an-andrew)
   - [Blackjack](#blackjack)
   - [Roulette](#roulette)
+    - [Discord Betting](#discord-betting)
   - [Resource Hunt](#resource-hunt)
   - [Rewards](#rewards)
 - [Land Protection](#land-protection)
@@ -965,7 +966,22 @@ When DiscordSRV is installed and `discord.channel-id` is configured, every betto
 duplicated with a second Discord message. Discord settlement lines are emitted for money outcomes
 even when the wheel is settling during chunk unload or shutdown.
 
+#### Discord Betting
+
+The Discord commands are native Discord slash commands and do not collide with the in-game
+`/roulette` command. An administrator designates the one board used for Discord wagers with
+`/roulette setdiscord`; `/roulette cleardiscord` removes that designation. Linked players can then
+use `/balance`, `/bet`, `/roulette`, and `/mybets` in the configured `discord.betting-channel-id`.
+Account linking is handled by DiscordSRV (`/discord link` in game), and linked players may check
+their balance or bet while offline in Minecraft. `/bet` uses the same board min/max and cumulative
+exposure rules as physical betting. Each settled round begins its grouped results block with a
+header such as `@@ Roulette — 17 Black @@`, and the bettor receives an ephemeral follow-up with
+their mention, pocket, colour, and outcome.
+
 #### Board Construction (Admin)
+
+- `/roulette setdiscord` begins the designation flow; right-click the board's spin control to expose that board to the native Discord betting commands.
+- `/roulette cleardiscord` clears the Discord betting designation directly. Both commands are refused while a round is in progress.
 
 - Stand near the physical wheel and run `/roulette createboard <min> <max>`, then right-click the button or lever that will act as the board's admin spin control.
 - `<min>`/`<max>` set the board's stake range; both must be whole numbers, `min` at least 1 and no greater than `max`.
@@ -1254,6 +1270,8 @@ When an action occurs, the system checks rules in this order:
 | `/blackjack removetable` | `tweaks.blackjack.removetable` | Remove a Blackjack table. |
 | `/roulette createboard <min> <max>` | `tweaks.roulette.createboard` | Begin Roulette board setup; right-click a button/lever to finalize. |
 | `/roulette removeboard` | `tweaks.roulette.removeboard` | Begin Roulette board removal; right-click the board's spin control. |
+| `/roulette setdiscord` | `tweaks.roulette.setdiscord` | Designate the board used by native Discord Roulette betting; right-click its spin control. |
+| `/roulette cleardiscord` | `tweaks.roulette.setdiscord` | Clear the current Discord Roulette betting designation. |
 | `/house <balance\|add\|remove\|set\|pay>` | `tweaks.admin.house` | View or administer the server-wide casino house account. |
 | `/lottery draw` | `tweaks.admin.lottery` | Draw the server-wide lottery and announce the winner. |
 | `/lottery baseline <amount>` | `tweaks.admin.lottery` | Set the lottery growth baseline. |
@@ -1261,7 +1279,7 @@ When an action occurs, the system checks rules in this order:
 | `/tconfig` / `/tconfig gui` | `tweaks.admin.config` | Open the admin config Dialog GUI (players only; console gets plain usage). |
 | `/tconfig list [category]` | `tweaks.admin.config` | Print every registered setting and its current value. |
 | `/tconfig list logging` | `tweaks.admin.config` | Print the 20 logging categories and their current values. |
-| `/tconfig list discord` | `tweaks.admin.config` | Print the Discord announcement, grouping, and voice-stat settings. |
+| `/tconfig list discord` | `tweaks.admin.config` | Print the Discord announcement, webhook, Roulette betting, grouping, and voice-stat settings. |
 | `/tconfig discord.<setting> <value>` | `tweaks.admin.config` | Edit a Discord setting; channel IDs accept a raw numeric ID or an empty value to disable that surface. |
 | `/tconfig max_homes <int>` | `tweaks.admin.config` | Set global max homes per player. |
 | `/tconfig max_chunks <int>` | `tweaks.admin.config` | Set global max chunk claims per player. |
@@ -1345,6 +1363,7 @@ When an action occurs, the system checks rules in this order:
 | `tweaks.admin.roulettescan` | Allows running the read-only Roulette board geometry diagnostic. |
 | `tweaks.roulette.createboard` | Allows starting the Roulette board setup flow. |
 | `tweaks.roulette.removeboard` | Allows starting the Roulette board removal flow. |
+| `tweaks.roulette.setdiscord` | Allows choosing or clearing the Roulette board exposed to Discord betting. |
 | `tweaks.roulette.forcespin` | Allows an admin's board-side control to force-close betting and spin immediately. |
 
 ---
@@ -1366,7 +1385,12 @@ by lottery, Blackjack, and Roulette:
 - Lottery draws post a yellow winner card.
 - Paid Blackjack hands, inactivity forfeitures, and Roulette settlements are grouped into short
   `diff` code blocks. Blackjack pushes/free hands are omitted; Roulette includes every bettor,
-  including a break-even result, and each line shows signed net change.
+  including a break-even result, and each line shows signed net change. Roulette blocks begin with
+  the unprefixed result header `@@ Roulette — N Colour @@`; the remaining lines are kept with that
+  header when a round spans multiple Discord messages.
+- Roulette result messages are posted as **House**. `discord.webhook-name` and
+  `discord.webhook-avatar-url` control casino announcements live; lottery winner cards keep the
+  winning player's skin avatar.
 - The House balance and lottery pot can be displayed in two separate voice-channel names. Names
   refresh at most once per five minutes and unchanged values are not renamed, respecting Discord's
   channel-rename rate limit. A lottery without a payable pot displays `Lottery Pot: waiting`.
@@ -1374,6 +1398,10 @@ by lottery, Blackjack, and Roulette:
 | Setting | Default | Description |
 |---|---:|---|
 | `discord.channel-id` | `""` | Numeric Discord text-channel ID for lottery/casino messages. |
+| `discord.webhook-name` | `House` | Display name used for casino and subjectless webhook messages; blank falls back to House. |
+| `discord.webhook-avatar-url` | `""` | Optional public avatar URL for casino and subjectless webhook messages. |
+| `discord.betting-channel-id` | `""` | Numeric Discord text-channel ID where the four native Roulette commands are accepted. |
+| `discord.betting-enabled` | `true` | Master switch for `/bet`; read-only Roulette commands remain available. |
 | `discord.house-channel-id` | `""` | Numeric Discord voice-channel ID for the House balance. |
 | `discord.lottery-channel-id` | `""` | Numeric Discord voice-channel ID for the lottery pot. |
 | `discord.group-window-seconds` | `2` | Settlement grouping window, bounded to 1–30 seconds. |

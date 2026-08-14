@@ -67,7 +67,7 @@ commands:
     usage: /roulettescan [radius]
   roulette:
     description: Bet on in-world Roulette boards; admins also create/remove boards via a spin-control button/lever.
-    usage: /roulette <createboard <min> <max>|removeboard|stake <amount>>
+    usage: /roulette <createboard <min> <max>|removeboard|setdiscord|cleardiscord|stake <amount>>
   more:
     description: Maximize the stack size of the held item
   condense:

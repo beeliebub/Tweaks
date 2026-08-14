@@ -77,6 +77,8 @@ class PermissionsTest {
         assertEquals("tweaks.admin.logs", Permissions.ADMIN_LOGS);
         assertEquals("tweaks.admin.permissions", Permissions.ADMIN_PERMISSIONS);
         assertEquals("tweaks.bypass.homes", Permissions.BYPASS_HOMES);
+        assertEquals("tweaks.roulette.setdiscord", Permissions.ROULETTE_SETDISCORD);
+        assertEquals("minigames", Permissions.getCategory(Permissions.ROULETTE_SETDISCORD));
     }
 
     // =========================================================================

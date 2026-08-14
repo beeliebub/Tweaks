@@ -55,6 +55,8 @@ public final class RouletteCommand implements CommandExecutor, TabCompleter {
         return switch (args[0].toLowerCase()) {
             case "createboard" -> handleCreateBoard(player, label, args);
             case "removeboard" -> handleRemoveBoard(player);
+            case "setdiscord" -> handleSetDiscord(player);
+            case "cleardiscord" -> handleClearDiscord(player);
             case "stake" -> handleStake(player, label, args);
             default -> {
                 player.sendMessage(Messages.MINIGAMES.rouletteUsage(label));
@@ -105,6 +107,24 @@ public final class RouletteCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private boolean handleSetDiscord(Player player) {
+        if (!player.hasPermission(Permissions.ROULETTE_SETDISCORD)) {
+            player.sendMessage(Messages.noPermission());
+            return true;
+        }
+        listener.beginDiscordDesignation(player);
+        return true;
+    }
+
+    private boolean handleClearDiscord(Player player) {
+        if (!player.hasPermission(Permissions.ROULETTE_SETDISCORD)) {
+            player.sendMessage(Messages.noPermission());
+            return true;
+        }
+        listener.clearDiscordDesignation(player);
+        return true;
+    }
+
     /** Ungated, like a physical button press — every player may set their own sticky stake. */
     private boolean handleStake(Player player, String label, String[] args) {
         if (args.length < 2) {
@@ -140,6 +160,14 @@ public final class RouletteCommand implements CommandExecutor, TabCompleter {
             if (sender.hasPermission(Permissions.ROULETTE_REMOVEBOARD)
                     && "removeboard".startsWith(args[0].toLowerCase())) {
                 suggestions.add("removeboard");
+            }
+            if (sender.hasPermission(Permissions.ROULETTE_SETDISCORD)
+                    && "setdiscord".startsWith(args[0].toLowerCase())) {
+                suggestions.add("setdiscord");
+            }
+            if (sender.hasPermission(Permissions.ROULETTE_SETDISCORD)
+                    && "cleardiscord".startsWith(args[0].toLowerCase())) {
+                suggestions.add("cleardiscord");
             }
             if ("stake".startsWith(args[0].toLowerCase())) {
                 suggestions.add("stake");

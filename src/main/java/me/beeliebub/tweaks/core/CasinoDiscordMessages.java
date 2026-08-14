@@ -24,6 +24,19 @@ public final class CasinoDiscordMessages {
         return "[Roulette] " + sanitizeName(name) + " " + signedMoney(net);
     }
 
+    public String rouletteBettorOutcome(String name, int pocket, String colorName, long net) {
+        return rouletteRound(name, net) + " | result: " + pocket + " " + titleCase(colorName);
+    }
+
+    /** Header placed immediately before one grouped Roulette settlement. */
+    public String rouletteResultHeader(int pocket, String colorName) {
+        return "@@ Roulette — " + pocket + " " + titleCase(colorName) + " @@";
+    }
+
+    public String rouletteHeader(int pocket, String colorName) {
+        return rouletteResultHeader(pocket, colorName);
+    }
+
     private static String signedMoney(long amount) {
         if (amount > 0) return "+" + money(amount);
         if (amount < 0) {
@@ -49,5 +62,11 @@ public final class CasinoDiscordMessages {
             sanitized = sanitized.substring(0, MAX_NAME_LENGTH);
         }
         return sanitized;
+    }
+
+    private static String titleCase(String raw) {
+        if (raw == null || raw.isBlank()) return "Unknown";
+        String value = raw.toLowerCase(Locale.ROOT);
+        return Character.toUpperCase(value.charAt(0)) + value.substring(1);
     }
 }

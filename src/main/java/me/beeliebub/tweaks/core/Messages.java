@@ -57,6 +57,10 @@ public final class Messages {
     /** Discord wording for grouped blackjack and roulette settlement lines. */
     public static final CasinoDiscordMessages CASINO_DISCORD = new CasinoDiscordMessages();
 
+    /** Plain-text ephemeral responses for Discord Roulette commands. */
+    public static final RouletteDiscordCommandMessages ROULETTE_DISCORD_COMMANDS =
+            new RouletteDiscordCommandMessages();
+
     /** Discord wording for optional live voice-channel stat names. */
     public static final DiscordStatMessages DISCORD_STATS = new DiscordStatMessages();
 

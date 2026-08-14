@@ -1,11 +1,24 @@
 package me.beeliebub.tweaks.discord;
 
 /** One settlement line before it is rendered into a Discord diff block. */
-public record SettlementLine(String text, Sign sign) {
+public record SettlementLine(String text, Sign sign, long groupId) {
+
+    public SettlementLine(String text, Sign sign) {
+        this(text, sign, 0L);
+    }
 
     public static SettlementLine forNet(String text, long net) {
         Sign sign = net > 0 ? Sign.WIN : net < 0 ? Sign.LOSS : Sign.NEUTRAL;
-        return new SettlementLine(text, sign);
+        return new SettlementLine(text, sign, 0L);
+    }
+
+    public static SettlementLine forNet(String text, long net, long groupId) {
+        Sign sign = net > 0 ? Sign.WIN : net < 0 ? Sign.LOSS : Sign.NEUTRAL;
+        return new SettlementLine(text, sign, groupId);
+    }
+
+    public static SettlementLine header(String text, long groupId) {
+        return new SettlementLine(text, Sign.HEADER, groupId);
     }
 
     public SettlementLine {
@@ -17,5 +30,5 @@ public record SettlementLine(String text, Sign sign) {
         }
     }
 
-    public enum Sign { WIN, LOSS, NEUTRAL }
+    public enum Sign { WIN, LOSS, NEUTRAL, HEADER }
 }

@@ -29,4 +29,10 @@ class CasinoDiscordMessagesTest {
         assertEquals("[Roulette] A+ forged $0", even);
         assertEquals("[Blackjack] Alice -$100 (forfeited)", forfeited);
     }
+
+    @Test
+    void rouletteResultHeaderUsesPocketAndTitleCaseColor() {
+        assertEquals("@@ Roulette — 17 Black @@",
+                Messages.CASINO_DISCORD.rouletteResultHeader(17, "BLACK"));
+    }
 }

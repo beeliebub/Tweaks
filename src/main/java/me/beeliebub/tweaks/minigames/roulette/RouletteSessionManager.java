@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -58,6 +59,7 @@ final class RouletteSessionManager {
     private final RouletteRestPoseStore restPoseStore;
     private final LotteryManager lotteryManager;
     private final DiscordAnnouncer discordAnnouncer;
+    private final RouletteDiscordGateway discordGateway;
     private final RandomGenerator rng = new SecureRandom();
 
     private final Map<UUID, Integer> stickyStakes = new HashMap<>();
@@ -65,6 +67,7 @@ final class RouletteSessionManager {
     /** Same-tick double-fire guard: {@code PlayerInteractAtEntityEvent} extends
      *  {@code PlayerInteractEntityEvent} and can deliver twice for one physical click. */
     private final Map<UUID, Integer> lastBetTick = new HashMap<>();
+    private long settlementGroupSequence;
 
     private int indicatorTaskId = -1;
 
@@ -96,10 +99,15 @@ final class RouletteSessionManager {
         this.restPoseStore = restPoseStore;
         this.lotteryManager = lotteryManager;
         this.discordAnnouncer = discordAnnouncer == null ? DiscordAnnouncer.NOOP : discordAnnouncer;
+        this.discordGateway = new RouletteDiscordGateway(this);
 
         this.indicatorTaskId = Bukkit.getScheduler()
                 .runTaskTimer(plugin, this::tickStakeIndicators, STAKE_INDICATOR_PERIOD, STAKE_INDICATOR_PERIOD)
                 .getTaskId();
+    }
+
+    RouletteDiscordGateway discordGateway() {
+        return discordGateway;
     }
 
     // ---- Sticky stake -----------------------------------------------------------------
@@ -152,6 +160,114 @@ final class RouletteSessionManager {
 
     static boolean withinBoardBounds(int stake, int minBet, int maxBet) {
         return stake >= minBet && stake <= maxBet;
+    }
+
+    /** Main-thread Discord bet operation. The UUID is deliberately accepted offline. */
+    DiscordBetResult placeDiscordBet(UUID playerId, BetType type, int selector, int amount) {
+        // Loading is intentionally the first operation: getBalance returns zero for an uncached
+        // player, while Discord betting is allowed for linked offline accounts.
+        economyManager.loadPlayer(playerId);
+        Optional<RouletteBoardStore.BoardEntry> designated = boardStore.designatedActiveBoard();
+        if (designated.isEmpty()) {
+            return new DiscordBetResult(boardStore.designatedBoard().isPresent()
+                    ? DiscordBetOutcome.BOARD_UNAVAILABLE : DiscordBetOutcome.NO_DESIGNATED_BOARD, amount, 0);
+        }
+        RouletteBoardStore.BoardEntry board = designated.get();
+        if (!boardStore.isActive(board)) {
+            return new DiscordBetResult(DiscordBetOutcome.BOARD_UNAVAILABLE, amount, 0);
+        }
+        RouletteRoundContext ctx = contexts.get(board);
+        if (ctx != null && ctx.round.state() == RouletteRound.State.SPINNING) {
+            return new DiscordBetResult(DiscordBetOutcome.BETTING_CLOSED, amount, 0);
+        }
+        if (ctx != null && ctx.round.state() == RouletteRound.State.SETTLED) {
+            recycleSettledContext(ctx);
+            ctx = null;
+        }
+        if (amount < 1 || amount > RouletteRound.MAX_CUMULATIVE_WAGER
+                || !withinBoardBounds(amount, board.minBet(), board.maxBet())) {
+            return new DiscordBetResult(DiscordBetOutcome.INVALID_BET, amount, 0);
+        }
+
+        RouletteBet bet;
+        try {
+            bet = new RouletteBet(playerId, type, selector, amount);
+        } catch (IllegalArgumentException e) {
+            return new DiscordBetResult(DiscordBetOutcome.INVALID_BET, amount, 0);
+        }
+        RouletteRoundContext target = ctx != null ? ctx : new RouletteRoundContext(board);
+        if (!target.round.canPlace(playerId, amount)) {
+            return new DiscordBetResult(DiscordBetOutcome.EXPOSURE_LIMIT, amount, bet.payoutMultiplier());
+        }
+
+        long balance = economyManager.getBalance(playerId);
+        if (balance < amount) {
+            return new DiscordBetResult(DiscordBetOutcome.INSUFFICIENT_FUNDS, amount, bet.payoutMultiplier());
+        }
+        BalanceMutationResult debit;
+        try {
+            debit = economyManager.removeBalance(playerId, amount);
+        } catch (RuntimeException e) {
+            plugin.getLogger().log(Level.SEVERE, "Roulette Discord debit of $" + amount + " for "
+                    + playerId + " raised after an uncertain mutation; no bet was recorded.", e);
+            return new DiscordBetResult(DiscordBetOutcome.REJECTED, amount, bet.payoutMultiplier());
+        }
+        if (debit == BalanceMutationResult.REJECTED_UNREPRESENTABLE) {
+            return new DiscordBetResult(DiscordBetOutcome.BALANCE_UNREPRESENTABLE, amount,
+                    bet.payoutMultiplier());
+        }
+        if (!target.round.placeBet(bet)) {
+            creditOrRouteToHouse(playerId, amount, "Discord place-bet refund", board);
+            plugin.getLogger().severe("Roulette Discord placeBet rejected a bet canPlace had just accepted "
+                    + "for " + playerId + " on board at " + board.center());
+            return new DiscordBetResult(DiscordBetOutcome.REJECTED, amount, bet.payoutMultiplier());
+        }
+        target.rakebackRates.computeIfAbsent(playerId, rankManager::getCasinoRakebackRate);
+        if (ctx == null) {
+            contexts.put(board, target);
+            openWindow(board, target);
+        }
+        return new DiscordBetResult(DiscordBetOutcome.PLACED, amount, bet.payoutMultiplier());
+    }
+
+    DiscordBoardStatus discordBoardStatus(Map<RouletteBoardStore.BoardEntry, LastResult> lastResults) {
+        Optional<RouletteBoardStore.BoardEntry> designated = boardStore.designatedBoard();
+        if (designated.isEmpty()) {
+            return new DiscordBoardStatus(false, false, RouletteRound.State.IDLE, 0, 0, 0, null);
+        }
+        RouletteBoardStore.BoardEntry board = designated.get();
+        boolean active = boardStore.isActive(board);
+        RouletteRoundContext ctx = contexts.get(board);
+        RouletteRound.State state = ctx == null ? RouletteRound.State.IDLE : ctx.round.state();
+        int secondsRemaining = 0;
+        if (ctx != null && state == RouletteRound.State.BETTING) {
+            long remainingTicks = Math.max(0L, ctx.bettingWindowTicks
+                    - (Bukkit.getCurrentTick() - ctx.windowOpenedTick));
+            secondsRemaining = (int) (remainingTicks / 20L);
+        }
+        return new DiscordBoardStatus(true, active, state, secondsRemaining,
+                board.minBet(), board.maxBet(), lastResults.get(board));
+    }
+
+    List<RouletteBet> discordBetsFor(UUID playerId) {
+        Optional<RouletteBoardStore.BoardEntry> designated = boardStore.designatedActiveBoard();
+        if (designated.isEmpty()) {
+            return List.of();
+        }
+        RouletteRoundContext ctx = contexts.get(designated.get());
+        if (ctx == null || ctx.round.state() == RouletteRound.State.SETTLED) {
+            return List.of();
+        }
+        return ctx.round.bets().stream().filter(bet -> bet.player().equals(playerId)).toList();
+    }
+
+    void recordDiscordLastResult(RouletteBoardStore.BoardEntry board, int pocket, String colorName) {
+        discordGateway.recordLastResult(board, pocket, colorName);
+    }
+
+    void replaceDiscordBoardIdentity(RouletteBoardStore.BoardEntry oldEntry,
+                                     RouletteBoardStore.BoardEntry newEntry) {
+        discordGateway.replaceBoardIdentity(oldEntry, newEntry);
     }
 
     /** The hardcoded default for {@link #isBigWin(long, long)}'s 2-arg form and the fallback used
@@ -398,7 +514,7 @@ final class RouletteSessionManager {
                     board, "spin-start status refresh");
             broadcastNear(board, Messages.MINIGAMES.rouletteSpinStarted());
 
-            // Decision 14: skip the animation entirely when nobody is watching — settle immediately.
+            // When nobody is watching, skip the animation entirely and settle immediately.
             if (!renderer.hasWatcher(board)) {
                 safeSettleRound(ctx, true);
                 scheduleLinger(ctx);
@@ -623,6 +739,7 @@ final class RouletteSessionManager {
 
         String colorName = RouletteWheel.colorOf(pocket).name();
         int dozen = RouletteWheel.dozenOf(pocket);
+        discordGateway.recordLastResult(board, pocket, colorName);
         Set<UUID> messaged = new HashSet<>();
         for (Map.Entry<UUID, RouletteRound.PlayerCredit> entry : settlement.credits().entrySet()) {
             Player player = Bukkit.getPlayer(entry.getKey());
@@ -643,17 +760,30 @@ final class RouletteSessionManager {
 
         // Discord records money that actually settled, so this deliberately ignores the
         // presentation flag used for in-world cosmetics during chunk unload and shutdown.
-        for (Map.Entry<UUID, RouletteRound.PlayerCredit> entry : settlement.credits().entrySet()) {
+        if (!settlement.credits().isEmpty()) {
+            long groupId = nextSettlementGroupId();
             try {
-                String name = Bukkit.getOfflinePlayer(entry.getKey()).getName();
-                RouletteRound.PlayerCredit credit = entry.getValue();
-                long net = credit.payout() + credit.rakeback() - credit.wagered();
-                discordAnnouncer.announceSettlement(SettlementLine.forNet(
-                        Messages.CASINO_DISCORD.rouletteRound(
-                                name == null ? entry.getKey().toString() : name, net), net));
+                discordAnnouncer.announceSettlement(SettlementLine.header(
+                        Messages.CASINO_DISCORD.rouletteResultHeader(pocket, colorName), groupId));
             } catch (Throwable throwable) {
                 plugin.getLogger().log(Level.WARNING,
-                        "Roulette Discord settlement announcement failed for " + entry.getKey(), throwable);
+                        "Roulette Discord settlement header announcement failed for board at "
+                                + board.center(), throwable);
+            }
+            for (Map.Entry<UUID, RouletteRound.PlayerCredit> entry : settlement.credits().entrySet()) {
+                try {
+                    String name = Bukkit.getOfflinePlayer(entry.getKey()).getName();
+                    RouletteRound.PlayerCredit credit = entry.getValue();
+                    long net = credit.payout() + credit.rakeback() - credit.wagered();
+                    String displayName = name == null ? entry.getKey().toString() : name;
+                    discordAnnouncer.announceSettlement(SettlementLine.forNet(
+                            Messages.CASINO_DISCORD.rouletteRound(displayName, net), net, groupId));
+                    discordAnnouncer.announceRouletteOutcome(entry.getKey(),
+                            Messages.CASINO_DISCORD.rouletteBettorOutcome(displayName, pocket, colorName, net));
+                } catch (Throwable throwable) {
+                    plugin.getLogger().log(Level.WARNING,
+                            "Roulette Discord settlement announcement failed for " + entry.getKey(), throwable);
+                }
             }
         }
         if (presentation) {
@@ -670,6 +800,14 @@ final class RouletteSessionManager {
                 }
             }
         }
+    }
+
+    private long nextSettlementGroupId() {
+        settlementGroupSequence++;
+        if (settlementGroupSequence <= 0L) {
+            settlementGroupSequence = 1L;
+        }
+        return settlementGroupSequence;
     }
 
     /**
@@ -743,6 +881,12 @@ final class RouletteSessionManager {
 
         safeRender(() -> renderer.endRoundVisuals(board, ctx, boardStore.restPose(board), reason),
                 board, "end-round visual teardown (" + reason + ")");
+        try {
+            discordAnnouncer.clearRouletteBetHooks();
+        } catch (Throwable throwable) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Roulette Discord bet-hook cleanup failed for board at " + board.center(), throwable);
+        }
     }
 
     private void applyMoneyAction(RouletteRoundContext ctx, RouletteTeardownPolicy.EndReason reason) {
@@ -851,7 +995,7 @@ final class RouletteSessionManager {
         }
     }
 
-    /** Decision 9: routes a stuck board through the exact same {@link #beginSpin} path
+    /** Routes a stuck board through the exact same {@link #beginSpin} path
      *  as a window naturally expiring — never a parallel one. */
     enum ForceSpinResult { SPUN, NOTHING_TO_SPIN, ALREADY_SPINNING }
 

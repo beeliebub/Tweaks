@@ -19,17 +19,61 @@ import java.util.logging.Level;
 /** DiscordSRV-backed implementation of the optional Discord seam. */
 final class DiscordSrvAnnouncer implements DiscordAnnouncer {
 
-    private static final String WEBHOOK_NAME = "Tweaks";
-
     private final Tweaks plugin;
     private final SettlementLineBuffer settlementBuffer;
     private String bufferedChannelId;
+    private DiscordRouletteBridge rouletteBridge;
 
     DiscordSrvAnnouncer(Tweaks plugin) {
         this.plugin = plugin;
         this.settlementBuffer = new SettlementLineBuffer(
                 message -> plugin.getLogger().warning(message),
                 message -> plugin.getLogger().info(message));
+    }
+
+    void registerRouletteBridge(me.beeliebub.tweaks.minigames.roulette.RouletteListener roulette,
+                                me.beeliebub.tweaks.economy.EconomyManager economy) {
+        DiscordRouletteBridge bridge = new DiscordRouletteBridge(plugin, roulette, economy);
+        try {
+            DiscordSRV.api.addSlashCommandProvider(bridge);
+            DiscordSRV.api.updateSlashCommands();
+            rouletteBridge = bridge;
+        } catch (Throwable throwable) {
+            try {
+                DiscordSRV.api.removeSlashCommandProvider(bridge);
+                DiscordSRV.api.updateSlashCommands();
+            } catch (Throwable cleanup) {
+                logFailure("Discord Roulette slash-command rollback failed", cleanup);
+            }
+            throw new IllegalStateException("Discord Roulette slash-command registration failed", throwable);
+        }
+    }
+
+    void unregisterRouletteBridge() {
+        DiscordRouletteBridge bridge = rouletteBridge;
+        if (bridge == null) return;
+        try {
+            DiscordSRV.api.removeSlashCommandProvider(bridge);
+            DiscordSRV.api.updateSlashCommands();
+        } catch (Throwable throwable) {
+            logFailure("Discord Roulette slash-command removal failed", throwable);
+        }
+    }
+
+    void clearRouletteBridge() {
+        DiscordRouletteBridge bridge = rouletteBridge;
+        rouletteBridge = null;
+        if (bridge != null) bridge.clearPendingHooks();
+    }
+
+    boolean hasPendingRouletteFollowUps() {
+        DiscordRouletteBridge bridge = rouletteBridge;
+        return bridge != null && bridge.hasPendingFollowUps();
+    }
+
+    void flushRouletteFollowUps() {
+        DiscordRouletteBridge bridge = rouletteBridge;
+        if (bridge != null) bridge.awaitFollowUps();
     }
 
     @Override
@@ -45,7 +89,7 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
                     .setColor(color)
                     .build();
             if (subject != null) {
-                WebhookUtil.deliverMessage(channel, subject, WEBHOOK_NAME, "", embed);
+                WebhookUtil.deliverMessage(channel, subject, configuredWebhookName(), "", embed);
                 return;
             }
 
@@ -54,7 +98,7 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
                     // This overload resolves or creates the channel webhook before its own
                     // scheduleAsync flag is consulted, so it must never be called on the server
                     // thread when the per-channel webhook cache is cold.
-                    WebhookUtil.deliverMessage(channel, WEBHOOK_NAME, "", "", embed);
+                    WebhookUtil.deliverMessage(channel, configuredWebhookName(), configuredWebhookAvatarUrl(), "", embed);
                 } catch (Throwable throwable) {
                     logFailure("Discord announcement delivery failed", throwable);
                 }
@@ -76,7 +120,6 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
                 bufferedChannelId = null;
                 return;
             }
-            if (!DiscordSRV.isReady) return;
             if (bufferedChannelId != null && !bufferedChannelId.equals(channelId)) {
                 // Do not reroute lines created for an old channel to a newly edited ID.
                 settlementBuffer.clear();
@@ -85,6 +128,22 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
             settlementBuffer.add(line);
         } catch (Throwable throwable) {
             logFailure("Discord settlement announcement could not be buffered", throwable);
+        }
+    }
+
+    @Override
+    public void announceRouletteOutcome(java.util.UUID playerId, String message) {
+        DiscordRouletteBridge bridge = rouletteBridge;
+        if (bridge != null) {
+            bridge.announceOutcome(playerId, message);
+        }
+    }
+
+    @Override
+    public void clearRouletteBetHooks() {
+        DiscordRouletteBridge bridge = rouletteBridge;
+        if (bridge != null) {
+            bridge.clearPendingHooks();
         }
     }
 
@@ -172,12 +231,14 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
             TextChannel channel = DiscordUtil.getTextChannelById(channelId);
             if (channel == null) return;
             if (synchronous) {
-                WebhookUtil.deliverMessage(channel, WEBHOOK_NAME, "", block, (MessageEmbed) null);
+                WebhookUtil.deliverMessage(channel, configuredWebhookName(), configuredWebhookAvatarUrl(),
+                        block, (MessageEmbed) null);
                 return;
             }
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
                 try {
-                    WebhookUtil.deliverMessage(channel, WEBHOOK_NAME, "", block, (MessageEmbed) null);
+                    WebhookUtil.deliverMessage(channel, configuredWebhookName(), configuredWebhookAvatarUrl(),
+                            block, (MessageEmbed) null);
                 } catch (Throwable throwable) {
                     logFailure("Discord settlement delivery failed", throwable);
                 }
@@ -194,7 +255,8 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
             if (channel == null) return;
             for (String block : blocks) {
                 try {
-                    WebhookUtil.deliverMessage(channel, WEBHOOK_NAME, "", block, (MessageEmbed) null);
+                WebhookUtil.deliverMessage(channel, configuredWebhookName(), configuredWebhookAvatarUrl(),
+                        block, (MessageEmbed) null);
                 } catch (Throwable throwable) {
                     logFailure("Discord shutdown settlement delivery failed", throwable);
                 }
@@ -205,7 +267,7 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
     }
 
     boolean hasPendingSettlements() {
-        return settlementDestinationCurrent() && settlementBuffer.hasPending();
+        return DiscordSRV.isReady && settlementDestinationCurrent() && settlementBuffer.hasPending();
     }
 
     boolean settlementCapHit() {
@@ -244,6 +306,15 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
 
     String configuredAnnouncementChannel() {
         return configured("channel-id");
+    }
+
+    String configuredWebhookName() {
+        String value = configured("webhook-name");
+        return value.isBlank() ? "House" : value;
+    }
+
+    String configuredWebhookAvatarUrl() {
+        return configured("webhook-avatar-url");
     }
 
     private boolean settlementDestinationCurrent() {

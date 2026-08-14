@@ -153,6 +153,15 @@ discord:
   # Must be quoted: an 18-digit ID is not safe to carry as a YAML number.
   # Do not also add this channel to DiscordSRV's Channels map; that would make it a two-way chat bridge.
   channel-id: ""
+  # Name the bot posts under in the announcement channel.
+  webhook-name: "House"
+  # Publicly reachable image URL used as the bot's picture. Leave empty for the webhook default.
+  # Lottery winner cards ignore this and show the winning player's skin instead.
+  webhook-avatar-url: ""
+  # Channel where the Tweaks slash commands are accepted. Leave empty to disable them.
+  betting-channel-id: ""
+  # Master switch for Discord-originated betting.
+  betting-enabled: true
   # Seconds to collect casino settlements before posting them as one grouped code block.
   group-window-seconds: 2
   # Voice channels whose names display live figures. Leave empty to disable each one.

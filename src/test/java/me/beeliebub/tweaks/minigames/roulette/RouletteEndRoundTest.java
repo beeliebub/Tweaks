@@ -55,7 +55,7 @@ class RouletteEndRoundTest {
         World world = server.addSimpleWorld("casino");
         Location center = new Location(world, 0.5, 65.0, 0.5);
         Location control = new Location(world, 2.0, 65.0, 0.5);
-        board = new RouletteBoardStore.BoardEntry(center, 1, 1000, 16, control, BlockFace.NORTH);
+        board = new RouletteBoardStore.BoardEntry(center, 1, 1000, 16, control, BlockFace.NORTH, false);
     }
 
     @AfterEach

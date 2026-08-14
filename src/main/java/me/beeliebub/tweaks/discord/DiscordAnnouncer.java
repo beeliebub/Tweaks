@@ -2,6 +2,8 @@ package me.beeliebub.tweaks.discord;
 
 import org.bukkit.OfflinePlayer;
 
+import java.util.UUID;
+
 /** Narrow feature-facing seam for optional Discord integration. */
 public interface DiscordAnnouncer {
 
@@ -17,6 +19,14 @@ public interface DiscordAnnouncer {
         @Override
         public void renameChannel(String channelId, String name) {
         }
+
+        @Override
+        public void announceRouletteOutcome(UUID playerId, String message) {
+        }
+
+        @Override
+        public void clearRouletteBetHooks() {
+        }
     };
 
     void announceCard(String message, int color, OfflinePlayer subject);
@@ -24,6 +34,14 @@ public interface DiscordAnnouncer {
     void announceSettlement(SettlementLine line);
 
     void renameChannel(String channelId, String name);
+
+    /** Sends the outcome to the Discord interaction hook associated with one bettor, if present. */
+    default void announceRouletteOutcome(UUID playerId, String message) {
+    }
+
+    /** Clears any interaction hooks that can no longer receive a round outcome. */
+    default void clearRouletteBetHooks() {
+    }
 
     /**
      * Requests a rename and reports the asynchronous outcome. Implementations must invoke the

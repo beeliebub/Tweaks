@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -64,5 +65,36 @@ class SettlementLineBufferTest {
         assertEquals(1, warnings.size());
         buffer.drainBlocks();
         assertEquals(1, infos.size());
+    }
+
+    @Test
+    void headerRendersWithoutDiffPrefixAndStaysWithGroupedLines() {
+        SettlementLineBuffer buffer = new SettlementLineBuffer(message -> {});
+        buffer.add(SettlementLine.header("@@ Roulette — 17 Black @@", 9L));
+        buffer.add(SettlementLine.forNet("[Roulette] Alice +$100", 100, 9L));
+
+        assertEquals(List.of("```diff\n@@ Roulette — 17 Black @@\n+ [Roulette] Alice +$100\n```"),
+                buffer.drainBlocks());
+    }
+
+    @Test
+    void oversizedGroupRepeatsHeaderOnContinuation() {
+        SettlementLineBuffer buffer = new SettlementLineBuffer(message -> {});
+        buffer.add(SettlementLine.header("@@ Roulette — 17 Black @@", 2L));
+        for (int i = 0; i < SettlementLineBuffer.MAX_BLOCK_LINES; i++) {
+            buffer.add(SettlementLine.forNet("bettor-" + i + " " + "x".repeat(80), -1, 2L));
+        }
+
+        List<String> blocks = buffer.drainBlocks();
+        assertTrue(blocks.size() > 1);
+        for (int i = 1; i < blocks.size(); i++) {
+            assertTrue(blocks.get(i).contains("@@ Roulette — 17 Black @@"));
+        }
+    }
+
+    @Test
+    void headerRejectsFenceBreakingText() {
+        assertThrows(IllegalArgumentException.class, () -> SettlementLine.header("bad`", 1L));
+        assertThrows(IllegalArgumentException.class, () -> SettlementLine.header("bad\nline", 1L));
     }
 }

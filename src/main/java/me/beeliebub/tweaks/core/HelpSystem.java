@@ -761,11 +761,14 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 green("Winnings are credited to your balance even if you log off first."),
                 white("Your result message shows the amount wagered and the amount actually won."),
                 white("When Discord is configured, each settled bettor appears in the grouped settlement record."),
+                white("Discord betting uses native /balance, /bet, /roulette, and /mybets commands in the configured betting channel; linked accounts may bet while offline."),
                 gold("Winning 8x your wager or more announces it to the whole server!"),
                 gold("A hologram over the wheel shows the one server-wide house balance."),
                 red("Admin:"),
                 cmd("/roulette createboard <min> <max>", "Begin board setup; right-click the spin control to finalize."),
                 cmd("/roulette removeboard", "Begin board removal; right-click the target board's spin control."),
+                cmd("/roulette setdiscord", "Designate the board used by Discord betting; right-click its spin control."),
+                cmd("/roulette cleardiscord", "Clear the Discord betting designation directly."),
                 white("Right-click a registered board's spin control to force-close betting and spin now.")
         ), Material.RED_CONCRETE, 37, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack", "house")));
 

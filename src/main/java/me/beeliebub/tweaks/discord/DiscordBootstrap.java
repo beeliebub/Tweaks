@@ -44,10 +44,25 @@ public final class DiscordBootstrap {
     public static void start(Tweaks plugin, Services services) {
         if (!(announcer instanceof DiscordSrvAnnouncer srv)) return;
 
+        try {
+            srv.registerRouletteBridge(services.rouletteListener(), services.economyManager());
+        } catch (Throwable throwable) {
+            plugin.getLogger().log(java.util.logging.Level.WARNING,
+                    "Discord Roulette slash commands could not be registered; outbound Discord "
+                            + "announcements remain enabled.", throwable);
+        }
+
         schedulePreflight(plugin, srv);
 
         settlementFlushTask = Bukkit.getScheduler().runTaskTimer(plugin,
-                () -> flushSettlements(plugin, srv, false), 20L, 20L);
+                () -> {
+                    try {
+                        flushSettlements(plugin, srv, false);
+                    } catch (Throwable throwable) {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING,
+                                "Discord settlement flush task failed", throwable);
+                    }
+                }, 20L, 20L);
 
         statChannels = new DiscordStatChannels(plugin, services.houseAccount(),
                 services.lotteryManager(), srv);
@@ -131,7 +146,9 @@ public final class DiscordBootstrap {
             statRefreshTask = null;
         }
         if (announcer instanceof DiscordSrvAnnouncer srv) {
+            srv.unregisterRouletteBridge();
             flushSettlementsOnShutdown(plugin, srv);
+            srv.clearRouletteBridge();
         }
         statChannels = null;
         announcer = DiscordAnnouncer.NOOP;
@@ -147,12 +164,16 @@ public final class DiscordBootstrap {
     }
 
     private static void flushSettlementsOnShutdown(Tweaks plugin, DiscordSrvAnnouncer srv) {
-        if (!srv.hasPendingSettlements()) return;
-        List<String> blocks = srv.drainSettlementBlocks();
-        if (blocks.isEmpty()) return;
+        boolean hasBlocks = srv.hasPendingSettlements();
+        boolean hasFollowUps = srv.hasPendingRouletteFollowUps();
+        if (!hasBlocks && !hasFollowUps) return;
+        List<String> blocks = hasBlocks ? srv.drainSettlementBlocks() : List.of();
 
         String channelId = srv.configuredAnnouncementChannel();
-        Thread worker = new Thread(() -> srv.deliverSettlementBlocks(blocks, channelId),
+        Thread worker = new Thread(() -> {
+            srv.deliverSettlementBlocks(blocks, channelId);
+            srv.flushRouletteFollowUps();
+        },
                 "Tweaks-Discord-shutdown-flush");
         worker.setDaemon(true);
         worker.start();

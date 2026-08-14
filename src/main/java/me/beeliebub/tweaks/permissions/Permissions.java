@@ -227,6 +227,11 @@ public final class Permissions {
     public static final String ROULETTE_REMOVEBOARD = "tweaks.roulette.removeboard";
 
     /**
+     * Allows choosing or clearing the single Roulette board exposed to Discord betting.
+     */
+    public static final String ROULETTE_SETDISCORD = "tweaks.roulette.setdiscord";
+
+    /**
      * Allows using a Roulette board's admin-only spin control to force-close betting and spin
      * immediately, bypassing the normal timer. Checked in the listener at the point of use, not
      * just at command level, since the control is a physical block any player could right-click.
@@ -297,6 +302,7 @@ public final class Permissions {
         register(m, ADMIN_ROULETTE_SCAN, "minigames", "Run the read-only Roulette board geometry diagnostic.");
         register(m, ROULETTE_CREATEBOARD, "minigames", "Start the Roulette board setup flow.");
         register(m, ROULETTE_REMOVEBOARD, "minigames", "Start the Roulette board removal flow.");
+        register(m, ROULETTE_SETDISCORD, "minigames", "Choose or clear the Roulette board exposed to Discord betting.");
         register(m, ROULETTE_FORCESPIN, "minigames", "Force a Roulette board to close betting and spin immediately.");
 
         // protection — land claim permissions
