@@ -14,10 +14,9 @@ import java.util.logging.Level;
  *            through a second entry point (registerRankAwareListener), called immediately
  *            after ranks.RanksBootstrap.register in the same tier, rather than folding
  *            ranks' command wiring into this package.
- * Ordering:  housePaymentService's startup replay is chained onto houseAccount's own async load
- *            (whenLoaded()) rather than awaited here, so register() stays non-blocking — replay
- *            only runs, and housePaymentService only becomes ready, if the house account itself
- *            loaded successfully.
+ * Ordering:  housePaymentService's startup replay is started after LotteryManager has read its
+ *            pending award id, so a lottery receipt is retained until Lottery commits its own
+ *            state. Nothing is awaited here; all bootstrap methods remain non-blocking.
  */
 public final class EconomyBootstrap {
 
@@ -32,19 +31,6 @@ public final class EconomyBootstrap {
 
         HousePaymentService housePaymentService = new HousePaymentService(plugin, houseAccount, economyManager);
         services.setHousePaymentService(housePaymentService);
-        houseAccount.whenLoaded().thenRun(() -> {
-            if (houseAccount.isLoaded()) {
-                housePaymentService.replayPendingPayments();
-            } else {
-                plugin.getLogger().severe("House account failed to load; house payments will remain unavailable until restart");
-            }
-        }).exceptionally(error -> {
-            // Nothing downstream awaits this chain, so an uncaught exception here (e.g. a future
-            // change to pendingPayments() that throws synchronously) would otherwise vanish with
-            // housePaymentService.isReady() silently stuck false and no log explaining why.
-            plugin.getLogger().log(Level.SEVERE, "House payment replay failed to start", error);
-            return null;
-        });
 
         BalanceCommand balanceCommand = new BalanceCommand(economyManager);
         plugin.getCommand("balance").setExecutor(balanceCommand);
@@ -55,9 +41,38 @@ public final class EconomyBootstrap {
         plugin.getCommand("house").setTabCompleter(houseCommand);
     }
 
+    /** Starts payment replay after Lottery has published any caller-owned pending award id. */
+    public static void startPaymentReplay(Tweaks plugin, Services services) {
+        services.lotteryManager().paymentIntentIds()
+                .handle((ids, error) -> {
+                    if (error != null) {
+                        plugin.getLogger().log(Level.SEVERE,
+                                "Lottery payment-intent discovery failed; replaying without retained owners", error);
+                        return java.util.Set.<String>of();
+                    }
+                    return ids;
+                })
+                .thenCompose(ids -> {
+                    if (!services.houseAccount().isLoaded()) {
+                        plugin.getLogger().severe("House account failed to load; house payments will remain unavailable until restart");
+                        return java.util.concurrent.CompletableFuture.failedFuture(
+                                new IllegalStateException("House account did not load safely"));
+                    }
+                    return services.housePaymentService().replayPendingPayments(ids);
+                })
+                .exceptionally(error -> {
+                    // Nothing downstream awaits this chain, so an uncaught exception here would
+                    // otherwise leave isReady() silently stuck false.
+                    plugin.getLogger().log(Level.SEVERE, "House payment replay failed to start", error);
+                    return null;
+                });
+    }
+
     public static void registerRankAwareListener(Tweaks plugin, Services services) {
         plugin.getServer().getPluginManager().registerEvents(
-                new EconomyListener(plugin, services.economyManager(), services.rankManager()), plugin);
+                new EconomyListener(plugin, services.economyManager(), services.rankManager(),
+                        services.housePaymentService(), services.houseAccount(),
+                        services.lotteryManager()::isLoaded), plugin);
     }
 
     /**

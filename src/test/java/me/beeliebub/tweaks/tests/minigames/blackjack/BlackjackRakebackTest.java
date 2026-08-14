@@ -164,7 +164,7 @@ class BlackjackRakebackTest {
         UUID uuid = player.getUniqueId();
 
         em.setRank(uuid, 5);
-        em.setBalance(uuid, 0.0); // start with a clean slate
+        em.setBalance(uuid, 0L); // start with a clean slate
 
         double rate = rm.getCasinoRakebackRate(uuid); // 0.05
         int bet = 100;
@@ -174,7 +174,7 @@ class BlackjackRakebackTest {
         assertTrue(rakeback > 0, "rakeback must be positive before crediting");
         em.addBalance(uuid, rakeback);
 
-        assertEquals(5.0, em.getBalance(uuid), 1e-9,
+        assertEquals(5L, em.getBalance(uuid),
                 "Balance must be exactly 5 after crediting a 5-coin rakeback on a 100-coin loss");
     }
 
@@ -184,7 +184,7 @@ class BlackjackRakebackTest {
         PlayerMock player = server.addPlayer();
         UUID uuid = player.getUniqueId();
 
-        em.setBalance(uuid, 50.0);
+        em.setBalance(uuid, 50L);
 
         double rate = rm.getCasinoRakebackRate(uuid); // 0.0 (unranked)
         int bet = 100;
@@ -196,7 +196,7 @@ class BlackjackRakebackTest {
             em.addBalance(uuid, rakeback);
         }
 
-        assertEquals(50.0, em.getBalance(uuid), 1e-9,
+        assertEquals(50L, em.getBalance(uuid),
                 "Balance must remain unchanged when rakeback is zero");
     }
 
@@ -207,7 +207,7 @@ class BlackjackRakebackTest {
         UUID uuid = player.getUniqueId();
 
         em.setRank(uuid, 5);
-        em.setBalance(uuid, 0.0);
+        em.setBalance(uuid, 0L);
 
         double rate = rm.getCasinoRakebackRate(uuid); // 0.05
         int bet = 200;
@@ -215,7 +215,7 @@ class BlackjackRakebackTest {
 
         em.addBalance(uuid, rakeback);
 
-        assertEquals(10.0, em.getBalance(uuid), 1e-9,
+        assertEquals(10L, em.getBalance(uuid),
                 "A rank-5 player losing a 200-coin bet must receive a 10-coin rakeback");
     }
 }

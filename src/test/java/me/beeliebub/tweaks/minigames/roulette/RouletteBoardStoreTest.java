@@ -4,11 +4,16 @@ import me.beeliebub.tweaks.utils.GeometryUtil;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.BlockFace;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -33,10 +38,12 @@ import static org.junit.jupiter.api.Assertions.*;
 class RouletteBoardStoreTest {
 
     private ServerMock server;
+    private JavaPlugin plugin;
 
     @BeforeEach
     void setUp() {
         server = MockBukkit.mock();
+        plugin = MockBukkit.createMockPlugin("tweaks");
     }
 
     @AfterEach
@@ -55,7 +62,7 @@ class RouletteBoardStoreTest {
         Location control = new Location(world, 12, 65, -5);
 
         RouletteBoardStore.BoardEntry entry = new RouletteBoardStore.BoardEntry(
-                center, 10, 500, 16, control, BlockFace.NORTH);
+                center, 10, 500, 16, control, BlockFace.NORTH, true);
         String serialized = RouletteBoardStore.serializeBoard(entry);
         RouletteBoardStore.BoardEntry roundTripped = RouletteBoardStore.deserializeBoard(serialized);
 
@@ -71,25 +78,27 @@ class RouletteBoardStoreTest {
         assertEquals(65, roundTripped.control().getBlockY(), "control y must round-trip");
         assertEquals(-5, roundTripped.control().getBlockZ(), "control z must round-trip");
         assertEquals(BlockFace.NORTH, roundTripped.controlFacing(), "facing must round-trip");
+        assertTrue(roundTripped.discordEnabled(), "Discord designation must round-trip");
     }
 
     @Test
-    void serializedFormatIsElevenPipeDelimitedFields() {
+    void serializedFormatIsTwelvePipeDelimitedFields() {
         World world = server.addSimpleWorld("overworld");
         Location center = new Location(world, 1.0, 2.0, 3.0);
         Location control = new Location(world, 1, 2, 0);
 
         RouletteBoardStore.BoardEntry entry = new RouletteBoardStore.BoardEntry(
-                center, 5, 50, 16, control, BlockFace.WEST);
+                center, 5, 50, 16, control, BlockFace.WEST, false);
         String serialized = RouletteBoardStore.serializeBoard(entry);
 
         String[] parts = serialized.split("\\|", -1);
-        assertEquals(11, parts.length, "serialized board string must have exactly 11 pipe-delimited parts");
+        assertEquals(12, parts.length, "serialized board string must have exactly 12 pipe-delimited parts");
         assertEquals("overworld", parts[0], "first part must be the world name");
         assertEquals("5", parts[4], "fifth part (index 4) must be minBet");
         assertEquals("50", parts[5], "sixth part (index 5) must be maxBet");
         assertEquals("16", parts[6], "seventh part (index 6) must be scanRadius");
-        assertEquals(BlockFace.WEST.name(), parts[10], "last part (index 10) must be the BlockFace name");
+        assertEquals(BlockFace.WEST.name(), parts[10], "BlockFace must be index 10");
+        assertEquals("0", parts[11], "false designation must be encoded as 0");
     }
 
     @Test
@@ -99,7 +108,7 @@ class RouletteBoardStoreTest {
         Location control = new Location(world, 5, 64, 3);
 
         for (BlockFace face : new BlockFace[]{BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST}) {
-            RouletteBoardStore.BoardEntry entry = new RouletteBoardStore.BoardEntry(center, 1, 100, 16, control, face);
+            RouletteBoardStore.BoardEntry entry = new RouletteBoardStore.BoardEntry(center, 1, 100, 16, control, face, false);
             String serialized = RouletteBoardStore.serializeBoard(entry);
             RouletteBoardStore.BoardEntry roundTripped = RouletteBoardStore.deserializeBoard(serialized);
             assertNotNull(roundTripped, "deserializeBoard must succeed for facing " + face);
@@ -163,6 +172,70 @@ class RouletteBoardStoreTest {
                 "a world that is not loaded must cause deserializeBoard to return null");
     }
 
+    @Test
+    void legacyElevenFieldRowDefaultsToUndesignated() {
+        World world = server.addSimpleWorld("legacyworld");
+        RouletteBoardStore.BoardEntry entry = RouletteBoardStore.deserializeBoard(
+                "legacyworld|10.5|65.0|0.5|1|100|16|10|65|0|NORTH");
+        assertNotNull(entry);
+        assertFalse(entry.discordEnabled());
+        assertEquals(world, entry.center().getWorld());
+    }
+
+    @Test
+    void invalidDesignationAndNonFiniteRowsReturnNull() {
+        server.addSimpleWorld("validworld");
+        assertNull(RouletteBoardStore.deserializeBoard(
+                "validworld|10|65|0|1|100|16|10|65|0|NORTH|2"));
+        assertNull(RouletteBoardStore.deserializeBoard(
+                "validworld|10|65|0|1|100|16|10|65|0|NORTH|"));
+        assertNull(RouletteBoardStore.deserializeBoard(
+                "validworld|NaN|65|0|1|100|16|10|65|0|NORTH"));
+        assertNull(RouletteBoardStore.deserializeBoard(
+                "validworld|10|65|0|0|100|16|10|65|0|NORTH"));
+    }
+
+    @Test
+    void designationUpdatesOnlyMatchingPhysicalRowAndInvalidatesCache() {
+        World world = server.addSimpleWorld("designationworld");
+        Location center = new Location(world, 10.5, 65, 0.5);
+        Location control = new Location(world, 12, 65, 0);
+        RouletteBoardStore.BoardEntry entry = new RouletteBoardStore.BoardEntry(
+                center, 1, 100, 16, control, BlockFace.NORTH, false);
+        RouletteBoardStore.BoardEntry sibling = new RouletteBoardStore.BoardEntry(
+                new Location(world, 50.5, 65, 0.5), 2, 200, 16,
+                new Location(world, 52, 65, 0), BlockFace.SOUTH, false);
+        RouletteBoardStore store = new RouletteBoardStore(plugin);
+        store.persistBoard(entry);
+        store.persistBoard(sibling);
+        store.loadBoardsForWorld(world); // prime the cache
+
+        RouletteBoardStore.BoardEntry designated = store.setDiscordDesignation(entry, true);
+
+        assertNotNull(designated);
+        assertTrue(designated.discordEnabled());
+        List<RouletteBoardStore.BoardEntry> reloaded = store.loadBoardsForWorld(world);
+        assertTrue(reloaded.stream().anyMatch(RouletteBoardStore.BoardEntry::discordEnabled));
+        assertTrue(reloaded.contains(sibling));
+        assertNull(store.setDiscordDesignation(
+                new RouletteBoardStore.BoardEntry(new Location(world, 99, 65, 99), 1, 1, 1,
+                        new Location(world, 99, 65, 99), BlockFace.NORTH, false), true));
+    }
+
+    @Test
+    void designatedActiveBoardFiltersInactiveRuntimeEntries() {
+        World world = server.addSimpleWorld("active-designation");
+        RouletteBoardStore.BoardEntry entry = new RouletteBoardStore.BoardEntry(
+                new Location(world, 10, 65, 10), 1, 100, 2,
+                new Location(world, 10, 65, 10), BlockFace.NORTH, true);
+        RouletteBoardStore store = new RouletteBoardStore(plugin);
+        store.persistBoard(entry);
+        assertTrue(store.designatedActiveBoard().isEmpty());
+        store.registerHitboxes(entry, Map.of(UUID.randomUUID(),
+                new RouletteBoardStore.SegmentRef(entry, BetType.STRAIGHT, 1)));
+        assertEquals(entry, store.designatedActiveBoard().orElseThrow());
+    }
+
     // -------------------------------------------------------------------------
     // chunkKeysTouchedBy
     // -------------------------------------------------------------------------
@@ -173,7 +246,7 @@ class RouletteBoardStoreTest {
         // Center well inside chunk (0,0) with a small radius that never crosses a chunk border.
         Location center = new Location(world, 8, 65, 8);
         Location control = new Location(world, 8, 65, 8);
-        RouletteBoardStore.BoardEntry entry = new RouletteBoardStore.BoardEntry(center, 1, 100, 2, control, BlockFace.NORTH);
+        RouletteBoardStore.BoardEntry entry = new RouletteBoardStore.BoardEntry(center, 1, 100, 2, control, BlockFace.NORTH, false);
 
         long[] keys = RouletteBoardStore.chunkKeysTouchedBy(entry);
 
@@ -187,7 +260,7 @@ class RouletteBoardStoreTest {
         Location center = new Location(world, 0, 65, 0);
         Location control = new Location(world, 0, 65, 0);
         // Radius 16 from origin spans chunks -1..1 on both axes (block range -16..16).
-        RouletteBoardStore.BoardEntry entry = new RouletteBoardStore.BoardEntry(center, 1, 100, 16, control, BlockFace.NORTH);
+        RouletteBoardStore.BoardEntry entry = new RouletteBoardStore.BoardEntry(center, 1, 100, 16, control, BlockFace.NORTH, false);
 
         long[] keys = RouletteBoardStore.chunkKeysTouchedBy(entry);
 

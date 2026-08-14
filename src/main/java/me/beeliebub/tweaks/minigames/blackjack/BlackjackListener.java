@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.minigames.blackjack;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.discord.DiscordAnnouncer;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
 import me.beeliebub.tweaks.lottery.LotteryManager;
@@ -89,16 +90,22 @@ public final class BlackjackListener implements Listener {
 
     public BlackjackListener(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
                              RankManager rankManager) {
-        this(plugin, economyManager, houseAccount, rankManager, null);
+        this(plugin, economyManager, houseAccount, rankManager, null, DiscordAnnouncer.NOOP);
     }
 
     public BlackjackListener(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
                              RankManager rankManager, LotteryManager lotteryManager) {
+        this(plugin, economyManager, houseAccount, rankManager, lotteryManager, DiscordAnnouncer.NOOP);
+    }
+
+    public BlackjackListener(JavaPlugin plugin, EconomyManager economyManager, HouseAccount houseAccount,
+                             RankManager rankManager, LotteryManager lotteryManager,
+                             DiscordAnnouncer discordAnnouncer) {
         this.plugin = plugin;
         this.tableStore = new BlackjackTableStore(plugin);
         this.renderer = new BlackjackRenderer(plugin);
         this.sessionManager = new BlackjackSessionManager(plugin, economyManager, houseAccount, rankManager,
-                renderer, lotteryManager);
+                renderer, lotteryManager, discordAnnouncer);
     }
 
     // ---- Public API ---------------------------------------------------------

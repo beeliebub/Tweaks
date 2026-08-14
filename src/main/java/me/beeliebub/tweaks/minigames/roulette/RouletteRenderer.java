@@ -56,8 +56,8 @@ final class RouletteRenderer {
     private static final float BALL_SCALE = 0.28f;
     private static final double SEGMENT_LABEL_LIFT = 0.5;
     private static final float LABEL_SCALE = 0.4f;
-    private static final double SEGMENT_MARKER_LIFT = 0.2;
-    private static final float MARKER_SCALE = 0.3f;
+    static final double SEGMENT_MARKER_LIFT = 0.2;
+    static final float MARKER_SCALE = 0.3f;
     private static final double MAX_RING_RESIDUAL = 0.05;
     private static final double WATCHER_RADIUS = 48.0;
 
@@ -781,8 +781,10 @@ final class RouletteRenderer {
     // ---- Segment markers ----------------------------------------------------------------------
 
     /**
-     * One coloured {@code ItemDisplay} per physical segment, floating just above its invisible
-     * {@code Interaction} hitbox (below the odds label) so the clickable area itself reads as
+     * One coloured {@code ItemDisplay} per physical segment. Its spawn point and transformed
+     * {@link #MARKER_SCALE} are the shared geometry contract used by the invisible
+     * {@code Interaction} hitbox, so the visible marker and clickable footprint occupy the same
+     * centred space below the odds label and the clickable area itself reads as
      * red/black/green wool (straight-up and colour bets) or grey/yellow/orange terracotta
      * (1st/2nd/3rd dozen) — an {@code Interaction} has no model of its own, so this is the only
      * way to make "the entity that gets clicked" visually present. Rendered the same way {@link

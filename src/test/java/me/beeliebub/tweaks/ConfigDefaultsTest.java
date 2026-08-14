@@ -136,4 +136,20 @@ class ConfigDefaultsTest {
 
         assertEquals(250000, readLiveFile().getInt("skyblock.template-max-blocks", -1));
     }
+
+    @Test
+    void discordBridgeDefaultsAreReconciled() {
+        writeLiveFile("discord.webhook-name", null);
+        writeLiveFile("discord.webhook-avatar-url", null);
+        writeLiveFile("discord.betting-channel-id", null);
+        writeLiveFile("discord.betting-enabled", null);
+
+        plugin.reconcileConfigDefaults();
+
+        YamlConfiguration config = readLiveFile();
+        assertEquals("House", config.getString("discord.webhook-name"));
+        assertEquals("", config.getString("discord.webhook-avatar-url"));
+        assertEquals("", config.getString("discord.betting-channel-id"));
+        assertTrue(config.getBoolean("discord.betting-enabled"));
+    }
 }

@@ -70,33 +70,33 @@ class EconomyManagerPersistenceTest {
     @Test
     void setBalanceRoundTripsWithoutTabManagerWired() {
         UUID id = UUID.randomUUID();
-        economy.setBalance(id, 123.45D);
-        assertEquals(123.45D, economy.getBalance(id));
+        economy.setBalance(id, 123L);
+        assertEquals(123L, economy.getBalance(id));
     }
 
     @Test
     void saveAllFlushesToDisk() throws Exception {
         UUID id = UUID.randomUUID();
-        economy.setBalance(id, 777.0D);
+        economy.setBalance(id, 777L);
 
         economy.saveAll().get(5, TimeUnit.SECONDS);
 
         File file = new File(dataFolder, "players/" + id + ".yml");
         assertTrue(file.exists());
         YamlConfiguration onDisk = YamlConfiguration.loadConfiguration(file);
-        assertEquals(777.0D, onDisk.getDouble("balance"));
+        assertEquals(777L, onDisk.getLong("balance"));
     }
 
     @Test
     void unloadAndSavePlayerPersistsToDiskAndClearsCache() throws InterruptedException {
         UUID id = UUID.randomUUID();
-        economy.setBalance(id, 50.0D);
+        economy.setBalance(id, 50L);
 
         economy.unloadAndSavePlayer(id);
 
         // Balance reads default to 0.0 once unloaded, since the cache entry is gone and getBalance
         // never touches disk (a documented, deliberate quirk — see economy/CLAUDE.md).
-        assertEquals(0.0D, economy.getBalance(id));
+        assertEquals(0L, economy.getBalance(id));
 
         File file = new File(dataFolder, "players/" + id + ".yml");
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
@@ -104,13 +104,13 @@ class EconomyManagerPersistenceTest {
             Thread.sleep(20);
         }
         assertTrue(file.exists(), "unload must persist the removed player's data to disk");
-        assertEquals(50.0D, YamlConfiguration.loadConfiguration(file).getDouble("balance"));
+        assertEquals(50L, YamlConfiguration.loadConfiguration(file).getLong("balance"));
     }
 
     @Test
     void loadPlayerReadsBackPersistedValueAfterUnload() throws InterruptedException {
         UUID id = UUID.randomUUID();
-        economy.setBalance(id, 200.0D);
+        economy.setBalance(id, 200L);
         economy.setRank(id, 3);
         economy.unloadAndSavePlayer(id);
 
@@ -127,7 +127,7 @@ class EconomyManagerPersistenceTest {
 
         economy.loadPlayer(id);
 
-        assertEquals(200.0D, economy.getBalance(id));
+        assertEquals(200L, economy.getBalance(id));
         assertEquals(3, economy.getRank(id));
     }
 
@@ -140,7 +140,7 @@ class EconomyManagerPersistenceTest {
     @Test
     void saveAllCompletesExceptionallyAndLogsWhenAPlayerFileIsBlocked() throws Exception {
         UUID id = UUID.randomUUID();
-        economy.setBalance(id, 10.0D);
+        economy.setBalance(id, 10L);
 
         // A directory at the exact target path makes config.save(file) throw IOException.
         File playersDir = new File(dataFolder, "players");
@@ -161,5 +161,73 @@ class EconomyManagerPersistenceTest {
         assertEquals(Level.WARNING, logRecords.getFirst().getLevel());
         assertNotNull(logRecords.getFirst().getThrown(),
                 "the IOException must be attached to the log record, not just its message string");
+    }
+
+    @Test
+    void fractionalBalanceFloorsAndLoadPlayerRewritesItAsAnInteger() throws Exception {
+        UUID id = UUID.randomUUID();
+        writeBalance(id, 110.00000000000001D);
+
+        economy.loadPlayer(id);
+        ForkJoinPool.commonPool().awaitQuiescence(2, TimeUnit.SECONDS);
+
+        File file = new File(dataFolder, "players/" + id + ".yml");
+        YamlConfiguration onDisk = YamlConfiguration.loadConfiguration(file);
+        assertEquals(110L, economy.getBalance(id));
+        assertEquals(110L, onDisk.getLong("balance"));
+        assertEquals("110", onDisk.getString("balance"));
+    }
+
+    @Test
+    void nonFiniteAndOverCeilingBalancesClampAndLogTheOriginalValue() throws Exception {
+        UUID nanId = UUID.randomUUID();
+        writeBalance(nanId, Double.NaN);
+        economy.loadPlayer(nanId);
+
+        UUID highId = UUID.randomUUID();
+        double overCeiling = Math.nextUp((double) EconomyManager.MAX_BALANCE);
+        writeBalance(highId, overCeiling);
+        economy.loadPlayer(highId);
+        ForkJoinPool.commonPool().awaitQuiescence(2, TimeUnit.SECONDS);
+
+        assertEquals(0L, economy.getBalance(nanId));
+        assertEquals(EconomyManager.MAX_BALANCE, economy.getBalance(highId));
+        assertEquals(1L, logRecords.stream().filter(record -> record.getLevel() == Level.SEVERE
+                && record.getMessage().contains(nanId.toString())
+                && record.getMessage().contains("NaN")).count());
+        assertEquals(1L, logRecords.stream().filter(record -> record.getLevel() == Level.SEVERE
+                && record.getMessage().contains(highId.toString())
+                && record.getMessage().contains(Double.toString(overCeiling))).count());
+
+        assertEquals(0L, YamlConfiguration.loadConfiguration(
+                new File(dataFolder, "players/" + nanId + ".yml")).getLong("balance"));
+        assertEquals(EconomyManager.MAX_BALANCE, YamlConfiguration.loadConfiguration(
+                new File(dataFolder, "players/" + highId + ".yml")).getLong("balance"));
+    }
+
+    @Test
+    void nonNumericBalanceFailsClosedWithoutOverwritingTheOriginalFile() throws Exception {
+        UUID id = UUID.randomUUID();
+        File file = new File(dataFolder, "players/" + id + ".yml");
+        file.getParentFile().mkdirs();
+        YamlConfiguration seed = new YamlConfiguration();
+        seed.set("balance", "not-a-number");
+        seed.save(file);
+
+        economy.loadPlayer(id);
+
+        assertEquals(0L, economy.getBalance(id));
+        assertEquals(me.beeliebub.tweaks.economy.BalanceMutationResult.REJECTED_UNREPRESENTABLE,
+                economy.setBalance(id, 100L));
+        ForkJoinPool.commonPool().awaitQuiescence(2, TimeUnit.SECONDS);
+        assertEquals("not-a-number", YamlConfiguration.loadConfiguration(file).getString("balance"));
+    }
+
+    private void writeBalance(UUID id, double balance) throws Exception {
+        File file = new File(dataFolder, "players/" + id + ".yml");
+        file.getParentFile().mkdirs();
+        YamlConfiguration seed = new YamlConfiguration();
+        seed.set("balance", balance);
+        seed.save(file);
     }
 }

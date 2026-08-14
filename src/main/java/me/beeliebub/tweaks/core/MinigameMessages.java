@@ -364,9 +364,9 @@ public final class MinigameMessages {
         return Messages.MM.deserialize("<red>You cannot afford a bet of $" + bet + ". Your balance is $" + balance + ".</red>");
     }
 
-    /** Explains that a Blackjack balance cannot represent the requested stake exactly. */
+    /** Explains that a Blackjack balance is outside the supported range for the requested stake. */
     public Component blackjackBalanceUnrepresentable() {
-        return Messages.MM.deserialize("<red>Your balance is too large to represent this Blackjack stake exactly. "
+        return Messages.MM.deserialize("<red>Your balance is outside the supported range for this Blackjack stake. "
                 + "Ask an administrator to adjust it before playing.</red>");
     }
 
@@ -479,7 +479,7 @@ public final class MinigameMessages {
     /** Shows the Roulette command help syntax. */
     public Component rouletteUsage(String label) {
         return Messages.MM.deserialize("<gray>Usage:</gray> <yellow>/" + label
-                + " <createboard <min> <max>|removeboard|stake <amount>></yellow>");
+                + " <createboard <min> <max>|removeboard|setdiscord|cleardiscord|stake <amount>></yellow>");
     }
 
     /** Shows Roulette board-creation syntax. */
@@ -515,6 +515,48 @@ public final class MinigameMessages {
     /** Instructs an administrator to select a Roulette board for removal. */
     public Component rouletteRemovalPrompt() {
         return Messages.MM.deserialize("<yellow>Right-click the spin control of the board you want to remove.</yellow>");
+    }
+
+    /** Instructs an administrator to select the board exposed to Discord betting. */
+    public Component rouletteDiscordDesignationPrompt() {
+        return Messages.MM.deserialize("<yellow>Right-click the spin control of the Roulette board to expose to Discord betting.</yellow>");
+    }
+
+    /** Instructs an administrator to select the currently designated board to clear. */
+    public Component rouletteDiscordDesignationClearPrompt() {
+        return Messages.MM.deserialize("<yellow>Right-click the spin control of the Roulette board whose Discord designation should be cleared.</yellow>");
+    }
+
+    public Component rouletteDiscordBoardNotFound() {
+        return Messages.MM.deserialize("<red>That control is not registered to a Roulette board.</red>");
+    }
+
+    public Component rouletteDiscordBoardUnavailable() {
+        return Messages.MM.deserialize("<red>That Roulette board is inactive and cannot be exposed to Discord betting.</red>");
+    }
+
+    public Component rouletteDiscordAlreadyDesignated() {
+        return Messages.MM.deserialize("<yellow>That Roulette board is already designated for Discord betting.</yellow>");
+    }
+
+    public Component rouletteDiscordClearWrongBoard() {
+        return Messages.MM.deserialize("<red>That is not the board currently designated for Discord betting.</red>");
+    }
+
+    public Component rouletteDiscordBoardNotDesignated() {
+        return Messages.MM.deserialize("<yellow>No Roulette board is currently designated for Discord betting.</yellow>");
+    }
+
+    public Component rouletteDiscordDesignationSet() {
+        return Messages.MM.deserialize("<green>Roulette Discord betting board updated.</green>");
+    }
+
+    public Component rouletteDiscordDesignationCleared() {
+        return Messages.MM.deserialize("<green>Roulette Discord betting designation cleared.</green>");
+    }
+
+    public Component rouletteDiscordDesignationFailed() {
+        return Messages.MM.deserialize("<red>The Discord betting designation could not be changed. See the server console.</red>");
     }
 
     /** Explains that a Roulette setup click was not on a wall-mountable button or lever. */
@@ -614,9 +656,9 @@ public final class MinigameMessages {
                 + ". Your balance is $" + balance + ".</red>");
     }
 
-    /** Explains that a Roulette balance cannot represent the requested stake exactly. */
+    /** Explains that a Roulette balance is outside the supported range for the requested stake. */
     public Component rouletteBalanceUnrepresentable() {
-        return Messages.MM.deserialize("<red>Your balance is too large to represent this Roulette stake exactly. "
+        return Messages.MM.deserialize("<red>Your balance is outside the supported range for this Roulette stake. "
                 + "Ask an administrator to adjust it before betting.</red>");
     }
 

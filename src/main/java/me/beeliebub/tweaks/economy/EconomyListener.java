@@ -11,7 +11,10 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
+import java.util.logging.Level;
 
 /**
  * Grants daily login rewards on join.
@@ -29,11 +32,28 @@ public class EconomyListener implements Listener {
     private final Tweaks plugin;
     private final EconomyManager economyManager;
     private final RankManager rankManager;
+    private final HousePaymentService housePaymentService;
+    private final HouseAccount houseAccount;
+    private final BooleanSupplier recoveryConsumersReady;
 
     public EconomyListener(Tweaks plugin, EconomyManager economyManager, RankManager rankManager) {
+        this(plugin, economyManager, rankManager, null, null);
+    }
+
+    public EconomyListener(Tweaks plugin, EconomyManager economyManager, RankManager rankManager,
+                           HousePaymentService housePaymentService, HouseAccount houseAccount) {
+        this(plugin, economyManager, rankManager, housePaymentService, houseAccount, () -> true);
+    }
+
+    public EconomyListener(Tweaks plugin, EconomyManager economyManager, RankManager rankManager,
+                           HousePaymentService housePaymentService, HouseAccount houseAccount,
+                           BooleanSupplier recoveryConsumersReady) {
         this.plugin = plugin;
         this.economyManager = economyManager;
         this.rankManager = rankManager;
+        this.housePaymentService = housePaymentService;
+        this.houseAccount = houseAccount;
+        this.recoveryConsumersReady = recoveryConsumersReady;
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -43,6 +63,7 @@ public class EconomyListener implements Listener {
 
         // Ensure data is in cache before any reads.
         economyManager.loadPlayer(uuid);
+        sweepLegacyHousePaymentReceipts(uuid);
 
         long lastLogin = economyManager.getLastLogin(uuid);
         long now = System.currentTimeMillis();
@@ -77,21 +98,44 @@ public class EconomyListener implements Listener {
                 "economy.streak-multipliers." + newStreak, 1.0);
         double rankBonus = rankManager.getRankMultiplierBonus(economyManager.getRank(uuid));
         double reward = base * multiplier + rankBonus;
+        if (!Double.isFinite(reward)) {
+            plugin.getLogger().warning("Skipped non-finite daily reward for " + uuid
+                    + ": base=" + base + ", multiplier=" + multiplier + ", rankBonus=" + rankBonus);
+            return;
+        }
+        long rewardAmount = (long) Math.floor(reward);
 
         // Apply reward and update tracking fields.
-        economyManager.addBalance(uuid, reward);
+        if (economyManager.addBalance(uuid, rewardAmount) != BalanceMutationResult.APPLIED) {
+            plugin.getLogger().warning("Skipped daily reward outside the supported balance range for " + uuid
+                    + ": " + rewardAmount);
+            return;
+        }
         economyManager.setLoginStreak(uuid, newStreak);
         economyManager.setLastLogin(uuid, now);
 
         // Notify the player.
-        player.sendMessage(Messages.dailyReward(BalanceCommand.formatBalance(reward), newStreak));
+        player.sendMessage(Messages.dailyReward(BalanceCommand.formatBalance(rewardAmount), newStreak));
         ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
         if (eventLog != null) {
             String name = player.getName();
             eventLog.log(LoggingPaths.ECONOMY_DAILY_REWARD, () -> "[Economy] "
                     + ConsoleEventLog.actorLabel(name, uuid) + " claimed daily reward: "
-                    + BalanceCommand.formatBalance(reward) + " (streak " + newStreak + ")");
+                    + BalanceCommand.formatBalance(rewardAmount) + " (streak " + newStreak + ")");
         }
+    }
+
+    private void sweepLegacyHousePaymentReceipts(UUID uuid) {
+        if (housePaymentService == null || houseAccount == null || !housePaymentService.isReady()
+                || !recoveryConsumersReady.getAsBoolean()) return;
+        Set<String> journalIds = houseAccount.journalEntries().keySet();
+        economyManager.pruneStaleHousePaymentReceipts(uuid, journalIds)
+                .whenComplete((ignored, error) -> {
+                    if (error != null) {
+                        plugin.getLogger().log(Level.WARNING,
+                                "Failed to prune stale house-payment receipts for " + uuid, error);
+                    }
+                });
     }
 
 }

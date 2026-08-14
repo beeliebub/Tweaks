@@ -51,6 +51,19 @@ public final class Messages {
     /** Player-feedback factories for the server-wide lottery. */
     public static final LotteryMessages LOTTERY = new LotteryMessages();
 
+    /** Discord wording for lottery draw cards. */
+    public static final LotteryDiscordMessages LOTTERY_DISCORD = new LotteryDiscordMessages();
+
+    /** Discord wording for grouped blackjack and roulette settlement lines. */
+    public static final CasinoDiscordMessages CASINO_DISCORD = new CasinoDiscordMessages();
+
+    /** Plain-text ephemeral responses for Discord Roulette commands. */
+    public static final RouletteDiscordCommandMessages ROULETTE_DISCORD_COMMANDS =
+            new RouletteDiscordCommandMessages();
+
+    /** Discord wording for optional live voice-channel stat names. */
+    public static final DiscordStatMessages DISCORD_STATS = new DiscordStatMessages();
+
     /** Player-feedback factories and dialog copy for permission administration. */
     public static final PermissionMessages PERMISSIONS = new PermissionMessages();
 
@@ -149,11 +162,11 @@ public final class Messages {
                 .append(Component.text(formattedNewBalance, NamedTextColor.YELLOW));
     }
 
-    /** Explains that a balance mutation was rejected because the stored value cannot represent it exactly. */
+    /** Explains that a balance mutation was rejected because the result is outside the supported range. */
     public static Component balanceMutationRejected(String targetName, String operation, String formattedAmount) {
         return Component.text("Could not " + operation + " " + formattedAmount + " for ", NamedTextColor.RED)
                 .append(Component.text(targetName, NamedTextColor.GOLD))
-                .append(Component.text(" because that balance cannot represent the change exactly.", NamedTextColor.RED));
+                .append(Component.text(" because the resulting balance is outside the supported range.", NamedTextColor.RED));
     }
 
     /** Explains that a sender cannot view another player's balance. */
@@ -231,9 +244,9 @@ public final class Messages {
         return Component.text("The server is shutting down; house payments are temporarily unavailable.", NamedTextColor.RED);
     }
 
-    /** Explains that the recipient's balance could not exactly represent the payment; the house was not charged. */
+    /** Explains that the recipient's balance could not accept the payment; the house was not charged. */
     public static Component housePaymentUnrepresentable(String target) {
-        return Component.text(target + "'s balance can't exactly represent that amount; nothing was charged.",
+        return Component.text(target + "'s balance is outside the supported range for that payment; nothing was charged.",
                 NamedTextColor.RED);
     }
 

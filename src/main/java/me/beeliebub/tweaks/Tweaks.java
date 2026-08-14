@@ -3,6 +3,7 @@ package me.beeliebub.tweaks;
 import me.beeliebub.tweaks.blocklog.BlockLogBootstrap;
 import me.beeliebub.tweaks.core.CoreBootstrap;
 import me.beeliebub.tweaks.deathinventory.DeathInventoryBootstrap;
+import me.beeliebub.tweaks.discord.DiscordBootstrap;
 import me.beeliebub.tweaks.economy.EconomyBootstrap;
 import me.beeliebub.tweaks.enchantments.EnchantmentsBootstrap;
 import me.beeliebub.tweaks.enchantments.Replant;
@@ -151,11 +152,15 @@ public class Tweaks extends JavaPlugin {
             // Tier 0 - console event logging must be published before every feature that can emit
             // an event. LoggingBootstrap reads no Services state; later tiers may use its slot.
             LoggingBootstrap.register(this, services);
+            // Optional Discord is published after logging and before every producer that reads
+            // the seam; its own manager-dependent refresh starts after Tier 2 registration.
+            DiscordBootstrap.register(this, services);
 
             // Tier 1 - foundation state
             ProfilesBootstrap.register(this, services);
             EconomyBootstrap.register(this, services);
             me.beeliebub.tweaks.lottery.LotteryBootstrap.register(this, services);
+            EconomyBootstrap.startPaymentReplay(this, services);
             RanksBootstrap.register(this, services);
             EconomyBootstrap.registerRankAwareListener(this, services);
             PermissionsBootstrap.register(this, services);
@@ -163,6 +168,7 @@ public class Tweaks extends JavaPlugin {
 
             // Tier 2 - shared game state
             MinigamesBootstrap.register(this, services);
+            DiscordBootstrap.start(this, services);
             WorldManagementBootstrap.register(this, services);
 
             // Tier 3 - player-facing infra
@@ -219,6 +225,8 @@ public class Tweaks extends JavaPlugin {
         runShutdownStep("lottery", () -> me.beeliebub.tweaks.lottery.LotteryBootstrap.shutdown(this, services.lotteryManager));
         runShutdownStep("minigames", () -> MinigamesBootstrap.shutdown(this, services.blackjackListener, services.rouletteListener));
         runShutdownStep("skyblock", () -> SkyblockBootstrap.shutdown(this, services.skyblockRuntime));
+        // Discord flush follows every producer: Roulette shutdown can enqueue its final settlement.
+        runShutdownStep("discord", () -> DiscordBootstrap.shutdown(this));
         // Logging tears down last so every earlier participant's shutdown records are still
         // admitted and flushed.
         runShutdownStep("logging", () -> LoggingBootstrap.shutdown(services.consoleEventLog));

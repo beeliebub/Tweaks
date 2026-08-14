@@ -44,12 +44,16 @@ public final class ConfigGUI {
                 Messages.CONFIG.worldProfileCategoryLabel(),
                 Messages.CONFIG.worldProfileCategoryTooltip(),
                 p -> openWorldProfileList(p, valueEditor, 0)));
-        for (ConfigCategory category : ConfigRegistry.categories()) {
+        for (ConfigCategory category : ConfigRegistry.mainMenuCategories()) {
             buttons.add(dialogButton(
                     Messages.CONFIG.categoryLabel(category.displayName()),
                     Messages.CONFIG.categoryTooltip(category.settings().size()),
                     p -> openCategory(p, valueEditor, category.key(), 0)));
         }
+        buttons.add(dialogButton(
+                Messages.CONFIG.loggingCategoryLabel(),
+                Messages.CONFIG.loggingCategoryTooltip(),
+                p -> openLoggingMenu(p, valueEditor, 0)));
 
         DialogBase base = DialogBase.builder(Messages.CONFIG.mainTitle())
                 .body(List.of(DialogBody.plainMessage(Messages.CONFIG.mainBody())))
@@ -94,8 +98,10 @@ public final class ConfigGUI {
 
         ActionButton back = dialogButton(
                 Messages.CONFIG.backLabel(),
-                Messages.CONFIG.backToMainTooltip(),
-                p -> openMainMenu(p, valueEditor));
+                category.group() == ConfigCategory.Group.LOGGING
+                        ? Messages.CONFIG.backToLoggingTooltip()
+                        : Messages.CONFIG.backToMainTooltip(),
+                p -> openCategoryParent(p, valueEditor, category));
 
         DialogBase base = DialogBase.builder(Messages.CONFIG.categoryTitle(category.displayName()))
                 .body(List.of(DialogBody.plainMessage(Messages.CONFIG.categoryBody())))
@@ -109,6 +115,56 @@ public final class ConfigGUI {
                         .build()));
 
         player.showDialog(dialog);
+    }
+
+    // --------------------------------------------------------------- Logging
+
+    public static void openLoggingMenu(Player player, ConfigValueEditor valueEditor, int page) {
+        List<ConfigCategory> categories = ConfigRegistry.loggingCategories();
+        int totalPages = Math.max(1, (categories.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
+        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
+        int start = currentPage * DIALOG_PAGE_SIZE;
+        int end = Math.min(start + DIALOG_PAGE_SIZE, categories.size());
+
+        List<ActionButton> buttons = new ArrayList<>();
+        for (int i = start; i < end; i++) {
+            ConfigCategory category = categories.get(i);
+            buttons.add(dialogButton(
+                    Messages.CONFIG.categoryLabel(category.displayName()),
+                    Messages.CONFIG.categoryTooltip(category.settings().size()),
+                    p -> openCategory(p, valueEditor, category.key(), 0)));
+        }
+
+        addPageNavButtons(buttons, currentPage, totalPages,
+                target -> openLoggingMenu(target, valueEditor, currentPage - 1),
+                target -> openLoggingMenu(target, valueEditor, currentPage + 1));
+
+        ActionButton back = dialogButton(
+                Messages.CONFIG.backLabel(),
+                Messages.CONFIG.backToMainTooltip(),
+                p -> openMainMenu(p, valueEditor));
+
+        DialogBase base = DialogBase.builder(Messages.CONFIG.loggingTitle())
+                .body(List.of(DialogBody.plainMessage(Messages.CONFIG.loggingBody())))
+                .build();
+
+        Dialog dialog = Dialog.create(b -> b.empty()
+                .base(base)
+                .type(DialogType.multiAction(buttons)
+                        .columns(DIALOG_COLUMNS)
+                        .exitAction(back)
+                        .build()));
+
+        player.showDialog(dialog);
+    }
+
+    private static void openCategoryParent(Player player, ConfigValueEditor valueEditor,
+                                           ConfigCategory category) {
+        if (category.group() == ConfigCategory.Group.LOGGING) {
+            openLoggingMenu(player, valueEditor, 0);
+        } else {
+            openMainMenu(player, valueEditor);
+        }
     }
 
     // ---------------------------------------------------------------- Setting

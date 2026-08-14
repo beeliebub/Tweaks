@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.lottery;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.discord.DiscordAnnouncer;
 import me.beeliebub.tweaks.economy.HouseAccount;
 import me.beeliebub.tweaks.economy.HousePaymentService;
 import me.beeliebub.tweaks.logging.ConsoleEventLog;
@@ -32,14 +33,21 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
     private final LotteryManager manager;
     private final HouseAccount houseAccount;
     private final HousePaymentService housePaymentService;
+    private final DiscordAnnouncer discordAnnouncer;
     private final Map<UUID, Long> entriesCooldowns = new HashMap<>();
 
     public LotteryCommand(JavaPlugin plugin, LotteryManager manager, HouseAccount houseAccount,
                           HousePaymentService housePaymentService) {
+        this(plugin, manager, houseAccount, housePaymentService, DiscordAnnouncer.NOOP);
+    }
+
+    public LotteryCommand(JavaPlugin plugin, LotteryManager manager, HouseAccount houseAccount,
+                          HousePaymentService housePaymentService, DiscordAnnouncer discordAnnouncer) {
         this.plugin = plugin;
         this.manager = manager;
         this.houseAccount = houseAccount;
         this.housePaymentService = housePaymentService;
+        this.discordAnnouncer = discordAnnouncer == null ? DiscordAnnouncer.NOOP : discordAnnouncer;
     }
 
     @Override
@@ -215,6 +223,8 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                 case LotteryManager.DrawResult.InFlight ignored -> sender.sendMessage(Messages.LOTTERY.drawInFlight());
                 case LotteryManager.DrawResult.NotEnoughEntrants notEnough -> {
                     Bukkit.broadcast(Messages.LOTTERY.notEnoughEntries());
+                    announceCardSafely(Messages.LOTTERY_DISCORD.notEnoughEntries(),
+                            Messages.LOTTERY_DISCORD.YELLOW, null);
                     if (notEnough.rolledIn() > 0) {
                         sender.sendMessage(Messages.LOTTERY.rollInDetail(notEnough.rolledIn(), notEnough.fallback(),
                                 notEnough.baseline()));
@@ -223,8 +233,12 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                 case LotteryManager.DrawResult.Refused refused -> {
                     if (refused.reason() == LotteryMath.RefusalReason.NO_GROWTH) {
                         Bukkit.broadcast(Messages.LOTTERY.noGrowthBroadcast());
+                        announceCardSafely(Messages.LOTTERY_DISCORD.noGrowth(),
+                                Messages.LOTTERY_DISCORD.YELLOW, null);
                     } else if (refused.reason() == LotteryMath.RefusalReason.NOT_ENOUGH_ENTRANTS) {
                         Bukkit.broadcast(Messages.LOTTERY.notEnoughEntries());
+                        announceCardSafely(Messages.LOTTERY_DISCORD.notEnoughEntries(),
+                                Messages.LOTTERY_DISCORD.YELLOW, null);
                     } else {
                         sender.sendMessage(Messages.LOTTERY.drawRefused(refused.reason()));
                     }
@@ -233,6 +247,8 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Messages.LOTTERY.paymentAbandoned(abandoned.outcome().name(),
                             abandoned.entrantCount()));
                     Bukkit.broadcast(Messages.LOTTERY.paymentAbandonedBroadcast(abandoned.entrantCount()));
+                    announceCardSafely(Messages.LOTTERY_DISCORD.paymentAbandoned(abandoned.entrantCount()),
+                            Messages.LOTTERY_DISCORD.YELLOW, null);
                 }
                 case LotteryManager.DrawResult.PaymentPending pending ->
                         sender.sendMessage(Messages.LOTTERY.paymentPending(pending.paymentId(), pending.outcome().name()));
@@ -242,9 +258,21 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                     OfflinePlayer winner = Bukkit.getOfflinePlayer(awarded.winner());
                     String name = winner.getName() == null ? awarded.winner().toString() : winner.getName();
                     Bukkit.broadcast(Messages.LOTTERY.winner(name, awarded.amount()));
+                    announceCardSafely(Messages.LOTTERY_DISCORD.winner(name, awarded.amount()),
+                            Messages.LOTTERY_DISCORD.YELLOW, winner);
                 }
             }
         });
+    }
+
+    private void announceCardSafely(String message, int color, OfflinePlayer subject) {
+        try {
+            discordAnnouncer.announceCard(message, color, subject);
+        } catch (Throwable throwable) {
+            // The in-game broadcast is the primary outcome. Keep optional Discord linkage,
+            // formatter, and injected-announcer failures from aborting the draw task.
+            plugin.getLogger().log(Level.WARNING, "Lottery Discord announcement failed", throwable);
+        }
     }
 
     private void deliver(CommandSender sender, Component message) {

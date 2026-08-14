@@ -17,7 +17,7 @@ public final class LoggingConfigCategories {
                         category.events().stream()
                                 .map(event -> ConfigSetting.of(event.path(), event.path(),
                                         event.displayName(), EditorType.BOOLEAN))
-                                .toList()))
+                                .toList(), ConfigCategory.Group.LOGGING))
                 .toList();
     }
 }

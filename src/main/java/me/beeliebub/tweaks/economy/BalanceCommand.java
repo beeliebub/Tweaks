@@ -85,14 +85,10 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(Messages.balanceMutationUsage(sub));
                 return true;
             }
-            double amount;
+            long amount;
             try {
-                amount = Double.parseDouble(args[2]);
+                amount = Long.parseLong(args[2].trim());
             } catch (NumberFormatException e) {
-                sender.sendMessage(Messages.balanceInvalidAmount(args[2]));
-                return true;
-            }
-            if (!Double.isFinite(amount)) {
                 sender.sendMessage(Messages.balanceInvalidAmount(args[2]));
                 return true;
             }
@@ -142,7 +138,7 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
         resolveTarget(sender, args[0], target -> {
             UUID targetId = target.getUniqueId();
             economyManager.loadPlayer(targetId);
-            double balance = economyManager.getBalance(targetId);
+            long balance = economyManager.getBalance(targetId);
             String targetName = target.getName() != null ? target.getName() : args[0];
             sender.sendMessage(Messages.balanceOtherPlayer(targetName, formatBalance(balance)));
         });
@@ -224,11 +220,17 @@ public class BalanceCommand implements CommandExecutor, TabCompleter {
 
     private void sendOwnBalance(Player player) {
         UUID uuid = player.getUniqueId();
-        double balance = economyManager.getBalance(uuid);
+        long balance = economyManager.getBalance(uuid);
         player.sendMessage(Messages.balanceOwn(formatBalance(balance)));
     }
 
-    /** Formats a double as a dollar-style currency string, e.g. $1,234. */
+    /** Formats a whole-dollar balance as a dollar-style currency string, e.g. $1,234. */
+    public static String formatBalance(long amount) {
+        NumberFormat fmt = NumberFormat.getNumberInstance(Locale.US);
+        return "$" + fmt.format(amount);
+    }
+
+    /** Formats a configured fractional value as a dollar-style currency string. */
     public static String formatBalance(double amount) {
         NumberFormat fmt = NumberFormat.getNumberInstance(Locale.US);
         fmt.setMaximumFractionDigits(0);

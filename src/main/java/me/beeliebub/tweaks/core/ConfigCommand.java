@@ -218,12 +218,14 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
 
     private void handleList(CommandSender sender, String[] args) {
         String categoryFilter = args.length >= 2 ? args[1] : null;
-        if (categoryFilter != null && ConfigRegistry.category(categoryFilter).isEmpty()) {
+        boolean loggingFilter = categoryFilter != null && categoryFilter.equalsIgnoreCase("logging");
+        if (categoryFilter != null && !loggingFilter && ConfigRegistry.category(categoryFilter).isEmpty()) {
             sender.sendMessage(Messages.CONFIG.unknownCategory(categoryFilter));
             return;
         }
         for (ConfigCategory category : ConfigRegistry.categories()) {
-            if (categoryFilter != null && !category.key().equalsIgnoreCase(categoryFilter)) continue;
+            if (loggingFilter && category.group() != ConfigCategory.Group.LOGGING) continue;
+            if (!loggingFilter && categoryFilter != null && !category.key().equalsIgnoreCase(categoryFilter)) continue;
             sender.sendMessage(Messages.CONFIG.categoryHeader(category.displayName()));
             for (ConfigSetting setting : category.settings()) {
                 sender.sendMessage(Messages.CONFIG.settingListEntry(setting.displayName(),
@@ -322,10 +324,12 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 2 && key.equals("list")) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
-            return ConfigRegistry.categories().stream()
+            List<String> categories = new ArrayList<>(ConfigRegistry.categories().stream()
                     .map(ConfigCategory::key)
                     .filter(s -> s.startsWith(prefix))
-                    .toList();
+                    .toList());
+            if ("logging".startsWith(prefix)) categories.add("logging");
+            return categories;
         }
 
         if (args.length == 2 && (key.equals("eggdrop") || key.equals("spawneregg"))) {

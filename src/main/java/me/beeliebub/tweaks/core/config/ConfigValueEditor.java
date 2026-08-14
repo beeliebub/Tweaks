@@ -236,6 +236,14 @@ public final class ConfigValueEditor {
         };
     }
 
+    private EditResult setString(ConfigSetting setting, String rawValue) {
+        String value = rawValue == null ? "" : rawValue;
+        if (!writeAndVerify(setting.path(), value)) {
+            return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
+        }
+        return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), value));
+    }
+
     private EditResult setBoundedNumber(ConfigSetting setting, String rawValue, boolean integral) {
         double parsed;
         try {
@@ -285,13 +293,6 @@ public final class ConfigValueEditor {
             loggingBooleanChanged.accept(setting.path(), value);
         }
         return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), String.valueOf(value)));
-    }
-
-    private EditResult setString(ConfigSetting setting, String rawValue) {
-        String value = rawValue == null ? "" : rawValue;
-        plugin.getConfig().set(setting.path(), value);
-        plugin.saveConfig();
-        return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), value));
     }
 
     private static final String PROTECTION_SELECTION_TOOL_PATH = "protection.selection-tool";

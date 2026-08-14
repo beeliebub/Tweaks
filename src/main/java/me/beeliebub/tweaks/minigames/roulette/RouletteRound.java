@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.minigames.roulette;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -115,7 +116,7 @@ public final class RouletteRound {
      * amount * multiplier} over every bet this player won this round. The wagered stake, already
      * debited at bet-placement time, is never returned as part of this figure — plus any rakeback.
      */
-    public record PlayerCredit(long payout, long rakeback) {
+    public record PlayerCredit(long payout, long rakeback, long wagered) {
     }
 
     /** Full settlement result, including players whose net round result was a loss. */
@@ -133,28 +134,25 @@ public final class RouletteRound {
      * the whole round (never a net win), floored, using that player's own rate — note that under
      * this no-stake-return rule, "net" (payout minus wagered) already nets out correctly to the
      * player's true profit/loss without needing to separately account for a returned stake. The
-     * house is credited the gross sum of losing wagers only (the house-accounting invariant) — a
-     * winning wager contributes {@code 0}, it never offsets, so a rakeback-bearing loss still
-     * credits the house the full losing wager (rakeback is minted, never taken from the house's cut).
+     * house is credited the sum of each player's net loss, floored at zero per player, so a player
+     * who hedges into a break-even result does not feed the pot. One player's net win never offsets
+     * another player's loss, and rakeback is minted rather than taken from the house's cut.
      */
     public static Settlement computeSettlement(
             List<RouletteBet> bets, int pocket, Map<UUID, Double> rakebackRates) {
-        Map<UUID, Long> wageredByPlayer = new HashMap<>();
-        Map<UUID, Long> payoutByPlayer = new HashMap<>();
-        long houseCredit = 0L;
-
+        Map<UUID, Long> wageredByPlayer = new LinkedHashMap<>();
+        Map<UUID, Long> payoutByPlayer = new LinkedHashMap<>();
         for (RouletteBet bet : bets) {
             wageredByPlayer.merge(bet.player(), (long) bet.amount(), Long::sum);
             if (bet.wins(pocket)) {
                 long payout = (long) bet.amount() * bet.payoutMultiplier();
                 payoutByPlayer.merge(bet.player(), payout, Long::sum);
-            } else {
-                houseCredit += bet.amount();
             }
         }
 
-        Map<UUID, PlayerCredit> credits = new HashMap<>();
+        Map<UUID, PlayerCredit> credits = new LinkedHashMap<>();
         Set<UUID> netLosers = new HashSet<>();
+        long houseCredit = 0L;
         for (Map.Entry<UUID, Long> entry : wageredByPlayer.entrySet()) {
             UUID player = entry.getKey();
             long wagered = entry.getValue();
@@ -163,12 +161,14 @@ public final class RouletteRound {
             long rakeback = 0L;
             if (net < 0) {
                 netLosers.add(player);
+                houseCredit += -net;
                 double rate = rakebackRates.getOrDefault(player, 0.0);
                 rakeback = (long) Math.floor(-net * rate);
             }
-            credits.put(player, new PlayerCredit(payout, rakeback));
+            credits.put(player, new PlayerCredit(payout, rakeback, wagered));
         }
 
-        return new Settlement(Map.copyOf(credits), Math.max(0L, houseCredit), Set.copyOf(netLosers));
+        return new Settlement(java.util.Collections.unmodifiableMap(new LinkedHashMap<>(credits)),
+                Math.max(0L, houseCredit), Set.copyOf(netLosers));
     }
 }

@@ -55,7 +55,7 @@ class RouletteEndRoundTest {
         World world = server.addSimpleWorld("casino");
         Location center = new Location(world, 0.5, 65.0, 0.5);
         Location control = new Location(world, 2.0, 65.0, 0.5);
-        board = new RouletteBoardStore.BoardEntry(center, 1, 1000, 16, control, BlockFace.NORTH);
+        board = new RouletteBoardStore.BoardEntry(center, 1, 1000, 16, control, BlockFace.NORTH, false);
     }
 
     @AfterEach
@@ -84,16 +84,16 @@ class RouletteEndRoundTest {
         RouletteSessionManager sessions = freshSessionManager();
         PlayerMock player = server.addPlayer();
         UUID playerId = player.getUniqueId();
-        economyManager.setBalance(playerId, 1000.0);
+        economyManager.setBalance(playerId, 1000L);
 
         sessions.setStake(playerId, STAKE);
         sessions.handleSegmentClick(player, straightUpRef(7));
-        double balanceAfterBet = economyManager.getBalance(playerId);
-        assertEquals(900.0, balanceAfterBet, 1e-9, "the stake must be debited on placement");
+        long balanceAfterBet = economyManager.getBalance(playerId);
+        assertEquals(900L, balanceAfterBet, "the stake must be debited on placement");
 
         sessions.shutdown();
 
-        assertEquals(1000.0, economyManager.getBalance(playerId), 1e-9,
+        assertEquals(1000L, economyManager.getBalance(playerId),
                 "shutdown mid-BETTING must refund the full wager");
     }
 
@@ -108,11 +108,11 @@ class RouletteEndRoundTest {
                 plugin, economyManager, house, plugin.getRankManager(), boardStore, renderer, restPoseStore);
         PlayerMock player = server.addPlayer();
         UUID playerId = player.getUniqueId();
-        economyManager.setBalance(playerId, 1000.0);
+        economyManager.setBalance(playerId, 1000L);
 
         sessions.setStake(playerId, STAKE);
         sessions.handleSegmentClick(player, straightUpRef(7));
-        seedBalance(playerId, Double.NaN);
+        seedBalance(playerId, EconomyManager.MAX_BALANCE);
 
         sessions.shutdown();
 
@@ -135,19 +135,19 @@ class RouletteEndRoundTest {
         RouletteSessionManager sessions = freshSessionManager();
         PlayerMock player = server.addPlayer();
         UUID playerId = player.getUniqueId();
-        economyManager.setBalance(playerId, 1000.0);
+        economyManager.setBalance(playerId, 1000L);
 
         sessions.setStake(playerId, STAKE);
         sessions.handleSegmentClick(player, straightUpRef(7));
 
         sessions.endRound(board, RouletteTeardownPolicy.EndReason.SHUTDOWN);
-        double balanceAfterFirstTeardown = economyManager.getBalance(playerId);
-        assertEquals(1000.0, balanceAfterFirstTeardown, 1e-9, "the wager must be refunded once");
+        long balanceAfterFirstTeardown = economyManager.getBalance(playerId);
+        assertEquals(1000L, balanceAfterFirstTeardown, "the wager must be refunded once");
 
         // The context was already removed by the first call — a second call for the same board
         // must be a silent no-op, never a second refund.
         sessions.endRound(board, RouletteTeardownPolicy.EndReason.SHUTDOWN);
-        assertEquals(balanceAfterFirstTeardown, economyManager.getBalance(playerId), 1e-9,
+        assertEquals(balanceAfterFirstTeardown, economyManager.getBalance(playerId),
                 "a repeated endRound call for an already-torn-down board must not refund twice");
     }
 
@@ -158,13 +158,13 @@ class RouletteEndRoundTest {
         RouletteSessionManager sessions = freshSessionManager();
         PlayerMock player = server.addPlayer();
         UUID playerId = player.getUniqueId();
-        economyManager.setBalance(playerId, 1000.0);
+        economyManager.setBalance(playerId, 1000L);
 
         sessions.setStake(playerId, STAKE);
         sessions.handleSegmentClick(player, straightUpRef(7));
-        double balanceBeforeBet = 1000.0;
-        double balanceAfterBet = economyManager.getBalance(playerId);
-        assertEquals(900.0, balanceAfterBet, 1e-9);
+        long balanceBeforeBet = 1000L;
+        long balanceAfterBet = economyManager.getBalance(playerId);
+        assertEquals(900L, balanceAfterBet);
         assertTrue(sessions.hasRoundInFlight(board), "the round must be BETTING before teardown");
 
         sessions.endRound(board, RouletteTeardownPolicy.EndReason.CHUNK_UNLOAD);
@@ -174,8 +174,8 @@ class RouletteEndRoundTest {
         // 36:1 (balance jumps far above balanceBeforeBet) — either way, never exactly the
         // pre-bet balance, which is what distinguishes "settled" from "refunded" without needing
         // to control the drawn pocket's RNG.
-        double finalBalance = economyManager.getBalance(playerId);
-        assertNotEquals(balanceBeforeBet, finalBalance, 1e-9,
+        long finalBalance = economyManager.getBalance(playerId);
+        assertNotEquals(balanceBeforeBet, finalBalance,
                 "a chunk-unloaded BETTING round must settle (win or lose), never refund");
         assertTrue(finalBalance == balanceAfterBet || finalBalance > balanceBeforeBet,
                 "the settled balance must reflect either a loss (unchanged from post-bet) or a "

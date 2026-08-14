@@ -40,6 +40,7 @@ class BlackjackSessionManagerSettlementTest {
         assertEquals(250, settlement.payoutAmount(), "payout must be bet + floor(bet*1.5) = 250");
         assertEquals(0, settlement.rakebackAmount(), "no rakeback on a player win");
         assertEquals(0, settlement.houseWinnings(), "a player win must never debit the house");
+        assertEquals(150, settlement.netChange());
         assertTrue(summaryText(settlement).contains("BLACKJACK"));
         assertTrue(summaryText(settlement).contains("won $150"),
                 "net winnings must be payout - bet = 150");
@@ -53,6 +54,7 @@ class BlackjackSessionManagerSettlementTest {
         assertEquals(200, settlement.payoutAmount(), "payout must be bet * 2 = 200");
         assertEquals(0, settlement.rakebackAmount());
         assertEquals(0, settlement.houseWinnings());
+        assertEquals(100, settlement.netChange());
         assertTrue(summaryText(settlement).contains("Payout: $200"));
         assertTrue(summaryText(settlement).contains("net +$100"));
     }
@@ -65,6 +67,7 @@ class BlackjackSessionManagerSettlementTest {
         assertEquals(100, settlement.payoutAmount(), "push must return exactly the bet");
         assertEquals(0, settlement.rakebackAmount());
         assertEquals(0, settlement.houseWinnings(), "a push must not credit the house");
+        assertEquals(0, settlement.netChange());
         assertTrue(summaryText(settlement).contains("bet of $100 is returned"));
     }
 
@@ -80,6 +83,7 @@ class BlackjackSessionManagerSettlementTest {
         assertEquals(0, settlement.payoutAmount(), "no payout on a dealer win");
         assertEquals(5, settlement.rakebackAmount(), "floor(100 * 0.05) = 5");
         assertEquals(100, settlement.houseWinnings(), "rakeback is minted and must not reduce house proceeds");
+        assertEquals(-95, settlement.netChange(), "rakeback counts toward the player's net result");
         assertTrue(summaryText(settlement).contains("lost $100"));
         assertTrue(summaryText(settlement).contains("Rakeback: +$5"));
     }
@@ -104,6 +108,7 @@ class BlackjackSessionManagerSettlementTest {
 
         assertEquals(16, settlement.rakebackAmount(), "floor(333 * 0.05) must equal 16");
         assertEquals(333, settlement.houseWinnings());
+        assertEquals(-317, settlement.netChange());
     }
 
     @Test
@@ -115,6 +120,7 @@ class BlackjackSessionManagerSettlementTest {
         assertEquals(0, settlement.rakebackAmount(),
                 "rakeback must never apply to a non-DEALER_WIN result");
         assertEquals(0, settlement.houseWinnings());
+        assertEquals(100, settlement.netChange());
     }
 
     // -------------------------------------------------------------------------
@@ -129,6 +135,7 @@ class BlackjackSessionManagerSettlementTest {
         assertEquals(0, settlement.payoutAmount());
         assertEquals(0, settlement.rakebackAmount());
         assertEquals(0, settlement.houseWinnings());
+        assertEquals(0, settlement.netChange());
         assertTrue(summaryText(settlement).contains("Practice table"));
     }
 

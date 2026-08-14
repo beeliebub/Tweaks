@@ -8,7 +8,9 @@ import java.util.Optional;
 /**
  * Single static ordered category -&gt; settings table backing both {@code /tconfig}'s CLI path
  * grammar and its Dialog GUI. New settings append entries here while each owning package keeps its
- * live-read conversion local; the record types used to describe settings remain stable.
+ * live-read conversion local; the record types used to describe settings remain stable. The
+ * complete flat registry remains the source of truth; menu-specific views are filtered projections
+ * so CLI lookup and output retain the full ordered list.
  *
  * <p>{@link #EGGDROP_SENTINEL_PATH}, {@link #SPAWNEREGG_SENTINEL_PATH}, and
  * {@link #RESOURCEITEMS_SENTINEL_PATH} mark the three pre-existing legacy settings whose mutation
@@ -177,6 +179,26 @@ public final class ConfigRegistry {
                     ConfigSetting.bounded("itemadmin.gui-copy.max-distance", "itemadmin.gui-copy.max-distance",
                             "Gui Copy Max Distance", EditorType.INT, 1, 64)
             )),
+            new ConfigCategory("discord", "Discord", List.of(
+                    ConfigSetting.of("discord.channel-id", "discord.channel-id",
+                            "Announcement Channel ID", EditorType.STRING),
+                    ConfigSetting.of("discord.webhook-name", "discord.webhook-name",
+                            "Webhook Display Name", EditorType.STRING),
+                    ConfigSetting.of("discord.webhook-avatar-url", "discord.webhook-avatar-url",
+                            "Webhook Avatar URL", EditorType.STRING),
+                    ConfigSetting.of("discord.betting-channel-id", "discord.betting-channel-id",
+                            "Roulette Betting Channel ID", EditorType.STRING),
+                    ConfigSetting.of("discord.betting-enabled", "discord.betting-enabled",
+                            "Roulette Betting Enabled", EditorType.BOOLEAN),
+                    ConfigSetting.of("discord.house-channel-id", "discord.house-channel-id",
+                            "House Stat Voice Channel ID", EditorType.STRING),
+                    ConfigSetting.of("discord.lottery-channel-id", "discord.lottery-channel-id",
+                            "Lottery Stat Voice Channel ID", EditorType.STRING),
+                    ConfigSetting.bounded("discord.group-window-seconds", "discord.group-window-seconds",
+                            "Settlement Group Window Seconds", EditorType.INT, 1, 30),
+                    ConfigSetting.bounded("discord.stat-refresh-seconds", "discord.stat-refresh-seconds",
+                            "Stat Channel Refresh Seconds", EditorType.INT, 300, 3600)
+            )),
             new ConfigCategory("xpbottle", "Xp Bottle", List.of(
                     ConfigSetting.bounded("xpbottle.orbs-per-emerald", "xpbottle.orbs-per-emerald",
                             "Orbs Per Emerald (restart required)", EditorType.INT, 1, Integer.MAX_VALUE)
@@ -222,6 +244,18 @@ public final class ConfigRegistry {
 
     public static List<ConfigCategory> categories() {
         return allCategories();
+    }
+
+    public static List<ConfigCategory> mainMenuCategories() {
+        return allCategories().stream()
+                .filter(category -> category.group() == ConfigCategory.Group.MAIN)
+                .toList();
+    }
+
+    public static List<ConfigCategory> loggingCategories() {
+        return allCategories().stream()
+                .filter(category -> category.group() == ConfigCategory.Group.LOGGING)
+                .toList();
     }
 
     public static Optional<ConfigCategory> category(String key) {

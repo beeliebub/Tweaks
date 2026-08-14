@@ -230,10 +230,16 @@ public final class ConfigMessages {
                 plainGray("Ranks: /ranks edit  ·  Permissions: /tprm  ·  Whack: /whack"));
     }
 
+    public Component loggingCategoryLabel() { return bold("Logging", NamedTextColor.YELLOW); }
+    public Component loggingCategoryTooltip() { return gray("Manage console event logging switches."); }
+    public Component loggingTitle() { return title("<!italic><green><bold>Logging"); }
+    public Component loggingBody() { return plainGray("Select a logging category to edit."); }
+
     public Component categoryLabel(String displayName) { return bold(displayName, NamedTextColor.YELLOW); }
     public Component categoryTooltip(int settingCount) { return gray(settingCount + " setting(s). Click to view."); }
     public Component backLabel() { return bold("← Back", NamedTextColor.RED); }
     public Component backToMainTooltip() { return gray("Return to the main config menu."); }
+    public Component backToLoggingTooltip() { return gray("Return to the logging categories."); }
     public Component categoryTitle(String displayName) { return title("<!italic><green>" + displayName); }
     public Component categoryBody() { return plainGray("Select a setting to edit."); }
 

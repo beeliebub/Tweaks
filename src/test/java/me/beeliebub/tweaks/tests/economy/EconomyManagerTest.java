@@ -42,37 +42,53 @@ class EconomyManagerTest {
     @Test
     void defaultBalanceIsZero() {
         UUID id = UUID.randomUUID();
-        assertEquals(0.0D, economy.getBalance(id));
+        assertEquals(0L, economy.getBalance(id));
     }
 
     @Test
     void setBalanceRoundtrips() {
         UUID id = UUID.randomUUID();
-        economy.setBalance(id, 123.45D);
-        assertEquals(123.45D, economy.getBalance(id));
+        economy.setBalance(id, 123L);
+        assertEquals(123L, economy.getBalance(id));
     }
 
     @Test
     void addBalanceAccumulates() {
         UUID id = UUID.randomUUID();
-        economy.setBalance(id, 100.0D);
-        economy.addBalance(id, 50.0D);
-        assertEquals(150.0D, economy.getBalance(id));
+        economy.setBalance(id, 100L);
+        economy.addBalance(id, 50L);
+        assertEquals(150L, economy.getBalance(id));
     }
 
     @Test
     void removeBalanceSubtracts() {
         UUID id = UUID.randomUUID();
-        economy.setBalance(id, 100.0D);
-        economy.removeBalance(id, 30.0D);
-        assertEquals(70.0D, economy.getBalance(id));
+        economy.setBalance(id, 100L);
+        economy.removeBalance(id, 30L);
+        assertEquals(70L, economy.getBalance(id));
     }
 
     @Test
     void addBalanceFromDefaultStartsAtZero() {
         UUID id = UUID.randomUUID();
-        economy.addBalance(id, 25.0D);
-        assertEquals(25.0D, economy.getBalance(id));
+        economy.addBalance(id, 25L);
+        assertEquals(25L, economy.getBalance(id));
+    }
+
+    @Test
+    void addAtTheBalanceCeilingLeavesMemoryAndDiskUnchanged() throws Exception {
+        UUID id = UUID.randomUUID();
+        assertEquals(me.beeliebub.tweaks.economy.BalanceMutationResult.APPLIED,
+                economy.setBalance(id, EconomyManager.MAX_BALANCE));
+        economy.saveAll().get(5, TimeUnit.SECONDS);
+
+        assertEquals(me.beeliebub.tweaks.economy.BalanceMutationResult.REJECTED_UNREPRESENTABLE,
+                economy.addBalance(id, 1L));
+        assertEquals(EconomyManager.MAX_BALANCE, economy.getBalance(id));
+
+        economy.saveAll().get(5, TimeUnit.SECONDS);
+        File file = new File(plugin.getDataFolder(), "players/" + id + ".yml");
+        assertEquals(EconomyManager.MAX_BALANCE, YamlConfiguration.loadConfiguration(file).getLong("balance"));
     }
 
     @Test
@@ -112,23 +128,23 @@ class EconomyManagerTest {
     void worksWithRealPlayerUuid() {
         PlayerMock player = server.addPlayer();
         UUID id = player.getUniqueId();
-        economy.setBalance(id, 500.0D);
+        economy.setBalance(id, 500L);
         economy.setRank(id, 2);
-        assertEquals(500.0D, economy.getBalance(id));
+        assertEquals(500L, economy.getBalance(id));
         assertEquals(2, economy.getRank(id));
     }
 
     @Test
     void saveAllFlushesBalanceMutatedImmediatelyBeforeDisableToDisk() throws Exception {
         UUID id = UUID.randomUUID();
-        economy.setBalance(id, 777.0D);
+        economy.setBalance(id, 777L);
 
         economy.saveAll().get(5, TimeUnit.SECONDS);
 
         File file = new File(plugin.getDataFolder(), "players/" + id + ".yml");
         assertTrue(file.exists());
         YamlConfiguration onDisk = YamlConfiguration.loadConfiguration(file);
-        assertEquals(777.0D, onDisk.getDouble("balance"));
+        assertEquals(777L, onDisk.getLong("balance"));
     }
 
     @Test
@@ -141,17 +157,17 @@ class EconomyManagerTest {
         UUID first = UUID.randomUUID();
         UUID second = UUID.randomUUID();
         UUID third = UUID.randomUUID();
-        economy.setBalance(first, 10.0D);
-        economy.setBalance(second, 20.0D);
-        economy.setBalance(third, 30.0D);
+        economy.setBalance(first, 10L);
+        economy.setBalance(second, 20L);
+        economy.setBalance(third, 30L);
 
         economy.saveAll().get(5, TimeUnit.SECONDS);
 
-        for (var entry : java.util.Map.of(first, 10.0D, second, 20.0D, third, 30.0D).entrySet()) {
+        for (var entry : java.util.Map.of(first, 10L, second, 20L, third, 30L).entrySet()) {
             File file = new File(plugin.getDataFolder(), "players/" + entry.getKey() + ".yml");
             assertTrue(file.exists(), "expected a saved file for " + entry.getKey());
             YamlConfiguration onDisk = YamlConfiguration.loadConfiguration(file);
-            assertEquals(entry.getValue(), onDisk.getDouble("balance"));
+            assertEquals(entry.getValue(), onDisk.getLong("balance"));
         }
     }
 }

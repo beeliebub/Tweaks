@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.ranks;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.economy.BalanceMutationResult;
 import me.beeliebub.tweaks.economy.BalanceCommand;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.logging.ConsoleEventLog;
@@ -12,6 +13,7 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.UUID;
+import java.util.logging.Level;
 
 /**
  * /rankup — purchase the next rank using the player's balance.
@@ -44,8 +46,21 @@ public class RankupCommand implements CommandExecutor {
         }
 
         int next = current + 1;
-        double cost = rankManager.getRankCost(next);
-        double balance = economyManager.getBalance(uuid);
+        double configuredCost = rankManager.getRankCost(next);
+        if (!Double.isFinite(configuredCost)) {
+            rankManager.plugin().getLogger().log(Level.WARNING,
+                    "Refusing rankup to rank " + next + " because its configured cost is non-finite: "
+                            + configuredCost);
+            return true;
+        }
+        long cost = (long) Math.floor(configuredCost);
+        if (cost < 0 || cost > EconomyManager.MAX_BALANCE) {
+            rankManager.plugin().getLogger().log(Level.WARNING,
+                    "Refusing rankup to rank " + next + " because its configured cost is outside the balance range: "
+                            + configuredCost);
+            return true;
+        }
+        long balance = economyManager.getBalance(uuid);
 
         if (balance < cost) {
             player.sendMessage(Messages.rankupInsufficientFunds(rankManager.getRankDisplayComponent(next),
@@ -53,10 +68,14 @@ public class RankupCommand implements CommandExecutor {
             return true;
         }
 
-        economyManager.removeBalance(uuid, cost);
+        if (economyManager.removeBalance(uuid, cost) != BalanceMutationResult.APPLIED) {
+            rankManager.plugin().getLogger().log(Level.WARNING,
+                    "Refusing rankup to rank " + next + " because its cost could not be debited for " + uuid);
+            return true;
+        }
         economyManager.setRank(uuid, next);
 
-        double remaining = economyManager.getBalance(uuid);
+        long remaining = economyManager.getBalance(uuid);
         player.sendMessage(Messages.rankupSuccess(rankManager.getRankDisplayComponent(next),
                 BalanceCommand.formatBalance(remaining)));
         ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(rankManager.plugin());

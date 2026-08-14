@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.minigames.roulette;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.discord.DiscordAnnouncer;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.economy.HouseAccount;
 import me.beeliebub.tweaks.lottery.LotteryManager;
@@ -80,6 +81,7 @@ public final class RouletteListener implements Listener {
 
     private final Map<UUID, PendingBoardSetup> pendingSetups = new HashMap<>();
     private final Set<UUID> pendingRemovals = new HashSet<>();
+    private final Set<UUID> pendingDiscordDesignations = new HashSet<>();
 
     /** Dedupes the "control block is no longer a button/lever" warning per board. */
     private final Set<RouletteBoardStore.BoardEntry> loggedBrokenControl = new HashSet<>();
@@ -89,19 +91,25 @@ public final class RouletteListener implements Listener {
 
     public RouletteListener(JavaPlugin plugin, EconomyManager economyManager,
                              HouseAccount houseAccount, RankManager rankManager) {
-        this(plugin, economyManager, houseAccount, rankManager, null);
+        this(plugin, economyManager, houseAccount, rankManager, null, DiscordAnnouncer.NOOP);
     }
 
     public RouletteListener(JavaPlugin plugin, EconomyManager economyManager,
                              HouseAccount houseAccount, RankManager rankManager,
                              LotteryManager lotteryManager) {
+        this(plugin, economyManager, houseAccount, rankManager, lotteryManager, DiscordAnnouncer.NOOP);
+    }
+
+    public RouletteListener(JavaPlugin plugin, EconomyManager economyManager,
+                             HouseAccount houseAccount, RankManager rankManager,
+                             LotteryManager lotteryManager, DiscordAnnouncer discordAnnouncer) {
         this.plugin = plugin;
         this.boardStore = new RouletteBoardStore(plugin);
         this.restPoseStore = new RouletteRestPoseStore(plugin);
         this.renderer = new RouletteRenderer(plugin, houseAccount, restPoseStore);
         this.sessions = new RouletteSessionManager(
                 plugin, economyManager, houseAccount, rankManager, boardStore, renderer, restPoseStore,
-                lotteryManager);
+                lotteryManager, discordAnnouncer);
     }
 
     // ---- Public API -----------------------------------------------------------------
@@ -112,6 +120,7 @@ public final class RouletteListener implements Listener {
     public void beginBoardSetup(Player admin, int minBet, int maxBet) {
         UUID id = admin.getUniqueId();
         pendingRemovals.remove(id); // a fresh setup supersedes any pending removal for this admin
+        pendingDiscordDesignations.remove(id);
         pendingSetups.put(id, new PendingBoardSetup(minBet, maxBet));
         admin.sendMessage(Messages.MINIGAMES.rouletteControlSetupPrompt(minBet, maxBet));
     }
@@ -121,14 +130,67 @@ public final class RouletteListener implements Listener {
     public void beginBoardRemoval(Player admin) {
         UUID id = admin.getUniqueId();
         pendingSetups.remove(id); // a fresh removal supersedes any pending setup for this admin
+        pendingDiscordDesignations.remove(id);
         pendingRemovals.add(id);
         admin.sendMessage(Messages.MINIGAMES.rouletteRemovalPrompt());
+    }
+
+    /** Puts {@code admin} into Discord-designation mode for the next registered board control click. */
+    public void beginDiscordDesignation(Player admin) {
+        UUID id = admin.getUniqueId();
+        pendingSetups.remove(id);
+        pendingRemovals.remove(id);
+        pendingDiscordDesignations.add(id);
+        admin.sendMessage(Messages.MINIGAMES.rouletteDiscordDesignationPrompt());
+    }
+
+    /** Clears the current Discord designation directly; no board click is required. */
+    public void clearDiscordDesignation(Player admin) {
+        List<RouletteBoardStore.BoardEntry> designated = boardStore.designatedBoards();
+        if (designated.isEmpty()) {
+            admin.sendMessage(Messages.MINIGAMES.rouletteDiscordBoardNotDesignated());
+            return;
+        }
+        if (designated.stream().anyMatch(sessions::hasRoundInFlight)) {
+            admin.sendMessage(Messages.MINIGAMES.rouletteBoardBusy());
+            return;
+        }
+        try {
+            for (RouletteBoardStore.BoardEntry current : designated) {
+                RouletteBoardStore.BoardEntry persisted = boardStore.setDiscordDesignation(current, false);
+                if (persisted == null) {
+                    throw new IllegalStateException("designated board row was not found");
+                }
+                swapBoardIdentity(current, persisted);
+            }
+            admin.sendMessage(Messages.MINIGAMES.rouletteDiscordDesignationCleared());
+            logDiscordDesignationChange(admin, "cleared", designated.get(0));
+        } catch (RuntimeException e) {
+            plugin.getLogger().log(Level.SEVERE, "Roulette: failed to clear Discord designation for "
+                    + describeLocation(designated.get(0).center()), e);
+            admin.sendMessage(Messages.MINIGAMES.rouletteDiscordDesignationFailed());
+        }
     }
 
     /** Sets {@code admin}'s (in practice, any player's) sticky Roulette stake, consumed by the next
      *  segment click at any board. Called from {@link RouletteCommand}'s {@code stake} subcommand. */
     public void setStickyStake(Player player, int amount) {
         sessions.setStake(player.getUniqueId(), amount);
+    }
+
+    /** UUID-only status snapshot for the optional Discord bridge. */
+    public DiscordBoardStatus discordBoardStatus() {
+        return sessions.discordGateway().discordBoardStatus();
+    }
+
+    /** Main-thread UUID-only Discord betting operation. */
+    public DiscordBetResult placeDiscordBet(UUID playerId, BetType type, int selector, int amount) {
+        return sessions.discordGateway().placeDiscordBet(playerId, type, selector, amount);
+    }
+
+    /** Returns this Discord-linked bettor's current bets on the designated board. */
+    public List<RouletteBet> discordBetsFor(UUID playerId) {
+        return sessions.discordGateway().discordBetsFor(playerId);
     }
 
     /**
@@ -248,9 +310,12 @@ public final class RouletteListener implements Listener {
                 continue;
             }
             touchesAnyBoard = true;
-            if (!boardStore.isActive(board) && allTouchedChunksLoaded(board)) {
+            if (!boardStore.isActive(board)) {
                 try {
-                    tryActivate(board);
+                    reassertChunkTickets(board);
+                    if (allTouchedChunksLoaded(board)) {
+                        tryActivate(board);
+                    }
                 } catch (RuntimeException e) {
                     // One board's failure must not stop a sibling board sharing this chunk from
                     // being considered, nor skip the orphan sweep below.
@@ -345,6 +410,12 @@ public final class RouletteListener implements Listener {
             return;
         }
 
+        if (pendingDiscordDesignations.contains(playerId)) {
+            event.setCancelled(true);
+            handleDiscordDesignation(player, clicked);
+            return;
+        }
+
         RouletteBoardStore.BoardEntry board = boardStore.lookupControl(key);
         if (board == null) {
             return;
@@ -364,7 +435,7 @@ public final class RouletteListener implements Listener {
             player.sendMessage(Messages.noPermission());
             return;
         }
-        // Decision 9: the control is admin-only and routes through the exact same beginSpin path
+        // The control is admin-only and routes through the exact same beginSpin path
         // as a window naturally expiring — never a parallel one. A board deactivated (e.g. after
         // an incomplete rest-pose restore) refuses bets and must refuse a forced spin too — its
         // hitbox↔segment mapping is untrustworthy, not just its click targets.
@@ -416,6 +487,7 @@ public final class RouletteListener implements Listener {
         UUID id = event.getPlayer().getUniqueId();
         pendingSetups.remove(id);
         pendingRemovals.remove(id);
+        pendingDiscordDesignations.remove(id);
         sessions.onPlayerQuit(id);
     }
 
@@ -471,7 +543,7 @@ public final class RouletteListener implements Listener {
         RouletteGeometry.Vec3 centre = outcome.wheelCentre();
         Location center = new Location(controlLoc.getWorld(), centre.x(), centre.y(), centre.z());
         RouletteBoardStore.BoardEntry entry = new RouletteBoardStore.BoardEntry(
-                center, pending.minBet(), pending.maxBet(), scanRadius, controlLoc, facing);
+                center, pending.minBet(), pending.maxBet(), scanRadius, controlLoc, facing, false);
 
         if (!boardStore.persistBoard(entry)) {
             admin.sendMessage(Messages.MINIGAMES.rouletteBoardAlreadyRegistered());
@@ -515,6 +587,138 @@ public final class RouletteListener implements Listener {
                 "[Roulette] " + ConsoleEventLog.actorLabel(admin.getName(), admin.getUniqueId())
                         + " created board at " + describeLocation(center) + " with bets $"
                         + pending.minBet() + "-$" + pending.maxBet());
+    }
+
+    private void handleDiscordDesignation(Player admin, Block clicked) {
+        RouletteBoardStore.BoardEntry selected = boardStore.lookupControl(
+                RouletteBoardStore.blockKey(clicked.getLocation()));
+        if (selected == null) {
+            admin.sendMessage(Messages.MINIGAMES.rouletteDiscordBoardNotFound());
+            return;
+        }
+        List<RouletteBoardStore.BoardEntry> currentDesignated = boardStore.designatedBoards();
+        boolean selectedAlready = currentDesignated.stream()
+                .anyMatch(entry -> RouletteBoardStore.samePhysicalBoard(entry, selected));
+        if (selectedAlready && currentDesignated.size() == 1) {
+            pendingDiscordDesignations.remove(admin.getUniqueId());
+            admin.sendMessage(Messages.MINIGAMES.rouletteDiscordAlreadyDesignated());
+            return;
+        }
+        if (sessions.hasRoundInFlight(selected)
+                || currentDesignated.stream().anyMatch(sessions::hasRoundInFlight)) {
+            admin.sendMessage(Messages.MINIGAMES.rouletteBoardBusy());
+            return;
+        }
+        if (!boardStore.isActive(selected)) {
+            admin.sendMessage(Messages.MINIGAMES.rouletteDiscordBoardUnavailable());
+            return;
+        }
+
+        RouletteBoardStore.BoardEntry selectedRuntime = selected;
+        RouletteBoardStore.BoardEntry selectedReplacement = null;
+        try {
+            for (RouletteBoardStore.BoardEntry current : currentDesignated) {
+                RouletteBoardStore.BoardEntry currentReplacement = boardStore.setDiscordDesignation(current, false);
+                if (currentReplacement == null) {
+                    throw new IllegalStateException("previous Discord designation row was not found");
+                }
+                swapBoardIdentity(current, currentReplacement);
+                if (RouletteBoardStore.samePhysicalBoard(current, selected)) {
+                    selectedRuntime = currentReplacement;
+                }
+            }
+            selectedReplacement = boardStore.setDiscordDesignation(selectedRuntime, true);
+            if (selectedReplacement == null) {
+                throw new IllegalStateException("new Discord designation row was not found");
+            }
+            swapBoardIdentity(selectedRuntime, selectedReplacement);
+            pendingDiscordDesignations.remove(admin.getUniqueId());
+            admin.sendMessage(Messages.MINIGAMES.rouletteDiscordDesignationSet());
+            logDiscordDesignationChange(admin, "set", selected);
+        } catch (RuntimeException e) {
+            plugin.getLogger().log(Level.SEVERE, "Roulette: failed to move Discord designation to "
+                    + describeLocation(selected.center()), e);
+            if (selectedReplacement != null) {
+                try {
+                    boardStore.setDiscordDesignation(selectedReplacement, false);
+                    swapBoardIdentity(selectedReplacement, selectedRuntime);
+                } catch (RuntimeException rollback) {
+                    plugin.getLogger().log(Level.SEVERE, "Roulette: failed to restore selected board after "
+                            + "Discord designation failure at " + describeLocation(selected.center()), rollback);
+                }
+            }
+            admin.sendMessage(Messages.MINIGAMES.rouletteDiscordDesignationFailed());
+        }
+    }
+
+    /** Migrates one active board's immutable runtime identity while retaining its chunk ownership. */
+    private void swapBoardIdentity(RouletteBoardStore.BoardEntry oldEntry,
+                                   RouletteBoardStore.BoardEntry newEntry) {
+        if (oldEntry == null || RouletteBoardStore.samePhysicalBoard(oldEntry, newEntry)
+                && oldEntry.discordEnabled() == newEntry.discordEnabled()) {
+            return;
+        }
+        if (!boardStore.isActive(oldEntry)) {
+            return;
+        }
+
+        boolean newOwnershipRegistered = false;
+        try {
+            deactivateBoard(oldEntry, RouletteTeardownPolicy.EndReason.RECYCLED, false);
+            boardStore.unregisterControl(oldEntry);
+            // Register the replacement before releasing the old identity. Overlapping board
+            // footprints are ref-counted by BoardStore, so this cannot drop a needed ticket.
+            takeChunkTickets(newEntry);
+            newOwnershipRegistered = true;
+            if (!allTouchedChunksLoaded(newEntry)) {
+                throw new IllegalStateException("replacement board footprint is not fully loaded");
+            }
+            RouletteSegmentScanner.ScanOutcome outcome =
+                    RouletteSegmentScanner.scan(newEntry.center(), newEntry.scanRadius(), plugin);
+            if (!outcome.isComplete()) {
+                throw new IllegalStateException("replacement board scan is incomplete: " + outcome.problems());
+            }
+            if (!activateBoard(newEntry, outcome)) {
+                throw new IllegalStateException("replacement board hitbox activation failed");
+            }
+            sessions.replaceDiscordBoardIdentity(oldEntry, newEntry);
+            if (loggedBrokenControl.remove(oldEntry)) {
+                loggedBrokenControl.add(newEntry);
+            }
+            if (loggedLostTicket.remove(oldEntry)) {
+                loggedLostTicket.add(newEntry);
+            }
+            releaseChunkTickets(oldEntry);
+        } catch (RuntimeException e) {
+            boardStore.unregisterControl(oldEntry);
+            if (newOwnershipRegistered) {
+                releaseChunkTickets(newEntry);
+            }
+            try {
+                if (!boardStore.isActive(oldEntry) && allTouchedChunksLoaded(oldEntry)) {
+                    RouletteSegmentScanner.ScanOutcome restore =
+                            RouletteSegmentScanner.scan(oldEntry.center(), oldEntry.scanRadius(), plugin);
+                    if (restore.isComplete() && !activateBoard(oldEntry, restore)) {
+                        throw new IllegalStateException("old board hitbox activation failed");
+                    }
+                }
+            } catch (RuntimeException restoreFailure) {
+                plugin.getLogger().log(Level.SEVERE, "Roulette: board identity rollback failed at "
+                        + describeLocation(oldEntry.center()), restoreFailure);
+            }
+            throw e;
+        }
+    }
+
+    private void logDiscordDesignationChange(Player admin, String action,
+                                             RouletteBoardStore.BoardEntry board) {
+        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+        if (eventLog != null) {
+            eventLog.log(LoggingPaths.ROULETTE_BOARD, () ->
+                    "[Roulette] " + ConsoleEventLog.actorLabel(admin.getName(), admin.getUniqueId())
+                            + " " + action + " Discord betting designation for "
+                            + describeLocation(board.center()));
+        }
     }
 
     // ---- Removal handler ----------------------------------------------------------------
@@ -647,8 +851,25 @@ public final class RouletteListener implements Listener {
      *  never race each other's ticket lifecycle. */
     private void takeChunkTickets(RouletteBoardStore.BoardEntry board) {
         World world = board.center().getWorld();
-        for (long key : boardStore.registerChunkOwnership(board)) {
-            world.addPluginChunkTicket(GeometryUtil.chunkX(key), GeometryUtil.chunkZ(key), plugin);
+        Set<Long> newlyOwned = boardStore.registerChunkOwnership(board);
+        Set<Long> taken = new HashSet<>();
+        try {
+            for (long key : newlyOwned) {
+                world.addPluginChunkTicket(GeometryUtil.chunkX(key), GeometryUtil.chunkZ(key), plugin);
+                taken.add(key);
+            }
+        } catch (RuntimeException e) {
+            for (long key : boardStore.unregisterChunkOwnership(board)) {
+                if (taken.contains(key)) {
+                    try {
+                        world.removePluginChunkTicket(GeometryUtil.chunkX(key), GeometryUtil.chunkZ(key), plugin);
+                    } catch (RuntimeException cleanup) {
+                        plugin.getLogger().log(Level.SEVERE, "Roulette: failed to roll back chunk ticket "
+                                + key + " for " + describeLocation(board.center()), cleanup);
+                    }
+                }
+            }
+            throw e;
         }
     }
 
@@ -657,7 +878,25 @@ public final class RouletteListener implements Listener {
     private void releaseChunkTickets(RouletteBoardStore.BoardEntry board) {
         World world = board.center().getWorld();
         for (long key : boardStore.unregisterChunkOwnership(board)) {
-            world.removePluginChunkTicket(GeometryUtil.chunkX(key), GeometryUtil.chunkZ(key), plugin);
+            try {
+                world.removePluginChunkTicket(GeometryUtil.chunkX(key), GeometryUtil.chunkZ(key), plugin);
+            } catch (RuntimeException e) {
+                plugin.getLogger().log(Level.SEVERE, "Roulette: failed to release chunk ticket " + key
+                        + " for " + describeLocation(board.center()), e);
+            }
+        }
+    }
+
+    private void reassertChunkTickets(RouletteBoardStore.BoardEntry board) {
+        World world = board.center().getWorld();
+        for (long key : RouletteBoardStore.chunkKeysTouchedBy(board)) {
+            try {
+                world.addPluginChunkTicket(GeometryUtil.chunkX(key), GeometryUtil.chunkZ(key), plugin);
+            } catch (RuntimeException e) {
+                plugin.getLogger().log(Level.SEVERE, "Roulette: failed to reassert chunk ticket " + key
+                        + " for " + describeLocation(board.center()), e);
+                throw e;
+            }
         }
     }
 

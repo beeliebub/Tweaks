@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.tests.core;
 
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.core.ConfigCommand;
+import me.beeliebub.tweaks.core.config.ConfigRegistry;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import me.beeliebub.tweaks.permissions.Permissions;
 import me.beeliebub.tweaks.profiles.WorldProfileTable;
@@ -150,5 +151,54 @@ class ConfigCommandTest {
 
         configCommand.onCommand(player, bukkitCmd, "config", new String[]{"world-profiles", "remove", "jass:doesnotexist"});
         MessageAssert.assertMessageSent(player, "not mapped");
+    }
+
+    @Test
+    void loggingListFilterPrintsOnlyLoggingCategories() {
+        PlayerMock player = server.addPlayer();
+        while (player.nextComponentMessage() != null) { /* drain join output */ }
+        player.addAttachment(plugin, Permissions.ADMIN_CONFIG, true);
+
+        configCommand.onCommand(player, bukkitCmd, "config", new String[]{"list", "logging"});
+
+        StringBuilder output = new StringBuilder();
+        net.kyori.adventure.text.Component message;
+        while ((message = player.nextComponentMessage()) != null) {
+            output.append(PlainTextComponentSerializer.plainText().serialize(message)).append('\n');
+        }
+        String text = output.toString();
+        List<String> headers = text.lines().filter(line -> line.startsWith("--- ")).toList();
+        assertEquals(ConfigRegistry.loggingCategories().size(), headers.size());
+        assertEquals(ConfigRegistry.loggingCategories().stream()
+                .map(category -> "--- " + category.displayName() + " ---").toList(), headers);
+        assertFalse(text.contains("--- General ---"));
+    }
+
+    @Test
+    void unfilteredListPreservesTheCompleteRegistryOrder() {
+        PlayerMock player = server.addPlayer();
+        while (player.nextComponentMessage() != null) { /* drain join output */ }
+        player.addAttachment(plugin, Permissions.ADMIN_CONFIG, true);
+
+        configCommand.onCommand(player, bukkitCmd, "config", new String[]{"list"});
+
+        List<String> headers = new java.util.ArrayList<>();
+        net.kyori.adventure.text.Component message;
+        while ((message = player.nextComponentMessage()) != null) {
+            String plain = PlainTextComponentSerializer.plainText().serialize(message);
+            if (plain.startsWith("--- ")) headers.add(plain);
+        }
+        assertEquals(ConfigRegistry.categories().stream()
+                .map(category -> "--- " + category.displayName() + " ---").toList(), headers);
+    }
+
+    @Test
+    void loggingListFilterIsSuggested() {
+        PlayerMock player = server.addPlayer();
+        player.nextComponentMessage();
+        player.addAttachment(plugin, Permissions.ADMIN_CONFIG, true);
+
+        assertTrue(configCommand.onTabComplete(player, bukkitCmd, "config",
+                new String[]{"list", "logg"}).contains("logging"));
     }
 }

@@ -85,6 +85,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Whack an Andrew](#whack-an-andrew)
   - [Blackjack](#blackjack)
   - [Roulette](#roulette)
+    - [Discord Betting](#discord-betting)
   - [Resource Hunt](#resource-hunt)
   - [Rewards](#rewards)
 - [Land Protection](#land-protection)
@@ -97,6 +98,7 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
 - [Commands Reference](#commands-reference)
 - [Permissions Reference](#permissions-reference)
 - [Configuration](#configuration)
+  - [Discord announcements and stat channels](#discord-announcements-and-stat-channels)
 - [Server Administration](#server-administration)
   - [Installation](#installation)
   - [Data Pack Requirement](#data-pack-requirement)
@@ -1184,9 +1186,11 @@ When you join, you'll see a message like:
 | `/house add\|remove\|set <amount>` | Adjust the casino house account. Admin permission required. |
 | `/house pay <player> <amount>` | Transfer house funds to an online or known offline player. Admin permission required. |
 
-Balance mutations reject non-finite or inexact values instead of silently rounding them. A casino
-stake that cannot be debited exactly is refused; a rejected payout, rakeback, or refund is routed
-to the House account and logged for recovery.
+Balances are whole-dollar values. `/balance set|add|remove` reject decimal inputs rather than
+rounding them, and a mutation is rejected without changing the balance when its result would leave
+the supported `±2^53` range. Legacy persisted fractions are floored on load; non-finite or
+out-of-range legacy values are clamped and logged. A rejected casino stake is refused; a rejected
+payout, rakeback, or refund is routed to the House account and logged for recovery.
 
 #### Lottery
 
@@ -1200,9 +1204,11 @@ growth into the fallback and advances the baseline without paying anyone; the ti
 
 The pot is paid from the House through a durable payment intent and house-payment journal; an
 unpaid draw keeps its entries and baseline, while an in-flight payment resumes from its retained
-House debit on the next startup. Only a committed draw removes the recorded entrants, so entries
-added during payment remain. The live fallback is stored with lottery state, resets to the configured
-base after a successful draw, and can be viewed or changed with `/lottery fallback`.
+House debit on the next startup. A successful payment completes the House journal before its
+recipient receipt is pruned; the ready-gated join sweep removes only receipts with no matching
+full-journal entry. Only a committed draw removes the recorded entrants, so entries added during
+payment remain. The live fallback is stored with lottery state, resets to the configured base after
+a successful draw, and can be viewed or changed with `/lottery fallback`.
 
 | Command | What it does |
 |---|---|
@@ -1211,6 +1217,12 @@ base after a successful draw, and can be viewed or changed with `/lottery fallba
 | `/lottery draw` | Draw and announce a winner. Admin permission required. |
 | `/lottery baseline <amount>` | Set the growth baseline. Admin permission required. |
 | `/lottery fallback [<amount>]` | View or set the live fallback floor. Admin permission required. |
+
+When DiscordSRV is installed and `discord.channel-id` is configured, each committed draw also
+posts a yellow winner card to that Discord channel. The card uses the winner's name and avatar;
+the bot needs **Manage Webhooks** for the channel. The announcement channel is addressed by its
+numeric ID and must not be added to DiscordSRV's `Channels:` map, which would make it a two-way
+chat bridge.
 
 ### Ranks
 
@@ -1386,9 +1398,11 @@ Both commands are player-only and only affect the executing player; if you're al
 
 Console event records are opt-in and console-only. Every `logging.*` switch in `config.yml` starts
 disabled, so enable only the event families you need. Use `/tconfig logging.<feature>.<event>
-<true|false>`, `/tconfig list logging-core` (or another logging category), or the `/tconfig gui`
-to manage them. A confirmed `/tconfig` save updates the running logger immediately; editing
-`config.yml` by hand while the server is running requires a restart.
+<true|false>`, `/tconfig list logging` to print all 20 logging categories, `/tconfig list
+logging-core` (or another logging category), or the `/tconfig gui`'s main-menu **Logging** tab.
+The GUI shows the 20 logging categories over two pages. A confirmed `/tconfig` save updates the
+running logger immediately; editing `config.yml` by hand while the server is running requires a
+restart.
 
 The logger covers economy, minigames, lottery, protection administration, permissions, ranks,
 teleports, player administration, profiles, item administration, death inventories, block logs,
@@ -1450,9 +1464,14 @@ The standard casino experience. Play against an automated dealer at tables with 
 - **Rules**: Standard 52-card deck (reshuffled every game); Dealer stands on all 17s; Blackjack pays 3:2.
 - **Dealer Mannequin**: A 'LimeLush' visual mannequin appears on the dealer side at game end. It celebrates on dealer wins and performs a death animation on player wins.
 - **Rakeback**: Losing hands grant a small percentage of the bet back, based on your [Rank](#ranks).
-- **Balance safety**: A stake that cannot be represented exactly is refused; rejected payouts or
-  rakeback are routed to the House account for recovery rather than discarded.
+- **Balance safety**: A stake whose whole-dollar debit would leave the supported balance range is
+  refused; rejected payouts or rakeback are routed to the House account for recovery rather than
+  discarded.
 - **Free/Practice Tables**: Admins can create tables with **bet 0** (use `free` or `0` as the bet argument). These tables display **"Bet: FREE"** on the hologram, perform no currency transfers, and skip rakeback entirely — ideal for learning the game.
+
+When DiscordSRV is installed and `discord.channel-id` is configured, each settled paid hand is
+included in a short grouped `diff` code block showing the player's signed net change. Pushes and
+free/practice hands produce no line. Inactivity forfeitures are reported as losses.
 
 #### General Mechanics
 
@@ -1478,16 +1497,49 @@ An in-world roulette wheel — a real physical build the server team constructed
 - **Bet families**: **Straight-up** on a single pocket (1-36, pays 36:1; pocket **0**/Green pays **50:1**), a **dozen/thirds** (1st/2nd/3rd twelve, pays 3:1), or a **colour** (red/black, pays 2:1). A win credits exactly `stake × odds` — your wagered stake itself is never returned on top of that, even on a win. Green **0** loses every dozen/colour bet — there is no odd/even, high/low, or column betting on this board.
 - **Labeled bets**: Every clickable segment shows a floating label with its bet description and odds (e.g. "Straight: 18 (Black)" — 36:1, "Dozen: 1st (1-12)" — 3:1, "Red"/"Black" — 2:1, "Straight: 0 (Green)" — 50:1, shown in green) for as long as the board is active. Labels hide during the spin and reappear once the result is shown. Colors alternate strictly by parity (odd = red, even = black).
 - **Color-coded segments**: Each clickable segment is itself a colored block matching its bet — red/black/green wool for straight-up and colour bets, grey/yellow/orange terracotta for the 1st/2nd/3rd dozen — so the betting area is visually readable at a glance. These also hide during the spin and reappear with the labels.
+- **Marker geometry**: Each colored `ItemDisplay` marker and its invisible clickable hitbox use the
+  same scale and center, so the visual target and interaction footprint line up. Markers use a
+  vertical billboard to face viewers; the hitboxes remain axis-aligned, so the display orientation
+  does not rotate the clickable box.
 - **Sticky stake**: Set your wager once with `/roulette stake <amount>`, then every segment you click wagers that amount. Multiple bets in the same round are allowed and stack — including clicking more than one physical segment of the same dozen, which places two independent bets.
 - **Shared round**: The first bet on an idle board opens a **30-second** betting window for everyone nearby — there's no host and no spin button for players. Once the window closes, the wheel spins, a ball orbits and settles into the winning pocket, and the round settles automatically.
 - **Bets are final**: There is no un-betting, no refund on quitting mid-round, and winnings are still credited to your balance even if you log off before the wheel stops.
-- **Balance safety**: A stake that cannot be represented exactly is refused; rejected winnings,
-  rakeback, or shutdown refunds are routed to the House account for recovery rather than discarded.
+- **Balance safety**: A stake whose whole-dollar debit would leave the supported balance range is
+  refused; rejected winnings, rakeback, or shutdown refunds are routed to the House account for
+  recovery rather than discarded.
 - **Settlement summary**: Your personal result message shows the amount wagered and the amount actually won (winnings only, not your returned stake) — e.g. a $100 stake winning at 36:1 shows wagered $100, won $3,600.
 - **Big win announcements**: If your winnings reach 8x your wager, the whole server is notified.
-- **House balance**: A hologram over each wheel shows the single server-wide house balance — the same account Blackjack's losses feed.
+- **House balance**: A hologram over each wheel shows the single server-wide house balance — the same
+  account Blackjack's losses and each Roulette player's net losses feed.
+
+When DiscordSRV is installed and `discord.channel-id` is configured, every bettor gets one grouped
+`diff` line showing their signed net change, including break-even results. A big-win event is not
+duplicated with a second Discord message. Discord settlement lines are emitted for money outcomes
+even when the wheel is settling during chunk unload or shutdown.
+
+#### Discord Betting
+
+The Discord commands are native Discord slash commands and do not collide with the in-game
+`/roulette` command. An administrator designates the one board used for Discord wagers with
+`/roulette setdiscord`; `/roulette cleardiscord` removes that designation. Linked players can then
+use `/balance`, `/bet`, `/roulette`, and `/mybets` in the configured `discord.betting-channel-id`.
+Account linking is handled by DiscordSRV (`/discord link` in game), and linked players may check
+their balance or bet while offline in Minecraft. `/bet` uses the same board min/max and cumulative
+exposure rules as physical betting. Each settled round begins its grouped results block with a
+header such as `@@ Roulette — 17 Black @@`, and the bettor receives an ephemeral follow-up with
+their mention, pocket, colour, and outcome.
+
+Commands are published after DiscordSRV is ready and are scoped to the guild that owns the
+configured betting text channel. A successful startup logs the channel and guild used for the
+publication. If the channel ID cannot be resolved or is not a text channel, the commands remain
+temporarily unfiltered while the plugin retries resolution every 30 seconds; the warning includes
+DiscordSRV's re-authorize URL. The bot needs the `applications.commands` OAuth scope in addition
+to the channel permissions listed below.
 
 #### Board Construction (Admin)
+
+- `/roulette setdiscord` begins the designation flow; right-click the board's spin control to expose that board to the native Discord betting commands.
+- `/roulette cleardiscord` clears the Discord betting designation directly. Both commands are refused while a round is in progress.
 
 - Stand near the physical wheel and run `/roulette createboard <min> <max>`, then right-click the button or lever that will act as the board's admin spin control.
 - `<min>`/`<max>` set the board's stake range; both must be whole numbers, `min` at least 1 and no greater than `max`.
@@ -1788,12 +1840,17 @@ When an action occurs, the system checks rules in this order:
 | `/blackjack removetable` | `tweaks.blackjack.removetable` | Remove a Blackjack table. |
 | `/roulette createboard <min> <max>` | `tweaks.roulette.createboard` | Begin Roulette board setup; right-click a button/lever to finalize. |
 | `/roulette removeboard` | `tweaks.roulette.removeboard` | Begin Roulette board removal; right-click the board's spin control. |
+| `/roulette setdiscord` | `tweaks.roulette.setdiscord` | Designate the board used by native Discord Roulette betting; right-click its spin control. |
+| `/roulette cleardiscord` | `tweaks.roulette.setdiscord` | Clear the current Discord Roulette betting designation. |
 | `/house <balance\|add\|remove\|set\|pay>` | `tweaks.admin.house` | View or administer the server-wide casino house account. |
 | `/lottery draw` | `tweaks.admin.lottery` | Draw the server-wide lottery and announce the winner. |
 | `/lottery baseline <amount>` | `tweaks.admin.lottery` | Set the lottery growth baseline. |
 | `/lottery fallback [<amount>]` | `tweaks.admin.lottery` | View or set the live lottery fallback floor. |
 | `/tconfig` / `/tconfig gui` | `tweaks.admin.config` | Open the admin config Dialog GUI (players only; console gets plain usage). |
 | `/tconfig list [category]` | `tweaks.admin.config` | Print every registered setting and its current value. |
+| `/tconfig list logging` | `tweaks.admin.config` | Print the 20 logging categories and their current values. |
+| `/tconfig list discord` | `tweaks.admin.config` | Print the Discord announcement, webhook, Roulette betting, grouping, and voice-stat settings. |
+| `/tconfig discord.<setting> <value>` | `tweaks.admin.config` | Edit a Discord setting; channel IDs accept a raw numeric ID or an empty value to disable that surface. |
 | `/tconfig max_homes <int>` | `tweaks.admin.config` | Set global max homes per player. |
 | `/tconfig max_chunks <int>` | `tweaks.admin.config` | Set global max chunk claims per player. |
 | `/tconfig egg_collector_drop_chance <0.0-100.0>` | `tweaks.admin.config` | Set the base Egg Collector drop chance. |
@@ -1889,6 +1946,7 @@ When an action occurs, the system checks rules in this order:
 | `tweaks.skyblock.bypass` | Bypasses Skyblock containment restrictions. |
 | `tweaks.roulette.createboard` | Allows starting the Roulette board setup flow. |
 | `tweaks.roulette.removeboard` | Allows starting the Roulette board removal flow. |
+| `tweaks.roulette.setdiscord` | Allows choosing or clearing the Roulette board exposed to Discord betting. |
 | `tweaks.roulette.forcespin` | Allows an admin's board-side control to force-close betting and spin immediately. |
 
 ---
@@ -1899,7 +1957,46 @@ The plugin generates a `config.yml` on first startup. Custom enchantments requir
 
 On every startup, any key present in the bundled default `config.yml` but missing from your live file is automatically added back with its default value (an admin-modified value is never overwritten, and an explicit empty list you've saved stays empty — only a genuinely absent key is filled in).
 
-A growing set of settings — spanning General, Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Xp Bottle, and Console Event Logging — is also editable at runtime without touching `config.yml` by hand, via `/tconfig`. Six have dedicated CLI forms (see the [Commands Reference](#commands-reference) table above); the rest use the generic `/tconfig <path> <value>` grammar. Run `/tconfig gui` in-game for a Dialog-based editor with the same categories, or `/tconfig list [category]` to print every registered setting and its current value from the console or in chat.
+A growing set of settings — spanning General, Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Xp Bottle, Discord, and Console Event Logging — is also editable at runtime without touching `config.yml` by hand, via `/tconfig`. Six have dedicated CLI forms (see the [Commands Reference](#commands-reference) table above); the rest use the generic `/tconfig <path> <value>` grammar. Run `/tconfig gui` in-game for a Dialog-based editor with the same categories and a main-menu **Logging** tab, or `/tconfig list [category]` to print every registered setting and its current value from the console or in chat. `/tconfig list logging` filters that output to the 20 logging categories; `/tconfig list discord` filters to the Discord settings.
+
+### Discord announcements and stat channels
+
+Discord integration is optional and requires DiscordSRV. Leave every Discord channel ID empty to
+disable that surface without log noise or Discord API traffic. The announcement channel is shared
+by lottery, Blackjack, and Roulette:
+
+- Lottery draws post a yellow winner card.
+- Paid Blackjack hands, inactivity forfeitures, and Roulette settlements are grouped into short
+  `diff` code blocks. Blackjack pushes/free hands are omitted; Roulette includes every bettor,
+  including a break-even result, and each line shows signed net change. Roulette blocks begin with
+  the unprefixed result header `@@ Roulette — N Colour @@`; the remaining lines are kept with that
+  header when a round spans multiple Discord messages.
+- Roulette result messages are posted as **House**. `discord.webhook-name` and
+  `discord.webhook-avatar-url` control casino announcements live; lottery winner cards keep the
+  winning player's skin avatar.
+- The House balance and lottery pot can be displayed in two separate voice-channel names. Names
+  refresh at most once per five minutes and unchanged values are not renamed, respecting Discord's
+  channel-rename rate limit. A lottery without a payable pot displays `Lottery Pot: waiting`.
+
+| Setting | Default | Description |
+|---|---:|---|
+| `discord.channel-id` | `""` | Numeric Discord text-channel ID for lottery/casino messages. |
+| `discord.webhook-name` | `House` | Display name used for casino and subjectless webhook messages; blank falls back to House. |
+| `discord.webhook-avatar-url` | `""` | Optional public avatar URL for casino and subjectless webhook messages. |
+| `discord.betting-channel-id` | `""` | Numeric Discord text-channel ID where the four native Roulette commands are accepted; its guild determines where those commands are published. |
+| `discord.betting-enabled` | `true` | Master switch for `/bet`; read-only Roulette commands remain available. |
+| `discord.house-channel-id` | `""` | Numeric Discord voice-channel ID for the House balance. |
+| `discord.lottery-channel-id` | `""` | Numeric Discord voice-channel ID for the lottery pot. |
+| `discord.group-window-seconds` | `2` | Settlement grouping window, bounded to 1–30 seconds. |
+| `discord.stat-refresh-seconds` | `300` | Voice-stat refresh interval, bounded to 300–3600 seconds. |
+
+Use quoted raw numeric IDs in `config.yml`; Discord snowflakes are too large for a safe YAML
+number. The announcement channel must not be added to DiscordSRV's `Channels:` map, because that
+map creates a two-way chat bridge. The bot needs the **`applications.commands`** OAuth scope,
+**Manage Webhooks** on the announcement channel, and **Manage Channel** on each configured voice
+channel. Incorrect IDs or permissions produce one startup warning after DiscordSRV is ready;
+empty IDs remain silent. `/tconfig` writes the same settings immediately, and its generic STRING
+editor accepts an empty value to disable a channel.
 
 ### Console logging settings
 

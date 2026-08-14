@@ -9,9 +9,12 @@ import org.junit.jupiter.api.Test;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -87,5 +90,37 @@ class ConfigRegistryTest {
                 }
             }
         }
+    }
+
+    @Test
+    void discordSettlementGroupWindowAllowsThirtySecondsButNotMore() {
+        ConfigSetting setting = ConfigRegistry.byPath("discord.group-window-seconds").orElseThrow();
+
+        assertEquals(1.0, setting.min());
+        assertEquals(30.0, setting.max());
+    }
+
+    @Test
+    void discordBridgeSettingsAreRegistered() {
+        assertTrue(ConfigRegistry.byPath("discord.webhook-name").isPresent());
+        assertTrue(ConfigRegistry.byPath("discord.webhook-avatar-url").isPresent());
+        assertTrue(ConfigRegistry.byPath("discord.betting-channel-id").isPresent());
+        assertTrue(ConfigRegistry.byPath("discord.betting-enabled").isPresent());
+    }
+
+    @Test
+    void menuGroupsPreserveTheFullRegistryOrder() {
+        List<ConfigCategory> main = ConfigRegistry.mainMenuCategories();
+        List<ConfigCategory> logging = ConfigRegistry.loggingCategories();
+        assertEquals(14, main.size(), "the main menu must retain all fourteen registered categories");
+        assertEquals(20, logging.size(), "logging categories must paginate as twenty categories over two pages");
+        assertFalse(main.stream().anyMatch(category -> category.group() == ConfigCategory.Group.LOGGING));
+        assertTrue(main.stream().allMatch(category -> category.group() == ConfigCategory.Group.MAIN));
+        assertTrue(logging.stream().allMatch(category -> category.group() == ConfigCategory.Group.LOGGING));
+        assertFalse(logging.isEmpty());
+
+        List<ConfigCategory> recombined = new ArrayList<>(main);
+        recombined.addAll(logging);
+        assertEquals(ConfigRegistry.categories(), recombined);
     }
 }

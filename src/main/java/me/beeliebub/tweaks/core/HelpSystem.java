@@ -614,6 +614,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 gray("Manage plugin configuration at runtime."),
                 cmd("/tconfig gui", "Open the admin config GUI (players only)."),
                 cmd("/tconfig list [category]", "Print every setting and its current value."),
+                cmd("/tconfig list logging", "Print the 20 logging categories and their current values."),
                 cmd("/tconfig max_homes <int>", "Set global max homes per player."),
                 cmd("/tconfig max_chunks <int>", "Set global max chunk claims per player."),
                 cmd("/tconfig egg_collector_drop_chance <%>", "Set base egg drop chance."),
@@ -622,6 +623,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/tconfig resourceitems <add|remove> <item>", "Manage resource world allowed items."),
                 cmd("/tconfig world-profiles <list|add|remove|edit>", "Manage world-key -> profile/tag/color mappings (see /help profiles)."),
                 cmd("/tconfig logging.<feature>.<event> <true|false>", "Toggle one console-only event record."),
+                white("The GUI main menu has a Logging tab with 20 categories over two pages."),
                 white("Logging records are disabled by default; a confirmed CLI/GUI save applies immediately, while hand edits require a restart."),
                 cmd("/tconfig <path> <value>", "Generic setter for any other registered setting (Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Xp Bottle categories)."),
                 white("Ranks: /ranks edit  ·  Permissions: /tprm  ·  Whack: /whack"),
@@ -812,6 +814,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("- Left: Hit, Middle: Start/Clear, Right: Stand."),
                 green("Dealer Mannequin: celebrates or mourns at game end."),
                 green("Practice tables (bet: FREE) available — no currency required."),
+                white("When Discord is configured, settled wins, losses, and forfeitures appear in grouped lines."),
                 red("Requirement: 'dqc.cards' resource pack.")
         ), Material.GREEN_WOOL, 33, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack_mechanics")));
 
@@ -839,17 +842,22 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 yellow("Green 0 loses every Dozen/Colour bet — no odd/even, high/low, or columns."),
                 yellow("A win pays exactly stake x odds — your wagered stake is never returned on top."),
                 white("Segments are color-coded blocks (red/black/green wool, dozen terracotta) with a floating odds label."),
+                white("Each colored marker and clickable hitbox share one scale and center; markers billboard vertically while hitboxes stay axis-aligned."),
                 aqua("How a round works:"),
                 white("The first bet on an idle wheel opens a 30-second window for everyone nearby."),
                 white("When it closes, the wheel spins, the ball settles, and the round pays out."),
                 red("Bets are final: no un-betting, no refund on quit."),
                 green("Winnings are credited to your balance even if you log off first."),
                 white("Your result message shows the amount wagered and the amount actually won."),
+                white("When Discord is configured, each settled bettor appears in the grouped settlement record."),
+                white("Discord betting uses native /balance, /bet, /roulette, and /mybets commands in the configured betting channel; linked accounts may bet while offline."),
                 gold("Winning 8x your wager or more announces it to the whole server!"),
                 gold("A hologram over the wheel shows the one server-wide house balance."),
                 red("Admin:"),
                 cmd("/roulette createboard <min> <max>", "Begin board setup; right-click the spin control to finalize."),
                 cmd("/roulette removeboard", "Begin board removal; right-click the target board's spin control."),
+                cmd("/roulette setdiscord", "Designate the board used by Discord betting; right-click its spin control."),
+                cmd("/roulette cleardiscord", "Clear the Discord betting designation directly."),
                 white("Right-click a registered board's spin control to force-close betting and spin now.")
         ), Material.RED_CONCRETE, 37, ColorUtil.HELP_GRAD_BLACKJACK, List.of("blackjack", "house")));
 
@@ -1094,7 +1102,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/balance set <player> <amount>", "Set a player's balance."),
                 cmd("/balance add <player> <amount>", "Grant funds."),
                 cmd("/balance remove <player> <amount>", "Deduct funds."),
-                white("Balance changes that cannot be represented exactly are rejected without changing the balance."),
+                white("Balances are whole-dollar values; decimal admin inputs and mutations outside the supported range are rejected without changing the balance."),
                 red("Permission: tweaks.admin.balance."),
                 white("Skyblock has a separate per-island wallet; see the Skyblock Shop & Wallet article.")
         ), Material.EMERALD, 22, ColorUtil.HELP_GRAD_ECONOMY, List.of("daily_rewards", "ranks", "lottery", "skyblock_shop")));
@@ -1112,6 +1120,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/lottery baseline <amount>", "Set the growth baseline."),
                 cmd("/lottery fallback [<amount>]", "View or set the live fallback floor."),
                 white("If payment is abandoned, entries and baseline stay unchanged. A retained payment resumes on the next startup; a stuck payment needs House reconciliation."),
+                white("When configured, the lottery voice channel displays the live payable pot or 'waiting'."),
                 red("Admin permission: " + Permissions.LOTTERY_ADMIN + ".")
         ), Material.CHEST, 21, ColorUtil.HELP_GRAD_ECONOMY, List.of("house", "balance")));
 
@@ -1121,6 +1130,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/house balance", "View the server-wide house balance."),
                 cmd("/house add|remove|set <amount>", "Adjust the account; only set may make it negative."),
                 cmd("/house pay <player> <amount>", "Transfer house funds to an online or known offline player."),
+                white("When configured, a Discord voice channel displays the live House balance."),
                 red("Permission: " + Permissions.HOUSE_ADMIN + ".")
         ), Material.GOLD_BLOCK, 23, ColorUtil.HELP_GRAD_ECONOMY, List.of("balance", "ranks", "roulette", "lottery"), Permissions.HOUSE_ADMIN));
 
