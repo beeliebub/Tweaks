@@ -6,6 +6,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.List;
+import java.util.Objects;
 
 /** Owns optional Discord integration tasks and their shutdown ordering. */
 public final class DiscordBootstrap {
@@ -13,12 +14,14 @@ public final class DiscordBootstrap {
     private static final long PREFLIGHT_PERIOD_TICKS = 600L;
     private static final int MAX_PREFLIGHT_ATTEMPTS = 10;
     private static final long SHUTDOWN_FLUSH_TIMEOUT_MILLIS = 2_000L;
+    private static final int SLASH_COMMAND_RETRY_SECONDS = 30;
 
     private static DiscordAnnouncer announcer = DiscordAnnouncer.NOOP;
     private static BukkitTask preflightTask;
     private static BukkitTask settlementFlushTask;
     private static BukkitTask statRefreshTask;
     private static DiscordStatChannels statChannels;
+    private static int slashCommandRetrySeconds;
 
     private DiscordBootstrap() {
     }
@@ -44,19 +47,24 @@ public final class DiscordBootstrap {
     public static void start(Tweaks plugin, Services services) {
         if (!(announcer instanceof DiscordSrvAnnouncer srv)) return;
 
+        srv.refreshConfigSnapshot();
         try {
             srv.registerRouletteBridge(services.rouletteListener(), services.economyManager());
         } catch (Throwable throwable) {
             plugin.getLogger().log(java.util.logging.Level.WARNING,
                     "Discord Roulette slash commands could not be registered; outbound Discord "
-                            + "announcements remain enabled.", throwable);
+                    + "announcements remain enabled.", throwable);
         }
+
+        srv.subscribeReadyListener();
+        if (srv.isDiscordReady()) srv.pushSlashCommands();
 
         schedulePreflight(plugin, srv);
 
         settlementFlushTask = Bukkit.getScheduler().runTaskTimer(plugin,
                 () -> {
                     try {
+                        refreshSlashCommands(srv);
                         flushSettlements(plugin, srv, false);
                     } catch (Throwable throwable) {
                         plugin.getLogger().log(java.util.logging.Level.WARNING,
@@ -67,6 +75,26 @@ public final class DiscordBootstrap {
         statChannels = new DiscordStatChannels(plugin, services.houseAccount(),
                 services.lotteryManager(), srv);
         scheduleStatRefresh(plugin);
+    }
+
+    private static void refreshSlashCommands(DiscordSrvAnnouncer srv) {
+        srv.refreshConfigSnapshot();
+        String configuredChannelId = srv.configSnapshot().bettingChannelId();
+        boolean channelChanged = !Objects.equals(configuredChannelId, srv.lastPushedChannelId());
+        if (channelChanged) {
+            slashCommandRetrySeconds = 0;
+            srv.pushSlashCommands();
+            return;
+        }
+        if (!srv.lastPushResolvedGuild()) {
+            slashCommandRetrySeconds++;
+            if (slashCommandRetrySeconds >= SLASH_COMMAND_RETRY_SECONDS) {
+                slashCommandRetrySeconds = 0;
+                srv.pushSlashCommands();
+            }
+        } else {
+            slashCommandRetrySeconds = 0;
+        }
     }
 
     private static void scheduleStatRefresh(Tweaks plugin) {
@@ -146,10 +174,17 @@ public final class DiscordBootstrap {
             statRefreshTask = null;
         }
         if (announcer instanceof DiscordSrvAnnouncer srv) {
+            try {
+                srv.unsubscribeReadyListener();
+            } catch (Throwable throwable) {
+                plugin.getLogger().log(java.util.logging.Level.WARNING,
+                        "Discord Roulette ready listener unsubscribe failed", throwable);
+            }
             srv.unregisterRouletteBridge();
             flushSettlementsOnShutdown(plugin, srv);
             srv.clearRouletteBridge();
         }
+        slashCommandRetrySeconds = 0;
         statChannels = null;
         announcer = DiscordAnnouncer.NOOP;
     }
@@ -170,8 +205,10 @@ public final class DiscordBootstrap {
         List<String> blocks = hasBlocks ? srv.drainSettlementBlocks() : List.of();
 
         String channelId = srv.configuredAnnouncementChannel();
+        String webhookName = srv.configuredWebhookName();
+        String webhookAvatarUrl = srv.configuredWebhookAvatarUrl();
         Thread worker = new Thread(() -> {
-            srv.deliverSettlementBlocks(blocks, channelId);
+            srv.deliverSettlementBlocks(blocks, channelId, webhookName, webhookAvatarUrl);
             srv.flushRouletteFollowUps();
         },
                 "Tweaks-Discord-shutdown-flush");

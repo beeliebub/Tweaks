@@ -978,6 +978,13 @@ exposure rules as physical betting. Each settled round begins its grouped result
 header such as `@@ Roulette — 17 Black @@`, and the bettor receives an ephemeral follow-up with
 their mention, pocket, colour, and outcome.
 
+Commands are published after DiscordSRV is ready and are scoped to the guild that owns the
+configured betting text channel. A successful startup logs the channel and guild used for the
+publication. If the channel ID cannot be resolved or is not a text channel, the commands remain
+temporarily unfiltered while the plugin retries resolution every 30 seconds; the warning includes
+DiscordSRV's re-authorize URL. The bot needs the `applications.commands` OAuth scope in addition
+to the channel permissions listed below.
+
 #### Board Construction (Admin)
 
 - `/roulette setdiscord` begins the designation flow; right-click the board's spin control to expose that board to the native Discord betting commands.
@@ -1400,7 +1407,7 @@ by lottery, Blackjack, and Roulette:
 | `discord.channel-id` | `""` | Numeric Discord text-channel ID for lottery/casino messages. |
 | `discord.webhook-name` | `House` | Display name used for casino and subjectless webhook messages; blank falls back to House. |
 | `discord.webhook-avatar-url` | `""` | Optional public avatar URL for casino and subjectless webhook messages. |
-| `discord.betting-channel-id` | `""` | Numeric Discord text-channel ID where the four native Roulette commands are accepted. |
+| `discord.betting-channel-id` | `""` | Numeric Discord text-channel ID where the four native Roulette commands are accepted; its guild determines where those commands are published. |
 | `discord.betting-enabled` | `true` | Master switch for `/bet`; read-only Roulette commands remain available. |
 | `discord.house-channel-id` | `""` | Numeric Discord voice-channel ID for the House balance. |
 | `discord.lottery-channel-id` | `""` | Numeric Discord voice-channel ID for the lottery pot. |
@@ -1409,10 +1416,11 @@ by lottery, Blackjack, and Roulette:
 
 Use quoted raw numeric IDs in `config.yml`; Discord snowflakes are too large for a safe YAML
 number. The announcement channel must not be added to DiscordSRV's `Channels:` map, because that
-map creates a two-way chat bridge. The bot needs **Manage Webhooks** on the announcement channel
-and **Manage Channel** on each configured voice channel. Incorrect IDs or permissions produce one
-startup warning after DiscordSRV is ready; empty IDs remain silent. `/tconfig` writes the same
-settings immediately, and its generic STRING editor accepts an empty value to disable a channel.
+map creates a two-way chat bridge. The bot needs the **`applications.commands`** OAuth scope,
+**Manage Webhooks** on the announcement channel, and **Manage Channel** on each configured voice
+channel. Incorrect IDs or permissions produce one startup warning after DiscordSRV is ready;
+empty IDs remain silent. `/tconfig` writes the same settings immediately, and its generic STRING
+editor accepts an empty value to disable a channel.
 
 ### Console logging settings
 

@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.discord;
 
 import github.scarsz.discordsrv.DiscordSRV;
 import github.scarsz.discordsrv.dependencies.jda.api.EmbedBuilder;
+import github.scarsz.discordsrv.dependencies.jda.api.JDA;
 import github.scarsz.discordsrv.dependencies.jda.api.Permission;
 import github.scarsz.discordsrv.dependencies.jda.api.entities.MessageEmbed;
 import github.scarsz.discordsrv.dependencies.jda.api.entities.TextChannel;
@@ -21,8 +22,14 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
 
     private final Tweaks plugin;
     private final SettlementLineBuffer settlementBuffer;
+    private final SlashCommandPushPolicy slashCommandPushPolicy = new SlashCommandPushPolicy();
     private String bufferedChannelId;
     private DiscordRouletteBridge rouletteBridge;
+    private DiscordReadyListener readyListener;
+    private volatile DiscordConfigSnapshot configSnapshot = DiscordConfigSnapshot.from(null);
+    private volatile String lastPushedChannelId;
+    private volatile boolean lastPushResolvedGuild;
+    private String lastSlashPreflightReport;
 
     DiscordSrvAnnouncer(Tweaks plugin) {
         this.plugin = plugin;
@@ -33,19 +40,14 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
 
     void registerRouletteBridge(me.beeliebub.tweaks.minigames.roulette.RouletteListener roulette,
                                 me.beeliebub.tweaks.economy.EconomyManager economy) {
-        DiscordRouletteBridge bridge = new DiscordRouletteBridge(plugin, roulette, economy);
+        DiscordRouletteBridge bridge = new DiscordRouletteBridge(plugin, roulette, economy,
+                this::configSnapshot);
         try {
             DiscordSRV.api.addSlashCommandProvider(bridge);
-            DiscordSRV.api.updateSlashCommands();
             rouletteBridge = bridge;
         } catch (Throwable throwable) {
-            try {
-                DiscordSRV.api.removeSlashCommandProvider(bridge);
-                DiscordSRV.api.updateSlashCommands();
-            } catch (Throwable cleanup) {
-                logFailure("Discord Roulette slash-command rollback failed", cleanup);
-            }
-            throw new IllegalStateException("Discord Roulette slash-command registration failed", throwable);
+            rouletteBridge = null;
+            logFailure("Discord Roulette slash-command provider registration failed", throwable);
         }
     }
 
@@ -54,9 +56,136 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
         if (bridge == null) return;
         try {
             DiscordSRV.api.removeSlashCommandProvider(bridge);
-            DiscordSRV.api.updateSlashCommands();
         } catch (Throwable throwable) {
             logFailure("Discord Roulette slash-command removal failed", throwable);
+        } finally {
+            lastPushedChannelId = null;
+            lastPushResolvedGuild = false;
+            pushSlashCommands();
+        }
+    }
+
+    void subscribeReadyListener() {
+        if (readyListener != null) return;
+        DiscordReadyListener listener = new DiscordReadyListener(plugin, this);
+        try {
+            DiscordSRV.api.subscribe(listener);
+            readyListener = listener;
+        } catch (Throwable throwable) {
+            logFailure("Discord Roulette ready listener subscription failed", throwable);
+        }
+    }
+
+    void unsubscribeReadyListener() {
+        DiscordReadyListener listener = readyListener;
+        readyListener = null;
+        if (listener != null) DiscordSRV.api.unsubscribe(listener);
+    }
+
+    void refreshConfigSnapshot() {
+        configSnapshot = DiscordConfigSnapshot.from(
+                plugin.getConfig().getConfigurationSection("discord"));
+    }
+
+    DiscordConfigSnapshot configSnapshot() {
+        return configSnapshot;
+    }
+
+    boolean isDiscordReady() {
+        return DiscordSRV.isReady;
+    }
+
+    String lastPushedChannelId() {
+        return lastPushedChannelId;
+    }
+
+    boolean lastPushResolvedGuild() {
+        return lastPushResolvedGuild;
+    }
+
+    synchronized SlashCommandPushResult pushSlashCommands() {
+        try {
+            DiscordConfigSnapshot snapshot = configSnapshot();
+            boolean ready = DiscordSRV.isReady;
+            var jda = ready ? DiscordSRV.getPlugin().getJda() : null;
+            int guildCount = jda == null ? 0 : jda.getGuilds().size();
+            SlashCommandPushPolicy.Decision decision = slashCommandPushPolicy.decide(
+                    ready, jda != null, guildCount, snapshot.bettingChannelId(),
+                    lastPushedChannelId, lastPushResolvedGuild);
+            if (decision != SlashCommandPushPolicy.Decision.PUSH) {
+                return new SlashCommandPushResult(statusFor(decision), null);
+            }
+
+            DiscordRouletteBridge bridge = rouletteBridge;
+            if (bridge == null) {
+                return new SlashCommandPushResult(SlashCommandPushStatus.SKIPPED_NO_PROVIDER, null);
+            }
+            SlashCommandPreflight preflight = resolveSlashCommandPreflight(snapshot.bettingChannelId(), jda);
+            bridge.setGuildResolution(preflight.guildId());
+
+            DiscordSRV.api.updateSlashCommands();
+            lastPushedChannelId = snapshot.bettingChannelId();
+            lastPushResolvedGuild = preflight != null && preflight.resolvesGuild();
+            if (preflight != null) reportSlashCommandPreflight(preflight);
+            return new SlashCommandPushResult(SlashCommandPushStatus.PUSHED, preflight);
+        } catch (Throwable throwable) {
+            logFailure("Discord Roulette slash-command push failed", throwable);
+            return new SlashCommandPushResult(SlashCommandPushStatus.FAILED, null);
+        }
+    }
+
+    private SlashCommandPushStatus statusFor(SlashCommandPushPolicy.Decision decision) {
+        return switch (decision) {
+            case PUSH -> SlashCommandPushStatus.PUSHED;
+            case SKIP_NOT_READY -> SlashCommandPushStatus.SKIPPED_NOT_READY;
+            case SKIP_NO_GUILDS -> SlashCommandPushStatus.SKIPPED_NO_GUILDS;
+            case SKIP_UNCHANGED -> SlashCommandPushStatus.SKIPPED_UNCHANGED;
+        };
+    }
+
+    private SlashCommandPreflight resolveSlashCommandPreflight(String channelId, JDA jda) {
+        if (channelId.isBlank()) return SlashCommandPreflight.disabled();
+        if (jda == null) return SlashCommandPreflight.notReady(channelId);
+
+        try {
+            var guildChannel = jda.getGuildChannelById(channelId);
+            if (guildChannel == null) {
+                return unresolvedSlashChannel(channelId);
+            }
+            if (!(guildChannel instanceof TextChannel channel)) {
+                return SlashCommandPreflight.nonText(channelId,
+                        "Discord Roulette betting channel " + channelId + " resolves to a non-text channel ("
+                                + guildChannel.getClass().getSimpleName() + "); choose a guild text channel.");
+            }
+            return SlashCommandPreflight.success(channelId, channel.getName(),
+                    channel.getGuild().getId(), channel.getGuild().getName());
+        } catch (Throwable throwable) {
+            return unresolvedSlashChannel(channelId);
+        }
+    }
+
+    private SlashCommandPreflight unresolvedSlashChannel(String channelId) {
+        return SlashCommandPreflight.unresolved(channelId,
+                "Discord Roulette slash commands could not resolve betting channel " + channelId
+                        + "; verify the channel ID and the bot's guild authorization, including the "
+                        + "applications.commands scope (https://scarsz.me/authorize).");
+    }
+
+    private void reportSlashCommandPreflight(SlashCommandPreflight report) {
+        String state = report.status() + "|" + report.channelId() + "|" + report.guildId()
+                + "|" + report.problem();
+        if (state.equals(lastSlashPreflightReport)) return;
+        lastSlashPreflightReport = state;
+        switch (report.status()) {
+            case DISABLED -> plugin.getLogger().info(
+                    "Discord Roulette slash commands are disabled because discord.betting-channel-id is blank.");
+            case SUCCESS -> plugin.getLogger().info("Discord Roulette slash commands are configured for #"
+                    + report.channelName() + " (" + report.channelId() + ") in guild "
+                    + report.guildName() + " (" + report.guildId() + ").");
+            case UNRESOLVED, NON_TEXT -> plugin.getLogger().warning(report.problem());
+            case NOT_READY -> {
+                // A not-ready report is not emitted because the push guard handles that state first.
+            }
         }
     }
 
@@ -83,13 +212,15 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
             if (channelId.isBlank() || !DiscordSRV.isReady) return;
             TextChannel channel = DiscordUtil.getTextChannelById(channelId);
             if (channel == null) return;
+            String webhookName = configuredWebhookName();
+            String webhookAvatarUrl = configuredWebhookAvatarUrl();
 
             MessageEmbed embed = new EmbedBuilder()
                     .setDescription(message)
                     .setColor(color)
                     .build();
             if (subject != null) {
-                WebhookUtil.deliverMessage(channel, subject, configuredWebhookName(), "", embed);
+                WebhookUtil.deliverMessage(channel, subject, webhookName, "", embed);
                 return;
             }
 
@@ -98,7 +229,7 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
                     // This overload resolves or creates the channel webhook before its own
                     // scheduleAsync flag is consulted, so it must never be called on the server
                     // thread when the per-channel webhook cache is cold.
-                    WebhookUtil.deliverMessage(channel, configuredWebhookName(), configuredWebhookAvatarUrl(), "", embed);
+                    WebhookUtil.deliverMessage(channel, webhookName, webhookAvatarUrl, "", embed);
                 } catch (Throwable throwable) {
                     logFailure("Discord announcement delivery failed", throwable);
                 }
@@ -230,14 +361,16 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
             if (channelId.isBlank() || !DiscordSRV.isReady) return;
             TextChannel channel = DiscordUtil.getTextChannelById(channelId);
             if (channel == null) return;
+            String webhookName = configuredWebhookName();
+            String webhookAvatarUrl = configuredWebhookAvatarUrl();
             if (synchronous) {
-                WebhookUtil.deliverMessage(channel, configuredWebhookName(), configuredWebhookAvatarUrl(),
+                WebhookUtil.deliverMessage(channel, webhookName, webhookAvatarUrl,
                         block, (MessageEmbed) null);
                 return;
             }
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
                 try {
-                    WebhookUtil.deliverMessage(channel, configuredWebhookName(), configuredWebhookAvatarUrl(),
+                    WebhookUtil.deliverMessage(channel, webhookName, webhookAvatarUrl,
                             block, (MessageEmbed) null);
                 } catch (Throwable throwable) {
                     logFailure("Discord settlement delivery failed", throwable);
@@ -248,15 +381,16 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
         }
     }
 
-    void deliverSettlementBlocks(List<String> blocks, String channelId) {
+    void deliverSettlementBlocks(List<String> blocks, String channelId,
+                                String webhookName, String webhookAvatarUrl) {
         try {
             if (channelId.isBlank() || !DiscordSRV.isReady) return;
             TextChannel channel = DiscordUtil.getTextChannelById(channelId);
             if (channel == null) return;
             for (String block : blocks) {
                 try {
-                WebhookUtil.deliverMessage(channel, configuredWebhookName(), configuredWebhookAvatarUrl(),
-                        block, (MessageEmbed) null);
+                    WebhookUtil.deliverMessage(channel, webhookName, webhookAvatarUrl,
+                            block, (MessageEmbed) null);
                 } catch (Throwable throwable) {
                     logFailure("Discord shutdown settlement delivery failed", throwable);
                 }
@@ -361,6 +495,54 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
         }
         static VoicePreflight ok(String key, String id, String name) {
             return new VoicePreflight(key, id, true, null, name);
+        }
+    }
+
+    enum SlashCommandPushStatus {
+        PUSHED,
+        SKIPPED_NOT_READY,
+        SKIPPED_NO_GUILDS,
+        SKIPPED_UNCHANGED,
+        SKIPPED_NO_PROVIDER,
+        FAILED
+    }
+
+    record SlashCommandPushResult(SlashCommandPushStatus status, SlashCommandPreflight preflight) {
+    }
+
+    record SlashCommandPreflight(Status status, String channelId, String problem,
+                                 String channelName, String guildId, String guildName) {
+        static SlashCommandPreflight disabled() {
+            return new SlashCommandPreflight(Status.DISABLED, "", null, null, null, null);
+        }
+
+        static SlashCommandPreflight notReady(String id) {
+            return new SlashCommandPreflight(Status.NOT_READY, id, null, null, null, null);
+        }
+
+        static SlashCommandPreflight unresolved(String id, String problem) {
+            return new SlashCommandPreflight(Status.UNRESOLVED, id, problem, null, null, null);
+        }
+
+        static SlashCommandPreflight nonText(String id, String problem) {
+            return new SlashCommandPreflight(Status.NON_TEXT, id, problem, null, null, null);
+        }
+
+        static SlashCommandPreflight success(String id, String channelName,
+                                             String guildId, String guildName) {
+            return new SlashCommandPreflight(Status.SUCCESS, id, null, channelName, guildId, guildName);
+        }
+
+        boolean resolvesGuild() {
+            return status == Status.SUCCESS && guildId != null && !guildId.isBlank();
+        }
+
+        enum Status {
+            DISABLED,
+            NOT_READY,
+            UNRESOLVED,
+            NON_TEXT,
+            SUCCESS
         }
     }
 }

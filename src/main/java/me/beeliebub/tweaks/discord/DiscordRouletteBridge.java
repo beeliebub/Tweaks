@@ -23,12 +23,14 @@ import org.bukkit.Bukkit;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 
 /** Optional inbound DiscordSRV slash-command provider for Roulette. */
@@ -39,18 +41,28 @@ final class DiscordRouletteBridge implements SlashCommandProvider {
     private final Tweaks plugin;
     private final RouletteListener roulette;
     private final EconomyManager economy;
-    private final Set<PluginSlashCommand> commands = new HashSet<>();
+    private final Supplier<DiscordConfigSnapshot> configSnapshot;
     private final Map<String, Long> betCooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, InteractionHook> pendingBetHooks = new ConcurrentHashMap<>();
     private final Set<CompletableFuture<Void>> followUps = new CopyOnWriteArraySet<>();
+    private volatile String resolvedGuildId;
+    private volatile boolean guildResolved;
 
-    DiscordRouletteBridge(Tweaks plugin, RouletteListener roulette, EconomyManager economy) {
+    DiscordRouletteBridge(Tweaks plugin, RouletteListener roulette, EconomyManager economy,
+                          Supplier<DiscordConfigSnapshot> configSnapshot) {
         this.plugin = plugin;
         this.roulette = roulette;
         this.economy = economy;
-        commands.add(new PluginSlashCommand(plugin, new CommandData("balance", "Show your balance")));
-        commands.add(new PluginSlashCommand(plugin, new CommandData("roulette", "Show Roulette status")));
-        commands.add(new PluginSlashCommand(plugin, new CommandData("mybets", "Show your current Roulette bets")));
+        this.configSnapshot = Objects.requireNonNull(configSnapshot, "configSnapshot");
+    }
+
+    @Override
+    public Set<PluginSlashCommand> getSlashCommands() {
+        Set<PluginSlashCommand> commands = new HashSet<>();
+        commands.add(command(new CommandData("balance", "Show your balance")));
+        commands.add(command(new CommandData("roulette", "Show Roulette status")));
+        commands.add(command(new CommandData("mybets", "Show your current Roulette bets")));
+
         OptionData amount = new OptionData(OptionType.INTEGER, "amount", "Wager amount", true)
                 .setMinValue(1);
         OptionData pocket = new OptionData(OptionType.INTEGER, "pocket", "Straight-up pocket 0-36", false)
@@ -61,12 +73,24 @@ final class DiscordRouletteBridge implements SlashCommandProvider {
                 .addChoice("red", "red").addChoice("black", "black");
         CommandData bet = new CommandData("bet", "Place a Roulette bet")
                 .addOptions(amount, pocket, dozen, color);
-        commands.add(new PluginSlashCommand(plugin, bet));
+        commands.add(command(bet));
+        return Set.copyOf(commands);
     }
 
-    @Override
-    public Set<PluginSlashCommand> getSlashCommands() {
-        return Set.copyOf(commands);
+    private PluginSlashCommand command(CommandData data) {
+        PluginSlashCommand command = new PluginSlashCommand(plugin, data);
+        if (guildResolved) command.addGuildFilter(resolvedGuildId);
+        return command;
+    }
+
+    void setGuildResolution(String guildId) {
+        if (guildId == null || guildId.isBlank()) {
+            guildResolved = false;
+            resolvedGuildId = null;
+            return;
+        }
+        resolvedGuildId = guildId;
+        guildResolved = true;
     }
 
     @SlashCommand(path = "balance", deferReply = true, deferEphemeral = true,
@@ -98,7 +122,7 @@ final class DiscordRouletteBridge implements SlashCommandProvider {
     @SlashCommand(path = "bet", deferReply = true, deferEphemeral = true,
             ignoreAcknowledged = true)
     public void bet(SlashCommandEvent event) {
-        if (!plugin.getConfig().getBoolean("discord.betting-enabled", true)) {
+        if (!configSnapshot.get().bettingEnabled()) {
             reply(event, Messages.ROULETTE_DISCORD_COMMANDS.bettingDisabled());
             return;
         }
@@ -145,6 +169,8 @@ final class DiscordRouletteBridge implements SlashCommandProvider {
             reply(event, Messages.ROULETTE_DISCORD_COMMANDS.accountNotLinked());
             return;
         }
+        // plugin.isEnabled() is a plain boolean fast path; the scheduled runTask call below is
+        // the authoritative guard when a plugin is disabled during dispatch.
         if (!plugin.isEnabled() || roulette == null) {
             reply(event, Messages.ROULETTE_DISCORD_COMMANDS.serverRestarting());
             return;
@@ -174,7 +200,7 @@ final class DiscordRouletteBridge implements SlashCommandProvider {
     }
 
     private boolean channelAllowed(SlashCommandEvent event) {
-        String configured = plugin.getConfig().getString("discord.betting-channel-id", "");
+        String configured = configSnapshot.get().bettingChannelId();
         return configured != null && !configured.isBlank()
                 && configured.trim().equals(event.getChannel().getId());
     }
