@@ -45,6 +45,11 @@ A Paper plugin that adds custom enchantments, an enchantment quality system, sep
   - [Tab List](#tab-list)
   - [Help Menu](#help-menu)
   - [XP Storage Bottles](#xp-storage-bottles)
+  - [Tool XP and Mending](#tool-xp-and-mending)
+  - [Cash Items](#cash-items)
+  - [Durability and Repair Kits](#durability-and-repair-kits)
+  - [Augments](#augments)
+  - [Rename and Tool Lockouts](#rename-and-tool-lockouts)
   - [Disenchanting Bundle](#disenchanting-bundle)
   - [Economy](#economy)
     - [Lottery](#lottery)
@@ -182,7 +187,10 @@ The spawn location is set by creating a warp named "spawn" using `/setwarp spawn
 
 All custom enchantments are provided by a **server-side data pack** and resolved by the plugin at startup. They appear on tools as normal enchantments and can be obtained however the data pack defines (enchanting table, villager trades, loot tables, etc.).
 
-Tools with the Spawner Pickup or Egg Collector enchantments **cannot be used in anvils** — this is intentional to prevent repair/combination exploits.
+Anvils and grindstones are fully locked for ordinary players to prevent repair, stripping, and
+augment-combination exploits. Staff with `tweaks.tools.anvilbypass` can open them for
+administration. The same guard blocks the vanilla 2x2/crafting-grid combine path for damaged
+augmented or quality tools while leaving plain unaugmented tools usable.
 
 ### Telekinesis
 
@@ -582,6 +590,76 @@ Store your experience levels for later use or trade by brewing **Experience Poti
 
 This system ensures that experience can be safely stored and transferred without loss, using a clean, vanilla-friendly brewing mechanic.
 
+### Tool XP and Mending
+
+The plugin can remove XP from mob drops, including the Ender Dragon, while preserving player-death
+and other non-mob XP sources. Custom XP rolls are independent for mature crops, leaves broken by a
+player, leaf decay, and configured stone materials. Each chance and the XP amount are editable
+under `/tconfig xp`.
+
+Placed leaves and configured stone are marked in the chunk PDC and do not award custom XP until the
+configured taint TTL expires. This prevents placed blocks from being used as an XP loop. Replanted
+crops are rolled once, not once per replant callback.
+
+When Mending is enabled, XP collected by a player carrying Mending in either hand or armor is
+converted to dollars at the configured rate. The XP is consumed only after the economy accepts the
+credit. The enchantment key is resolved from the live `xp.mending.enchantment-key` setting.
+
+### Cash Items
+
+Datapack-issued cash items are recognized by the configured `cash` PDC key under the Tweaks
+namespace. A BYTE, SHORT, INTEGER, or LONG value is accepted; the complete stack is converted on
+pickup, trade result, click, drag, cursor, and plugin/hopper ingress into a player inventory.
+
+Missing, malformed, fractional, negative, zero, overflowed, or economy-rejected values leave the
+item in place. The bridge is controlled by `/tconfig tools.cash-item.enabled` and
+`/tconfig tools.cash-item.pdc-key`. Datapack item models and item creation remain the server
+owner's responsibility.
+
+### Durability and Repair Kits
+
+Every damageable item is lazily stamped with a custom durability pool. The initial maximum is the
+vanilla maximum multiplied by the live repair-kit multiplier (default `3.0`); the multiplier is
+anchored per item. Each Repair Kit advances the item one tier and applies the configured percentage
+step to its maximum. Tier 9 is the default maximum and cannot be repaired further.
+
+With never-break enabled, spent tools remain in the inventory but cannot mine, attack, protect the
+player with armor, glide with elytra, or use bows/rods. Area enchantments charge the same custom
+durability and check land protection for every collateral block.
+
+Repair Kits are craftable from the live `/tconfig tools.repair-kit.recipe` nine-cell grid. The
+recipe can be shaped or shapeless and is rejected if invalid or if its ingredient signature
+collides with an existing recipe. Right-click a kit to open a paginated menu of all storage,
+armor, and offhand damageable items; selecting one repairs it and consumes exactly one kit. Admins
+can use `/repairkit give` and `/repairkit debug`.
+
+### Augments
+
+Enchanting-table results and enchanted books are diverted into individual Augment Gems. A plain
+Book is valid input. Gems are PDC-marked, rare, glinting, stack to 64, and carry one registry
+enchantment plus its level. A gem right-click and `/augment` open the same two-screen hub.
+
+The item ledger stores purchased slots and attached entries in PDC. Slot dots use `◌` for
+un-purchased, `○` for purchased, and `●` for occupied. Quality costs 1/2/3/4/5 slots from no
+quality through Legendary; quality exclusivity is always enforced and vanilla exclusivity is
+configurable. Turning an augment off removes its active enchantment but keeps its slot occupied.
+
+Existing enchantments migrate once, on first `/augment` use, into gems without granting free
+slots. Migration and all multi-gem conversions refuse before mutating when the player's inventory
+cannot hold every generated gem. A lore-bearing Disenchanting Bundle is the destructive recovery
+path: it migrates legacy enchantments first, applies the 100/80/60/40/20/0% recovery ladder, and
+destroys the source item and bundle.
+
+### Rename and Tool Lockouts
+
+`/rename <text...>` is a free, public command for the main-hand item. It accepts the same legacy
+`&` and hex color syntax as other item editing commands, measures the plain-text result against
+the live `tools.rename.max-length` (default 50), and resets the item when run without arguments.
+
+Opening an anvil or grindstone is cancelled unless the player has
+`tweaks.tools.anvilbypass`. Plain damaged tools still combine in the crafting grid; augmented or
+quality tools do not.
+
 ### Dice Converter
 
 If the **Dice** data pack is installed, splash potions carrying the `dqc.dice:dice_converter` enchantment will trigger a temporary **2-second pickup block** for the throwing player. This prevents you from accidentally picking up the "dice" item immediately after launching it.
@@ -590,21 +668,22 @@ If the **Dice** data pack is installed, splash potions carrying the `dqc.dice:di
 
 ### Disenchanting Bundle
 
-Any **bundle with lore** (any custom lore will work) can be used to safely (or mostly safely) extract enchantments from items. **The bundle is consumed and destroyed upon use.**
+Any **bundle with lore** (any custom lore will work) is the destructive recovery tool for an
+augmented item. **The source item and bundle are consumed on use.**
 
 **How it works**:
 
-1.  **Trigger**: Right-click an enchanted item with a Disenchanting Bundle (or right-click the bundle with the enchanted item on your cursor).
-2.  **Extraction**: The bundle will immediately strip **all** enchantments from the item.
-3.  **Conversion**: For each enchantment removed, the bundle attempts to convert it into an individual **Enchanted Book**.
-4.  **Priority**: Enchantments are processed in order of their [quality tier](#tiers) (Legendary > Epic > Rare > Uncommon > Vanilla).
+1.  **Trigger**: Right-click an augmented item with a Disenchanting Bundle (or right-click the bundle with the item on your cursor).
+2.  **Legacy migration**: A still-vanilla-enchanted item is migrated into Augment Gems before destruction, so old gear is never destroyed for zero recovery.
+3.  **Conversion**: Attached augments are processed in order of their [quality tier](#tiers) (Legendary > Epic > Rare > Uncommon > Vanilla) and returned as individual Augment Gems.
+4.  **Inventory safety**: The operation refuses before consuming anything if all potential gems cannot fit.
 
 **Success Probabilities**:
 
-- **First Enchantment**: The highest-tier enchantment is **guaranteed** (100% chance) to be given back as a book. If there are multiple enchantments at the highest tier, one is picked at random to be the guaranteed extraction.
-- **Subsequent Enchantments**: After each **successful** book extraction, the chance for the next enchantment to become a book decreases (100% -> 80% -> 60% -> 40% -> 20% -> 0%).
-- **Failure**: If an extraction roll fails, the enchantment is still removed from the item, but no book is given (it is lost to the void). After a failure, the success chance for the next enchantment **remains at its current level**.
-- **Restrictions**: The Disenchanting Bundle **cannot** be used on tools containing the **Spawner Pickup** or **Egg Collector** enchantments. The bundle will refuse the extraction to prevent players from bypassing the limited uses of these enchants.
+- **First Enchantment**: The highest-tier augment is **guaranteed** (100% chance) to be returned. If there are multiple enchantments at the highest tier, one is selected at random.
+- **Subsequent Enchantments**: After each **successful** recovery, the chance for the next gem decreases (100% -> 80% -> 60% -> 40% -> 20% -> 0%).
+- **Failure**: A failed roll returns no gem, and the next chance remains at its current level.
+- **Restrictions**: The bundle cannot be used on tools containing the Spawner Pickup or Egg Collector enchantments.
 
 This mechanic provides a strategic way to recover powerful enchantments from tools at the cost of the bundle itself and the risk of losing some enchantments on heavily enchanted items.
 
@@ -1221,6 +1300,9 @@ When an action occurs, the system checks rules in this order:
 | `/condense [all]` | Compact 9x granular items into their block form. |
 | `/toolprotect [on\|off]` | Toggle ToolProtect on/off. |
 | `/toolprotect durability <n>` | Set remaining-durability threshold for ToolProtect. |
+| `/rename [name]` | Free rename/reset for the main-hand item; supports legacy color codes. |
+| `/augment` | Open the augment slot and gem menu for the held item. |
+| Right-click an Augment Gem | Open the gem-first augment menu. |
 | `/afk` | Toggle AFK status. |
 | `/fullmoon` | Show estimate for next full moon. |
 | `/displaychest [hand\|off]` | Toggle display chest setup mode. |
@@ -1255,6 +1337,10 @@ When an action occurs, the system checks rules in this order:
 | `/tprm user <player> <addperm\|delperm\|setgroup>` | `tweaks.admin.permissions` | CLI user management. |
 | `/ranks edit` | `tweaks.admin.ranks` | Open the visual rank editor. |
 | `/rank set <player> <rank_id/name>` | `tweaks.admin.rank.set` | Manually assign a player's rank. |
+| `/augment debug` | `tweaks.admin.augment` | Inspect the held item's augment slots and occupancy. |
+| `/augment give <player> <enchantment-key> [level]` | `tweaks.admin.augment` | Give a player one Augment Gem. |
+| `/repairkit give [player] [amount]` | `tweaks.admin.repairkit` | Give Repair Kits to a player. |
+| `/repairkit debug` | `tweaks.admin.repairkit` | Inspect the held item's custom durability state. |
 | `/region claim <name>` | `tweaks.protection.purchaseable` (or a listed `protection.public-claim-worlds` world) | Claim territory using wand selection; non-admin public claims still pay and obey the chunk-limit and overlap checks. |
 | `/region unclaim <name> [world]` | `tweaks.protection.unclaim` | Remove a region claim and permanently delete its sub-regions, refunding each owner. Alias: `/rg unclaim`. |
 | `/region info [name] [world]` | `tweaks.protection.info` | Show region details. Alias: `/rg i`. |
@@ -1298,7 +1384,7 @@ When an action occurs, the system checks rules in this order:
 | `/tconfig world-profiles add <world-key> <profile> <label> <color>` | `tweaks.admin.config` | Register a new world-key mapping (profile is only settable here — see [World Profiles](#world-profiles)). |
 | `/tconfig world-profiles remove <world-key>` | `tweaks.admin.config` | Remove a world-key mapping (that world falls back to the default profile/tag). |
 | `/tconfig world-profiles edit <world-key> <label> <color>` | `tweaks.admin.config` | Change an existing mapping's tab-list tag/color (its profile cannot be changed). |
-| `/tconfig <path> <value>` | `tweaks.admin.config` | Generic setter for any other registered setting by its config.yml path, e.g. `protection.selection-tool <material>`, `protection.public-claim-worlds <add\|remove> <world-key>`, `fly-advancement <namespaced-key>`, `fly-worlds <add\|remove> <world>`, `disabled-end-portal-worlds <add\|remove> <world>`, `economy.daily-reward-base <amount>`, `economy.streak-multipliers <day 1-7> <multiplier>`, `lottery.pot-multiplier <0.0-10.0>`, `blocklog.retention-days <days>`, `blocklog.max-entries-per-chest <n>`, `deathinventory.retention-days <days>`, `enchantments.spawner-pickup.drop-chance-percent <0.0-100.0>`, `enchantments.spawner-pickup.uses <n>`, `enchantments.egg-collector.uses <n>`, `enchantments.quality.chance-percent <0.0-100.0>`, `enchantments.quality.blood-moon-chance-percent <0.0-100.0>`, `enchantments.lumberjack.max-logs <n>`, `itemadmin.tool-protect.default-threshold <n>`, `itemadmin.tool-protect.warn-cooldown-ms <ms>`, `itemadmin.gui-copy.max-distance <1-64>`, `xpbottle.orbs-per-emerald <n>` (restart required). |
+| `/tconfig <path> <value>` | `tweaks.admin.config` | Generic setter for any other registered setting by its config.yml path, including `xp.*`, `tools.*`, `protection.selection-tool <material>`, `protection.public-claim-worlds <add\|remove> <world-key>`, `fly-advancement <namespaced-key>`, `fly-worlds <add\|remove> <world>`, `disabled-end-portal-worlds <add\|remove> <world>`, `economy.daily-reward-base <amount>`, `economy.streak-multipliers <day 1-7> <multiplier>`, `lottery.pot-multiplier <0.0-10.0>`, `blocklog.retention-days <days>`, `blocklog.max-entries-per-chest <n>`, `deathinventory.retention-days <days>`, `enchantments.spawner-pickup.drop-chance-percent <0.0-100.0>`, `enchantments.spawner-pickup.uses <n>`, `enchantments.egg-collector.uses <n>`, `enchantments.quality.chance-percent <0.0-100.0>`, `enchantments.quality.blood-moon-chance-percent <0.0-100.0>`, `enchantments.lumberjack.max-logs <n>`, `itemadmin.tool-protect.default-threshold <n>`, `itemadmin.tool-protect.warn-cooldown-ms <ms>`, `itemadmin.gui-copy.max-distance <1-64>`, `xpbottle.orbs-per-emerald <n>` (restart required). |
 | `/more` | `tweaks.admin.more` | Maximize the stack size of the held item. |
 | `/invsee <player>` | `tweaks.admin.invsee` | View and modify an online player's inventory. |
 | `/bloodmoon` | `tweaks.admin.bloodmoon` | Force-activate the Blood Moon event. |
@@ -1364,6 +1450,9 @@ When an action occurs, the system checks rules in this order:
 | `tweaks.admin.lottery` | Allows drawing and administering the server-wide lottery; viewing entries is public. |
 | `tweaks.admin.ranks` | Allows access to the administrative rank editor via `/ranks edit`. |
 | `tweaks.admin.rank.set` | Allows manually assigning a player's rank via `/rank set`. |
+| `tweaks.tools.anvilbypass` | Allows opening anvils and grindstones despite the player lockout. |
+| `tweaks.admin.augment` | Allows `/augment give` and `/augment debug`. |
+| `tweaks.admin.repairkit` | Allows `/repairkit give` and `/repairkit debug`. |
 | `tweaks.admin.permissions` | Grants full access to the custom permission management system, including groups, users, and GUI editor. |
 | `tweaks.blackjack.createtable` | Allows starting the button-linking table creation flow. |
 | `tweaks.blackjack.removetable` | Allows starting the table removal flow. |
@@ -1381,7 +1470,23 @@ The plugin generates a `config.yml` on first startup. Custom enchantments requir
 
 On every startup, any key present in the bundled default `config.yml` but missing from your live file is automatically added back with its default value (an admin-modified value is never overwritten, and an explicit empty list you've saved stays empty — only a genuinely absent key is filled in).
 
-A growing set of settings — spanning General, Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Xp Bottle, Discord, and Console Event Logging — is also editable at runtime without touching `config.yml` by hand, via `/tconfig`. Six have dedicated CLI forms (see the [Commands Reference](#commands-reference) table above); the rest use the generic `/tconfig <path> <value>` grammar. Run `/tconfig gui` in-game for a Dialog-based editor with the same categories and a main-menu **Logging** tab, or `/tconfig list [category]` to print every registered setting and its current value from the console or in chat. `/tconfig list logging` filters that output to the 20 logging categories; `/tconfig list discord` filters to the Discord settings.
+A growing set of settings — spanning General, Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Experience (`xp`), Player Tools (`tools`), Xp Bottle, Discord, and Console Event Logging — is also editable at runtime without touching `config.yml` by hand, via `/tconfig`. Six have dedicated CLI forms (see the [Commands Reference](#commands-reference) table above); the rest use the generic `/tconfig <path> <value>` grammar. Run `/tconfig gui` in-game for a Dialog-based editor with the same categories and a main-menu **Logging** tab, or `/tconfig list [category]` to print every registered setting and its current value from the console or in chat. `/tconfig list logging` filters that output to the 20 logging categories; `/tconfig list discord` filters to the Discord settings. XP chances, Mending, cash conversion, durability, Repair Kit recipes, rename length, lockouts, and augment settings take effect live after a successful edit.
+
+### Experience and player tools
+
+The XP category controls mob-drop removal, custom XP amount/chances/material lists, taint TTL, and
+Mending payout settings:
+
+| Setting family | Main keys |
+|---|---|
+| Mob XP | `xp.mob-drops.remove` |
+| Custom block XP | `xp.custom-drops.enabled`, `.amount`, `.crop-chance-percent`, `.leaf-break-chance-percent`, `.leaf-decay-chance-percent`, `.stone-chance-percent`, `.stone-materials`, `.leaf-materials`, `.taint-ttl-days` |
+| Mending | `xp.mending.enabled`, `.dollars-per-xp`, `.enchantment-key` |
+
+The Tools category controls augment capacity/prices and exclusivity, Repair Kit item/recipe and
+tier curve, never-break, anvil/grindstone lockouts, rename length, and the cash-item PDC bridge.
+The complete list is available with `/tconfig list tools`; the nine-cell Repair Kit recipe is
+editable from the Dialog grid editor as well as the CLI list form.
 
 ### Discord announcements and stat channels
 

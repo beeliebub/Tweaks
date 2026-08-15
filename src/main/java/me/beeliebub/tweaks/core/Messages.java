@@ -73,6 +73,9 @@ public final class Messages {
     /** Player-feedback factories and dialog copy for the {@code /tconfig} generic settings engine and GUI. */
     public static final ConfigMessages CONFIG = new ConfigMessages();
 
+    /** Player-feedback factories for the live tools, XP, cash, durability, and augment systems. */
+    public static final ToolsMessages TOOLS = new ToolsMessages();
+
     // ---------------------------------------------------------------- Permissions
 
     /**

@@ -17,22 +17,24 @@ import java.util.Locale;
 import java.io.File;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
 
 /**
  * Pure parse/validate/write core for every {@code /tconfig} mutation. Both {@code ConfigCommand}
  * (CLI) and {@code ConfigGUI} (Dialog) call into this class rather than touching
  * {@code plugin.getConfig()} directly themselves - it has no Dialog import so it stays
- * constructible and unit-testable without MockBukkit's Dialog boundary (see this package's
- * CLAUDE.md).
+ * constructible and unit-testable without constructing a Dialog (see this package's CLAUDE.md).
  *
  * <p>The six pre-existing legacy CLI forms (max_homes, max_chunks, egg_collector_drop_chance,
  * eggdrop, spawneregg, resourceitems) keep dedicated methods reproducing their exact historical
  * response wording via {@code Messages.COMMANDS} - a wording change there is a behavior-visible
- * regression pinned by {@code ConfigCommandTest}. Every setting a later phase of the
- * config-migration plan adds goes through the generic engine below ({@link #applyScalar},
+ * regression pinned by {@code ConfigCommandTest}. Settings beyond those legacy forms go through
+ * the generic engine below ({@link #applyScalar},
  * {@link #listAdd}, {@link #listRemove}, {@link #mapPut}) and {@code Messages.CONFIG} instead.
  * {@link #listAdd}/{@link #listRemove} route the three sentinel-path settings back to the legacy
  * toggle/delegate methods so the registry (and therefore the GUI) can still present them uniformly.
@@ -54,6 +56,8 @@ public final class ConfigValueEditor {
     private final ResourceHuntItems resourceHuntItems;
     private final WorldProfileTable worldProfileTable;
     private final BiConsumer<String, Boolean> loggingBooleanChanged;
+    private BiFunction<ConfigSetting, List<String>, Boolean> materialGridHandler;
+    private final List<java.util.function.Consumer<String>> configChangedListeners = new CopyOnWriteArrayList<>();
 
     public ConfigValueEditor(Tweaks plugin, ResourceHuntItems resourceHuntItems, WorldProfileTable worldProfileTable) {
         this(plugin, resourceHuntItems, worldProfileTable, (path, value) -> {});
@@ -66,6 +70,15 @@ public final class ConfigValueEditor {
         this.resourceHuntItems = resourceHuntItems;
         this.worldProfileTable = worldProfileTable;
         this.loggingBooleanChanged = loggingBooleanChanged == null ? (path, value) -> {} : loggingBooleanChanged;
+    }
+
+    /** Registers the late Tier-5 owner of a MATERIAL_GRID setting without coupling core to tools. */
+    public void setMaterialGridHandler(BiFunction<ConfigSetting, List<String>, Boolean> handler) {
+        this.materialGridHandler = handler;
+    }
+
+    public void addConfigChangedListener(java.util.function.Consumer<String> listener) {
+        if (listener != null) configChangedListeners.add(listener);
     }
 
     private EditResult guarded(Supplier<EditResult> action) {
@@ -237,6 +250,11 @@ public final class ConfigValueEditor {
 
     private EditResult setString(ConfigSetting setting, String rawValue) {
         String value = rawValue == null ? "" : rawValue;
+        if (setting.path().equals("tools.cash-item.pdc-key")) {
+            if (value.isBlank() || NamespacedKey.fromString("tweaks:" + value) == null) {
+                return new EditResult.Invalid(Messages.CONFIG.invalidNamespacedKey(value));
+            }
+        }
         if (!writeAndVerify(setting.path(), value)) {
             return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
         }
@@ -244,16 +262,24 @@ public final class ConfigValueEditor {
     }
 
     private EditResult setBoundedNumber(ConfigSetting setting, String rawValue, boolean integral) {
+        Object value;
         double parsed;
         try {
-            parsed = Double.parseDouble(rawValue);
+            if (integral) {
+                long integer = Long.parseLong(rawValue);
+                parsed = integer;
+                value = integer >= Integer.MIN_VALUE && integer <= Integer.MAX_VALUE
+                        ? (int) integer : integer;
+            } else {
+                parsed = Double.parseDouble(rawValue);
+                value = parsed;
+            }
         } catch (NumberFormatException | NullPointerException e) {
             return new EditResult.Invalid(integral ? Messages.invalidNumber() : Messages.invalidDecimal());
         }
         if (Double.isNaN(parsed) || Double.isInfinite(parsed) || outOfBounds(setting, parsed)) {
             return new EditResult.Invalid(Messages.CONFIG.outOfRange(setting.displayName(), setting.min(), setting.max()));
         }
-        Object value = integral ? (int) parsed : parsed;
         if (!writeAndVerify(setting.path(), value)) {
             return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
         }
@@ -305,6 +331,10 @@ public final class ConfigValueEditor {
         if (mat == null || mat.isAir() || !mat.isItem()) {
             return new EditResult.Invalid(Messages.COMMANDS.configUnknownMaterial(String.valueOf(rawValue)));
         }
+        if ((setting.path().equals("tools.augments.gem-material")
+                || setting.path().equals("tools.repair-kit.material")) && mat.isBlock()) {
+            return new EditResult.Invalid(Messages.COMMANDS.configUnknownMaterial(String.valueOf(rawValue)));
+        }
         if (!writeAndVerify(setting.path(), mat.name())) {
             return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
         }
@@ -327,6 +357,41 @@ public final class ConfigValueEditor {
         return new EditResult.Ok(Messages.CONFIG.updated(setting.displayName(), key.toString()));
     }
 
+    /** Edits one positional cell in a nine-cell crafting recipe. */
+    public EditResult materialGridCell(ConfigSetting setting, String rawIndex, String rawMaterial) {
+        return guarded(() -> {
+            if (setting.type() != EditorType.MATERIAL_GRID) {
+                return new EditResult.Invalid(Messages.CONFIG.notAListSetting(setting.displayName()));
+            }
+            int index;
+            try {
+                index = Integer.parseInt(rawIndex);
+            } catch (NumberFormatException | NullPointerException e) {
+                return new EditResult.Invalid(Messages.invalidNumber());
+            }
+            if (index < 0 || index >= 9) {
+                return new EditResult.Invalid(Messages.CONFIG.gridCellRange());
+            }
+            Material material = "air".equalsIgnoreCase(String.valueOf(rawMaterial))
+                    ? Material.AIR : Material.matchMaterial(rawMaterial);
+            if (material == null || (!material.isAir() && (!material.isItem() || material == Material.AIR))) {
+                return new EditResult.Invalid(Messages.COMMANDS.configUnknownMaterial(String.valueOf(rawMaterial)));
+            }
+
+            List<String> previous = currentGridValues(setting);
+            List<String> next = new ArrayList<>(previous);
+            next.set(index, material.isAir() ? "air" : material.name().toLowerCase(Locale.ROOT));
+            if (!writeAndVerify(setting.path(), next)) {
+                return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
+            }
+            if (materialGridHandler != null && !Boolean.TRUE.equals(materialGridHandler.apply(setting, List.copyOf(next)))) {
+                writeAndVerify(setting.path(), previous);
+                return new EditResult.Invalid(Messages.CONFIG.recipeRejected());
+            }
+            return new EditResult.Ok(Messages.CONFIG.gridCellUpdated(index, next.get(index)));
+        });
+    }
+
     public EditResult listAdd(ConfigSetting setting, String rawValue) {
         if (setting.path().equals(ConfigRegistry.EGGDROP_SENTINEL_PATH)) return toggleEggDrop("disable", rawValue);
         if (setting.path().equals(ConfigRegistry.SPAWNEREGG_SENTINEL_PATH)) return toggleSpawnerEgg("disable", rawValue);
@@ -347,22 +412,30 @@ public final class ConfigValueEditor {
         }
         boolean lowercase = setting.type() == EditorType.WORLD_KEY_LIST;
         String value = lowercase ? rawValue.toLowerCase(Locale.ROOT) : rawValue;
+        if (setting.type() == EditorType.MATERIAL_LIST) {
+            Material material = Material.matchMaterial(value);
+            if (material == null || material.isAir() || !material.isItem()) {
+                return new EditResult.Invalid(Messages.COMMANDS.configUnknownMaterial(rawValue));
+            }
+            value = material.name().toLowerCase(Locale.ROOT);
+        }
+        final String normalizedValue = value;
 
         List<String> list = new ArrayList<>(plugin.getConfig().getStringList(setting.path()));
         boolean changed;
         if (adding) {
-            changed = list.stream().noneMatch(s -> s.equalsIgnoreCase(value));
-            if (changed) list.add(value);
+            changed = list.stream().noneMatch(s -> s.equalsIgnoreCase(normalizedValue));
+            if (changed) list.add(normalizedValue);
         } else {
-            changed = list.removeIf(s -> s.equalsIgnoreCase(value));
+            changed = list.removeIf(s -> s.equalsIgnoreCase(normalizedValue));
         }
 
         if (!writeAndVerify(setting.path(), list)) {
             return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
         }
         return new EditResult.Ok(adding
-                ? Messages.CONFIG.listEntryAdded(setting.displayName(), value, changed)
-                : Messages.CONFIG.listEntryRemoved(setting.displayName(), value, changed));
+                ? Messages.CONFIG.listEntryAdded(setting.displayName(), normalizedValue, changed)
+                : Messages.CONFIG.listEntryRemoved(setting.displayName(), normalizedValue, changed));
     }
 
     public EditResult mapPut(ConfigSetting setting, String rawKey, String rawValue) {
@@ -402,6 +475,35 @@ public final class ConfigValueEditor {
             if (Double.isNaN(value) || Double.isInfinite(value)) {
                 return new EditResult.Invalid(Messages.invalidDecimal());
             }
+            if (setting.path().equals("tools.augments.slot-prices")
+                    || setting.path().equals("tools.augments.slot-capacity")
+                    || setting.path().equals("tools.augments.quality-slot-cost")) {
+                if (value < (setting.path().endsWith("quality-slot-cost") ? 1 : 0)
+                        || value != Math.rint(value)) {
+                    return new EditResult.Invalid(Messages.invalidDecimal());
+                }
+                String normalizedKey = rawKey.toLowerCase(Locale.ROOT);
+                if (setting.path().equals("tools.augments.slot-prices")) {
+                    try {
+                        int level = Integer.parseInt(rawKey);
+                        if (level < 1 || level > 64) {
+                            return new EditResult.Invalid(Messages.CONFIG.invalidMapKey(rawKey));
+                        }
+                        normalizedKey = Integer.toString(level);
+                    } catch (NumberFormatException e) {
+                        return new EditResult.Invalid(Messages.CONFIG.invalidMapKey(rawKey));
+                    }
+                } else if (setting.path().equals("tools.augments.quality-slot-cost")
+                        && !Set.of("none", "uncommon", "rare", "epic", "legendary").contains(normalizedKey)) {
+                    return new EditResult.Invalid(Messages.CONFIG.invalidMapKey(rawKey));
+                }
+                Object persistedValue = (long) value;
+                String path = setting.path() + "." + normalizedKey;
+                if (!writeAndVerify(path, persistedValue)) {
+                    return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
+                }
+                return new EditResult.Ok(Messages.CONFIG.mapEntryUpdated(setting.displayName(), normalizedKey, value));
+            }
             String path = setting.path() + "." + rawKey;
             if (!writeAndVerify(path, value)) {
                 return new EditResult.Invalid(Messages.CONFIG.saveFailed(setting.displayName()));
@@ -425,6 +527,13 @@ public final class ConfigValueEditor {
             var persisted = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(configFile)
                     .get(path);
             if (configurationValuesEqual(value, persisted)) {
+                for (java.util.function.Consumer<String> listener : configChangedListeners) {
+                    try {
+                        listener.accept(path);
+                    } catch (RuntimeException e) {
+                        plugin.getLogger().log(Level.WARNING, "Config change listener failed for " + path, e);
+                    }
+                }
                 return true;
             }
         }
@@ -602,6 +711,10 @@ public final class ConfigValueEditor {
     public String currentValueDisplay(ConfigSetting setting) {
         return switch (setting.type()) {
             case STRING_LIST, WORLD_KEY_LIST, MOB_LIST, MATERIAL_LIST -> String.join(", ", currentListValues(setting));
+            case MATERIAL_GRID -> {
+                List<String> values = currentGridValues(setting);
+                yield String.join(", ", values);
+            }
             case NUMBER_MAP -> {
                 var section = plugin.getConfig().getConfigurationSection(setting.path());
                 yield section == null ? "" : String.join(", ", section.getKeys(false));
@@ -646,5 +759,16 @@ public final class ConfigValueEditor {
             return plugin.getConfig().getStringList(SPAWNER_EGG_DISABLED_KEY).stream().sorted().toList();
         }
         return plugin.getConfig().getStringList(setting.path()).stream().sorted().toList();
+    }
+
+    /** Returns exactly nine lower-case material names, with missing cells represented by air. */
+    public List<String> currentGridValues(ConfigSetting setting) {
+        List<String> configured = plugin.getConfig().getStringList(setting.path());
+        List<String> values = new ArrayList<>(9);
+        for (int i = 0; i < 9; i++) {
+            String value = i < configured.size() ? configured.get(i) : "air";
+            values.add(value == null || value.isBlank() ? "air" : value.toLowerCase(Locale.ROOT));
+        }
+        return List.copyOf(values);
     }
 }

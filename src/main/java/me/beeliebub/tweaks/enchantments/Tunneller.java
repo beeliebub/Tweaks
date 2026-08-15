@@ -9,6 +9,9 @@ import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
 import me.beeliebub.tweaks.enchantments.quality.QualityTier;
 import me.beeliebub.tweaks.enchantments.quality.SilkTouchQualityListener;
 import me.beeliebub.tweaks.minigames.resource.ResourceHunt;
+import me.beeliebub.tweaks.utils.ExternalBlockBreakHook;
+import me.beeliebub.tweaks.utils.ExternalBlockBreakGuard;
+import me.beeliebub.tweaks.utils.ExternalDurabilityHook;
 import org.bukkit.Effect;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -21,6 +24,7 @@ import org.bukkit.block.ShulkerBox;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -50,13 +54,15 @@ public class Tunneller implements Listener {
     private final SilkTouchQualityListener silkTouchQuality;
     private final ResourceHunt resourceHunt;
     private final EnchantMode enchantMode;
+    private ExternalBlockBreakHook externalBlockBreakHook;
+    private ExternalBlockBreakGuard externalBlockBreakGuard;
+    private ExternalDurabilityHook externalDurabilityHook;
 
     public Tunneller(Tweaks plugin, Telekinesis telekinesis, Smelter smelter,
                      GemConnoisseur gemConnoisseur, QualityRegistry qualityRegistry,
                      FortuneQualityListener fortuneQuality, SilkTouchQualityListener silkTouchQuality,
                      ResourceHunt resourceHunt, EnchantMode enchantMode) {
-        String raw = plugin.getConfig().getString("tunneller");
-        this.enchantment = resolveEnchantment(plugin, raw);
+        this.enchantment = EnchantmentResolver.resolve(plugin, "tunneller", "tunneller");
         this.telekinesis = telekinesis;
         this.smelter = smelter;
         this.gemConnoisseur = gemConnoisseur;
@@ -67,24 +73,20 @@ public class Tunneller implements Listener {
         this.enchantMode = enchantMode;
     }
 
-    private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
-        if (raw == null || raw.isBlank()) {
-            plugin.getLogger().warning("No 'tunneller' key configured; tunneller enchant disabled.");
-            return null;
-        }
-        NamespacedKey key = NamespacedKey.fromString(raw);
-        if (key == null) {
-            plugin.getLogger().log(Level.WARNING, "Invalid tunneller key '" + raw + "'; tunneller enchant disabled.");
-            return null;
-        }
-        Enchantment resolved = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT).get(key);
-        if (resolved == null) {
-            plugin.getLogger().warning("Tunneller enchantment '" + raw + "' not found in registry; is the data pack loaded?");
-        }
-        return resolved;
+    public void setExternalBlockBreakHook(ExternalBlockBreakHook hook) {
+        this.externalBlockBreakHook = hook;
     }
 
-    @EventHandler(ignoreCancelled = true)
+    public void setExternalBlockBreakGuard(ExternalBlockBreakGuard guard) {
+        this.externalBlockBreakGuard = guard;
+    }
+
+    public void setExternalDurabilityHook(ExternalDurabilityHook hook) {
+        this.externalDurabilityHook = hook;
+    }
+
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
         ItemStack tool = player.getInventory().getItemInMainHand();
@@ -144,7 +146,11 @@ public class Tunneller implements Listener {
                 }
             }
             if (damageToApply > 0) {
-                player.damageItemStack(EquipmentSlot.HAND, damageToApply);
+                if (externalDurabilityHook != null) {
+                    externalDurabilityHook.applyDamage(player, EquipmentSlot.HAND, damageToApply);
+                } else {
+                    player.damageItemStack(EquipmentSlot.HAND, damageToApply);
+                }
             }
         }
     }
@@ -184,6 +190,13 @@ public class Tunneller implements Listener {
             } else {
                 return false;
             }
+        }
+
+        if (externalBlockBreakGuard != null
+                && !externalBlockBreakGuard.canBreak(player, target, type)) return false;
+
+        if (externalBlockBreakHook != null) {
+            externalBlockBreakHook.onExternalBreak(player, target, type);
         }
 
         // Container blocks (chests, barrels, hoppers, furnaces, brewing stands, etc.) need

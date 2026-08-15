@@ -6,6 +6,10 @@ import me.beeliebub.tweaks.economy.HousePaymentService;
 import me.beeliebub.tweaks.discord.DiscordAnnouncer;
 import me.beeliebub.tweaks.enchantments.Replant;
 import me.beeliebub.tweaks.enchantments.Telekinesis;
+import me.beeliebub.tweaks.enchantments.Efficacy;
+import me.beeliebub.tweaks.enchantments.Lumberjack;
+import me.beeliebub.tweaks.enchantments.Tunneller;
+import me.beeliebub.tweaks.core.ConfigCommand;
 import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
 import me.beeliebub.tweaks.itemadmin.ItemFilterCommand;
 import me.beeliebub.tweaks.minigames.blackjack.BlackjackListener;
@@ -73,6 +77,10 @@ public final class Services {
     ItemFilterCommand itemFilterCommand;
     Telekinesis telekinesis;
     Replant replant;
+    Efficacy efficacy;
+    Lumberjack lumberjack;
+    Tunneller tunneller;
+    ConfigCommand configCommand;
     BlackjackListener blackjackListener;
     RouletteListener rouletteListener;
     LotteryManager lotteryManager;
@@ -275,6 +283,46 @@ public final class Services {
     public Replant replant() {
         if (replant == null) throw new IllegalStateException("replant not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
         return replant;
+    }
+
+    public void setEfficacy(Efficacy efficacy) {
+        if (this.efficacy != null) throw new IllegalStateException("efficacy already published");
+        this.efficacy = efficacy;
+    }
+
+    public Efficacy efficacy() {
+        if (efficacy == null) throw new IllegalStateException("efficacy not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
+        return efficacy;
+    }
+
+    public void setLumberjack(Lumberjack lumberjack) {
+        if (this.lumberjack != null) throw new IllegalStateException("lumberjack already published");
+        this.lumberjack = lumberjack;
+    }
+
+    public Lumberjack lumberjack() {
+        if (lumberjack == null) throw new IllegalStateException("lumberjack not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
+        return lumberjack;
+    }
+
+    public void setTunneller(Tunneller tunneller) {
+        if (this.tunneller != null) throw new IllegalStateException("tunneller already published");
+        this.tunneller = tunneller;
+    }
+
+    public Tunneller tunneller() {
+        if (tunneller == null) throw new IllegalStateException("tunneller not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
+        return tunneller;
+    }
+
+    public void setConfigCommand(ConfigCommand configCommand) {
+        if (this.configCommand != null) throw new IllegalStateException("configCommand already published");
+        this.configCommand = configCommand;
+    }
+
+    public ConfigCommand configCommand() {
+        if (configCommand == null) throw new IllegalStateException("configCommand not yet published - check bootstrap tier ordering in Tweaks.onEnable()");
+        return configCommand;
     }
 
     public void setBlackjackListener(BlackjackListener blackjackListener) {

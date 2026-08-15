@@ -32,25 +32,7 @@ public class DiceConverterListener implements Listener {
     private final Map<UUID, Long> pickupBlockedUntil = new ConcurrentHashMap<>();
 
     public DiceConverterListener(Tweaks plugin) {
-        this.enchantment = resolveEnchantment(plugin);
-    }
-
-    private Enchantment resolveEnchantment(Tweaks plugin) {
-        String raw = plugin.getConfig().getString("dice-converter");
-        if (raw == null || raw.isBlank()) {
-            plugin.getLogger().warning("No 'dice-converter' key configured; dice converter pickup prevention disabled.");
-            return null;
-        }
-        NamespacedKey key = NamespacedKey.fromString(raw);
-        if (key == null) {
-            plugin.getLogger().warning("Invalid dice-converter key '" + raw + "'; pickup prevention disabled.");
-            return null;
-        }
-        Enchantment resolved = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT).get(key);
-        if (resolved == null) {
-            plugin.getLogger().warning("Dice converter enchantment '" + raw + "' not found in registry; is the data pack loaded?");
-        }
-        return resolved;
+        this.enchantment = EnchantmentResolver.resolve(plugin, "dice-converter", "dice converter");
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)

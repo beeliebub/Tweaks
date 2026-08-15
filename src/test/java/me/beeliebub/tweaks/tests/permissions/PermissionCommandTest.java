@@ -47,10 +47,8 @@ class PermissionCommandTest {
         MessageAssert.assertMessageSent(player, "do not have permission");
     }
 
-    // The /tprm gui main menu is now a Paper Dialog. MockBukkit does not load a
-    // DialogInstancesProvider service, so ActionButton.builder(...) throws
-    // NoSuchElementException under MockBukkit. Verification of the dialog open
-    // path lives outside this unit test (real-server smoke test).
+    // The real /tprm Dialog construction path is covered by GUI smoke coverage. Command
+    // mutations stay here so permission and persistence assertions do not depend on rendering.
 
     @Test
     void onCommandGroupCreate() {

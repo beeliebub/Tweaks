@@ -69,6 +69,8 @@ public class QualityRegistry {
     // Match a base enchantment's key name to a supported enchant name (for enchant table).
     // Works for both vanilla (minecraft:fortune -> "fortune") and custom (jass:efficacy -> "efficacy").
     public String matchEnchantName(Enchantment enchant) {
+        String registeredName = enchantToName.get(enchant);
+        if (registeredName != null) return registeredName;
         String keyValue = enchant.getKey().getKey();
         return SUPPORTED_NAMES.contains(keyValue) ? keyValue : null;
     }

@@ -43,8 +43,7 @@ public class EggCollector implements Listener {
     public EggCollector(Tweaks plugin, QualityRegistry qualityRegistry) {
         this.plugin = plugin;
         this.qualityRegistry = qualityRegistry;
-        String raw = plugin.getConfig().getString("egg-collector");
-        this.enchantment = resolveEnchantment(plugin, raw);
+        this.enchantment = EnchantmentResolver.resolve(plugin, "egg-collector", "egg collector");
         this.counterKey = new NamespacedKey(plugin, "egg_collector_count");
     }
 
@@ -52,22 +51,6 @@ public class EggCollector implements Listener {
         return enchantment;
     }
 
-    private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
-        if (raw == null || raw.isBlank()) {
-            plugin.getLogger().warning("No 'egg-collector' key configured; egg-collector enchant disabled.");
-            return null;
-        }
-        NamespacedKey key = NamespacedKey.fromString(raw);
-        if (key == null) {
-            plugin.getLogger().log(Level.WARNING, "Invalid egg-collector key '" + raw + "'; egg-collector enchant disabled.");
-            return null;
-        }
-        Enchantment resolved = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT).get(key);
-        if (resolved == null) {
-            plugin.getLogger().warning("Egg-collector enchantment '" + raw + "' not found in registry; is the data pack loaded?");
-        }
-        return resolved;
-    }
 
     // Package-private (not private) so a config knob test can exercise the clamp/live-read
     // behavior directly without widening visibility to public.

@@ -154,11 +154,25 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
     }
 
     public void openCategoryMenu(Player player, HelpCategory category) {
+        openCategoryMenu(player, category, 0);
+    }
+
+    private void openCategoryMenu(Player player, HelpCategory category, int page) {
+        List<HelpArticle> visible = category.articles().stream()
+                .filter(article -> article.permission() == null || player.hasPermission(article.permission()))
+                .toList();
+        int totalPages = Math.max(1, (visible.size() + 11) / 12);
+        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
+        int start = currentPage * 12;
+        int end = Math.min(start + 12, visible.size());
         List<ActionButton> buttons = new ArrayList<>();
-        for (HelpArticle article : category.articles()) {
+        for (int i = start; i < end; i++) {
+            HelpArticle article = visible.get(i);
             if (article.permission() != null && !player.hasPermission(article.permission())) continue;
             buttons.add(buildArticleButton(article));
         }
+        if (currentPage > 0) buttons.add(pageButton("◀ Previous Page", p -> openCategoryMenu(p, category, currentPage - 1)));
+        if (currentPage + 1 < totalPages) buttons.add(pageButton("Next Page ▶", p -> openCategoryMenu(p, category, currentPage + 1)));
         ActionButton back = ActionButton.builder(
                         Component.text("Back", NamedTextColor.RED, TextDecoration.BOLD)
                                 .decoration(TextDecoration.ITALIC, false))
@@ -172,7 +186,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 .decoration(TextDecoration.ITALIC, false);
         Dialog dialog = Dialog.create(b -> b.empty()
                 .base(DialogBase.builder(title).canCloseWithEscape(true).pause(false).build())
-                .type(DialogType.multiAction(buttons, back, 1)));
+                .type(DialogType.multiAction(buttons, back, 2)));
         player.showDialog(dialog);
         player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.7f, 1.1f);
     }
@@ -194,12 +208,25 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         Component tooltip = Component.text("Click to read " + article.title().toLowerCase(), NamedTextColor.GRAY);
         return ActionButton.builder(label).tooltip(tooltip).width(BUTTON_WIDTH)
                 .action(DialogAction.customClick(
-                        (view, audience) -> { if (audience instanceof Player p) openArticle(p, article); },
+                        (view, audience) -> {
+                            if (audience instanceof Player p) {
+                                if (article.permission() != null && !p.hasPermission(article.permission())) {
+                                    p.sendMessage(Messages.noPermission());
+                                    return;
+                                }
+                                openArticle(p, article);
+                            }
+                        },
                         ClickCallback.Options.builder().build()))
                 .build();
     }
 
     public void openArticle(Player player, HelpArticle article) {
+        if (article == null || (article.permission() != null && !player.hasPermission(article.permission()))) {
+            player.sendMessage(Messages.noPermission());
+            openMainMenu(player);
+            return;
+        }
         HelpCategory owningCategory = findCategoryOf(article);
         Component title = MM.deserialize("<gradient:" + article.gradient() + "><b>" + article.title() + "</b></gradient>")
                 .decoration(TextDecoration.ITALIC, false);
@@ -248,6 +275,17 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 .type(DialogType.multiAction(jumpButtons, back, 1)));
         player.showDialog(dialog);
         player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.5f, 1.0f);
+    }
+
+    private static ActionButton pageButton(String label, java.util.function.Consumer<Player> action) {
+        return ActionButton.builder(Component.text(label, NamedTextColor.GREEN)
+                        .decoration(TextDecoration.ITALIC, false))
+                .tooltip(Component.text("Change help page", NamedTextColor.GRAY))
+                .width(BUTTON_WIDTH)
+                .action(DialogAction.customClick((view, audience) -> {
+                    if (audience instanceof Player p) action.accept(p);
+                }, ClickCallback.Options.builder().build()))
+                .build();
     }
 
     private HelpCategory findCategoryOf(HelpArticle article) {
@@ -549,6 +587,51 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 red("Brewing is cancelled if the brewer cannot afford the cost."),
                 green("Potions stack to 64.")
         ), Material.EXPERIENCE_BOTTLE, 24, ColorUtil.HELP_GRAD_XP_STORAGE, List.of("profiles", "disenchanting")));
+
+        articles.add(new HelpArticle("tool_xp", "Tool XP and Mending", List.of(
+                gray("Custom block XP rolls and Mending payouts are live-configurable."),
+                white("Mob XP removal includes the Ender Dragon; player death and non-mob XP sources stay intact."),
+                white("Crops, leaves, leaf decay, and configured stone blocks each use their own percentage."),
+                white("Placed leaves and stone are tainted and do not award custom XP."),
+                white("A Mending item in either hand or armor converts collected XP to economy credit."),
+                cmd("/tconfig xp", "Edit XP toggles, chances, materials, taint TTL, and the Mending rate.")
+        ), Material.EXPERIENCE_BOTTLE, 26, ColorUtil.HELP_GRAD_XP_STORAGE, List.of("xp_bottles", "profiles")));
+
+        articles.add(new HelpArticle("cash_items", "Cash Items", List.of(
+                gray("Tagged datapack cash converts when it enters your inventory."),
+                white("Pickup, trade results, clicks, drags, and plugin inventory moves convert the whole stack."),
+                yellow("Failed economy writes, malformed values, zero values, and overflow leave the item unchanged."),
+                cmd("/tconfig tools.cash-item", "Enable the bridge or change the configured cash key."),
+                white("Datapacks must write the value under PublicBukkitValues with the Tweaks cash key.")
+        ), Material.GOLD_INGOT, 28, ColorUtil.HELP_GRAD_ECONOMY, List.of("balance", "tool_xp")));
+
+        articles.add(new HelpArticle("durability_tools", "Durability and Repair Kits", List.of(
+                gray("Damageable items receive a larger, tiered durability pool the first time they are used."),
+                white("Repair Kits restore an item, advance its tier, and consume one kit."),
+                cmd("/repairkit give [player] [amount]", "Admin command for test kits."),
+                cmd("/repairkit debug", "Admin command showing the held item's durability state."),
+                cmd("/rename [name]", "Free plain-text or color-formatted rename; omit the name to reset."),
+                yellow("Spent tools remain in the inventory and cannot be used when never-break is enabled."),
+                red("Anvils and grindstones are locked unless the bypass permission is present.")
+        ), Material.DIAMOND_PICKAXE, 30, ColorUtil.HELP_GRAD_TOOL_PROTECT, List.of("toolprotect", "item_admin")));
+
+        articles.add(new HelpArticle("augments", "Augments", List.of(
+                gray("Augment Gems hold real registry enchantments while the item ledger owns slot state."),
+                cmd("/augment", "Open the two-screen slot and augment menu for the held item."),
+                white("Enchanting tables and enchanted books produce gems; a gem right-click opens the same attach flow."),
+                white("Slots use ◌ for unpurchased, ○ for purchased, and ● for occupied slots."),
+                white("Turning an augment off removes the active enchantment but keeps its slot occupied."),
+                yellow("A Disenchanting Bundle destroys the source item and recovers gems using the tiered chance ladder."),
+                red("Augment state is stored in PDC and survives renamed items and foreign metadata.")
+        ), Material.AMETHYST_SHARD, 32, ColorUtil.HELP_GRAD_GEM_CONNOISSEUR, List.of("tiers", "durability_tools")));
+
+        articles.add(new HelpArticle("rename_tools", "Rename and Lockouts", List.of(
+                gray("Player-facing item renaming is free and does not require an anvil."),
+                cmd("/rename <name>", "Apply a legacy-color name to the main-hand item."),
+                cmd("/rename", "Reset the main-hand item to its default name."),
+                white("Names are limited by the live rename max-length setting."),
+                red("Anvil and grindstone openings are cancelled unless you have the staff bypass permission.")
+        ), Material.NAME_TAG, 34, ColorUtil.HELP_GRAD_NICKNAMES, List.of("durability_tools", "augments")));
 
         articles.add(new HelpArticle("toolprotect", "Tool Protect", List.of(
                 gray("Blocks usage of high-tier tools when nearly broken."),

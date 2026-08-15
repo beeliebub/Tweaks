@@ -19,6 +19,7 @@ public final class CoreBootstrap {
 
         ConfigCommand configCommand = new ConfigCommand(plugin, services.resourceHuntItems(),
                 services.worldProfileTable(), services.consoleEventLog()::updateCachedBoolean);
+        services.setConfigCommand(configCommand);
         plugin.getCommand("tconfig").setExecutor(configCommand);
         plugin.getCommand("tconfig").setTabCompleter(configCommand);
     }

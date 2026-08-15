@@ -112,7 +112,7 @@ class ConfigRegistryTest {
     void menuGroupsPreserveTheFullRegistryOrder() {
         List<ConfigCategory> main = ConfigRegistry.mainMenuCategories();
         List<ConfigCategory> logging = ConfigRegistry.loggingCategories();
-        assertEquals(13, main.size(), "the main menu must retain all thirteen registered categories");
+        assertEquals(15, main.size(), "the main menu must retain all fifteen registered categories");
         assertEquals(20, logging.size(), "logging categories must paginate as twenty categories over two pages");
         assertFalse(main.stream().anyMatch(category -> category.group() == ConfigCategory.Group.LOGGING));
         assertTrue(main.stream().allMatch(category -> category.group() == ConfigCategory.Group.MAIN));

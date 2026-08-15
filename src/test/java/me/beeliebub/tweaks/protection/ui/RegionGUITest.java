@@ -34,9 +34,8 @@ import static org.mockito.Mockito.when;
  * {@code ProtectionCommand}) since that dispatch now lives on {@link GuiSubcommand#gui}, package-
  * private in this same package.
  *
- * <p>The dialog itself cannot be opened under MockBukkit (Paper's Dialog API requires a service
- * MockBukkit does not provide — see PermissionGUITest for the same caveat), so these tests stub
- * {@code RegionGUI.openRegionHub} via Mockito's static mocking and verify the COMMAND-layer guard:
+ * <p>The authorized dialog rendering path is covered by {@code RegionDialogTest}; these tests
+ * stub {@code RegionGUI.openRegionHub} via Mockito's static mocking and verify the COMMAND-layer guard:
  * owners, managers, and admins reach the open call; everyone else is short-circuited with a
  * denial message.
  */

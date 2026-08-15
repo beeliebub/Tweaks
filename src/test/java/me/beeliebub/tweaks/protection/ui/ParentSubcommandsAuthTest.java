@@ -23,7 +23,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Regression coverage for a CRITICAL security-review finding: {@code /region setparent}/
+ * Regression coverage for a critical authorization boundary: {@code /region setparent}/
  * {@code unsetparent} previously had NO ownership check at all — gated only by the flat
  * {@code PROTECTION_PURCHASEABLE} permission (the same one granted to every claiming player), with
  * {@code ProtectionManager.setParent} itself never checking who owns either region. Any player

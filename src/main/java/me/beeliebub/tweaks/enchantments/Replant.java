@@ -93,8 +93,7 @@ public class Replant implements Listener {
 
     public Replant(Tweaks plugin, Telekinesis telekinesis, Lumberjack lumberjack) {
         this.plugin = plugin;
-        String raw = plugin.getConfig().getString("replant");
-        this.enchantment = resolveEnchantment(plugin, raw);
+        this.enchantment = EnchantmentResolver.resolve(plugin, "replant", "replant");
         this.telekinesis = telekinesis;
         this.lumberjack = lumberjack;
     }
@@ -104,22 +103,6 @@ public class Replant implements Listener {
         if (hook != null) replantHooks.add(hook);
     }
 
-    private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
-        if (raw == null || raw.isBlank()) {
-            plugin.getLogger().warning("No 'replant' key configured; replant enchant disabled.");
-            return null;
-        }
-        NamespacedKey key = NamespacedKey.fromString(raw);
-        if (key == null) {
-            plugin.getLogger().log(Level.WARNING, "Invalid replant key '" + raw + "'; replant enchant disabled.");
-            return null;
-        }
-        Enchantment resolved = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT).get(key);
-        if (resolved == null) {
-            plugin.getLogger().warning("Replant enchantment '" + raw + "' not found in registry; is the data pack loaded?");
-        }
-        return resolved;
-    }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.LOW)
     public void onBlockBreak(BlockBreakEvent event) {
