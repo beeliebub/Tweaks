@@ -277,7 +277,7 @@ public final class ConfigRegistry {
             )),
             new ConfigCategory("xpbottle", "Xp Bottle", List.of(
                     ConfigSetting.bounded("xpbottle.orbs-per-emerald", "xpbottle.orbs-per-emerald",
-                            "Orbs Per Emerald (restart required)", EditorType.INT, 1, Integer.MAX_VALUE)
+                            "Orbs Per Emerald (restart required)", EditorType.INT, 1, Integer.MAX_VALUE / 9)
             ))
     );
 

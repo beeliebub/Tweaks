@@ -8,6 +8,7 @@ import me.beeliebub.tweaks.core.config.EditResult;
 import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import me.beeliebub.tweaks.profiles.WorldProfileTable;
+import me.beeliebub.tweaks.tools.augments.SlotCalculator;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,6 +42,7 @@ class ConfigValueEditorTest {
         plugin = MockBukkit.load(Tweaks.class);
         resourceHuntItems = mock(ResourceHuntItems.class);
         editor = new ConfigValueEditor(plugin, resourceHuntItems, new WorldProfileTable(plugin));
+        editor.setSlotCapacityKeyValidator(SlotCalculator::isValidCapacityKey);
     }
 
     @AfterEach
@@ -263,5 +265,25 @@ class ConfigValueEditorTest {
         assertEquals("nether_star", plugin.getConfig().getStringList(setting.path()).get(4));
         assertEquals("nether_star", handled.get().get(4));
         assertEquals(9, handled.get().size());
+    }
+
+    @Test
+    void slotCapacityAcceptsFamilyAndMaterialKeys() {
+        ConfigSetting setting = ConfigRegistry.byPath("tools.augments.slot-capacity").orElseThrow();
+
+        assertInstanceOf(EditResult.Ok.class, editor.mapPut(setting, "wooden", "4"));
+        assertEquals(4, plugin.getConfig().getInt("tools.augments.slot-capacity.wooden"));
+        assertInstanceOf(EditResult.Ok.class, editor.mapPut(setting, "netherite_pickaxe", "12"));
+        assertEquals(12, plugin.getConfig().getInt("tools.augments.slot-capacity.netherite_pickaxe"));
+    }
+
+    @Test
+    void slotCapacityRejectsUnknownKeysWithoutWriting() {
+        ConfigSetting setting = ConfigRegistry.byPath("tools.augments.slot-capacity").orElseThrow();
+
+        EditResult result = editor.mapPut(setting, "wood", "4");
+
+        assertInstanceOf(EditResult.Invalid.class, result);
+        assertTrue(!plugin.getConfig().contains("tools.augments.slot-capacity.wood"));
     }
 }

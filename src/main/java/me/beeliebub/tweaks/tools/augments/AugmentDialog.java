@@ -37,6 +37,14 @@ public final class AugmentDialog {
             player.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
             return;
         }
+        if (!augments.ledgerStateValid(held)) {
+            player.sendMessage(Messages.TOOLS.augmentIncompatible());
+            return;
+        }
+        if (AugmentLedger.hasLedger(held) && !augments.ledger().migrated(held)) {
+            player.sendMessage(Messages.TOOLS.augmentIncompatible());
+            return;
+        }
         if (augments.gemItem().read(held) != null) {
             openGemFirst(player, held);
             return;
@@ -50,6 +58,14 @@ public final class AugmentDialog {
     }
 
     public void openHub(Player player, ItemStack item) {
+        if (item == null || item.isEmpty()) {
+            player.sendMessage(Messages.TOOLS.augmentRequiresItem());
+            return;
+        }
+        if (!augments.ledgerStateValid(item)) {
+            player.sendMessage(Messages.TOOLS.augmentIncompatible());
+            return;
+        }
         List<ActionButton> buttons = List.of(
                 button(Messages.TOOLS.augmentSlotsLabel(), Messages.TOOLS.augmentSlotsBody(
                                 augments.slotCalculator().slotDots(augments.ledger().slots(item),
@@ -64,6 +80,14 @@ public final class AugmentDialog {
     }
 
     public void openSlots(Player player, ItemStack item) {
+        if (item == null || item.isEmpty()) {
+            player.sendMessage(Messages.TOOLS.augmentRequiresItem());
+            return;
+        }
+        if (!augments.ledgerStateValid(item)) {
+            player.sendMessage(Messages.TOOLS.augmentIncompatible());
+            return;
+        }
         int capacity = augments.slotCalculator().capacity(item.getType());
         int purchased = augments.ledger().slots(item);
         int used = augments.slotCalculator().used(augments.entries(item));
@@ -73,11 +97,27 @@ public final class AugmentDialog {
             buttons.add(button(Messages.TOOLS.augmentBuySlot(next, augments.slotCalculator().price(next)),
                     Messages.TOOLS.augmentSlotsBody(augments.slotCalculator().slotDots(purchased, used, capacity), used, capacity),
                     p -> {
-                        augments.purchaseSlot(p, currentHeldOrSame(p, item));
-                        openSlots(p, currentHeldOrSame(p, item));
+                        if (!augments.enabled()) {
+                            p.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
+                            return;
+                        }
+                        ItemStack target = currentHeldOrSame(p, item);
+                        if (target == null) {
+                            p.sendMessage(Messages.TOOLS.augmentRequiresItem());
+                            return;
+                        }
+                        augments.purchaseSlot(p, target);
+                        openSlots(p, target);
                     }));
         }
-        buttons.add(button(Messages.TOOLS.augmentListLabel(), Messages.TOOLS.augmentListLabel(), p -> openAugments(p, currentHeldOrSame(p, item))));
+        buttons.add(button(Messages.TOOLS.augmentListLabel(), Messages.TOOLS.augmentListLabel(), p -> {
+            ItemStack target = currentHeldOrSame(p, item);
+            if (target == null) {
+                p.sendMessage(Messages.TOOLS.augmentRequiresItem());
+                return;
+            }
+            openAugments(p, target);
+        }));
         show(player, Messages.TOOLS.augmentSlotsLabel(),
                 Messages.TOOLS.augmentSlotsBody(augments.slotCalculator().slotDots(purchased, used, capacity), used, capacity),
                 buttons, p -> openHub(p, currentHeldOrSame(p, item)));
@@ -88,35 +128,45 @@ public final class AugmentDialog {
     }
 
     private void openAugments(Player player, ItemStack item, int page) {
-        List<ActionButton> buttons = new ArrayList<>();
-        List<AugmentEntry> attached = augments.entries(item);
-        for (int i = 0; i < attached.size(); i++) {
-            int index = i;
-            AugmentEntry entry = attached.get(i);
-            var enchantment = registry().get(entry.enchantmentKey());
-            String name = enchantment == null ? entry.enchantmentKey().toString() : enchantment.getKey().getKey();
-            buttons.add(button(Messages.TOOLS.augmentEntry(name, entry.level(), entry.active()),
-                    Messages.TOOLS.augmentEntry(name, entry.level(), entry.active()),
-                    p -> {
-                        augments.toggle(p, currentHeldOrSame(p, item), index);
-                        openAugments(p, currentHeldOrSame(p, item), page);
-                    }));
+        if (item == null || item.isEmpty()) {
+            player.sendMessage(Messages.TOOLS.augmentRequiresItem());
+            return;
         }
+        if (!augments.ledgerStateValid(item)) {
+            player.sendMessage(Messages.TOOLS.augmentIncompatible());
+            return;
+        }
+        List<AugmentEntry> attached = augments.entries(item);
+        List<GemOption> compatibleGems = new ArrayList<>();
         for (AugmentService.GemLocation gem : augments.inventoryGems(player)) {
             AugmentGemItem.GemData data = augments.gemItem().read(gem.item());
-            if (data == null || !augments.compatibleForDisplay(item, data.enchantment(), attached)) continue;
-            buttons.add(button(Messages.TOOLS.augmentInventoryGem(data.enchantment().getKey().toString(), data.level()),
-                    Messages.TOOLS.augmentInventoryGem(data.enchantment().getKey().toString(), data.level()),
-                    p -> {
-                        ItemStack currentGem = getSlot(p, gem.slot());
-                        augments.attach(p, currentHeldOrSame(p, item), currentGem);
-                        openAugments(p, currentHeldOrSame(p, item), page);
-                    }));
+            if (data != null && augments.compatibleForDisplay(item, data, attached)) {
+                compatibleGems.add(new GemOption(gem, data));
+            }
         }
-        showPaged(player, Messages.TOOLS.augmentListLabel(), buttons, page,
+        int totalEntries = attached.size() + compatibleGems.size();
+        int totalPages = Math.max(1, (totalEntries + PAGE_SIZE - 1) / PAGE_SIZE);
+        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
+        int start = currentPage * PAGE_SIZE;
+        int end = Math.min(start + PAGE_SIZE, totalEntries);
+        List<ActionButton> visible = new ArrayList<>();
+        for (int option = start; option < end; option++) {
+            if (option < attached.size()) {
+                visible.add(attachedButton(item, attached.get(option), option, currentPage));
+            } else {
+                visible.add(gemButton(item, compatibleGems.get(option - attached.size()), currentPage));
+            }
+        }
+        showPaged(player, Messages.TOOLS.augmentListLabel(), visible, totalEntries, page,
                 Messages.TOOLS.augmentListLabel(),
-                p -> openHub(p, currentHeldOrSame(p, item)),
-                (p, nextPage) -> openAugments(p, currentHeldOrSame(p, item), nextPage));
+                p -> {
+                    ItemStack target = currentHeldOrSame(p, item);
+                    if (target != null) openHub(p, target);
+                },
+                (p, nextPage) -> {
+                    ItemStack target = currentHeldOrSame(p, item);
+                    if (target != null) openAugments(p, target, nextPage);
+                });
     }
 
     public void openGemFirst(Player player, ItemStack gem) {
@@ -125,38 +175,83 @@ public final class AugmentDialog {
 
     private void openGemFirst(Player player, ItemStack gem, int page) {
         AugmentGemItem.GemData data = augments.gemItem().read(gem);
-        if (data == null) return;
+        if (data == null) {
+            player.sendMessage(Messages.TOOLS.augmentIncompatible());
+            return;
+        }
         List<ActionButton> buttons = new ArrayList<>();
         for (AugmentService.GemLocation target : inventoryItems(player)) {
-            if (target.item() == gem || target.item().isSimilar(gem)) continue;
-            if (!augments.compatibleForDisplay(target.item(), data.enchantment(), augments.entries(target.item()))) continue;
+            if (target.item() == gem || sameGem(target.item(), gem)) continue;
+            if (!augments.compatibleForDisplay(target.item(), data, augments.entries(target.item()))) continue;
             buttons.add(button(Messages.TOOLS.augmentEntry(target.item().getType().name(), 1, true),
                     Messages.TOOLS.augmentInventoryGem(data.enchantment().getKey().toString(), data.level()),
                     p -> {
+                        if (!augments.enabled()) {
+                            p.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
+                            return;
+                        }
                         ItemStack currentGem = findSameGem(p, gem);
-                        augments.attach(p, getSlot(p, target.slot()), currentGem);
+                        ItemStack currentTarget = getSlot(p, target.slot());
+                        if (currentGem == null || currentGem.isEmpty() || currentTarget == null
+                                || currentTarget.isEmpty() || !currentTarget.isSimilar(target.item())) return;
+                        augments.attach(p, currentTarget, currentGem);
                         openGemFirst(p, currentGem, page);
                     }));
         }
-        showPaged(player, Messages.TOOLS.augmentListLabel(), buttons, page,
+        showPaged(player, Messages.TOOLS.augmentListLabel(), buttons, buttons.size(), page,
                 Messages.TOOLS.augmentInventoryGem(data.enchantment().getKey().toString(), data.level()),
                 null,
                 (p, nextPage) -> openGemFirst(p, gem, nextPage));
     }
 
-    private void showPaged(Player player, Component title, List<ActionButton> allButtons, int page,
+    private ActionButton attachedButton(ItemStack item, AugmentEntry entry, int index, int page) {
+        var enchantment = registry().get(entry.enchantmentKey());
+        String name = enchantment == null ? entry.enchantmentKey().toString() : enchantment.getKey().getKey();
+        Component label = Messages.TOOLS.augmentEntry(name, entry.level(), entry.active());
+        return button(label, label, p -> {
+            if (!augments.enabled()) {
+                p.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
+                return;
+            }
+            ItemStack target = currentHeldOrSame(p, item);
+            if (target == null) {
+                p.sendMessage(Messages.TOOLS.augmentRequiresItem());
+                return;
+            }
+            augments.toggle(p, target, index);
+            openAugments(p, target, page);
+        });
+    }
+
+    private ActionButton gemButton(ItemStack item, GemOption option, int page) {
+        AugmentService.GemLocation gem = option.location();
+        AugmentGemItem.GemData data = option.data();
+        Component label = Messages.TOOLS.augmentInventoryGem(data.enchantment().getKey().toString(), data.level());
+        return button(label, label, p -> {
+            if (!augments.enabled()) {
+                p.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
+                return;
+            }
+            ItemStack currentGem = getSlot(p, gem.slot());
+            ItemStack target = currentHeldOrSame(p, item);
+            if (currentGem == null || currentGem.isEmpty() || !sameGem(currentGem, gem.item()) || target == null) {
+                return;
+            }
+            augments.attach(p, target, currentGem);
+            openAugments(p, target, page);
+        });
+    }
+
+    private void showPaged(Player player, Component title, List<ActionButton> visibleButtons, int totalEntries, int page,
                            Component body, Consumer<Player> back,
                            java.util.function.BiConsumer<Player, Integer> pageOpener) {
-        int totalEntries = allButtons.size();
         int totalPages = Math.max(1, (totalEntries + PAGE_SIZE - 1) / PAGE_SIZE);
         int currentPage = Math.max(0, Math.min(page, totalPages - 1));
         List<ActionButton> buttons = new ArrayList<>();
         if (totalEntries == 0) {
             buttons.add(button(Messages.TOOLS.augmentNoGems(), Messages.TOOLS.augmentNoGems(), p -> {}));
         } else {
-            int start = currentPage * PAGE_SIZE;
-            int end = Math.min(start + PAGE_SIZE, totalEntries);
-            buttons.addAll(allButtons.subList(start, end));
+            buttons.addAll(visibleButtons);
         }
         if (currentPage > 0) {
             buttons.add(button(Messages.TOOLS.augmentPreviousPage(),
@@ -176,18 +271,29 @@ public final class AugmentDialog {
 
     private static ItemStack currentHeldOrSame(Player player, ItemStack item) {
         ItemStack current = player.getInventory().getItemInMainHand();
-        return current == null || current.isEmpty() ? item : current;
+        return current == null || current.isEmpty() || item == null || item.isEmpty()
+                || !current.isSimilar(item) ? null : current;
     }
 
     private static ItemStack getSlot(Player player, int slot) {
         return player.getInventory().getItem(slot);
     }
 
-    private static ItemStack findSameGem(Player player, ItemStack expected) {
-        for (ItemStack stack : player.getInventory().getStorageContents()) if (stack != null && stack.isSimilar(expected)) return stack;
-        if (player.getInventory().getItemInOffHand().isSimilar(expected)) return player.getInventory().getItemInOffHand();
-        for (ItemStack stack : player.getInventory().getArmorContents()) if (stack != null && stack.isSimilar(expected)) return stack;
-        return expected;
+    private ItemStack findSameGem(Player player, ItemStack expected) {
+        if (expected == null || expected.isEmpty()) return null;
+        for (ItemStack stack : player.getInventory().getStorageContents()) if (sameGem(stack, expected)) return stack;
+        ItemStack offhand = player.getInventory().getItemInOffHand();
+        if (sameGem(offhand, expected)) return offhand;
+        for (ItemStack stack : player.getInventory().getArmorContents()) {
+            if (sameGem(stack, expected)) return stack;
+        }
+        return null;
+    }
+
+    private boolean sameGem(ItemStack first, ItemStack second) {
+        AugmentGemItem.GemData left = augments.gemItem().read(first);
+        AugmentGemItem.GemData right = augments.gemItem().read(second);
+        return left != null && right != null && left.equals(right);
     }
 
     private static List<AugmentService.GemLocation> inventoryItems(Player player) {
@@ -221,4 +327,6 @@ public final class AugmentDialog {
         return io.papermc.paper.registry.RegistryAccess.registryAccess()
                 .getRegistry(io.papermc.paper.registry.RegistryKey.ENCHANTMENT);
     }
+
+    private record GemOption(AugmentService.GemLocation location, AugmentGemItem.GemData data) {}
 }

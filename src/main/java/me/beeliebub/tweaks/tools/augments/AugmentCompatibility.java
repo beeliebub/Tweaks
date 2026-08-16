@@ -19,7 +19,13 @@ public final class AugmentCompatibility {
     }
 
     public boolean canAttach(ItemStack item, Enchantment candidate, List<AugmentEntry> entries) {
-        if (item == null || item.isEmpty() || candidate == null || !candidate.canEnchantItem(item)) return false;
+        return canAttach(item, candidate, entries, false);
+    }
+
+    public boolean canAttach(ItemStack item, Enchantment candidate, List<AugmentEntry> entries,
+                             boolean skipItemTypeCheck) {
+        if (item == null || item.isEmpty() || candidate == null
+                || (!skipItemTypeCheck && !candidate.canEnchantItem(item))) return false;
         for (AugmentEntry entry : entries) {
             var existing = registry().get(entry.enchantmentKey());
             if (existing == null) continue;

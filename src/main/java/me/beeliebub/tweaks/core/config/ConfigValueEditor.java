@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Predicate;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
 
@@ -57,6 +58,7 @@ public final class ConfigValueEditor {
     private final WorldProfileTable worldProfileTable;
     private final BiConsumer<String, Boolean> loggingBooleanChanged;
     private BiFunction<ConfigSetting, List<String>, Boolean> materialGridHandler;
+    private Predicate<String> slotCapacityKeyValidator = key -> true;
     private final List<java.util.function.Consumer<String>> configChangedListeners = new CopyOnWriteArrayList<>();
 
     public ConfigValueEditor(Tweaks plugin, ResourceHuntItems resourceHuntItems, WorldProfileTable worldProfileTable) {
@@ -75,6 +77,11 @@ public final class ConfigValueEditor {
     /** Registers the late Tier-5 owner of a MATERIAL_GRID setting without coupling core to tools. */
     public void setMaterialGridHandler(BiFunction<ConfigSetting, List<String>, Boolean> handler) {
         this.materialGridHandler = handler;
+    }
+
+    /** Registers the late Tier-5 owner of slot-capacity key validation without coupling core to tools. */
+    public void setSlotCapacityKeyValidator(Predicate<String> validator) {
+        this.slotCapacityKeyValidator = validator == null ? key -> true : validator;
     }
 
     public void addConfigChangedListener(java.util.function.Consumer<String> listener) {
@@ -495,6 +502,9 @@ public final class ConfigValueEditor {
                     }
                 } else if (setting.path().equals("tools.augments.quality-slot-cost")
                         && !Set.of("none", "uncommon", "rare", "epic", "legendary").contains(normalizedKey)) {
+                    return new EditResult.Invalid(Messages.CONFIG.invalidMapKey(rawKey));
+                } else if (setting.path().equals("tools.augments.slot-capacity")
+                        && !slotCapacityKeyValidator.test(normalizedKey)) {
                     return new EditResult.Invalid(Messages.CONFIG.invalidMapKey(rawKey));
                 }
                 Object persistedValue = (long) value;

@@ -68,6 +68,11 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
         valueEditor.setMaterialGridHandler(handler);
     }
 
+    /** Late-bound Tier-5 slot-capacity validation; keeps core config parsing independent of tools. */
+    public void setSlotCapacityKeyValidator(java.util.function.Predicate<String> validator) {
+        valueEditor.setSlotCapacityKeyValidator(validator);
+    }
+
     public void addConfigChangedListener(java.util.function.Consumer<String> listener) {
         valueEditor.addConfigChangedListener(listener);
     }

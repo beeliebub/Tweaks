@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.core;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 
 /** Player-facing feedback for the tools, XP, cash, durability, and augment features. */
 public final class ToolsMessages {
@@ -101,7 +102,7 @@ public final class ToolsMessages {
     }
 
     public Component augmentUsage() {
-        return Component.text("Usage: /augment | /augment debug | /augment give <player> <enchantment-key> [level]",
+        return Component.text("Usage: /augment | /augment debug | /augment give <player> <enchantment-key> [level] [curse-key[:level] ...]",
                 NamedTextColor.YELLOW);
     }
 
@@ -111,6 +112,16 @@ public final class ToolsMessages {
 
     public Component augmentAttached(String enchantment, int level) {
         return Component.text("Attached " + enchantment + " " + level + ".", NamedTextColor.GREEN);
+    }
+
+    public Component augmentAttached(String enchantment, int level, int riders) {
+        if (riders <= 0) return augmentAttached(enchantment, level);
+        return Component.text("Attached " + enchantment + " " + level + " with " + riders
+                + " curse rider(s).", NamedTextColor.GREEN);
+    }
+
+    public Component augmentCursesAttached(int count) {
+        return Component.text("Attached " + count + " permanent curse(s).", NamedTextColor.RED);
     }
 
     public Component augmentDetached(String enchantment) {
@@ -125,8 +136,33 @@ public final class ToolsMessages {
         return Component.text("That augment is not compatible with the held item.", NamedTextColor.RED);
     }
 
+    public Component augmentCurseAlreadyAttached(String enchantment) {
+        return Component.text("The curse " + enchantment + " is already bound to that item.", NamedTextColor.RED);
+    }
+
+    public Component augmentCurseNotCurse(String enchantment) {
+        return Component.text(enchantment + " is not a registered curse.", NamedTextColor.RED);
+    }
+
+    public Component augmentCurseInvalid(String token) {
+        return Component.text("Invalid curse rider: " + token + ".", NamedTextColor.RED);
+    }
+
+    public Component augmentCurseDuplicate(String enchantment) {
+        return Component.text("The curse rider " + enchantment + " was listed more than once.", NamedTextColor.RED);
+    }
+
+    public Component augmentCursePrimary(String enchantment) {
+        return Component.text("The curse rider " + enchantment + " cannot also be the primary enchantment.", NamedTextColor.RED);
+    }
+
+    public Component augmentTooManyCurses(int maximum) {
+        return Component.text("That gem has too many curse riders; the maximum is " + maximum + ".", NamedTextColor.RED);
+    }
+
     public Component augmentMigrated(int count) {
-        return Component.text("Migrated " + count + " enchantment(s) into augment slots.", NamedTextColor.GREEN);
+        return Component.text("Migrated " + count + " enchantment(s) into gems; purchased slots were reset.",
+                NamedTextColor.GREEN);
     }
 
     public Component augmentPurchase(int cost, int slots) {
@@ -137,12 +173,21 @@ public final class ToolsMessages {
         return Component.text("You do not have enough XP for that augment slot.", NamedTextColor.RED);
     }
 
+    public Component augmentPurchaseUnsafeXp() {
+        return Component.text("That slot purchase cannot be represented safely at your current XP level.",
+                NamedTextColor.RED);
+    }
+
     public Component augmentMalformed() {
         return Component.text("This item contains an invalid augment record; it was skipped.", NamedTextColor.RED);
     }
 
     public Component augmentGemName() {
         return Component.text("Augment Gem", NamedTextColor.LIGHT_PURPLE);
+    }
+
+    public Component augmentGemLore(Component enchantmentName) {
+        return enchantmentName.decoration(TextDecoration.ITALIC, false);
     }
 
     public Component augmentHubTitle() {
@@ -179,6 +224,10 @@ public final class ToolsMessages {
                 active ? NamedTextColor.AQUA : NamedTextColor.DARK_GRAY);
     }
 
+    public Component augmentCurseLore(String enchantment) {
+        return Component.text("Curse: " + enchantment, NamedTextColor.RED);
+    }
+
     public Component augmentInventoryGem(String enchantment, int level) {
         return Component.text("Attach " + enchantment + " " + level, NamedTextColor.LIGHT_PURPLE);
     }
@@ -204,9 +253,51 @@ public final class ToolsMessages {
         return Component.text("There is not enough inventory space for the recovered augment gems.", NamedTextColor.RED);
     }
 
+    public Component augmentTableConversionFailed() {
+        return Component.text("The table enchantment could not be converted; the vanilla result was kept.", NamedTextColor.RED);
+    }
+
+    public Component augmentBookConversionFailed() {
+        return Component.text("That enchanted book could not be converted safely; it was left unchanged.", NamedTextColor.RED);
+    }
+
     public Component augmentBundleResult(int recovered) {
         return Component.text("The bundle destroyed the item and recovered " + recovered + " augment gem(s).",
                 NamedTextColor.LIGHT_PURPLE);
+    }
+
+    public Component xpBottleXpTotalTooLargeIngredientsReturned() {
+        return Component.text("Your XP total is too large to store safely; ingredients returned.",
+                NamedTextColor.RED);
+    }
+
+    public Component xpBottleNotEnoughXpIngredientsReturned() {
+        return Component.text("Not enough XP to brew XP bottles. Ingredients returned.", NamedTextColor.RED);
+    }
+
+    public Component xpBottleXpChangedReturned() {
+        return Component.text("Your XP total changed and the brew was returned without a charge.",
+                NamedTextColor.RED);
+    }
+
+    public Component xpBottleChargeFailed() {
+        return Component.text("Your XP total could not be charged safely; the brew was returned unchanged.",
+                NamedTextColor.RED);
+    }
+
+    public Component xpBottlePartialBrew(int affordable, int totalBottles) {
+        return Component.text("Not enough XP for all bottles — brewed " + affordable + " of " + totalBottles + ".",
+                NamedTextColor.YELLOW);
+    }
+
+    public Component xpBottleConsumeRejected() {
+        return Component.text("Your XP total is too large to receive that bottle safely; the bottle was not consumed.",
+                NamedTextColor.RED);
+    }
+
+    public Component xpBottleAwardFailed() {
+        return Component.text("Your XP total could not be increased safely; the bottle was not consumed.",
+                NamedTextColor.RED);
     }
 
     public Component repairKitDialogBody() {

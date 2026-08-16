@@ -472,12 +472,13 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         ), Material.SPLASH_POTION, 31, ColorUtil.HELP_GRAD_CUSTOM_ENCHANTS, List.of("telekinesis")));
 
         articles.add(new HelpArticle("disenchanting", "Disenchanting Bundle", List.of(
-                gray("Extracts enchantments into books via lore-tagged bundles."),
-                aqua("Per-extract success chance:"),
-                white("1st 100% → 2nd 80% → 3rd 60% → 4th 40% → 5th 20%."),
-                green("Highest quality tier is extracted first."),
-                yellow("Chance does NOT reset on failure."),
-                red("Failures consume the enchant without producing a book."),
+                gray("Recovers attached augments as Augment Gems via any lore-tagged bundle."),
+                aqua("Recovery order and chance:"),
+                white("Highest quality first; successful recovery steps use 100% → 80% → 60% → 40% → 20% → 0%."),
+                yellow("Failed rolls return no gem and do not advance the chance ladder."),
+                yellow("Legacy enchantments are migrated before the source item is destroyed."),
+                red("Bound curses are destroyed with the source item and never return as riders."),
+                red("A legacy item containing only curses is refused before anything is consumed."),
                 red("The bundle is consumed on use."),
                 red("Cannot extract from tools with Spawner Pickup or Egg Collector.")
         ), Material.BUNDLE, 32, ColorUtil.HELP_GRAD_DISENCHANTING, List.of("tiers")));
@@ -618,10 +619,19 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         articles.add(new HelpArticle("augments", "Augments", List.of(
                 gray("Augment Gems hold real registry enchantments while the item ledger owns slot state."),
                 cmd("/augment", "Open the two-screen slot and augment menu for the held item."),
-                white("Enchanting tables and enchanted books produce gems; a gem right-click opens the same attach flow."),
-                white("Slots use ◌ for unpurchased, ○ for purchased, and ● for occupied slots."),
-                white("Turning an augment off removes the active enchantment but keeps its slot occupied."),
-                yellow("A Disenchanting Bundle destroys the source item and recovers gems using the tiered chance ladder."),
+                white("Enchanting tables charge and complete normally, then convert the result into gems one tick later."),
+                white("Enchanted books produce gems; a gem right-click opens the same attach flow."),
+                white("Gems name their primary enchantment and any permanent curse riders in their lore."),
+                 white("Table and book curses ride another gem; an all-curse roll produces one curse-only gem."),
+                 white("Slots use ◌ for unpurchased, ○ for purchased, and ● for occupied slots."),
+                 white("Configured capacities remain exact for purchases; indicators above 64 slots use …."),
+                 white("Turning an augment off removes the active enchantment but keeps its slot occupied."),
+                 yellow("Curses are permanent, free, locked enchantments; a Disenchanting Bundle destroys them with the source item."),
+                 yellow("A Disenchanting Bundle validates every ledger record before mutation, randomizes highest-tier ties, and keeps the current chance after a failure."),
+                white("Legacy enchantments migrate once into gems with slots and entries reset; curses stay on the item."),
+                white("Plain items gain no augment PDC until a slot is purchased or a gem is attached."),
+                white("Book conversion rechecks exact post-event stack deltas; foreign lookalike lore is preserved."),
+                cmd("/augment give <player> <enchantment-key> [level] [curse-key[:level] ...]", "Admin test-gem command."),
                 red("Augment state is stored in PDC and survives renamed items and foreign metadata.")
         ), Material.AMETHYST_SHARD, 32, ColorUtil.HELP_GRAD_GEM_CONNOISSEUR, List.of("tiers", "durability_tools")));
 

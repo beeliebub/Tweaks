@@ -23,7 +23,8 @@ import me.beeliebub.tweaks.tools.augments.AugmentGemListener;
 import me.beeliebub.tweaks.tools.augments.AugmentService;
 import me.beeliebub.tweaks.tools.augments.AugmentTableListener;
 import me.beeliebub.tweaks.tools.augments.BookConversionListener;
-import me.beeliebub.tweaks.enchantments.DisenchantingBundle;
+import me.beeliebub.tweaks.tools.augments.DisenchantingBundle;
+import me.beeliebub.tweaks.tools.augments.SlotCalculator;
 
 /** Tier 5 composition root for the live player-tools systems. */
 public final class ToolsBootstrap {
@@ -70,6 +71,7 @@ public final class ToolsBootstrap {
         plugin.getCommand("repairkit").setTabCompleter(repairKitCommand);
 
         services.configCommand().setMaterialGridHandler(recipes::applyConfiguredGrid);
+        services.configCommand().setSlotCapacityKeyValidator(SlotCalculator::isValidCapacityKey);
         services.configCommand().addConfigChangedListener(path -> {
             if (path.startsWith("xp.")) xpSettings.refresh();
             if (path.startsWith("tools.repair-kit.")) {
@@ -91,7 +93,7 @@ public final class ToolsBootstrap {
         plugin.getCommand("augment").setExecutor(augmentCommand);
         plugin.getCommand("augment").setTabCompleter(augmentCommand);
         plugin.getServer().getPluginManager().registerEvents(new AugmentGemListener(augments.gemItem(), augmentDialog), plugin);
-        plugin.getServer().getPluginManager().registerEvents(new AugmentTableListener(augments), plugin);
+        plugin.getServer().getPluginManager().registerEvents(new AugmentTableListener(plugin, augments), plugin);
         plugin.getServer().getPluginManager().registerEvents(new BookConversionListener(plugin, augments), plugin);
         plugin.getServer().getPluginManager().registerEvents(new DisenchantingBundle(plugin, services.qualityRegistry(), augments), plugin);
     }
