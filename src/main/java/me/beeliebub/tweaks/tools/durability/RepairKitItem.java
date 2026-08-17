@@ -26,9 +26,9 @@ public final class RepairKitItem {
         Material material = configuredMaterial();
         ItemStack stack = new ItemStack(material, Math.max(1, Math.min(64, amount)));
         ItemMeta meta = stack.getItemMeta();
-        meta.displayName(Messages.TOOLS.repairKitName());
         meta.getPersistentDataContainer().set(markerKey, PersistentDataType.BYTE, (byte) 1);
         stack.setItemMeta(meta);
+        stack.setData(DataComponentTypes.ITEM_NAME, Messages.TOOLS.repairKitName());
         String model = plugin.getConfig().getString("tools.repair-kit.item-model", "jass:repair_kit");
         if (model != null && Key.key(model) != null) stack.setData(DataComponentTypes.ITEM_MODEL, Key.key(model));
         stack.setData(DataComponentTypes.RARITY, ItemRarity.UNCOMMON);

@@ -46,12 +46,19 @@ public final class AugmentCommand implements CommandExecutor, TabCompleter {
             if (args[0].equalsIgnoreCase("debug")) {
                 if (sender instanceof Player player) {
                     ItemStack item = player.getInventory().getItemInMainHand();
+                    SlotCalculator.CapacityResolution capacity = augments.slotCalculator()
+                            .capacityResolution(item.getType());
+                    int purchased = augments.ledger().slots(item);
+                    SlotCalculator.PriceResolution price = augments.slotCalculator()
+                            .priceResolution(purchased + 1);
                     player.sendMessage(Messages.TOOLS.augmentSlotsBody(
                             augments.slotCalculator().slotDots(augments.ledger().slots(item),
                                     augments.slotCalculator().used(augments.entries(item)),
-                                    augments.slotCalculator().capacity(item.getType())),
+                                    capacity.value()),
                             augments.slotCalculator().used(augments.entries(item)),
-                            augments.slotCalculator().capacity(item.getType())));
+                            capacity.value()));
+                    player.sendMessage(Messages.TOOLS.augmentDebugResolution(item.getType().name(),
+                            capacity.key(), capacity.value(), price.key(), price.value()));
                 }
                 return true;
             }
@@ -125,7 +132,8 @@ public final class AugmentCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (target.getInventory().addItem(gem).isEmpty()) {
-            sender.sendMessage(Messages.TOOLS.augmentAttached(enchantment.getKey().toString(), level, riders.size()));
+            sender.sendMessage(Messages.TOOLS.augmentAttached(
+                    Messages.TOOLS.enchantmentName(enchantment, level), riders.size()));
         } else {
             sender.sendMessage(Messages.TOOLS.inventoryFull());
         }

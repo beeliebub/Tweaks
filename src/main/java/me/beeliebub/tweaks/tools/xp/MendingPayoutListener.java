@@ -11,6 +11,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerExpChangeEvent;
+import org.bukkit.event.player.PlayerItemMendEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
@@ -29,6 +30,15 @@ public final class MendingPayoutListener implements Listener {
         this.plugin = plugin;
         this.economy = economy;
         this.settings = settings;
+    }
+
+    /**
+     * An experience orb repairs a Mending item before granting its remaining experience, so
+     * cancelling the mend is the only way to route the orb's full value into the payout.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onItemMend(PlayerItemMendEvent event) {
+        if (settings.mendingEnabled() && settings.mending() != null) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

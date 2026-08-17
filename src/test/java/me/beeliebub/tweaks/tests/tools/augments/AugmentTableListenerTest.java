@@ -27,6 +27,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AugmentTableListenerTest {
@@ -151,7 +152,9 @@ class AugmentTableListenerTest {
             player.getInventory().setItem(i, new ItemStack(Material.STONE, 64));
         }
 
-        listener.onEnchant(event(player, inventory, Map.of(Enchantment.EFFICIENCY, 5)));
+        EnchantItemEvent event = event(player, inventory, Map.of(Enchantment.EFFICIENCY, 5));
+        listener.onEnchant(event);
+        verify(event).setCancelled(true);
         server.getScheduler().performOneTick();
 
         assertTrue(item.containsEnchantment(Enchantment.EFFICIENCY));

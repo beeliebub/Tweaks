@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.tools.durability;
 
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
@@ -36,9 +37,11 @@ public final class DurabilityListener implements Listener {
         if (neverBreak() && service.isSpent(item)) event.setCancelled(true);
     }
 
-    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.NORMAL)
     public void onInteract(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND || event.getAction() == Action.PHYSICAL) return;
+        // An air interaction reports itself as cancelled, so ignoreCancelled would skip it.
+        if (event.useItemInHand() == Event.Result.DENY) return;
         ItemStack item = event.getItem();
         service.ensureStamped(item);
         if (neverBreak() && service.isSpent(item)) event.setCancelled(true);
@@ -83,14 +86,13 @@ public final class DurabilityListener implements Listener {
     public void onItemDamage(PlayerItemDamageEvent event) {
         ItemStack item = event.getItem();
         if (!service.ensureStamped(item) || !neverBreak()) return;
-        var meta = item.getItemMeta();
-        if (!(meta instanceof org.bukkit.inventory.meta.Damageable damageable)) return;
         int max = service.maxDamage(item);
-        if (damageable.getDamage() >= max - 1) {
+        int currentDamage = service.damage(item);
+        if (currentDamage >= max - 1) {
             event.setCancelled(true);
             return;
         }
-        event.setDamage(Math.min(event.getDamage(), Math.max(0, max - 1 - damageable.getDamage())));
+        event.setDamage(Math.min(event.getDamage(), Math.max(0, max - 1 - currentDamage)));
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

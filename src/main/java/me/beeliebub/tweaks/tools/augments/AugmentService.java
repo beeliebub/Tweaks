@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 
 /** Transactional owner for slot purchases, gem attachment, toggles, and migration. */
@@ -33,10 +34,17 @@ public final class AugmentService {
     private final SlotCalculator slotCalculator;
     private final AugmentCompatibility compatibility;
     private final AugmentLore lore;
+    private final Consumer<ItemStack> durabilityStamp;
 
     public AugmentService(Tweaks plugin, QualityRegistry qualityRegistry) {
+        this(plugin, qualityRegistry, item -> {});
+    }
+
+    public AugmentService(Tweaks plugin, QualityRegistry qualityRegistry,
+                          Consumer<ItemStack> durabilityStamp) {
         this.plugin = plugin;
         this.qualityRegistry = qualityRegistry;
+        this.durabilityStamp = durabilityStamp == null ? item -> {} : durabilityStamp;
         this.ledger = new AugmentLedger(plugin);
         this.gemItem = new AugmentGemItem(plugin);
         this.slotCalculator = new SlotCalculator(plugin, qualityRegistry);
@@ -70,6 +78,13 @@ public final class AugmentService {
     public static boolean hasAugmentsOrLegacy(ItemStack item) {
         return item != null && !item.isEmpty()
                 && (AugmentLedger.hasLedger(item) || !item.getEnchantments().isEmpty());
+    }
+
+    public static boolean hasMeaningfulAugmentState(AugmentLedger ledger, ItemStack item) {
+        if (item == null || item.isEmpty()) return false;
+        return item.getEnchantments().isEmpty() ? ledger != null
+                && (ledger.slots(item) > 0 || !ledger.entries(item).isEmpty() || !ledger.curses(item).isEmpty())
+                : true;
     }
 
     public boolean compatibleForDisplay(ItemStack item, Enchantment enchantment, List<AugmentEntry> entries) {
@@ -146,6 +161,7 @@ public final class AugmentService {
             if (!curses.contains(enchantment)) item.removeEnchantment(enchantment);
         }
         lore.update(item, qualityRegistry);
+        durabilityStamp.accept(item);
         if (!gems.isEmpty()) player.sendMessage(Messages.TOOLS.augmentMigrated(gems.size()));
         addGems(player, gems);
         return List.copyOf(gems);
@@ -167,6 +183,22 @@ public final class AugmentService {
         for (Enchantment enchantment : item.getEnchantments().keySet().toArray(Enchantment[]::new)) {
             if (!curses.contains(enchantment)) item.removeEnchantment(enchantment);
         }
+        lore.update(item, qualityRegistry);
+        durabilityStamp.accept(item);
+        return true;
+    }
+
+    /** Establishes the augment schema on a newly crafted damageable item without changing live enchants. */
+    public boolean initializeCraftedItem(ItemStack item) {
+        if (item == null || item.isEmpty() || AugmentLedger.hasLedger(item)) return false;
+        List<AugmentEntry> entries = new ArrayList<>();
+        for (Map.Entry<Enchantment, Integer> entry : item.getEnchantments().entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue() <= 0
+                    || isCurse(entry.getKey())) continue;
+            entries.add(new AugmentEntry(entry.getKey().getKey(), entry.getValue(), true));
+        }
+        ledger.write(item, 0, entries, true);
+        durabilityStamp.accept(item);
         lore.update(item, qualityRegistry);
         return true;
     }
@@ -222,6 +254,10 @@ public final class AugmentService {
         }
         int next = purchased + 1;
         int cost = slotCalculator.price(next);
+        if (cost < 0) {
+            player.sendMessage(Messages.TOOLS.augmentPurchaseRejected());
+            return false;
+        }
         int level = player.getLevel();
         if (level < cost) {
             player.sendMessage(Messages.TOOLS.augmentPurchaseRejected());
@@ -240,6 +276,7 @@ public final class AugmentService {
             player.sendMessage(Messages.TOOLS.augmentPurchaseUnsafeXp());
             return false;
         }
+        boolean firstLedger = !AugmentLedger.hasLedger(item);
         List<AugmentEntry> previousEntries = ledger.entries(item);
         boolean previousMigrated = ledger.migrated(item);
         ledger.write(item, next, previousEntries, true);
@@ -251,6 +288,7 @@ public final class AugmentService {
             return false;
         }
         lore.update(item, qualityRegistry);
+        if (firstLedger) durabilityStamp.accept(item);
         player.sendMessage(Messages.TOOLS.augmentPurchase(cost, next));
         return true;
     }
@@ -280,6 +318,7 @@ public final class AugmentService {
             if (knownCurses.contains(enchantment)) boundCurses.add(enchantment.getKey());
         }
         Set<org.bukkit.NamespacedKey> incomingCurses = new HashSet<>();
+        boolean callbackNeeded = !AugmentLedger.hasLedger(item);
         for (AugmentGemItem.CurseRider curse : curses) {
             if (curse == null || curse.enchantment() == null || !knownCurses.contains(curse.enchantment())
                     || curse.level() <= 0) {
@@ -287,7 +326,8 @@ public final class AugmentService {
                 return false;
             }
             if (!incomingCurses.add(curse.enchantment().getKey()) || boundCurses.contains(curse.enchantment().getKey())) {
-                player.sendMessage(Messages.TOOLS.augmentCurseAlreadyAttached(curse.enchantment().getKey().toString()));
+                player.sendMessage(Messages.TOOLS.augmentCurseAlreadyAttached(
+                        Messages.TOOLS.enchantmentName(curse.enchantment(), curse.level())));
                 return false;
             }
         }
@@ -343,6 +383,7 @@ public final class AugmentService {
             player.sendMessage(Messages.TOOLS.inventoryFull());
             return false;
         }
+        if (needsMigration && !migrationGems.isEmpty()) callbackNeeded = false;
 
         if (!curses.isEmpty() && !ledger.appendCurses(item, curses)) {
             player.sendMessage(Messages.TOOLS.augmentIncompatible());
@@ -369,8 +410,10 @@ public final class AugmentService {
         if (augment == null) {
             player.sendMessage(Messages.TOOLS.augmentCursesAttached(curses.size()));
         } else {
-            player.sendMessage(Messages.TOOLS.augmentAttached(augment.getKey().toString(), data.level(), curses.size()));
+            player.sendMessage(Messages.TOOLS.augmentAttached(
+                    Messages.TOOLS.enchantmentName(augment, data.level()), curses.size()));
         }
+        if (callbackNeeded && AugmentLedger.hasLedger(item)) durabilityStamp.accept(item);
         return true;
     }
 
@@ -389,7 +432,8 @@ public final class AugmentService {
             current.set(entryIndex, new AugmentEntry(entry.enchantmentKey(), entry.level(), false));
             ledger.write(item, ledger.slots(item), current, ledger.migrated(item));
             lore.update(item, qualityRegistry);
-            player.sendMessage(Messages.TOOLS.augmentDetached(enchantment.getKey().toString()));
+            player.sendMessage(Messages.TOOLS.augmentDetached(
+                    Messages.TOOLS.enchantmentName(enchantment, entry.level())));
             return true;
         }
         List<AugmentEntry> others = new ArrayList<>(current);
@@ -513,10 +557,22 @@ public final class AugmentService {
         return stripTableEnchantmentsResult(player, item, snapshot, random, preExistingEnchantments, false) != null;
     }
 
+    public GemBatchResult prepareTableGems(Map<Enchantment, Integer> snapshot, Random random) {
+        return createGemBatchResult(snapshot, random);
+    }
+
     public ItemStack stripTableEnchantmentsResult(Player player, ItemStack item,
                                                   Map<Enchantment, Integer> snapshot, Random random,
                                                   Map<Enchantment, Integer> preExistingEnchantments,
                                                   boolean normalizePlainBook) {
+        return stripTableEnchantmentsResult(player, item, snapshot, preExistingEnchantments,
+                normalizePlainBook, prepareTableGems(snapshot, random).gems());
+    }
+
+    public ItemStack stripTableEnchantmentsResult(Player player, ItemStack item,
+                                                  Map<Enchantment, Integer> snapshot,
+                                                  Map<Enchantment, Integer> preExistingEnchantments,
+                                                  boolean normalizePlainBook, List<ItemStack> preparedGems) {
         if (player == null || item == null || item.isEmpty() || snapshot == null || snapshot.isEmpty()
                 || !ledgerStateValid(item)) return null;
         boolean storedBook = item.getType() == Material.ENCHANTED_BOOK
@@ -528,7 +584,7 @@ public final class AugmentService {
                 if (storage.getStoredEnchantLevel(entry.getKey()) != entry.getValue()) return null;
             } else if (item.getEnchantmentLevel(entry.getKey()) != entry.getValue()) return null;
         }
-        List<ItemStack> gems = createGemBatch(snapshot, random);
+        List<ItemStack> gems = preparedGems == null ? List.of() : List.copyOf(preparedGems);
         if (gems.isEmpty() || !canFit(player, gems)) return null;
         ItemStack result = item;
         if (storedBook) {

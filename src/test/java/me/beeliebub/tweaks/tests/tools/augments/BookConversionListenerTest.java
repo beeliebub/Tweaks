@@ -6,7 +6,9 @@ import me.beeliebub.tweaks.tools.augments.AugmentService;
 import me.beeliebub.tweaks.tools.augments.BookConversionListener;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.entity.Item;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
@@ -28,8 +30,10 @@ import java.util.Random;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -175,6 +179,52 @@ class BookConversionListenerTest {
 
         MessageAssert.assertMessageSent(player, "could not be converted safely");
         assertEquals(1, player.getInventory().getItem(0).getAmount());
+    }
+
+    @Test
+    void fullInventoryPickupLeavesTheEntityAndEventUnchanged() {
+        PlayerMock player = server.addPlayer("FullBookPicker");
+        while (player.nextComponentMessage() != null) {}
+        fillStorage(player);
+        ItemStack book = enchantedBook(1);
+        Item entity = mock(Item.class);
+        when(entity.getItemStack()).thenReturn(book);
+        EntityPickupItemEvent event = mock(EntityPickupItemEvent.class);
+        when(event.getEntity()).thenReturn(player);
+        when(event.getItem()).thenReturn(entity);
+
+        listener.onPickup(event);
+
+        verify(event, never()).setCancelled(anyBoolean());
+        verify(entity, never()).remove();
+        assertEquals(1, book.getAmount());
+        assertTrue(augments.inventoryGems(player).isEmpty());
+        MessageAssert.assertMessageSent(player, "Your inventory does not have enough room");
+    }
+
+    @Test
+    void fullInventoryMoveLeavesTheSourceAndEventUnchanged() {
+        PlayerMock player = server.addPlayer("FullBookMover");
+        fillStorage(player);
+        Inventory source = Bukkit.createInventory(null, 9);
+        ItemStack sourceStack = enchantedBook(2);
+        source.setItem(0, sourceStack);
+        InventoryMoveItemEvent event = mock(InventoryMoveItemEvent.class);
+        when(event.getDestination()).thenReturn(player.getInventory());
+        when(event.getSource()).thenReturn(source);
+        when(event.getItem()).thenReturn(sourceStack.clone());
+
+        listener.onInventoryMove(event);
+
+        verify(event, never()).setCancelled(anyBoolean());
+        assertEquals(2, source.getItem(0).getAmount());
+        assertTrue(augments.inventoryGems(player).isEmpty());
+    }
+
+    private static void fillStorage(PlayerMock player) {
+        for (int slot = 0; slot < player.getInventory().getStorageContents().length; slot++) {
+            player.getInventory().setItem(slot, new ItemStack(Material.STONE, 64));
+        }
     }
 
     private static ItemStack enchantedBook(int amount) {

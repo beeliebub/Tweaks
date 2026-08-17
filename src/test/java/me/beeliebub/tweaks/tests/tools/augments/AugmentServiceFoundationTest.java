@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -80,8 +81,7 @@ class AugmentServiceFoundationTest {
 
         augments.updateLore(item);
         List<Component> withDuplicate = new ArrayList<>(item.getItemMeta().lore());
-        String visibleSlot = PlainTextComponentSerializer.plainText().serialize(withDuplicate.getLast())
-                .replace("\u2063", "");
+        String visibleSlot = PlainTextComponentSerializer.plainText().serialize(withDuplicate.getLast());
         withDuplicate.add(Component.text(visibleSlot));
         meta = item.getItemMeta();
         meta.lore(withDuplicate);
@@ -95,5 +95,17 @@ class AugmentServiceFoundationTest {
         assertEquals(1, plain.stream().filter("Augment: minecraft:fortune 3 ●"::equals).count());
         assertTrue(plain.contains("Keep this line"));
         assertEquals(2, plain.stream().filter(line -> line.startsWith("Augment Slots:")).count());
+    }
+
+    @Test
+    void firstLedgerMutationInvokesTheDurabilityStampCallback() {
+        AtomicInteger stamps = new AtomicInteger();
+        AugmentService service = new AugmentService(plugin, null, item -> stamps.incrementAndGet());
+        org.mockbukkit.mockbukkit.entity.PlayerMock player = server.addPlayer("StampTester");
+        player.setLevel(30);
+        ItemStack item = new ItemStack(Material.DIAMOND_PICKAXE);
+
+        assertTrue(service.purchaseSlot(player, item));
+        assertEquals(1, stamps.get());
     }
 }

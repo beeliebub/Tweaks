@@ -4,8 +4,10 @@ import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
 import me.beeliebub.tweaks.enchantments.quality.QualityTier;
 import org.bukkit.Material;
+import org.bukkit.configuration.ConfigurationSection;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** Bukkit-light slot capacity, purchase-price, and quality-weight math. */
@@ -33,17 +35,52 @@ public final class SlotCalculator {
     }
 
     public int capacity(Material material) {
-        String exact = material.name().toLowerCase(java.util.Locale.ROOT);
-        int configured = mapInt("tools.augments.slot-capacity." + exact, -1);
-        if (configured >= 0) return configured;
-        String family = family(material);
-        configured = family == null ? -1 : mapInt("tools.augments.slot-capacity." + family, -1);
-        if (configured >= 0) return configured;
-        return Math.max(0, Math.min(64, plugin.getConfig().getInt("tools.augments.slot-capacity-default", 5)));
+        return capacityResolution(material).value();
     }
 
     public int price(int slot) {
-        return Math.max(0, mapInt("tools.augments.slot-prices." + slot, 0));
+        return priceResolution(slot).value();
+    }
+
+    public CapacityResolution capacityResolution(Material material) {
+        Material resolvedMaterial = material == null ? Material.AIR : material;
+        String exact = resolvedMaterial.name().toLowerCase(java.util.Locale.ROOT);
+        int configured = mapInt("tools.augments.slot-capacity." + exact, -1);
+        if (configured >= 0) return new CapacityResolution("exact:" + exact, configured);
+        String family = family(resolvedMaterial);
+        configured = family == null ? -1 : mapInt("tools.augments.slot-capacity." + family, -1);
+        if (configured >= 0) return new CapacityResolution("family:" + family, configured);
+        return new CapacityResolution("default",
+                Math.max(0, Math.min(64, plugin.getConfig().getInt("tools.augments.slot-capacity-default", 5))));
+    }
+
+    public PriceResolution priceResolution(int slot) {
+        Object raw = plugin.getConfig().get("tools.augments.slot-prices");
+        if (raw instanceof Map<?, ?> values) {
+            String exactKey = Integer.toString(slot);
+            if (values.containsKey(slot) || values.containsKey(exactKey)) {
+                Object value = values.containsKey(slot) ? values.get(slot) : values.get(exactKey);
+                return new PriceResolution("exact:" + slot,
+                        value instanceof Number number ? number.intValue() : -1);
+            }
+            int highest = values.values().stream()
+                    .filter(Number.class::isInstance)
+                    .mapToInt(value -> ((Number) value).intValue())
+                    .max().orElse(-1);
+            return highest < 0 ? new PriceResolution("unpriced", -1)
+                    : new PriceResolution("highest-configured", highest);
+        }
+        String exactPath = "tools.augments.slot-prices." + slot;
+        if (plugin.getConfig().contains(exactPath)) {
+            return new PriceResolution("exact:" + slot, mapInt(exactPath, -1));
+        }
+        ConfigurationSection section = plugin.getConfig().getConfigurationSection("tools.augments.slot-prices");
+        int highest = section == null ? -1 : section.getValues(false).values().stream()
+                .filter(Number.class::isInstance)
+                .mapToInt(value -> ((Number) value).intValue())
+                .max().orElse(-1);
+        return highest < 0 ? new PriceResolution("unpriced", -1)
+                : new PriceResolution("highest-configured", highest);
     }
 
     public int qualityWeight(org.bukkit.enchantments.Enchantment enchantment) {
@@ -107,4 +144,8 @@ public final class SlotCalculator {
     private static String familyKey(String family) {
         return FAMILY_KEYS.contains(family) ? family : null;
     }
+
+    public record CapacityResolution(String key, int value) {}
+
+    public record PriceResolution(String key, int value) {}
 }

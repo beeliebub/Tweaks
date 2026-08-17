@@ -15,6 +15,7 @@ import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 
@@ -42,6 +43,14 @@ public final class AugmentTableListener implements Listener {
         Map<Enchantment, Integer> snapshot = Collections.unmodifiableMap(ordered);
         if (snapshot.isEmpty()) return;
         Player player = event.getEnchanter();
+        AugmentService.GemBatchResult prepared = augments.prepareTableGems(
+                snapshot, java.util.concurrent.ThreadLocalRandom.current());
+        if (prepared.refused() || prepared.gems().isEmpty() || !augments.canFit(player, prepared.gems())) {
+            event.setCancelled(true);
+            player.sendMessage(me.beeliebub.tweaks.core.Messages.TOOLS.augmentTableInventoryFull());
+            return;
+        }
+        List<ItemStack> preparedGems = prepared.gems();
         InventoryView view = player.getOpenInventory();
         ItemStack sourceSnapshot = event.getItem() == null ? null : event.getItem().clone();
         if (sourceSnapshot == null || sourceSnapshot.isEmpty()) {
@@ -66,7 +75,7 @@ public final class AugmentTableListener implements Listener {
                 boolean normalizePlainBook = sourceSnapshot.getType() == Material.BOOK
                         && stack.getType() == Material.ENCHANTED_BOOK;
                 ItemStack converted = augments.stripTableEnchantmentsResult(player, stack, snapshot,
-                        java.util.concurrent.ThreadLocalRandom.current(), preExisting, normalizePlainBook);
+                        preExisting, normalizePlainBook, preparedGems);
                 if (converted == null) {
                     player.sendMessage(me.beeliebub.tweaks.core.Messages.TOOLS.augmentTableConversionFailed());
                     return;

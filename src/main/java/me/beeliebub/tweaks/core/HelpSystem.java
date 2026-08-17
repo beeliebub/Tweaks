@@ -595,6 +595,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("Crops, leaves, leaf decay, and configured stone blocks each use their own percentage."),
                 white("Placed leaves and stone are tainted and do not award custom XP."),
                 white("A Mending item in either hand or armor converts collected XP to economy credit."),
+                yellow("When Mending payout is enabled, the repair step is cancelled so the full orb value can be paid out."),
                 cmd("/tconfig xp", "Edit XP toggles, chances, materials, taint TTL, and the Mending rate.")
         ), Material.EXPERIENCE_BOTTLE, 26, ColorUtil.HELP_GRAD_XP_STORAGE, List.of("xp_bottles", "profiles")));
 
@@ -607,12 +608,14 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         ), Material.GOLD_INGOT, 28, ColorUtil.HELP_GRAD_ECONOMY, List.of("balance", "tool_xp")));
 
         articles.add(new HelpArticle("durability_tools", "Durability and Repair Kits", List.of(
-                gray("Damageable items receive a larger, tiered durability pool the first time they are used."),
-                white("Repair Kits restore an item, advance its tier, and consume one kit."),
+                gray("Only augmented or already-participating damageable items receive a custom durability pool; plain items use vanilla breaking."),
+                white("Crafted and smithing damageables are initialized as augmented items, including an empty ledger when no enchantments are present."),
+                white("Repair Kits restore one augmented item, advance its tier, and consume one kit."),
                 cmd("/repairkit give [player] [amount]", "Admin command for test kits."),
                 cmd("/repairkit debug", "Admin command showing the held item's durability state."),
                 cmd("/rename [name]", "Free plain-text or color-formatted rename; omit the name to reset."),
-                yellow("Spent tools remain in the inventory and cannot be used when never-break is enabled."),
+                yellow("With never-break enabled, spent augmented tools remain at one durability point and cannot be used; disabling it restores normal breaking."),
+                white("Repair-kit menus hide plain items and report Repair kit applied! Repair X/Y after a successful repair."),
                 red("Anvils and grindstones are locked unless the bypass permission is present.")
         ), Material.DIAMOND_PICKAXE, 30, ColorUtil.HELP_GRAD_TOOL_PROTECT, List.of("toolprotect", "item_admin")));
 
@@ -620,17 +623,18 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 gray("Augment Gems hold real registry enchantments while the item ledger owns slot state."),
                 cmd("/augment", "Open the two-screen slot and augment menu for the held item."),
                 white("Enchanting tables charge and complete normally, then convert the result into gems one tick later."),
-                white("Enchanted books produce gems; a gem right-click opens the same attach flow."),
-                white("Gems name their primary enchantment and any permanent curse riders in their lore."),
-                 white("Table and book curses ride another gem; an all-curse roll produces one curse-only gem."),
-                 white("Slots use ◌ for unpurchased, ○ for purchased, and ● for occupied slots."),
-                 white("Configured capacities remain exact for purchases; indicators above 64 slots use …."),
-                 white("Turning an augment off removes the active enchantment but keeps its slot occupied."),
-                 yellow("Curses are permanent, free, locked enchantments; a Disenchanting Bundle destroys them with the source item."),
-                 yellow("A Disenchanting Bundle validates every ledger record before mutation, randomizes highest-tier ties, and keeps the current chance after a failure."),
+                yellow("The complete gem batch is preflighted before the table result is accepted; a refusal or full inventory cancels the enchantment and keeps the vanilla result."),
+                white("Enchanted books produce gems; a gem right-click on air or a block opens the same attach flow."),
+                white("Gems use readable enchantment names with Arabic levels; table and book curses ride another gem, while an all-curse roll produces one curse-only gem."),
+                white("A curse primary uses Bind and rider curses appear under that gem's action; attaching a curse is permanent, free, and occupies no slot."),
+                white("Slots use ◌ for unpurchased, ○ for purchased, and ● for occupied slots."),
+                white("Configured capacities remain exact for purchases; indicators above 64 slots use …; missing prices use the highest configured price."),
+                yellow("An empty price map leaves slots unpriced, so purchases refuse without changing XP or the ledger."),
+                white("Turning an augment off removes the active enchantment but keeps its slot occupied."),
+                yellow("A Disenchanting Bundle validates every ledger record before mutation, randomizes highest-tier ties, and keeps the current chance after a failure."),
                 white("Legacy enchantments migrate once into gems with slots and entries reset; curses stay on the item."),
                 white("Plain items gain no augment PDC until a slot is purchased or a gem is attached."),
-                white("Book conversion rechecks exact post-event stack deltas; foreign lookalike lore is preserved."),
+                white("Book conversion rechecks exact post-event stack deltas; crafted results initialize their own ledger; foreign lookalike lore is preserved by exact component fingerprints."),
                 cmd("/augment give <player> <enchantment-key> [level] [curse-key[:level] ...]", "Admin test-gem command."),
                 red("Augment state is stored in PDC and survives renamed items and foreign metadata.")
         ), Material.AMETHYST_SHARD, 32, ColorUtil.HELP_GRAD_GEM_CONNOISSEUR, List.of("tiers", "durability_tools")));

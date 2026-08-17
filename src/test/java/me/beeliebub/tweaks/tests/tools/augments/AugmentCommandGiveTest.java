@@ -63,7 +63,7 @@ class AugmentCommandGiveTest {
         assertEquals(1, data.level());
         assertEquals(1, data.curses().size());
         assertEquals(2, data.curses().getFirst().level());
-        MessageAssert.assertMessageSent(admin, "minecraft:efficiency");
+        MessageAssert.assertMessageSent(admin, "Efficiency 1");
     }
 
     @Test

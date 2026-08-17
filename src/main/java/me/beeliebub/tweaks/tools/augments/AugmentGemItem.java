@@ -43,7 +43,6 @@ public final class AugmentGemItem {
         Material material = configuredMaterial();
         ItemStack stack = new ItemStack(material);
         ItemMeta meta = stack.getItemMeta();
-        meta.displayName(Messages.TOOLS.augmentGemName());
         int clampedLevel = Math.max(1, level);
         List<CurseRider> safeCurses = curses == null ? List.of() : curses;
         if (safeCurses.size() > MAX_CURSE_RIDERS) {
@@ -75,6 +74,7 @@ public final class AugmentGemItem {
             pdc.set(cursesKey, PersistentDataType.LIST.strings(), encodedCurses);
         }
         stack.setItemMeta(meta);
+        stack.setData(DataComponentTypes.ITEM_NAME, Messages.TOOLS.augmentGemName());
         String model = plugin.getConfig().getString("tools.augments.gem-item-model", "jass:augment_gem");
         try { stack.setData(DataComponentTypes.ITEM_MODEL, Key.key(model)); }
         catch (RuntimeException ignored) { plugin.getLogger().warning("Invalid augment gem item model: " + model); }
@@ -194,12 +194,13 @@ public final class AugmentGemItem {
 
     private Component safeDisplayName(Enchantment enchantment, int level) {
         try {
-            return enchantment.displayName(level);
+            return Messages.TOOLS.enchantmentName(enchantment, level);
         } catch (RuntimeException primaryFailure) {
             try {
-                return enchantment.displayName(Math.max(0, level - 1));
+                return Messages.TOOLS.enchantmentName(enchantment, Math.max(0, level - 1));
             } catch (RuntimeException ignored) {
-                return Component.text(enchantment.getKey().toString());
+                return Component.text(enchantment.getKey().toString() + " " + level)
+                        .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false);
             }
         }
     }

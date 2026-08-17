@@ -3,6 +3,8 @@ package me.beeliebub.tweaks.core;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import org.bukkit.NamespacedKey;
+import org.bukkit.enchantments.Enchantment;
 
 /** Player-facing feedback for the tools, XP, cash, durability, and augment features. */
 public final class ToolsMessages {
@@ -38,7 +40,8 @@ public final class ToolsMessages {
     }
 
     public Component repairKitName() {
-        return Component.text("Repair Kit", NamedTextColor.LIGHT_PURPLE);
+        return Component.text("Repair Kit", NamedTextColor.LIGHT_PURPLE)
+                .decoration(TextDecoration.ITALIC, false);
     }
 
     public Component repairKitUsage() {
@@ -54,15 +57,21 @@ public final class ToolsMessages {
     }
 
     public Component repairKitNoTarget() {
-        return Component.text("Hold a damageable item and use a repair kit.", NamedTextColor.RED);
+        return Component.text("You have no augmented items to repair.", NamedTextColor.RED);
     }
 
-    public Component repairKitApplied(int tier) {
-        return Component.text("Repair kit applied. Durability tier is now " + tier + ".", NamedTextColor.GREEN);
+    public Component repairKitApplied(int repairs, int maxRepairs) {
+        return Component.text("Repair kit applied! Repair " + repairs + "/" + maxRepairs,
+                NamedTextColor.GREEN);
     }
 
     public Component repairKitMaxTier() {
-        return Component.text("That item is already at the maximum repair tier.", NamedTextColor.YELLOW);
+        return Component.text("That item has used all of its repairs and can no longer be restored.",
+                NamedTextColor.YELLOW);
+    }
+
+    public Component repairKitRequiresAugmented() {
+        return Component.text("Repair kits only work on augmented items.", NamedTextColor.RED);
     }
 
     public Component repairKitNoDamageableItem() {
@@ -110,22 +119,27 @@ public final class ToolsMessages {
         return Component.text("Hold an item or an augment gem.", NamedTextColor.RED);
     }
 
-    public Component augmentAttached(String enchantment, int level) {
-        return Component.text("Attached " + enchantment + " " + level + ".", NamedTextColor.GREEN);
+    public Component augmentAttached(Component enchantmentName) {
+        return Component.text("Attached ", NamedTextColor.GREEN)
+                .append(enchantmentName)
+                .append(Component.text(".", NamedTextColor.GREEN));
     }
 
-    public Component augmentAttached(String enchantment, int level, int riders) {
-        if (riders <= 0) return augmentAttached(enchantment, level);
-        return Component.text("Attached " + enchantment + " " + level + " with " + riders
-                + " curse rider(s).", NamedTextColor.GREEN);
+    public Component augmentAttached(Component enchantmentName, int riders) {
+        if (riders <= 0) return augmentAttached(enchantmentName);
+        return Component.text("Attached ", NamedTextColor.GREEN)
+                .append(enchantmentName)
+                .append(Component.text(" with " + riders + " curse rider(s).", NamedTextColor.GREEN));
     }
 
     public Component augmentCursesAttached(int count) {
         return Component.text("Attached " + count + " permanent curse(s).", NamedTextColor.RED);
     }
 
-    public Component augmentDetached(String enchantment) {
-        return Component.text("Disabled " + enchantment + ". The slot remains occupied.", NamedTextColor.YELLOW);
+    public Component augmentDetached(Component enchantmentName) {
+        return Component.text("Disabled ", NamedTextColor.YELLOW)
+                .append(enchantmentName)
+                .append(Component.text(". The slot remains occupied.", NamedTextColor.YELLOW));
     }
 
     public Component augmentNoSlots() {
@@ -136,8 +150,10 @@ public final class ToolsMessages {
         return Component.text("That augment is not compatible with the held item.", NamedTextColor.RED);
     }
 
-    public Component augmentCurseAlreadyAttached(String enchantment) {
-        return Component.text("The curse " + enchantment + " is already bound to that item.", NamedTextColor.RED);
+    public Component augmentCurseAlreadyAttached(Component enchantmentName) {
+        return Component.text("The curse ", NamedTextColor.RED)
+                .append(enchantmentName)
+                .append(Component.text(" is already bound to that item.", NamedTextColor.RED));
     }
 
     public Component augmentCurseNotCurse(String enchantment) {
@@ -173,6 +189,13 @@ public final class ToolsMessages {
         return Component.text("You do not have enough XP for that augment slot.", NamedTextColor.RED);
     }
 
+    public Component augmentDebugResolution(String material, String capacityKey, int capacity,
+                                            String priceKey, int price) {
+        String resolvedPrice = price < 0 ? "unpriced" : Integer.toString(price);
+        return Component.text("Material " + material + ": capacity " + capacityKey + " = " + capacity
+                + "; next slot price " + priceKey + " = " + resolvedPrice + ".", NamedTextColor.GRAY);
+    }
+
     public Component augmentPurchaseUnsafeXp() {
         return Component.text("That slot purchase cannot be represented safely at your current XP level.",
                 NamedTextColor.RED);
@@ -183,7 +206,41 @@ public final class ToolsMessages {
     }
 
     public Component augmentGemName() {
-        return Component.text("Augment Gem", NamedTextColor.LIGHT_PURPLE);
+        return Component.text("Augment Gem", NamedTextColor.LIGHT_PURPLE)
+                .decoration(TextDecoration.ITALIC, false);
+    }
+
+    public Component enchantmentName(Enchantment enchantment) {
+        if (enchantment == null) return Component.text("Unknown enchantment")
+                .decoration(TextDecoration.ITALIC, false);
+        try {
+            return enchantment.description().decoration(TextDecoration.ITALIC, false);
+        } catch (RuntimeException unavailable) {
+            return fallbackEnchantmentName(enchantment.getKey().getKey());
+        }
+    }
+
+    public Component enchantmentName(Enchantment enchantment, int level) {
+        return enchantmentName(enchantment)
+                .append(Component.space())
+                .append(Component.text(level))
+                .decoration(TextDecoration.ITALIC, false);
+    }
+
+    public Component enchantmentName(NamespacedKey key, int level) {
+        String raw = key == null ? "unknown enchantment" : key.toString();
+        return Component.text(raw + " " + level)
+                .decoration(TextDecoration.ITALIC, false);
+    }
+
+    private Component fallbackEnchantmentName(String raw) {
+        StringBuilder result = new StringBuilder();
+        for (String word : raw.replace('_', ' ').split(" ")) {
+            if (word.isBlank()) continue;
+            if (result.length() > 0) result.append(' ');
+            result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+        }
+        return Component.text(result.toString()).decoration(TextDecoration.ITALIC, false);
     }
 
     public Component augmentGemLore(Component enchantmentName) {
@@ -202,6 +259,10 @@ public final class ToolsMessages {
         return Component.text("Manage Augments", NamedTextColor.AQUA);
     }
 
+    public Component augmentTargetItem(String material) {
+        return Component.text(material, NamedTextColor.WHITE);
+    }
+
     public Component augmentSlotsBody(String dots, int used, int capacity) {
         return Component.text("Slots: " + dots + " (" + used + "/" + capacity + ")", NamedTextColor.WHITE);
     }
@@ -210,26 +271,36 @@ public final class ToolsMessages {
         return Component.text("Buy slot " + slot + " (" + cost + " levels)", NamedTextColor.GREEN);
     }
 
-    public Component augmentEntry(String enchantment, int level, boolean active) {
-        return Component.text(enchantment + " " + level + (active ? " ●" : " ○"),
-                active ? NamedTextColor.GREEN : NamedTextColor.GRAY);
+    public Component augmentEntry(Component enchantmentName, boolean active) {
+        return enchantmentName.append(Component.text(active ? " ●" : " ○",
+                active ? NamedTextColor.GREEN : NamedTextColor.GRAY));
     }
 
     public Component augmentSlotLore(String dots) {
         return Component.text("Augment Slots: " + dots, NamedTextColor.GRAY);
     }
 
-    public Component augmentEntryLore(String enchantment, int level, boolean active) {
-        return Component.text("Augment: " + enchantment + " " + level + " " + (active ? "●" : "○"),
-                active ? NamedTextColor.AQUA : NamedTextColor.DARK_GRAY);
+    public Component augmentEntryLore(Component enchantmentName, boolean active) {
+        return Component.text("Augment: ", active ? NamedTextColor.AQUA : NamedTextColor.DARK_GRAY)
+                .append(enchantmentName)
+                .append(Component.text(" " + (active ? "●" : "○"),
+                        active ? NamedTextColor.AQUA : NamedTextColor.DARK_GRAY));
     }
 
-    public Component augmentCurseLore(String enchantment) {
-        return Component.text("Curse: " + enchantment, NamedTextColor.RED);
+    public Component augmentCurseLore(Component enchantmentName) {
+        return Component.text("Curse: ", NamedTextColor.RED).append(enchantmentName);
     }
 
-    public Component augmentInventoryGem(String enchantment, int level) {
-        return Component.text("Attach " + enchantment + " " + level, NamedTextColor.LIGHT_PURPLE);
+    public Component augmentInventoryGem(Component enchantmentName) {
+        return Component.text("Attach ", NamedTextColor.LIGHT_PURPLE).append(enchantmentName);
+    }
+
+    public Component augmentInventoryCurseGem(Component curseName) {
+        return Component.text("Bind ", NamedTextColor.RED).append(curseName);
+    }
+
+    public Component augmentGemRider(Component curseName) {
+        return Component.text("Binds: ", NamedTextColor.RED).append(curseName);
     }
 
     public Component augmentNoGems() {
@@ -255,6 +326,11 @@ public final class ToolsMessages {
 
     public Component augmentTableConversionFailed() {
         return Component.text("The table enchantment could not be converted; the vanilla result was kept.", NamedTextColor.RED);
+    }
+
+    public Component augmentTableInventoryFull() {
+        return Component.text("Your inventory is too full to receive the augment gems; the enchantment was cancelled.",
+                NamedTextColor.RED);
     }
 
     public Component augmentBookConversionFailed() {
@@ -301,7 +377,7 @@ public final class ToolsMessages {
     }
 
     public Component repairKitDialogBody() {
-        return Component.text("Choose a damageable item to repair.", NamedTextColor.WHITE);
+        return Component.text("Choose an augmented item to repair.", NamedTextColor.WHITE);
     }
 
     public Component repairKitTargetName(String material) {

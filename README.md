@@ -603,7 +603,8 @@ crops are rolled once, not once per replant callback.
 
 When Mending is enabled, XP collected by a player carrying Mending in either hand or armor is
 converted to dollars at the configured rate. The XP is consumed only after the economy accepts the
-credit. The enchantment key is resolved from the live `xp.mending.enchantment-key` setting.
+credit. The normal repair step is cancelled so the full orb amount reaches the payout conversion.
+The enchantment key is resolved from the live `xp.mending.enchantment-key` setting.
 
 ### Cash Items
 
@@ -618,33 +619,42 @@ owner's responsibility.
 
 ### Durability and Repair Kits
 
-Every damageable item is lazily stamped with a custom durability pool. The initial maximum is the
+Only augmented or already-participating damageable items receive a custom durability pool. Plain
+items keep vanilla durability and break normally. An augmented item's initial maximum is the
 vanilla maximum multiplied by the live repair-kit multiplier (default `3.0`); the multiplier is
 anchored per item. Each Repair Kit advances the item one tier and applies the configured percentage
-step to its maximum. Tier 9 is the default maximum and cannot be repaired further.
+step to its maximum. Tier 9 is the default maximum and cannot be repaired further. Damageable
+items born from crafting or smithing are initialized as augmented items, including an empty ledger
+when no enchantments are present.
 
-With never-break enabled, spent tools remain in the inventory but cannot mine, attack, protect the
-player with armor, glide with elytra, or use bows/rods. Area enchantments charge the same custom
-durability and check land protection for every collateral block.
+With `never-break.enabled` enabled, spent augmented tools remain in the inventory at one durability
+point and cannot mine, attack, protect the player with armor, glide with elytra, or use bows/rods.
+Disabling never-break restores normal breaking. Area enchantments charge the same custom durability
+and check land protection for every collateral block.
 
 Repair Kits are craftable from the live `/tconfig tools.repair-kit.recipe` nine-cell grid. The
 recipe can be shaped or shapeless and is rejected if invalid or if its ingredient signature
-collides with an existing recipe. Right-click a kit to open a paginated menu of all storage,
-armor, and offhand damageable items; selecting one repairs it and consumes exactly one kit. Admins
-can use `/repairkit give` and `/repairkit debug`.
+collides with an existing recipe. Right-click a kit to open a paginated menu of augmented storage,
+armor, and offhand damageable items; plain items are not shown. Selecting one repairs it and
+consumes exactly one kit. A successful repair reports `Repair kit applied! Repair X/Y`; terminal
+items remain unusable. Kits use a stable `ITEM_NAME` and are recognized by PDC, not display text.
+Admins can use `/repairkit give` and `/repairkit debug`.
 
 ### Augments
 
 Enchanting-table results and enchanted books are diverted into individual Augment Gems. A plain
 Book is valid input. Gems are PDC-marked, rare, glinting, stack to 64, and carry one registry
-enchantment plus its level; their lore names the primary enchantment and any permanent curse
-riders. The table still charges levels/lapis and completes vanilla enchanting first; conversion runs
-one tick later. A gem right-click and `/augment` open the same two-screen hub.
+enchantment plus its level; their `ITEM_NAME` is stable and their lore uses readable names with
+Arabic levels. The table still charges levels/lapis and completes vanilla enchanting first;
+conversion runs one tick later. The table preflights the complete gem batch and cancels the
+enchantment with the vanilla result preserved when the batch is refused or cannot fit. A gem
+right-click (including right-clicking air) and `/augment` open the same two-screen hub.
 
 Table and book rolls bind each rolled curse to another gem from that same batch. A curse-only roll
 produces a curse-only gem. Attaching a curse is free, permanent, unsafe-applied, and shown as a
-locked host-item lore line; it never consumes a slot or becomes a toggleable ledger entry. A
-Disenchanting Bundle destroys bound curses with the source item and returns any recovered gems
+locked host-item lore line; it never consumes a slot or becomes a toggleable ledger entry. In the
+dialog, a curse primary uses its own Bind action and rider curses appear under that gem's tooltip.
+A Disenchanting Bundle destroys bound curses with the source item and returns any recovered gems
 without riders.
 
 The item ledger stores purchased slots and attached entries in PDC. Recovery and attachment
@@ -657,13 +667,13 @@ configurable. Turning an augment off removes its active enchantment but keeps it
 
 Existing non-curse enchantments migrate once, on first `/augment` use, into gems without granting
 free slots; legacy curses remain real enchantments on the item. Plain items receive no augment PDC
-just from opening the menu, while the first purchased slot writes the migration marker. Migration
-and all multi-gem conversions refuse before mutating when the player's inventory cannot hold every
-generated gem; if inventory state changes during delivery, unexpected gem leftovers are dropped
-instead of discarded. Deferred book conversion rechecks the captured view and exact post-event
-stack deltas and exact inventory-view identity, and leaves mismatched moves alone. Augment-generated lore is tracked by explicit item
-metadata plus an invisible line marker, so foreign lookalike lines (including exact visible copies)
-survive refreshes. Disenchanting Bundle recovery validates the
+just from opening the menu, while the first purchased slot or gem attachment writes the migration
+marker. Migration and all multi-gem conversions refuse before mutating when the player's inventory
+cannot hold every generated gem; if inventory state changes during delivery, unexpected gem
+leftovers are dropped instead of discarded. Deferred book conversion rechecks the captured view and
+exact post-event stack deltas and exact inventory-view identity, and leaves mismatched moves alone.
+Augment-generated lore is tracked by exact component fingerprints only, so foreign lookalike lines
+(including exact visible copies) survive refreshes. Disenchanting Bundle recovery validates the
 complete ledger and legacy migration plan before changing the source item, and refuses malformed or
 unresolved owned state without consuming anything. A lore-bearing Disenchanting Bundle is the destructive recovery path: it migrates legacy
 enchantments first, applies the 100/80/60/40/20/0% recovery ladder, and destroys the source item and
@@ -672,7 +682,8 @@ bundle.
 Capacity uses exact material overrides before the shared families `wooden`, `stone`, `iron`,
 `copper`, `gold`, `diamond`, `netherite`, `shears`, `fishing_rod`, `mace`, and `elytra`; leather,
 chainmail, and turtle armor map to wooden, stone, and iron. The default capacity is 5, and slots
-without a configured price cost 0 levels. Configured capacities remain exact for purchases; visual
+without an exact configured price use the highest configured price; an empty price map makes slots
+unpriced and purchases refuse. Configured capacities remain exact for purchases; visual
 slot indicators abbreviate capacities above 64 with `…` rather than constructing an unbounded string.
 An item whose recorded purchases exceed the current configured capacity is rejected safely; restoring
 the previous capacity makes the item usable again. Slot purchases also refuse when Bukkit's integer
@@ -1331,7 +1342,7 @@ When an action occurs, the system checks rules in this order:
 | `/toolprotect durability <n>` | Set remaining-durability threshold for ToolProtect. |
 | `/rename [name]` | Free rename/reset for the main-hand item; supports legacy color codes. |
 | `/augment` | Open the augment slot and gem menu for the held item. |
-| Right-click an Augment Gem | Open the gem-first augment menu. |
+| Right-click an Augment Gem (air or block) | Open the gem-first augment menu. |
 | `/afk` | Toggle AFK status. |
 | `/fullmoon` | Show estimate for next full moon. |
 | `/displaychest [hand\|off]` | Toggle display chest setup mode. |
@@ -1516,7 +1527,8 @@ The Tools category controls augment capacity/prices and exclusivity, Repair Kit 
 tier curve, never-break, anvil/grindstone lockouts, rename length, and the cash-item PDC bridge.
 Capacity keys are lowercased and must be one of the shared families or a real non-air item material;
 unknown keys such as `wood` are rejected without writing. Exact material overrides take precedence
-over family values, and unpriced slots cost 0 levels.
+over family values; an omitted slot price uses the highest configured price, while an empty price
+map makes slots unpriced and refuses purchases.
 The complete list is available with `/tconfig list tools`; the nine-cell Repair Kit recipe is
 editable from the Dialog grid editor as well as the CLI list form.
 

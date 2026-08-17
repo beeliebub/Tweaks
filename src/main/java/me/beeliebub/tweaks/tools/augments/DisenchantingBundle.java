@@ -82,7 +82,8 @@ public final class DisenchantingBundle implements Listener {
 
     private boolean isCandidate(ItemStack item) {
         return item != null && !item.isEmpty()
-                && (augments == null ? !item.getEnchantments().isEmpty() : AugmentService.hasAugmentsOrLegacy(item));
+                && (augments == null ? !item.getEnchantments().isEmpty()
+                : AugmentService.hasMeaningfulAugmentState(augments.ledger(), item));
     }
 
     private boolean isRestricted(ItemStack item) {

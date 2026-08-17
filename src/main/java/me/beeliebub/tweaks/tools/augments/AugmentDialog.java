@@ -94,21 +94,24 @@ public final class AugmentDialog {
         List<ActionButton> buttons = new ArrayList<>();
         if (purchased < capacity) {
             int next = purchased + 1;
-            buttons.add(button(Messages.TOOLS.augmentBuySlot(next, augments.slotCalculator().price(next)),
-                    Messages.TOOLS.augmentSlotsBody(augments.slotCalculator().slotDots(purchased, used, capacity), used, capacity),
-                    p -> {
-                        if (!augments.enabled()) {
-                            p.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
-                            return;
-                        }
-                        ItemStack target = currentHeldOrSame(p, item);
-                        if (target == null) {
-                            p.sendMessage(Messages.TOOLS.augmentRequiresItem());
-                            return;
-                        }
-                        augments.purchaseSlot(p, target);
-                        openSlots(p, target);
-                    }));
+            int price = augments.slotCalculator().price(next);
+            if (price >= 0) {
+                buttons.add(button(Messages.TOOLS.augmentBuySlot(next, price),
+                        Messages.TOOLS.augmentSlotsBody(augments.slotCalculator().slotDots(purchased, used, capacity), used, capacity),
+                        p -> {
+                            if (!augments.enabled()) {
+                                p.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
+                                return;
+                            }
+                            ItemStack target = currentHeldOrSame(p, item);
+                            if (target == null) {
+                                p.sendMessage(Messages.TOOLS.augmentRequiresItem());
+                                return;
+                            }
+                            augments.purchaseSlot(p, target);
+                            openSlots(p, target);
+                        }));
+            }
         }
         buttons.add(button(Messages.TOOLS.augmentListLabel(), Messages.TOOLS.augmentListLabel(), p -> {
             ItemStack target = currentHeldOrSame(p, item);
@@ -183,8 +186,8 @@ public final class AugmentDialog {
         for (AugmentService.GemLocation target : inventoryItems(player)) {
             if (target.item() == gem || sameGem(target.item(), gem)) continue;
             if (!augments.compatibleForDisplay(target.item(), data, augments.entries(target.item()))) continue;
-            buttons.add(button(Messages.TOOLS.augmentEntry(target.item().getType().name(), 1, true),
-                    Messages.TOOLS.augmentInventoryGem(data.enchantment().getKey().toString(), data.level()),
+            buttons.add(button(Messages.TOOLS.augmentTargetItem(target.item().getType().name()),
+                    gemTooltip(data),
                     p -> {
                         if (!augments.enabled()) {
                             p.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
@@ -199,15 +202,17 @@ public final class AugmentDialog {
                     }));
         }
         showPaged(player, Messages.TOOLS.augmentListLabel(), buttons, buttons.size(), page,
-                Messages.TOOLS.augmentInventoryGem(data.enchantment().getKey().toString(), data.level()),
+                gemTooltip(data),
                 null,
                 (p, nextPage) -> openGemFirst(p, gem, nextPage));
     }
 
     private ActionButton attachedButton(ItemStack item, AugmentEntry entry, int index, int page) {
         var enchantment = registry().get(entry.enchantmentKey());
-        String name = enchantment == null ? entry.enchantmentKey().toString() : enchantment.getKey().getKey();
-        Component label = Messages.TOOLS.augmentEntry(name, entry.level(), entry.active());
+        Component name = enchantment == null
+                ? Messages.TOOLS.enchantmentName(entry.enchantmentKey(), entry.level())
+                : Messages.TOOLS.enchantmentName(enchantment, entry.level());
+        Component label = Messages.TOOLS.augmentEntry(name, entry.active());
         return button(label, label, p -> {
             if (!augments.enabled()) {
                 p.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
@@ -226,8 +231,8 @@ public final class AugmentDialog {
     private ActionButton gemButton(ItemStack item, GemOption option, int page) {
         AugmentService.GemLocation gem = option.location();
         AugmentGemItem.GemData data = option.data();
-        Component label = Messages.TOOLS.augmentInventoryGem(data.enchantment().getKey().toString(), data.level());
-        return button(label, label, p -> {
+        Component label = gemLabel(data);
+        return button(label, gemTooltip(data), p -> {
             if (!augments.enabled()) {
                 p.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
                 return;
@@ -240,6 +245,23 @@ public final class AugmentDialog {
             augments.attach(p, target, currentGem);
             openAugments(p, target, page);
         });
+    }
+
+    private Component gemLabel(AugmentGemItem.GemData data) {
+        Component name = Messages.TOOLS.enchantmentName(data.enchantment(), data.level());
+        return augments.isCurse(data.enchantment())
+                ? Messages.TOOLS.augmentInventoryCurseGem(name)
+                : Messages.TOOLS.augmentInventoryGem(name);
+    }
+
+    private Component gemTooltip(AugmentGemItem.GemData data) {
+        Component tooltip = gemLabel(data);
+        for (AugmentGemItem.CurseRider rider : data.curses()) {
+            tooltip = tooltip.append(Component.newline())
+                    .append(Messages.TOOLS.augmentGemRider(
+                            Messages.TOOLS.enchantmentName(rider.enchantment(), rider.level())));
+        }
+        return tooltip;
     }
 
     private void showPaged(Player player, Component title, List<ActionButton> visibleButtons, int totalEntries, int page,

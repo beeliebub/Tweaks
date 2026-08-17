@@ -18,6 +18,7 @@ import me.beeliebub.tweaks.tools.xp.XpSettings;
 import me.beeliebub.tweaks.utils.BlockTaintStore;
 import me.beeliebub.tweaks.utils.ExternalBlockBreakGuard;
 import me.beeliebub.tweaks.tools.augments.AugmentCommand;
+import me.beeliebub.tweaks.tools.augments.AugmentCraftListener;
 import me.beeliebub.tweaks.tools.augments.AugmentDialog;
 import me.beeliebub.tweaks.tools.augments.AugmentGemListener;
 import me.beeliebub.tweaks.tools.augments.AugmentService;
@@ -87,13 +88,14 @@ public final class ToolsBootstrap {
         plugin.getCommand("rename").setExecutor(renameCommand);
         plugin.getCommand("rename").setTabCompleter(renameCommand);
 
-        AugmentService augments = new AugmentService(plugin, services.qualityRegistry());
+        AugmentService augments = new AugmentService(plugin, services.qualityRegistry(), durability::ensureStamped);
         AugmentDialog augmentDialog = new AugmentDialog(augments);
         AugmentCommand augmentCommand = new AugmentCommand(augments, augmentDialog);
         plugin.getCommand("augment").setExecutor(augmentCommand);
         plugin.getCommand("augment").setTabCompleter(augmentCommand);
         plugin.getServer().getPluginManager().registerEvents(new AugmentGemListener(augments.gemItem(), augmentDialog), plugin);
         plugin.getServer().getPluginManager().registerEvents(new AugmentTableListener(plugin, augments), plugin);
+        plugin.getServer().getPluginManager().registerEvents(new AugmentCraftListener(plugin, augments), plugin);
         plugin.getServer().getPluginManager().registerEvents(new BookConversionListener(plugin, augments), plugin);
         plugin.getServer().getPluginManager().registerEvents(new DisenchantingBundle(plugin, services.qualityRegistry(), augments), plugin);
     }

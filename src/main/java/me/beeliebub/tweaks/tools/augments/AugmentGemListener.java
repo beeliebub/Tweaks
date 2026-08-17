@@ -3,6 +3,7 @@ package me.beeliebub.tweaks.tools.augments;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Event;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -19,10 +20,12 @@ public final class AugmentGemListener implements Listener {
         this.dialog = dialog;
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGH)
     public void onInteract(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND
                 || (event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK)) return;
+        // An air interaction reports itself as cancelled, so ignoreCancelled would skip it.
+        if (event.useItemInHand() == Event.Result.DENY) return;
         if (!gems.isGem(event.getItem())) return;
         if (!gems.enabled()) return;
         event.setCancelled(true);

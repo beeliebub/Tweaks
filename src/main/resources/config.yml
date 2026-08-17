@@ -251,7 +251,8 @@ tools:
     enabled: true
     gem-material: AMETHYST_SHARD
     gem-item-model: jass:augment_gem
-    # Slot prices are in player levels. Unlisted slots intentionally cost 0.
+    # Slot prices are in player levels. Unlisted slots use the highest configured price;
+    # an empty price map makes slots unpriced rather than free.
     slot-prices:
       1: 30
       2: 35
@@ -309,6 +310,8 @@ tools:
       - iron_ingot
     recipe-shapeless: false
   never-break:
+    # When enabled, augmented items stop at one durability remaining and become unusable;
+    # plain items still break normally. When disabled, augmented items also break normally.
     enabled: true
   anvil:
     lockout-enabled: true

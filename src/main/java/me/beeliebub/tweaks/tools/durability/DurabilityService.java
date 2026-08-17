@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.tools.durability;
 
 import io.papermc.paper.datacomponent.DataComponentTypes;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.tools.augments.AugmentLedger;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.EquipmentSlot;
@@ -12,7 +13,7 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import me.beeliebub.tweaks.utils.ExternalDurabilityHook;
 
-/** Owns the anchored durability-tier projection for every damageable item. */
+/** Owns the anchored durability-tier projection for augmented or already-stamped items. */
 public final class DurabilityService implements ExternalDurabilityHook {
 
     private final Tweaks plugin;
@@ -27,6 +28,7 @@ public final class DurabilityService implements ExternalDurabilityHook {
 
     public boolean ensureStamped(ItemStack item) {
         if (!isDamageable(item)) return false;
+        if (!AugmentLedger.hasLedger(item) && !alreadyStamped(item)) return false;
         ItemMeta meta = item.getItemMeta();
         if (!(meta instanceof Damageable damageable)) return false;
         var pdc = meta.getPersistentDataContainer();
@@ -50,15 +52,19 @@ public final class DurabilityService implements ExternalDurabilityHook {
         int vanillaMax = item.getType().getMaxDurability();
         int targetMax = maxDamageFor(vanillaMax, anchored, tier, liveTierStep());
         int currentMax = maxDamage(item, vanillaMax);
+        int currentDamage = damage(item, damageable);
+        int targetDamage = currentDamage;
         if (firstStamp && currentMax > 0 && currentMax != targetMax) {
             double ratio = Math.max(0.0, Math.min(1.0,
-                    (double) damageable.getDamage() / (double) currentMax));
-            damageable.setDamage(Math.min(Math.max(0, targetMax - 1),
-                    (int) Math.round(ratio * targetMax)));
-        } else if (damageable.getDamage() >= targetMax) {
-            damageable.setDamage(Math.max(0, targetMax - 1));
+                    (double) currentDamage / (double) currentMax));
+            targetDamage = Math.min(Math.max(0, targetMax - 1),
+                    (int) Math.round(ratio * targetMax));
+        } else if (plugin.getConfig().getBoolean("tools.never-break.enabled", true)
+                && currentDamage >= targetMax) {
+            targetDamage = Math.max(0, targetMax - 1);
         }
         item.setItemMeta(meta);
+        item.setData(DataComponentTypes.DAMAGE, targetDamage);
         item.setData(DataComponentTypes.MAX_DAMAGE, targetMax);
         return true;
     }
@@ -78,8 +84,8 @@ public final class DurabilityService implements ExternalDurabilityHook {
         if (tier >= configuredMaxTier()) return false;
         tier++;
         pdc.set(tierKey, PersistentDataType.INTEGER, tier);
-        damageable.setDamage(0);
         item.setItemMeta(meta);
+        item.setData(DataComponentTypes.DAMAGE, 0);
         Double multiplier;
         try {
             multiplier = item.getItemMeta().getPersistentDataContainer().get(multiplierKey, PersistentDataType.DOUBLE);
@@ -110,20 +116,34 @@ public final class DurabilityService implements ExternalDurabilityHook {
 
     public boolean isSpent(ItemStack item) {
         if (!isDamageable(item)) return false;
+        // The never-break floor belongs to augmented or already-participating items; a raw
+        // damage comparison must not freeze a plain item at its vanilla break point.
+        if (!AugmentLedger.hasLedger(item) && !alreadyStamped(item)) return false;
         ItemMeta meta = item.getItemMeta();
         return meta instanceof Damageable damageable
-                && damageable.getDamage() >= Math.max(1, maxDamage(item, item.getType().getMaxDurability()) - 1);
+                && damage(item, damageable) >= Math.max(1,
+                maxDamage(item, item.getType().getMaxDurability()) - 1);
     }
 
     @Override
     public boolean canTakeDamage(ItemStack item, int amount) {
         if (!isDamageable(item) || amount < 0) return false;
+        // Unstamped, unaugmented items use vanilla collateral durability and must not be
+        // converted into custom-durability items merely because an area effect touched them.
+        if (!AugmentLedger.hasLedger(item) && !alreadyStamped(item)) return true;
         ensureStamped(item);
         if (!plugin.getConfig().getBoolean("tools.never-break.enabled", true)) return true;
         ItemMeta meta = item.getItemMeta();
         if (!(meta instanceof Damageable damageable)) return false;
-        long next = (long) damageable.getDamage() + amount;
+        long next = (long) damage(item, damageable) + amount;
         return next < maxDamage(item);
+    }
+
+    /** Reads the data-component damage value, falling back to the item-meta view. */
+    public int damage(ItemStack item) {
+        if (!isDamageable(item)) return 0;
+        ItemMeta meta = item.getItemMeta();
+        return meta instanceof Damageable damageable ? damage(item, damageable) : 0;
     }
 
     @Override
@@ -159,6 +179,21 @@ public final class DurabilityService implements ExternalDurabilityHook {
         } catch (RuntimeException malformed) {
             return fallback;
         }
+    }
+
+    private int damage(ItemStack item, Damageable fallback) {
+        try {
+            Integer component = item == null ? null : item.getData(DataComponentTypes.DAMAGE);
+            return component == null ? Math.max(0, fallback.getDamage()) : Math.max(0, component);
+        } catch (RuntimeException malformed) {
+            return Math.max(0, fallback.getDamage());
+        }
+    }
+
+    private boolean alreadyStamped(ItemStack item) {
+        if (item == null || item.isEmpty() || !item.hasItemMeta()) return false;
+        var keys = item.getItemMeta().getPersistentDataContainer().getKeys();
+        return keys.contains(tierKey) || keys.contains(multiplierKey);
     }
 
     private double liveMultiplier() {

@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.tests.tools.augments;
 
+import io.papermc.paper.datacomponent.DataComponentTypes;
 import me.beeliebub.tweaks.Tweaks;
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.tools.augments.AugmentGemItem;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -50,11 +52,12 @@ class AugmentGemItemTest {
         List<Component> lore = gem.getItemMeta().lore();
         String plain = lore.stream().map(PlainTextComponentSerializer.plainText()::serialize).reduce("", (a, b) -> a + "\n" + b);
 
-        assertEquals("Augment Gem", PlainTextComponentSerializer.plainText().serialize(gem.getItemMeta().displayName()));
         assertEquals(2, lore.size());
-        assertTrue(plain.contains("Efficiency V"));
-        assertTrue(plain.contains("Curse of Vanishing"));
+        assertTrue(plain.contains("Efficiency 5"), plain);
+        assertTrue(plain.contains("Vanishing Curse 1"), plain);
         assertEquals(1, gems.read(gem).curses().size());
+        assertEquals(Messages.TOOLS.augmentGemName(), gem.getData(DataComponentTypes.ITEM_NAME));
+        assertNull(gem.getData(DataComponentTypes.CUSTOM_NAME));
     }
 
     @Test

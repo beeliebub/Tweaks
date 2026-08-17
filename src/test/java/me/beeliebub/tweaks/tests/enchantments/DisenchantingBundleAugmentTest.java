@@ -29,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -66,6 +67,21 @@ class DisenchantingBundleAugmentTest {
         verify(event).setCancelled(true);
         assertTrue(item.containsEnchantment(Enchantment.BINDING_CURSE));
         assertFalse(AugmentLedger.hasLedger(item));
+        assertEquals(1, bundle.getAmount());
+    }
+
+    @Test
+    void emptyCraftedLedgerIsNotAMeaningfulBundleCandidate() {
+        DisenchantingBundle bundleListener = new DisenchantingBundle(plugin, null, augments);
+        ItemStack item = new ItemStack(Material.DIAMOND_PICKAXE);
+        augments.ledger().write(item, 0, List.of(), true);
+        ItemStack bundle = bundle();
+        InventoryClickEvent event = event(item, bundle);
+
+        bundleListener.onInventoryClick(event);
+
+        verify(event, never()).setCancelled(true);
+        assertEquals(1, item.getAmount());
         assertEquals(1, bundle.getAmount());
     }
 

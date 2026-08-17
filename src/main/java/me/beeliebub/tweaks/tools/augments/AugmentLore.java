@@ -12,7 +12,6 @@ import java.util.List;
 /** Renders augment lore while replacing only the explicitly owned component block. */
 public final class AugmentLore {
 
-    private static final String OWNERSHIP_MARKER = "\u2063";
     private final AugmentLedger ledger;
     private final SlotCalculator slots;
 
@@ -36,13 +35,15 @@ public final class AugmentLore {
         for (AugmentEntry entry : entries) {
             var enchantment = io.papermc.paper.registry.RegistryAccess.registryAccess()
                     .getRegistry(io.papermc.paper.registry.RegistryKey.ENCHANTMENT).get(entry.enchantmentKey());
-            String name = enchantment == null ? entry.enchantmentKey().toString() : enchantment.getKey().getKey();
-            generated.add(Messages.TOOLS.augmentEntryLore(name, entry.level(), entry.active()));
+            Component name = enchantment == null
+                    ? Messages.TOOLS.enchantmentName(entry.enchantmentKey(), entry.level())
+                    : Messages.TOOLS.enchantmentName(enchantment, entry.level());
+            generated.add(Messages.TOOLS.augmentEntryLore(name, entry.active()));
         }
         for (AugmentGemItem.CurseRider curse : ledger.curses(item)) {
-            generated.add(Messages.TOOLS.augmentCurseLore(curse.enchantment().getKey().getKey()));
+            generated.add(Messages.TOOLS.augmentCurseLore(
+                    Messages.TOOLS.enchantmentName(curse.enchantment())));
         }
-        generated.replaceAll(AugmentLore::markOwned);
         existing.addAll(generated);
         meta.lore(existing);
         item.setItemMeta(meta);
@@ -55,8 +56,7 @@ public final class AugmentLore {
             boolean matches = true;
             for (int offset = 0; offset < owned.size(); offset++) {
                 Component candidate = existing.get(start + offset);
-                if (!candidate.toString().contains(OWNERSHIP_MARKER)
-                        || !owned.get(offset).equals(candidate.toString())) {
+                if (!owned.get(offset).equals(candidate.toString())) {
                     matches = false;
                     break;
                 }
@@ -65,9 +65,5 @@ public final class AugmentLore {
             for (int offset = 0; offset < owned.size(); offset++) existing.remove(start);
             return;
         }
-    }
-
-    private static Component markOwned(Component line) {
-        return line.append(Component.text(OWNERSHIP_MARKER));
     }
 }

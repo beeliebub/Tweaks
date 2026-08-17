@@ -7,10 +7,12 @@ import io.papermc.paper.registry.data.dialog.action.DialogAction;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.tools.augments.AugmentLedger;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
@@ -34,10 +36,12 @@ public final class RepairKitListener implements Listener {
         this.durability = durability;
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGH)
     public void onInteract(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND
                 || (event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK)) return;
+        // An air interaction reports itself as cancelled, so ignoreCancelled would skip it.
+        if (event.useItemInHand() == Event.Result.DENY) return;
         ItemStack kit = event.getItem();
         if (!kitItem.isKit(kit)) return;
         event.setCancelled(true);
@@ -55,12 +59,21 @@ public final class RepairKitListener implements Listener {
     }
 
     public boolean apply(Player player, int slot) {
+        return apply(player, slot, null);
+    }
+
+    public boolean apply(Player player, int slot, ItemStack expectedTarget) {
         ItemStack kit = player.getInventory().getItemInMainHand();
         if (!kitItem.isKit(kit)) {
             player.sendMessage(Messages.TOOLS.repairKitNoTarget());
             return false;
         }
         ItemStack target = player.getInventory().getItem(slot);
+        if (!AugmentLedger.hasLedger(target)) {
+            player.sendMessage(Messages.TOOLS.repairKitRequiresAugmented());
+            return false;
+        }
+        if (expectedTarget != null && (target == null || !target.isSimilar(expectedTarget))) return false;
         if (!durability.isDamageable(target)) {
             player.sendMessage(Messages.TOOLS.repairKitNoDamageableItem());
             return false;
@@ -71,7 +84,7 @@ public final class RepairKitListener implements Listener {
         }
         if (!durability.repair(target)) return false;
         kit.setAmount(kit.getAmount() - 1);
-        player.sendMessage(Messages.TOOLS.repairKitApplied(durability.tier(target)));
+        player.sendMessage(Messages.TOOLS.repairKitApplied(durability.tier(target), durability.maxTier()));
         return true;
     }
 
@@ -89,7 +102,7 @@ public final class RepairKitListener implements Listener {
         for (int i = start; i < end; i++) {
             Target target = targets.get(i);
             buttons.add(button(Messages.TOOLS.repairKitTargetName(target.item().getType().name()),
-                    p -> apply(p, target.slot())));
+                    p -> apply(p, target.slot(), target.item())));
         }
         if (currentPage > 0) {
             buttons.add(button(Messages.TOOLS.repairKitPreviousPage(),
@@ -107,7 +120,8 @@ public final class RepairKitListener implements Listener {
     }
 
     private static void add(List<Target> targets, int slot, ItemStack item) {
-        if (item != null && !item.isEmpty() && item.getType().getMaxDurability() > 0) {
+        if (item != null && !item.isEmpty() && item.getType().getMaxDurability() > 0
+                && AugmentLedger.hasLedger(item)) {
             targets.add(new Target(slot, item.clone()));
         }
     }
