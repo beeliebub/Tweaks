@@ -1,5 +1,7 @@
 package me.beeliebub.tweaks.tools.durability;
 
+import com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Event;
@@ -11,10 +13,12 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityShootBowEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerFishEvent;
+import org.bukkit.event.player.PlayerShearEntityEvent;
 import org.bukkit.event.entity.EntityToggleGlideEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.EquipmentSlot;
@@ -67,6 +71,28 @@ public final class DurabilityListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    public void onShear(PlayerShearEntityEvent event) {
+        ItemStack item = event.getItem();
+        service.ensureStamped(item);
+        if (neverBreak() && service.isSpent(item)) event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    public void onInteractEntity(PlayerInteractEntityEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND) return;
+        ItemStack item = event.getPlayer().getInventory().getItemInMainHand();
+        service.ensureStamped(item);
+        if (neverBreak() && service.isSpent(item)) event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    public void onLaunchProjectile(PlayerLaunchProjectileEvent event) {
+        ItemStack item = event.getItemStack();
+        service.ensureStamped(item);
+        if (neverBreak() && service.isSpent(item)) event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onFish(PlayerFishEvent event) {
         ItemStack item = event.getPlayer().getInventory().getItemInMainHand();
         service.ensureStamped(item);
@@ -86,13 +112,16 @@ public final class DurabilityListener implements Listener {
     public void onItemDamage(PlayerItemDamageEvent event) {
         ItemStack item = event.getItem();
         if (!service.ensureStamped(item) || !neverBreak()) return;
-        int max = service.maxDamage(item);
         int currentDamage = service.damage(item);
-        if (currentDamage >= max - 1) {
+        int threshold = service.depletedThreshold(item);
+        if (service.isSpent(item)) {
+            stopGlidingIfSpent(event.getPlayer(), item);
             event.setCancelled(true);
             return;
         }
-        event.setDamage(Math.min(event.getDamage(), Math.max(0, max - 1 - currentDamage)));
+        int applied = Math.min(event.getDamage(), Math.max(0, threshold - currentDamage));
+        event.setDamage(applied);
+        if (currentDamage + applied >= threshold) stopGlidingIfSpent(event.getPlayer(), item);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -116,14 +145,33 @@ public final class DurabilityListener implements Listener {
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onArmorDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player player)) return;
+        boolean neverBreak = neverBreak();
         boolean spent = false;
         for (ItemStack armor : player.getInventory().getArmorContents()) {
             service.ensureStamped(armor);
-            if (service.isSpent(armor)) spent = true;
+            if (service.isSpent(armor)) {
+                spent = true;
+                if (neverBreak) stopGlidingIfSpent(player, armor);
+            }
         }
-        if (neverBreak() && spent && event.isApplicable(EntityDamageEvent.DamageModifier.ARMOR)) {
+        boolean spentShield = isSpentShield(player.getInventory().getItemInMainHand())
+                || isSpentShield(player.getInventory().getItemInOffHand());
+        if (neverBreak && spent && event.isApplicable(EntityDamageEvent.DamageModifier.ARMOR)) {
             event.setDamage(EntityDamageEvent.DamageModifier.ARMOR, 0.0);
         }
+        if (neverBreak && spentShield && event.isApplicable(EntityDamageEvent.DamageModifier.BLOCKING)) {
+            event.setDamage(EntityDamageEvent.DamageModifier.BLOCKING, 0.0);
+        }
+    }
+
+    private boolean isSpentShield(ItemStack item) {
+        if (item == null || item.getType() != Material.SHIELD) return false;
+        service.ensureStamped(item);
+        return service.isSpent(item);
+    }
+
+    private void stopGlidingIfSpent(Player player, ItemStack item) {
+        if (item.getType() == Material.ELYTRA && player.isGliding()) player.setGliding(false);
     }
 
     private boolean neverBreak() {

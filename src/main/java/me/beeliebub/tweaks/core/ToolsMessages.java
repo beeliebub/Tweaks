@@ -70,6 +70,18 @@ public final class ToolsMessages {
                 NamedTextColor.YELLOW);
     }
 
+    public Component repairKitAlreadyFull() {
+        return Component.text("That item is already at full durability.", NamedTextColor.YELLOW);
+    }
+
+    public Component repairKitTargetChanged() {
+        return Component.text("That repair target changed; no Repair Kit was consumed.", NamedTextColor.RED);
+    }
+
+    public Component repairKitRepairFailed() {
+        return Component.text("That item could not be repaired; no Repair Kit was consumed.", NamedTextColor.RED);
+    }
+
     public Component repairKitRequiresAugmented() {
         return Component.text("Repair kits only work on augmented items.", NamedTextColor.RED);
     }
@@ -384,9 +396,25 @@ public final class ToolsMessages {
         return Component.text(material, NamedTextColor.WHITE);
     }
 
-    public Component repairKitDebug(boolean damageable, int tier, int max) {
-        return Component.text("Damageable=" + damageable + ", tier=" + tier + ", max=" + max,
+    public Component repairKitDebug(boolean damageable, boolean ledger, boolean stamp, int tier, int maxTier,
+                                    int damage, int maxDamage, int threshold, boolean depleted,
+                                    double effectiveTierStep) {
+        boolean participating = damageable && (ledger || stamp);
+        return Component.text("Damageable=" + damageable + ", participating=" + participating
+                        + " (ledger=" + ledger + ", stamp=" + stamp + "), tier=" + tier + "/" + maxTier
+                        + ", damage=" + damage + "/" + maxDamage + ", threshold=" + threshold
+                        + ", depleted=" + depleted + ", effective-tier-step=" + effectiveTierStep + "%",
                 NamedTextColor.GRAY);
+    }
+
+    public Component durabilityDepletedRepairable() {
+        return Component.text("Out of durability — use a Repair Kit", NamedTextColor.YELLOW)
+                .decoration(TextDecoration.ITALIC, false);
+    }
+
+    public Component durabilityDepletedTerminal() {
+        return Component.text("Broken — cannot be repaired further", NamedTextColor.RED)
+                .decoration(TextDecoration.ITALIC, false);
     }
 
     public Component repairKitPreviousPage() {

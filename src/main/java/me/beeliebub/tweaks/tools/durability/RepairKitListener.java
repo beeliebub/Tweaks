@@ -73,16 +73,26 @@ public final class RepairKitListener implements Listener {
             player.sendMessage(Messages.TOOLS.repairKitRequiresAugmented());
             return false;
         }
-        if (expectedTarget != null && (target == null || !target.isSimilar(expectedTarget))) return false;
-        if (!durability.isDamageable(target)) {
+        if (!durability.ensureStamped(target) || !durability.isDamageable(target)) {
             player.sendMessage(Messages.TOOLS.repairKitNoDamageableItem());
+            return false;
+        }
+        if (durability.damage(target) <= 0) {
+            player.sendMessage(Messages.TOOLS.repairKitAlreadyFull());
+            return false;
+        }
+        if (expectedTarget != null && (target == null || !target.isSimilar(expectedTarget))) {
+            player.sendMessage(Messages.TOOLS.repairKitTargetChanged());
             return false;
         }
         if (durability.tier(target) >= maxTier()) {
             player.sendMessage(Messages.TOOLS.repairKitMaxTier());
             return false;
         }
-        if (!durability.repair(target)) return false;
+        if (!durability.repair(target)) {
+            player.sendMessage(Messages.TOOLS.repairKitRepairFailed());
+            return false;
+        }
         kit.setAmount(kit.getAmount() - 1);
         player.sendMessage(Messages.TOOLS.repairKitApplied(durability.tier(target), durability.maxTier()));
         return true;
@@ -119,9 +129,11 @@ public final class RepairKitListener implements Listener {
                 .type(DialogType.multiAction(buttons).columns(2).build())));
     }
 
-    private static void add(List<Target> targets, int slot, ItemStack item) {
-        if (item != null && !item.isEmpty() && item.getType().getMaxDurability() > 0
-                && AugmentLedger.hasLedger(item)) {
+    private void add(List<Target> targets, int slot, ItemStack item) {
+        if (item != null && !item.isEmpty() && AugmentLedger.hasLedger(item)
+                && durability.isDamageable(item)) {
+            durability.ensureStamped(item);
+            if (durability.damage(item) <= 0) return;
             targets.add(new Target(slot, item.clone()));
         }
     }

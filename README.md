@@ -627,18 +627,28 @@ step to its maximum. Tier 9 is the default maximum and cannot be repaired furthe
 items born from crafting or smithing are initialized as augmented items, including an empty ledger
 when no enchantments are present.
 
-With `never-break.enabled` enabled, spent augmented tools remain in the inventory at one durability
-point and cannot mine, attack, protect the player with armor, glide with elytra, or use bows/rods.
-Disabling never-break restores normal breaking. Area enchantments charge the same custom durability
-and check land protection for every collateral block.
+With `never-break.enabled` enabled, participating items remain in the inventory at one durability
+point and become inert instead of being destroyed. An item below the repair limit shows `Out of
+durability — use a Repair Kit`; an item at the repair limit shows `Broken — cannot be repaired
+further` and remains permanently inert. Disabling never-break restores normal breaking. Area
+enchantments charge the same custom durability and check land protection for every collateral block.
+Projected pools have a minimum maximum of 8, and the effective tier step is capped so the top tier
+retains a real pool even when the configured step would otherwise collapse it.
+
+Depleted items cannot mine, right-click with an item, deal weapon damage beyond one, fire bows or
+crossbows, fish, shear, right-click entities, throw tridents, start or continue elytra gliding, or
+provide armor/shield damage absorption. They can still be picked up, moved, dropped, stored, and
+selected as Repair Kit targets.
 
 Repair Kits are craftable from the live `/tconfig tools.repair-kit.recipe` nine-cell grid. The
 recipe can be shaped or shapeless and is rejected if invalid or if its ingredient signature
 collides with an existing recipe. Right-click a kit to open a paginated menu of augmented storage,
-armor, and offhand damageable items; plain items are not shown. Selecting one repairs it and
-consumes exactly one kit. A successful repair reports `Repair kit applied! Repair X/Y`; terminal
-items remain unusable. Kits use a stable `ITEM_NAME` and are recognized by PDC, not display text.
-Admins can use `/repairkit give` and `/repairkit debug`.
+armor, and offhand damageable items; plain and full-durability items are not shown. Selecting one
+repairs it and consumes exactly one kit; a full or stale target is refused at callback time without
+consuming a kit. A successful repair reports `Repair kit applied! Repair X/Y`; terminal items
+remain unusable. Kits use a stable `ITEM_NAME` and are recognized by PDC, not display text. Admins
+can use `/repairkit give` and `/repairkit debug` to inspect ledger/stamp/participation, tier,
+damage, threshold, depleted state, and the effective tier step.
 
 ### Augments
 
@@ -1380,7 +1390,7 @@ When an action occurs, the system checks rules in this order:
 | `/augment debug` | `tweaks.admin.augment` | Inspect the held item's augment slots and occupancy. |
 | `/augment give <player> <enchantment-key> [level] [curse-key[:level] ...]` | `tweaks.admin.augment` | Give a player one Augment Gem, optionally with validated curse riders. |
 | `/repairkit give [player] [amount]` | `tweaks.admin.repairkit` | Give Repair Kits to a player. |
-| `/repairkit debug` | `tweaks.admin.repairkit` | Inspect the held item's custom durability state. |
+| `/repairkit debug` | `tweaks.admin.repairkit` | Inspect held-item participation, ledger/stamp state, tier, damage, threshold, depleted state, and effective tier step. |
 | `/region claim <name>` | `tweaks.protection.purchaseable` (or a listed `protection.public-claim-worlds` world) | Claim territory using wand selection; non-admin public claims still pay and obey the chunk-limit and overlap checks. |
 | `/region unclaim <name> [world]` | `tweaks.protection.unclaim` | Remove a region claim and permanently delete its sub-regions, refunding each owner. Alias: `/rg unclaim`. |
 | `/region info [name] [world]` | `tweaks.protection.info` | Show region details. Alias: `/rg i`. |

@@ -310,8 +310,9 @@ tools:
       - iron_ingot
     recipe-shapeless: false
   never-break:
-    # When enabled, augmented items stop at one durability remaining and become unusable;
-    # plain items still break normally. When disabled, augmented items also break normally.
+    # When enabled, augmented items stop at one durability remaining, stay in the inventory,
+    # and become unusable; plain items still break normally. When disabled, augmented items
+    # also break normally.
     enabled: true
   anvil:
     lockout-enabled: true

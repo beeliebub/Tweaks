@@ -610,12 +610,14 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         articles.add(new HelpArticle("durability_tools", "Durability and Repair Kits", List.of(
                 gray("Only augmented or already-participating damageable items receive a custom durability pool; plain items use vanilla breaking."),
                 white("Crafted and smithing damageables are initialized as augmented items, including an empty ledger when no enchantments are present."),
-                white("Repair Kits restore one augmented item, advance its tier, and consume one kit."),
+                white("Repair Kits restore one damaged augmented item, advance its tier, and consume one kit; full-durability items are hidden and refused."),
                 cmd("/repairkit give [player] [amount]", "Admin command for test kits."),
-                cmd("/repairkit debug", "Admin command showing the held item's durability state."),
+                cmd("/repairkit debug", "Admin command showing participation, ledger/stamp state, tier, damage, threshold, depleted state, and effective tier step."),
                 cmd("/rename [name]", "Free plain-text or color-formatted rename; omit the name to reset."),
-                yellow("With never-break enabled, spent augmented tools remain at one durability point and cannot be used; disabling it restores normal breaking."),
-                white("Repair-kit menus hide plain items and report Repair kit applied! Repair X/Y after a successful repair."),
+                yellow("With never-break enabled, participating items remain at one durability point and become inert without being destroyed; below the repair limit they show 'Out of durability — use a Repair Kit'."),
+                red("At the repair limit, the item shows 'Broken — cannot be repaired further' and remains permanently inert."),
+                white("The projected pool has a minimum maximum of 8 and caps the effective tier step so the top tier retains a real pool."),
+                white("Blocked depleted uses include mining, right-clicks, melee damage beyond one, bows/crossbows, fishing, shearing, entity right-click, trident launch, gliding, and armor/shield absorption."),
                 red("Anvils and grindstones are locked unless the bypass permission is present.")
         ), Material.DIAMOND_PICKAXE, 30, ColorUtil.HELP_GRAD_TOOL_PROTECT, List.of("toolprotect", "item_admin")));
 

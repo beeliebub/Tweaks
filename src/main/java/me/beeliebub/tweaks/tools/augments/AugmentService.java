@@ -35,21 +35,29 @@ public final class AugmentService {
     private final AugmentCompatibility compatibility;
     private final AugmentLore lore;
     private final Consumer<ItemStack> durabilityStamp;
+    private final Consumer<ItemStack> durabilityTailRefresh;
 
     public AugmentService(Tweaks plugin, QualityRegistry qualityRegistry) {
-        this(plugin, qualityRegistry, item -> {});
+        this(plugin, qualityRegistry, item -> {}, item -> {});
     }
 
     public AugmentService(Tweaks plugin, QualityRegistry qualityRegistry,
                           Consumer<ItemStack> durabilityStamp) {
+        this(plugin, qualityRegistry, durabilityStamp, item -> {});
+    }
+
+    public AugmentService(Tweaks plugin, QualityRegistry qualityRegistry,
+                          Consumer<ItemStack> durabilityStamp,
+                          Consumer<ItemStack> durabilityTailRefresh) {
         this.plugin = plugin;
         this.qualityRegistry = qualityRegistry;
         this.durabilityStamp = durabilityStamp == null ? item -> {} : durabilityStamp;
+        this.durabilityTailRefresh = durabilityTailRefresh == null ? item -> {} : durabilityTailRefresh;
         this.ledger = new AugmentLedger(plugin);
         this.gemItem = new AugmentGemItem(plugin);
         this.slotCalculator = new SlotCalculator(plugin, qualityRegistry);
         this.compatibility = new AugmentCompatibility(plugin, qualityRegistry);
-        this.lore = new AugmentLore(ledger, slotCalculator);
+        this.lore = new AugmentLore(ledger, slotCalculator, this.durabilityTailRefresh);
     }
 
     public AugmentLedger ledger() { return ledger; }

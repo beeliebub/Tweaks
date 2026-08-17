@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.tools.durability;
 
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.permissions.Permissions;
+import me.beeliebub.tweaks.tools.augments.AugmentLedger;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -43,8 +44,16 @@ public final class RepairKitCommand implements CommandExecutor, TabCompleter {
         if (args[0].equalsIgnoreCase("debug")) {
             if (sender instanceof Player player) {
                 ItemStack item = player.getInventory().getItemInMainHand();
-                player.sendMessage(Messages.TOOLS.repairKitDebug(durability.isDamageable(item),
-                        durability.tier(item), durability.maxDamage(item)));
+                durability.ensureStamped(item);
+                boolean ledger = AugmentLedger.hasLedger(item);
+                boolean stamp = durability.hasStamp(item);
+                int maxDamage = durability.maxDamage(item);
+                player.sendMessage(Messages.TOOLS.repairKitDebug(durability.isDamageable(item), ledger, stamp,
+                        durability.tier(item), durability.maxTier(), durability.damage(item), maxDamage,
+                        durability.depletedThreshold(item), durability.isSpent(item),
+                        durability.effectiveTierStep()));
+            } else {
+                sender.sendMessage(Messages.TOOLS.repairKitRequiresPlayer());
             }
             return true;
         }

@@ -79,6 +79,7 @@ public final class ToolsBootstrap {
                 if (!recipes.refresh()) {
                     plugin.getLogger().warning("Live repair kit recipe update was rejected; the previous recipe remains active.");
                 }
+                durability.warnIfTierStepClamped();
             }
         });
 
@@ -88,7 +89,8 @@ public final class ToolsBootstrap {
         plugin.getCommand("rename").setExecutor(renameCommand);
         plugin.getCommand("rename").setTabCompleter(renameCommand);
 
-        AugmentService augments = new AugmentService(plugin, services.qualityRegistry(), durability::ensureStamped);
+        AugmentService augments = new AugmentService(plugin, services.qualityRegistry(),
+                durability::ensureStamped, durability::refreshLoreTail);
         AugmentDialog augmentDialog = new AugmentDialog(augments);
         AugmentCommand augmentCommand = new AugmentCommand(augments, augmentDialog);
         plugin.getCommand("augment").setExecutor(augmentCommand);

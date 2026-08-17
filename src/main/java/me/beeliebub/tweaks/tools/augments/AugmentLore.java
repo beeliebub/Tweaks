@@ -8,16 +8,25 @@ import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /** Renders augment lore while replacing only the explicitly owned component block. */
 public final class AugmentLore {
 
     private final AugmentLedger ledger;
     private final SlotCalculator slots;
+    private final Consumer<ItemStack> durabilityTailRefresh;
+    private boolean refreshingTail;
 
     public AugmentLore(AugmentLedger ledger, SlotCalculator slots) {
+        this(ledger, slots, item -> {});
+    }
+
+    public AugmentLore(AugmentLedger ledger, SlotCalculator slots,
+                       Consumer<ItemStack> durabilityTailRefresh) {
         this.ledger = ledger;
         this.slots = slots;
+        this.durabilityTailRefresh = durabilityTailRefresh == null ? item -> {} : durabilityTailRefresh;
     }
 
     public void update(ItemStack item, QualityRegistry qualityRegistry) {
@@ -48,6 +57,13 @@ public final class AugmentLore {
         meta.lore(existing);
         item.setItemMeta(meta);
         ledger.setOwnedLore(item, generated.stream().map(Component::toString).toList());
+        if (refreshingTail) return;
+        refreshingTail = true;
+        try {
+            durabilityTailRefresh.accept(item);
+        } finally {
+            refreshingTail = false;
+        }
     }
 
     private static void removeOwnedBlock(List<Component> existing, List<String> owned) {
