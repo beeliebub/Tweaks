@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.core;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.NamespacedKey;
@@ -123,7 +125,8 @@ public final class ToolsMessages {
     }
 
     public Component augmentUsage() {
-        return Component.text("Usage: /augment | /augment debug | /augment give <player> <enchantment-key> [level] [curse-key[:level] ...]",
+        return Component.text("Usage: /augment | /augment confirm | /augment cancel | /augment debug | "
+                        + "/augment give <player> <enchantment-key> [level] [curse-key[:level] ...]",
                 NamedTextColor.YELLOW);
     }
 
@@ -155,7 +158,8 @@ public final class ToolsMessages {
     }
 
     public Component augmentNoSlots() {
-        return Component.text("That item has no available augment slots.", NamedTextColor.RED);
+        return Component.text("That item has no available augment slots.\n"
+                + "Use /augment while holding it to unlock one.", NamedTextColor.RED);
     }
 
     public Component augmentIncompatible() {
@@ -189,8 +193,32 @@ public final class ToolsMessages {
     }
 
     public Component augmentMigrated(int count) {
-        return Component.text("Migrated " + count + " enchantment(s) into gems; purchased slots were reset.",
+        return Component.text("Migrated " + count + " enchantment(s) into gems.",
                 NamedTextColor.GREEN);
+    }
+
+    public Component augmentMigrationPrompt(int cost) {
+        Component confirm = Component.text("[Confirm]", NamedTextColor.GREEN)
+                .hoverEvent(HoverEvent.showText(Component.text("Unlock slot 1 for " + cost + " XP",
+                        NamedTextColor.GRAY)))
+                .clickEvent(ClickEvent.runCommand("/augment confirm"));
+        Component cancel = Component.text("[Cancel]", NamedTextColor.RED)
+                .hoverEvent(HoverEvent.showText(Component.text("Leave the item unchanged", NamedTextColor.GRAY)))
+                .clickEvent(ClickEvent.runCommand("/augment cancel"));
+        return Component.text("Unlock augment slot 1 for " + cost + " XP? ", NamedTextColor.YELLOW)
+                .append(confirm).append(Component.text(" ")).append(cancel);
+    }
+
+    public Component augmentConfirmationExpired() {
+        return Component.text("That augment confirmation expired or the held item changed.", NamedTextColor.RED);
+    }
+
+    public Component augmentConfirmationCancelled() {
+        return Component.text("Augment migration cancelled; the item was left unchanged.", NamedTextColor.YELLOW);
+    }
+
+    public Component augmentConfirmationUnpriced() {
+        return Component.text("Slot 1 is not currently priced, so migration was refused.", NamedTextColor.RED);
     }
 
     public Component augmentPurchase(int cost, int slots) {
@@ -218,8 +246,7 @@ public final class ToolsMessages {
     }
 
     public Component augmentGemName() {
-        return Component.text("Augment Gem", NamedTextColor.LIGHT_PURPLE)
-                .decoration(TextDecoration.ITALIC, false);
+        return Component.text("Augment Gem");
     }
 
     public Component enchantmentName(Enchantment enchantment) {
@@ -255,10 +282,6 @@ public final class ToolsMessages {
         return Component.text(result.toString()).decoration(TextDecoration.ITALIC, false);
     }
 
-    public Component augmentGemLore(Component enchantmentName) {
-        return enchantmentName.decoration(TextDecoration.ITALIC, false);
-    }
-
     public Component augmentHubTitle() {
         return Component.text("Augments", NamedTextColor.GOLD);
     }
@@ -289,18 +312,25 @@ public final class ToolsMessages {
     }
 
     public Component augmentSlotLore(String dots) {
-        return Component.text("Augment Slots: " + dots, NamedTextColor.GRAY);
+        return Component.text("Augment Slots: " + dots, NamedTextColor.GRAY)
+                .decoration(TextDecoration.ITALIC, false);
     }
 
-    public Component augmentEntryLore(Component enchantmentName, boolean active) {
-        return Component.text("Augment: ", active ? NamedTextColor.AQUA : NamedTextColor.DARK_GRAY)
-                .append(enchantmentName)
-                .append(Component.text(" " + (active ? "●" : "○"),
-                        active ? NamedTextColor.AQUA : NamedTextColor.DARK_GRAY));
+    public Component augmentEntryLore(Component enchantmentName, boolean active, String slotDots) {
+        NamedTextColor color = active ? NamedTextColor.GRAY : NamedTextColor.DARK_GRAY;
+        Component line = Component.text("", color)
+                .append(colorTree(enchantmentName, color))
+                .append(Component.text(" " + slotDots, color));
+        return withoutItalic(line);
     }
 
     public Component augmentCurseLore(Component enchantmentName) {
-        return Component.text("Curse: ", NamedTextColor.RED).append(enchantmentName);
+        return withoutItalic(Component.text("Curse: ", NamedTextColor.RED).append(enchantmentName));
+    }
+
+    public Component augmentForeignEnchantLore(Component enchantmentName) {
+        return withoutItalic(Component.text("Enchantment: ", NamedTextColor.RED)
+                .append(enchantmentName));
     }
 
     public Component augmentInventoryGem(Component enchantmentName) {
@@ -319,6 +349,10 @@ public final class ToolsMessages {
         return Component.text("No compatible augment gems are in your inventory.", NamedTextColor.YELLOW);
     }
 
+    public Component augmentNoTools() {
+        return Component.text("No compatible tools are in your inventory.", NamedTextColor.YELLOW);
+    }
+
     public Component augmentPreviousPage() {
         return Component.text("◀ Previous Page", NamedTextColor.GREEN);
     }
@@ -330,6 +364,16 @@ public final class ToolsMessages {
     public Component augmentPageSummary(int page, int totalPages, int totalEntries) {
         return Component.text("Showing " + totalEntries + " augment option(s), page "
                 + page + " of " + totalPages + ".", NamedTextColor.GRAY);
+    }
+
+    private Component colorTree(Component component, NamedTextColor color) {
+        return component.color(color).children(component.children().stream()
+                .map(child -> colorTree(child, color)).toList());
+    }
+
+    private Component withoutItalic(Component component) {
+        return component.decoration(TextDecoration.ITALIC, false).children(component.children().stream()
+                .map(this::withoutItalic).toList());
     }
 
     public Component augmentBundleRefused() {

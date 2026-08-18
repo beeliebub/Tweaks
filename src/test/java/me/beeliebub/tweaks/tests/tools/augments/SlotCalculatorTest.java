@@ -122,4 +122,12 @@ class SlotCalculatorTest {
 
         assertEquals(Integer.MAX_VALUE, calculator.used(entries));
     }
+
+    @Test
+    void entryDotsAreBoundedLikeSlotDots() {
+        assertEquals("●●●●", calculator.entryDots(4, true));
+        assertEquals(SlotCalculator.MAX_RENDERED_ENTRY_DOTS + 1,
+                calculator.entryDots(Integer.MAX_VALUE, false).length());
+        assertTrue(calculator.entryDots(Integer.MAX_VALUE, false).endsWith("…"));
+    }
 }

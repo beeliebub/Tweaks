@@ -49,9 +49,27 @@ public final class AugmentDialog {
             openGemFirst(player, held);
             return;
         }
-        List<ItemStack> migrated = augments.migrateToGems(player, held);
-        if (migrated == null) {
-            player.sendMessage(Messages.TOOLS.inventoryFull());
+        if (AugmentLedger.hasLedger(held)) {
+            openHub(player, held);
+            return;
+        }
+        List<ItemStack> legacyGems = augments.computeLegacyGems(held);
+        if (legacyGems == null) {
+            player.sendMessage(Messages.TOOLS.augmentIncompatible());
+            return;
+        }
+        if (!legacyGems.isEmpty()) {
+            if (augments.slotCalculator().capacity(held.getType()) < 1) {
+                player.sendMessage(Messages.TOOLS.augmentNoSlots());
+                return;
+            }
+            int price = augments.slotCalculator().priceResolution(1).value();
+            if (price < 0) {
+                player.sendMessage(Messages.TOOLS.augmentConfirmationUnpriced());
+                return;
+            }
+            augments.pendingConfirmations().create(player, held, price);
+            player.sendMessage(Messages.TOOLS.augmentMigrationPrompt(price));
             return;
         }
         openHub(player, held);
@@ -161,7 +179,7 @@ public final class AugmentDialog {
             }
         }
         showPaged(player, Messages.TOOLS.augmentListLabel(), visible, totalEntries, page,
-                Messages.TOOLS.augmentListLabel(),
+                Messages.TOOLS.augmentListLabel(), Messages.TOOLS.augmentNoGems(),
                 p -> {
                     ItemStack target = currentHeldOrSame(p, item);
                     if (target != null) openHub(p, target);
@@ -202,7 +220,7 @@ public final class AugmentDialog {
                     }));
         }
         showPaged(player, Messages.TOOLS.augmentListLabel(), buttons, buttons.size(), page,
-                gemTooltip(data),
+                gemTooltip(data), Messages.TOOLS.augmentNoTools(),
                 null,
                 (p, nextPage) -> openGemFirst(p, gem, nextPage));
     }
@@ -265,13 +283,13 @@ public final class AugmentDialog {
     }
 
     private void showPaged(Player player, Component title, List<ActionButton> visibleButtons, int totalEntries, int page,
-                           Component body, Consumer<Player> back,
+                           Component body, Component emptyMessage, Consumer<Player> back,
                            java.util.function.BiConsumer<Player, Integer> pageOpener) {
         int totalPages = Math.max(1, (totalEntries + PAGE_SIZE - 1) / PAGE_SIZE);
         int currentPage = Math.max(0, Math.min(page, totalPages - 1));
         List<ActionButton> buttons = new ArrayList<>();
         if (totalEntries == 0) {
-            buttons.add(button(Messages.TOOLS.augmentNoGems(), Messages.TOOLS.augmentNoGems(), p -> {}));
+            buttons.add(button(emptyMessage, emptyMessage, p -> {}));
         } else {
             buttons.addAll(visibleButtons);
         }

@@ -34,6 +34,22 @@ public final class AugmentCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
+        if (args.length > 0 && (args[0].equalsIgnoreCase("confirm")
+                || args[0].equalsIgnoreCase("cancel"))) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(Messages.TOOLS.augmentRequiresPlayerSender());
+                return true;
+            }
+            if (args[0].equalsIgnoreCase("cancel")) {
+                if (!augments.cancelPending(player)) {
+                    player.sendMessage(Messages.TOOLS.augmentConfirmationExpired());
+                }
+                return true;
+            }
+            ItemStack item = augments.confirmSlotOneUnlock(player);
+            if (item != null) dialog.openHub(player, item);
+            return true;
+        }
         if (!augments.enabled()) {
             sender.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
             return true;
@@ -131,7 +147,8 @@ public final class AugmentCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Messages.TOOLS.augmentTooManyCurses(AugmentGemItem.MAX_CURSE_RIDERS));
             return true;
         }
-        if (target.getInventory().addItem(gem).isEmpty()) {
+        if (augments.canFit(target, List.of(gem))) {
+            augments.addGems(target, List.of(gem));
             sender.sendMessage(Messages.TOOLS.augmentAttached(
                     Messages.TOOLS.enchantmentName(enchantment, level), riders.size()));
         } else {
@@ -143,7 +160,8 @@ public final class AugmentCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String alias, @NotNull String[] args) {
-        if (args.length == 1) return List.of("give", "debug");
+        if (args.length == 1) return List.of("give", "debug", "confirm", "cancel");
+        if (!args[0].equalsIgnoreCase("give")) return List.of();
         String prefix = args[args.length - 1].toLowerCase(Locale.ROOT);
         if (args.length == 2) {
             return Bukkit.getOnlinePlayers().stream().map(Player::getName)

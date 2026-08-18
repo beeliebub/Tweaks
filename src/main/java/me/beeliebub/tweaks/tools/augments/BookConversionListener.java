@@ -338,8 +338,10 @@ public final class BookConversionListener implements Listener {
     }
 
     private boolean isPotentialBook(ItemStack stack) {
+        AugmentGemItem gemItem = augments.gemItem();
         return stack != null && !stack.isEmpty() && stack.getType() == Material.ENCHANTED_BOOK
-                && stack.getItemMeta() instanceof EnchantmentStorageMeta;
+                && stack.getItemMeta() instanceof EnchantmentStorageMeta
+                && (gemItem == null || !gemItem.isGem(stack));
     }
 
     private record InventoryClaim(Inventory inventory, int slot, ItemStack expected, int amount) {}

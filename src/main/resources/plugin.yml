@@ -126,7 +126,7 @@ commands:
     usage: /rename [name]
   augment:
     description: Attach, toggle, and migrate augment gems.
-    usage: /augment | /augment debug | /augment give <player> <enchantment-key> [level] [curse-key[:level] ...]
+    usage: /augment | /augment confirm | /augment cancel | /augment debug | /augment give <player> <enchantment-key> [level] [curse-key[:level] ...]
   repairkit:
     description: Give or inspect repair kits (admin).
     usage: /repairkit give [player] [amount] | /repairkit debug

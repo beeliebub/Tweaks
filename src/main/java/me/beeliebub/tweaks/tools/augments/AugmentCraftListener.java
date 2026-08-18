@@ -1,6 +1,7 @@
 package me.beeliebub.tweaks.tools.augments;
 
 import me.beeliebub.tweaks.Tweaks;
+import io.papermc.paper.event.player.PlayerTradeEvent;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -13,7 +14,7 @@ import org.bukkit.inventory.SmithingInventory;
 
 import java.util.logging.Level;
 
-/** Establishes augment state on newly delivered damageable crafting and smithing results. */
+/** Establishes augment state on newly delivered damageable crafting, smithing, and trade results. */
 public final class AugmentCraftListener implements Listener {
 
     private final Tweaks plugin;
@@ -40,6 +41,14 @@ public final class AugmentCraftListener implements Listener {
         ItemStack result = inventory.getResult();
         if (!isDamageableResult(result)) return;
         deferDelta(player, result.getType());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onTrade(PlayerTradeEvent event) {
+        if (!augments.enabled()) return;
+        ItemStack result = event.getTrade().getResult();
+        if (!isDamageableResult(result)) return;
+        deferDelta(event.getPlayer(), result.getType());
     }
 
     private void deferDelta(Player player, Material resultMaterial) {

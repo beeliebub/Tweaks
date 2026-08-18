@@ -221,6 +221,26 @@ class BookConversionListenerTest {
         assertTrue(augments.inventoryGems(player).isEmpty());
     }
 
+    @Test
+    void augmentGemsAreNotTreatedAsConvertibleBooks() {
+        plugin.getConfig().set("tools.augments.gem-material", "ENCHANTED_BOOK");
+        AugmentService configuredAugments = new AugmentService(plugin, null);
+        BookConversionListener configuredListener = new BookConversionListener(plugin, configuredAugments);
+        Player player = server.addPlayer("GemBookHolder");
+        ItemStack gem = configuredAugments.gemItem().create(Enchantment.EFFICIENCY, 5);
+        Item entity = mock(Item.class);
+        when(entity.getItemStack()).thenReturn(gem);
+        EntityPickupItemEvent event = mock(EntityPickupItemEvent.class);
+        when(event.getEntity()).thenReturn(player);
+        when(event.getItem()).thenReturn(entity);
+
+        configuredListener.onPickup(event);
+
+        verify(event, never()).setCancelled(anyBoolean());
+        verify(entity, never()).remove();
+        assertEquals(Enchantment.EFFICIENCY, configuredAugments.gemItem().read(gem).enchantment());
+    }
+
     private static void fillStorage(PlayerMock player) {
         for (int slot = 0; slot < player.getInventory().getStorageContents().length; slot++) {
             player.getInventory().setItem(slot, new ItemStack(Material.STONE, 64));

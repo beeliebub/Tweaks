@@ -618,12 +618,14 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 red("At the repair limit, the item shows 'Broken — cannot be repaired further' and remains permanently inert."),
                 white("The projected pool has a minimum maximum of 8 and caps the effective tier step so the top tier retains a real pool."),
                 white("Blocked depleted uses include mining, right-clicks, melee damage beyond one, bows/crossbows, fishing, shearing, entity right-click, trident launch, gliding, and armor/shield absorption."),
-                red("Anvils and grindstones are locked unless the bypass permission is present.")
+                red("Anvils and grindstones are locked unless you have tweaks.tools.anvilbypass; staff with that permission will not see the grindstone lockout.")
         ), Material.DIAMOND_PICKAXE, 30, ColorUtil.HELP_GRAD_TOOL_PROTECT, List.of("toolprotect", "item_admin")));
 
         articles.add(new HelpArticle("augments", "Augments", List.of(
-                gray("Augment Gems hold real registry enchantments while the item ledger owns slot state."),
+                gray("Augment Gems hold real registry enchantments in the vanilla stored-enchantment component while the item ledger owns slot state."),
                 cmd("/augment", "Open the two-screen slot and augment menu for the held item."),
+                cmd("/augment confirm", "Confirm the quoted XP charge and migrate a legacy-enchanted held item."),
+                cmd("/augment cancel", "Cancel a pending legacy-migration confirmation."),
                 white("Enchanting tables charge and complete normally, then convert the result into gems one tick later."),
                 yellow("The complete gem batch is preflighted before the table result is accepted; a refusal or full inventory cancels the enchantment and keeps the vanilla result."),
                 white("Enchanted books produce gems; a gem right-click on air or a block opens the same attach flow."),
@@ -634,7 +636,9 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 yellow("An empty price map leaves slots unpriced, so purchases refuse without changing XP or the ledger."),
                 white("Turning an augment off removes the active enchantment but keeps its slot occupied."),
                 yellow("A Disenchanting Bundle validates every ledger record before mutation, randomizes highest-tier ties, and keeps the current chance after a failure."),
-                white("Legacy enchantments migrate once into gems with slots and entries reset; curses stay on the item."),
+                white("Unenchanted crafted, smithed, and villager-traded damageable results receive one free slot; enchanted results receive none, and netherite upgrades carry their existing ledger without another free slot."),
+                white("A ledger-less enchanted item gets a 30-second quoted confirmation; confirm charges that quote before migrating enchantments into gems, while cancel, expiry, or an item change leaves it untouched."),
+                white("Legacy curses stay real on the item and are recorded in the ledger's permanent curse list; tool lore is non-italic, gray/dark-gray by toggle, weighted with bounded dots, and shows unaccounted real enchantments in red."),
                 white("Plain items gain no augment PDC until a slot is purchased or a gem is attached."),
                 white("Book conversion rechecks exact post-event stack deltas; crafted results initialize their own ledger; foreign lookalike lore is preserved by exact component fingerprints."),
                 cmd("/augment give <player> <enchantment-key> [level] [curse-key[:level] ...]", "Admin test-gem command."),
@@ -646,7 +650,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/rename <name>", "Apply a legacy-color name to the main-hand item."),
                 cmd("/rename", "Reset the main-hand item to its default name."),
                 white("Names are limited by the live rename max-length setting."),
-                red("Anvil and grindstone openings are cancelled unless you have the staff bypass permission.")
+                red("Anvil and grindstone openings are cancelled unless you have tweaks.tools.anvilbypass; staff with it will not see the grindstone lockout.")
         ), Material.NAME_TAG, 34, ColorUtil.HELP_GRAD_NICKNAMES, List.of("durability_tools", "augments")));
 
         articles.add(new HelpArticle("toolprotect", "Tool Protect", List.of(

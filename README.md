@@ -188,9 +188,10 @@ The spawn location is set by creating a warp named "spawn" using `/setwarp spawn
 All custom enchantments are provided by a **server-side data pack** and resolved by the plugin at startup. They appear on tools as normal enchantments and can be obtained however the data pack defines (enchanting table, villager trades, loot tables, etc.).
 
 Anvils and grindstones are fully locked for ordinary players to prevent repair, stripping, and
-augment-combination exploits. Staff with `tweaks.tools.anvilbypass` can open them for
-administration. The same guard blocks the vanilla 2x2/crafting-grid combine path for damaged
-augmented or quality tools while leaving plain unaugmented tools usable.
+augment-combination exploits. The same `tweaks.tools.anvilbypass` permission bypasses both
+lockouts, so a staff account holding it will not see the grindstone lockout. The same guard blocks
+the vanilla 2x2/crafting-grid combine path for damaged augmented or quality tools while leaving
+plain unaugmented tools usable.
 
 ### Telekinesis
 
@@ -653,12 +654,14 @@ damage, threshold, depleted state, and the effective tier step.
 ### Augments
 
 Enchanting-table results and enchanted books are diverted into individual Augment Gems. A plain
-Book is valid input. Gems are PDC-marked, rare, glinting, stack to 64, and carry one registry
-enchantment plus its level; their `ITEM_NAME` is stable and their lore uses readable names with
-Arabic levels. The table still charges levels/lapis and completes vanilla enchanting first;
-conversion runs one tick later. The table preflights the complete gem batch and cancels the
-enchantment with the vanilla result preserved when the batch is refused or cannot fit. A gem
-right-click (including right-clicking air) and `/augment` open the same two-screen hub.
+Book is valid input. Gems are PDC-marked, rare, glinting, stack to 64, and carry their primary and
+curse-rider enchantments in Paper's `STORED_ENCHANTMENTS` component; `augment_gem_curses` is
+cross-checked rider metadata, and gems have no generated lore. Their `ITEM_NAME` is stable and
+`RARITY` supplies the vanilla aqua appearance. The table still charges levels/lapis and completes
+vanilla enchanting first; conversion runs one tick later. The table preflights the complete gem
+batch and cancels the enchantment with the vanilla result preserved when the batch is refused or
+cannot fit. A gem right-click (including right-clicking air) and `/augment` open the same
+two-screen hub.
 
 Table and book rolls bind each rolled curse to another gem from that same batch. A curse-only roll
 produces a curse-only gem. Attaching a curse is free, permanent, unsafe-applied, and shown as a
@@ -675,19 +678,25 @@ un-purchased, `○` for purchased, and `●` for occupied. Quality costs 1/2/3/4
 quality through Legendary; quality exclusivity is always enforced and vanilla exclusivity is
 configurable. Turning an augment off removes its active enchantment but keeps its slot occupied.
 
-Existing non-curse enchantments migrate once, on first `/augment` use, into gems without granting
-free slots; legacy curses remain real enchantments on the item. Plain items receive no augment PDC
-just from opening the menu, while the first purchased slot or gem attachment writes the migration
-marker. Migration and all multi-gem conversions refuse before mutating when the player's inventory
-cannot hold every generated gem; if inventory state changes during delivery, unexpected gem
-leftovers are dropped instead of discarded. Deferred book conversion rechecks the captured view and
-exact post-event stack deltas and exact inventory-view identity, and leaves mismatched moves alone.
-Augment-generated lore is tracked by exact component fingerprints only, so foreign lookalike lines
-(including exact visible copies) survive refreshes. Disenchanting Bundle recovery validates the
-complete ledger and legacy migration plan before changing the source item, and refuses malformed or
-unresolved owned state without consuming anything. A lore-bearing Disenchanting Bundle is the destructive recovery path: it migrates legacy
-enchantments first, applies the 100/80/60/40/20/0% recovery ladder, and destroys the source item and
-bundle.
+Unenchanted crafted, smithed, and villager-traded damageable results receive a migrated ledger with
+slot 1 free; results carrying live enchantments receive zero purchased slots. Netherite upgrades
+carry an existing ledger without another free slot. Existing non-curse enchantments on a
+ledger-less item migrate into gems only after a clickable `/augment confirm` prompt quotes the
+slot-1 XP price; `/augment cancel` or the 30-second expiry leaves the item and XP unchanged.
+Confirmation is one-shot, tolerates ordinary durability loss, rejects item swaps or meaningful
+metadata changes, preflights inventory space, charges the quoted price, migrates the enchantments,
+delivers the gems, and opens the hub. An unenchanted ledger-less item opens the hub for free and
+writes no PDC. The old curse-gem attachment route cannot grant free migration.
+
+Legacy curses remain real enchantments and are also folded into the ledger's permanent curse list.
+Augmented tool lore is non-italic: active entries are gray, inactive entries dark gray, each
+followed by bounded quality-weight dots, and any real enchantment not accounted for by an active
+entry or bound curse is shown in a red catch-all line. Vanilla enchantments are hidden from the
+tooltip while existing tooltip-hidden components are preserved. Lore ownership uses exact
+component fingerprints, so foreign lookalike lines (including exact visible copies) survive
+refreshes. A lore-bearing Disenchanting Bundle remains the destructive recovery path: it migrates
+legacy enchantments first, applies the 100/80/60/40/20/0% recovery ladder, and destroys the source
+item and bundle.
 
 Capacity uses exact material overrides before the shared families `wooden`, `stone`, `iron`,
 `copper`, `gold`, `diamond`, `netherite`, `shears`, `fishing_rod`, `mace`, and `elytra`; leather,
@@ -1352,6 +1361,8 @@ When an action occurs, the system checks rules in this order:
 | `/toolprotect durability <n>` | Set remaining-durability threshold for ToolProtect. |
 | `/rename [name]` | Free rename/reset for the main-hand item; supports legacy color codes. |
 | `/augment` | Open the augment slot and gem menu for the held item. |
+| `/augment confirm` | Confirm the quoted XP charge and migrate a held legacy-enchanted item. |
+| `/augment cancel` | Cancel the pending legacy-migration confirmation. |
 | Right-click an Augment Gem (air or block) | Open the gem-first augment menu. |
 | `/afk` | Toggle AFK status. |
 | `/fullmoon` | Show estimate for next full moon. |

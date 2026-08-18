@@ -4,6 +4,8 @@ import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.tools.augments.AugmentCraftListener;
 import me.beeliebub.tweaks.tools.augments.AugmentLedger;
 import me.beeliebub.tweaks.tools.augments.AugmentService;
+import io.papermc.paper.event.player.PlayerTradeEvent;
+import org.bukkit.entity.AbstractVillager;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
@@ -13,6 +15,7 @@ import org.bukkit.event.inventory.SmithItemEvent;
 import org.bukkit.inventory.Recipe;
 import org.bukkit.inventory.SmithingInventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.MerchantRecipe;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -64,6 +67,7 @@ class AugmentCraftListenerTest {
                 + (delivered == null ? null : delivered.getItemMeta()));
         assertTrue(augments.ledger().migrated(delivered));
         assertTrue(augments.entries(delivered).isEmpty());
+        assertEquals(1, augments.ledger().slots(delivered));
     }
 
     @Test
@@ -82,6 +86,7 @@ class AugmentCraftListenerTest {
         assertEquals(1, augments.entries(delivered).size(), "delivered=" + delivered + " meta="
                 + delivered.getItemMeta());
         assertEquals(Enchantment.EFFICIENCY.getKey(), augments.entries(delivered).getFirst().enchantmentKey());
+        assertEquals(0, augments.ledger().slots(delivered));
     }
 
     @Test
@@ -138,6 +143,47 @@ class AugmentCraftListenerTest {
         assertEquals(3, delivered.getEnchantmentLevel(Enchantment.UNBREAKING));
     }
 
+    @Test
+    void tradeResultGetsAFreeSlotWhenUnenchanted() {
+        PlayerMock player = server.addPlayer("TradePlainTool");
+        ItemStack result = new ItemStack(Material.DIAMOND_PICKAXE);
+        listener.onTrade(tradeEvent(player, result));
+        player.setItemOnCursor(result);
+        server.getScheduler().performOneTick();
+
+        assertEquals(1, augments.ledger().slots(player.getItemOnCursor()));
+    }
+
+    @Test
+    void tradeResultKeepsZeroSlotsWhenEnchanted() {
+        PlayerMock player = server.addPlayer("TradeEnchantedTool");
+        ItemStack result = enchanted(Material.DIAMOND_PICKAXE, Enchantment.EFFICIENCY, 5);
+        listener.onTrade(tradeEvent(player, result));
+        player.setItemOnCursor(result);
+        server.getScheduler().performOneTick();
+
+        assertEquals(0, augments.ledger().slots(player.getItemOnCursor()));
+        assertEquals(5, player.getItemOnCursor().getEnchantmentLevel(Enchantment.EFFICIENCY));
+    }
+
+    @Test
+    void netheriteUpgradeCarriesOverLedgerWithoutGrantingAFreeSlot() {
+        PlayerMock player = server.addPlayer("SmithingLedger");
+        SmithingInventory inventory = (SmithingInventory) Bukkit.createInventory(null, InventoryType.SMITHING);
+        ItemStack result = new ItemStack(Material.NETHERITE_PICKAXE);
+        augments.ledger().write(result, 4, java.util.List.of(), true);
+        inventory.setResult(result);
+        SmithItemEvent event = mock(SmithItemEvent.class);
+        when(event.getWhoClicked()).thenReturn(player);
+        when(event.getInventory()).thenReturn(inventory);
+
+        listener.onSmith(event);
+        player.setItemOnCursor(result);
+        server.getScheduler().performOneTick();
+
+        assertEquals(4, augments.ledger().slots(player.getItemOnCursor()));
+    }
+
     private static CraftItemEvent craftEvent(PlayerMock player, Recipe recipe) {
         CraftItemEvent event = mock(CraftItemEvent.class);
         when(event.getWhoClicked()).thenReturn(player);
@@ -153,6 +199,11 @@ class AugmentCraftListenerTest {
         Recipe recipe = mock(Recipe.class);
         when(recipe.getResult()).thenReturn(result);
         return recipe;
+    }
+
+    private static PlayerTradeEvent tradeEvent(PlayerMock player, ItemStack result) {
+        return new PlayerTradeEvent(player, mock(AbstractVillager.class),
+                new MerchantRecipe(result, 1), false, false);
     }
 
     private static ItemStack enchanted(Material material, Enchantment enchantment, int level) {

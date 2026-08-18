@@ -1,10 +1,10 @@
 package me.beeliebub.tweaks.tools.augments;
 
 import io.papermc.paper.datacomponent.DataComponentTypes;
+import io.papermc.paper.datacomponent.item.ItemEnchantments;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.core.Messages;
 import net.kyori.adventure.key.Key;
-import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.enchantments.Enchantment;
@@ -14,7 +14,10 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** Factory and PDC recognizer for one-enchantment augment gems. */
@@ -23,15 +26,11 @@ public final class AugmentGemItem {
     public static final int MAX_CURSE_RIDERS = 64;
     private final Tweaks plugin;
     private final NamespacedKey markerKey;
-    private final NamespacedKey enchantmentKey;
-    private final NamespacedKey levelKey;
     private final NamespacedKey cursesKey;
 
     public AugmentGemItem(Tweaks plugin) {
         this.plugin = plugin;
         this.markerKey = new NamespacedKey(plugin, "augment_gem");
-        this.enchantmentKey = new NamespacedKey(plugin, "augment_gem_enchantment");
-        this.levelKey = new NamespacedKey(plugin, "augment_gem_level");
         this.cursesKey = new NamespacedKey(plugin, "augment_gem_curses");
     }
 
@@ -40,32 +39,43 @@ public final class AugmentGemItem {
     }
 
     public ItemStack create(Enchantment enchantment, int level, List<CurseRider> curses) {
+        if (enchantment == null || level <= 0 || level > 255) {
+            plugin.getLogger().warning("Invalid augment gem primary enchantment input was rejected.");
+            return null;
+        }
         Material material = configuredMaterial();
         ItemStack stack = new ItemStack(material);
         ItemMeta meta = stack.getItemMeta();
-        int clampedLevel = Math.max(1, level);
         List<CurseRider> safeCurses = curses == null ? List.of() : curses;
         if (safeCurses.size() > MAX_CURSE_RIDERS) {
             plugin.getLogger().warning("Oversized augment curse input was rejected.");
             return null;
         }
         Set<Enchantment> knownCurses = AugmentService.resolveCurseEnchantments();
+        Set<Enchantment> seenCurses = new HashSet<>();
         List<CurseRider> validCurses = new ArrayList<>();
         for (CurseRider curse : safeCurses) {
-            if (curse == null || curse.enchantment() == null || curse.level() <= 0
-                    || !knownCurses.contains(curse.enchantment()) || validCurses.size() >= MAX_CURSE_RIDERS) continue;
+            if (curse == null || curse.enchantment() == null || curse.level() <= 0 || curse.level() > 255
+                    || !knownCurses.contains(curse.enchantment())) continue;
+            if (!seenCurses.add(curse.enchantment())) {
+                plugin.getLogger().warning("Duplicate augment gem curse input was rejected.");
+                return null;
+            }
             validCurses.add(curse);
         }
-        List<Component> lore = new ArrayList<>();
-        lore.add(Messages.TOOLS.augmentGemLore(safeDisplayName(enchantment, clampedLevel)));
         for (CurseRider curse : validCurses) {
-            lore.add(Messages.TOOLS.augmentGemLore(safeDisplayName(curse.enchantment(), curse.level())));
+            if (curse.enchantment().getKey().equals(enchantment.getKey())) {
+                plugin.getLogger().warning("Augment gem creation rejected a primary and rider enchantment collision.");
+                return null;
+            }
         }
-        meta.lore(lore);
+        Map<Enchantment, Integer> storedEnchantments = new HashMap<>();
+        storedEnchantments.put(enchantment, level);
+        for (CurseRider curse : validCurses) {
+            storedEnchantments.put(curse.enchantment(), curse.level());
+        }
         var pdc = meta.getPersistentDataContainer();
         pdc.set(markerKey, PersistentDataType.BYTE, (byte) 1);
-        pdc.set(enchantmentKey, PersistentDataType.STRING, enchantment.getKey().toString());
-        pdc.set(levelKey, PersistentDataType.INTEGER, clampedLevel);
         List<String> encodedCurses = new ArrayList<>();
         for (CurseRider curse : validCurses) {
             encodedCurses.add(encodeCurse(curse));
@@ -74,6 +84,7 @@ public final class AugmentGemItem {
             pdc.set(cursesKey, PersistentDataType.LIST.strings(), encodedCurses);
         }
         stack.setItemMeta(meta);
+        stack.setData(DataComponentTypes.STORED_ENCHANTMENTS, ItemEnchantments.itemEnchantments(storedEnchantments));
         stack.setData(DataComponentTypes.ITEM_NAME, Messages.TOOLS.augmentGemName());
         String model = plugin.getConfig().getString("tools.augments.gem-item-model", "jass:augment_gem");
         try { stack.setData(DataComponentTypes.ITEM_MODEL, Key.key(model)); }
@@ -88,15 +99,6 @@ public final class AugmentGemItem {
         if (!isGem(stack)) return null;
         try {
             var pdc = stack.getItemMeta().getPersistentDataContainer();
-            String raw = pdc.get(enchantmentKey, PersistentDataType.STRING);
-            Integer level = pdc.get(levelKey, PersistentDataType.INTEGER);
-            Enchantment enchantment = null;
-            if (raw != null) {
-                var key = NamespacedKey.fromString(raw);
-                if (key != null) enchantment = io.papermc.paper.registry.RegistryAccess.registryAccess()
-                        .getRegistry(io.papermc.paper.registry.RegistryKey.ENCHANTMENT).get(key);
-            }
-            if (enchantment == null || level == null || level <= 0) return null;
             List<CurseRider> curses = new ArrayList<>();
             List<String> encodedCurses;
             try {
@@ -117,11 +119,38 @@ public final class AugmentGemItem {
                     warnMalformedCurse();
                     curse = null;
                 }
-                if (curse != null && !curse.enchantment().getKey().equals(enchantment.getKey())) {
-                    curses.add(curse);
+                if (curse != null) curses.add(curse);
+            }
+            ItemEnchantments stored = stack.getData(DataComponentTypes.STORED_ENCHANTMENTS);
+            if (stored == null || stored.enchantments().isEmpty()) {
+                plugin.getLogger().warning("Augment gem stored enchantments were missing or empty.");
+                return null;
+            }
+            Set<Enchantment> seenRiders = new HashSet<>();
+            for (CurseRider curse : curses) {
+                if (!seenRiders.add(curse.enchantment())) {
+                    plugin.getLogger().warning("Duplicate augment gem curse metadata was ignored.");
+                    return null;
+                }
+                Integer storedLevel = stored.enchantments().get(curse.enchantment());
+                if (storedLevel == null || storedLevel != curse.level()) {
+                    plugin.getLogger().warning("Augment gem curse metadata did not match stored enchantments.");
+                    return null;
                 }
             }
-            return new GemData(enchantment, level, List.copyOf(curses));
+            var nonRiderEntries = new HashMap<>(stored.enchantments());
+            for (CurseRider curse : curses) nonRiderEntries.remove(curse.enchantment());
+            if (nonRiderEntries.size() != 1) {
+                plugin.getLogger().warning("Augment gem stored enchantments did not contain one primary.");
+                return null;
+            }
+            var primary = nonRiderEntries.entrySet().iterator().next();
+            if (primary.getKey() == null || primary.getValue() == null
+                    || primary.getValue() <= 0 || primary.getValue() > 255) {
+                plugin.getLogger().warning("Augment gem primary enchantment level was invalid.");
+                return null;
+            }
+            return new GemData(primary.getKey(), primary.getValue(), List.copyOf(curses));
         } catch (IllegalArgumentException malformed) {
             plugin.getLogger().warning("Malformed augment gem metadata was ignored.");
             return null;
@@ -190,19 +219,6 @@ public final class AugmentGemItem {
 
     private void warnMalformedCurse() {
         plugin.getLogger().warning("Malformed augment gem curse metadata was ignored.");
-    }
-
-    private Component safeDisplayName(Enchantment enchantment, int level) {
-        try {
-            return Messages.TOOLS.enchantmentName(enchantment, level);
-        } catch (RuntimeException primaryFailure) {
-            try {
-                return Messages.TOOLS.enchantmentName(enchantment, Math.max(0, level - 1));
-            } catch (RuntimeException ignored) {
-                return Component.text(enchantment.getKey().toString() + " " + level)
-                        .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false);
-            }
-        }
     }
 
     public record CurseRider(Enchantment enchantment, int level) {}

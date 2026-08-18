@@ -75,6 +75,8 @@ class AugmentServiceMigrationTest {
         assertFalse(item.containsEnchantment(Enchantment.PROTECTION));
         assertEquals(0, augments.ledger().slots(item));
         assertTrue(augments.entries(item).isEmpty());
+        assertEquals(List.of(new me.beeliebub.tweaks.tools.augments.AugmentGemItem.CurseRider(
+                Enchantment.BINDING_CURSE, 1)), augments.ledger().curses(item));
     }
 
     @Test
@@ -88,6 +90,8 @@ class AugmentServiceMigrationTest {
         assertTrue(augments.ledger().migrated(item));
         assertEquals(0, augments.ledger().slots(item));
         assertTrue(augments.entries(item).isEmpty());
+        assertEquals(List.of(new me.beeliebub.tweaks.tools.augments.AugmentGemItem.CurseRider(
+                Enchantment.BINDING_CURSE, 1)), augments.ledger().curses(item));
     }
 
     @Test

@@ -19,9 +19,11 @@ import me.beeliebub.tweaks.utils.BlockTaintStore;
 import me.beeliebub.tweaks.utils.ExternalBlockBreakGuard;
 import me.beeliebub.tweaks.tools.augments.AugmentCommand;
 import me.beeliebub.tweaks.tools.augments.AugmentCraftListener;
+import me.beeliebub.tweaks.tools.augments.AugmentConfirmationListener;
 import me.beeliebub.tweaks.tools.augments.AugmentDialog;
 import me.beeliebub.tweaks.tools.augments.AugmentGemListener;
 import me.beeliebub.tweaks.tools.augments.AugmentService;
+import me.beeliebub.tweaks.tools.augments.AugmentPendingConfirmations;
 import me.beeliebub.tweaks.tools.augments.AugmentTableListener;
 import me.beeliebub.tweaks.tools.augments.BookConversionListener;
 import me.beeliebub.tweaks.tools.augments.DisenchantingBundle;
@@ -29,6 +31,8 @@ import me.beeliebub.tweaks.tools.augments.SlotCalculator;
 
 /** Tier 5 composition root for the live player-tools systems. */
 public final class ToolsBootstrap {
+
+    private static AugmentPendingConfirmations pendingConfirmations;
 
     private ToolsBootstrap() {}
 
@@ -89,8 +93,9 @@ public final class ToolsBootstrap {
         plugin.getCommand("rename").setExecutor(renameCommand);
         plugin.getCommand("rename").setTabCompleter(renameCommand);
 
+        pendingConfirmations = new AugmentPendingConfirmations(plugin);
         AugmentService augments = new AugmentService(plugin, services.qualityRegistry(),
-                durability::ensureStamped, durability::refreshLoreTail);
+                durability::ensureStamped, durability::refreshLoreTail, pendingConfirmations);
         AugmentDialog augmentDialog = new AugmentDialog(augments);
         AugmentCommand augmentCommand = new AugmentCommand(augments, augmentDialog);
         plugin.getCommand("augment").setExecutor(augmentCommand);
@@ -100,9 +105,15 @@ public final class ToolsBootstrap {
         plugin.getServer().getPluginManager().registerEvents(new AugmentCraftListener(plugin, augments), plugin);
         plugin.getServer().getPluginManager().registerEvents(new BookConversionListener(plugin, augments), plugin);
         plugin.getServer().getPluginManager().registerEvents(new DisenchantingBundle(plugin, services.qualityRegistry(), augments), plugin);
+        plugin.getServer().getPluginManager().registerEvents(
+                new AugmentConfirmationListener(pendingConfirmations), plugin);
     }
 
     public static void shutdown(Tweaks plugin) {
+        if (pendingConfirmations != null) {
+            pendingConfirmations.cancelAll();
+            pendingConfirmations = null;
+        }
         new RepairRecipeManager(plugin, new RepairKitItem(plugin)).remove();
     }
 }

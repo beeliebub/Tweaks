@@ -1,5 +1,7 @@
 package me.beeliebub.tweaks.tools.augments;
 
+import io.papermc.paper.datacomponent.DataComponentTypes;
+import io.papermc.paper.datacomponent.item.ItemEnchantments;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import io.papermc.paper.registry.keys.tags.EnchantmentTagKeys;
@@ -11,6 +13,7 @@ import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 
 import java.util.ArrayList;
@@ -36,23 +39,34 @@ public final class AugmentService {
     private final AugmentLore lore;
     private final Consumer<ItemStack> durabilityStamp;
     private final Consumer<ItemStack> durabilityTailRefresh;
+    private final AugmentPendingConfirmations pendingConfirmations;
 
     public AugmentService(Tweaks plugin, QualityRegistry qualityRegistry) {
-        this(plugin, qualityRegistry, item -> {}, item -> {});
+        this(plugin, qualityRegistry, item -> {}, item -> {}, new AugmentPendingConfirmations(plugin));
     }
 
     public AugmentService(Tweaks plugin, QualityRegistry qualityRegistry,
                           Consumer<ItemStack> durabilityStamp) {
-        this(plugin, qualityRegistry, durabilityStamp, item -> {});
+        this(plugin, qualityRegistry, durabilityStamp, item -> {}, new AugmentPendingConfirmations(plugin));
     }
 
     public AugmentService(Tweaks plugin, QualityRegistry qualityRegistry,
                           Consumer<ItemStack> durabilityStamp,
                           Consumer<ItemStack> durabilityTailRefresh) {
+        this(plugin, qualityRegistry, durabilityStamp, durabilityTailRefresh,
+                new AugmentPendingConfirmations(plugin));
+    }
+
+    public AugmentService(Tweaks plugin, QualityRegistry qualityRegistry,
+                          Consumer<ItemStack> durabilityStamp,
+                          Consumer<ItemStack> durabilityTailRefresh,
+                          AugmentPendingConfirmations pendingConfirmations) {
         this.plugin = plugin;
         this.qualityRegistry = qualityRegistry;
         this.durabilityStamp = durabilityStamp == null ? item -> {} : durabilityStamp;
         this.durabilityTailRefresh = durabilityTailRefresh == null ? item -> {} : durabilityTailRefresh;
+        this.pendingConfirmations = pendingConfirmations == null
+                ? new AugmentPendingConfirmations(plugin) : pendingConfirmations;
         this.ledger = new AugmentLedger(plugin);
         this.gemItem = new AugmentGemItem(plugin);
         this.slotCalculator = new SlotCalculator(plugin, qualityRegistry);
@@ -64,6 +78,7 @@ public final class AugmentService {
     public AugmentGemItem gemItem() { return gemItem; }
     public SlotCalculator slotCalculator() { return slotCalculator; }
     public AugmentLore lore() { return lore; }
+    public AugmentPendingConfirmations pendingConfirmations() { return pendingConfirmations; }
 
     public boolean isCurse(Enchantment enchantment) {
         return enchantment != null && curseEnchantments().contains(enchantment);
@@ -157,22 +172,59 @@ public final class AugmentService {
         if (ledger.migrated(item)) return List.of();
         if (AugmentLedger.hasLedger(item)) return null;
         if (item.getEnchantments().isEmpty()) return List.of();
-        Set<Enchantment> curses = curseEnchantments();
-        List<ItemStack> gems = new ArrayList<>();
-        for (Map.Entry<Enchantment, Integer> entry : item.getEnchantments().entrySet()) {
-            if (curses.contains(entry.getKey())) continue;
-            gems.add(gemItem.create(entry.getKey(), entry.getValue()));
-        }
+        List<ItemStack> gems = computeLegacyGems(item);
+        if (gems == null) return null;
         if (!canFit(player, gems, removed)) return null;
         ledger.write(item, 0, List.of(), true);
-        for (Enchantment enchantment : item.getEnchantments().keySet().toArray(Enchantment[]::new)) {
-            if (!curses.contains(enchantment)) item.removeEnchantment(enchantment);
-        }
+        foldLiveCursesIntoLedger(item);
+        stripLegacyEnchantments(item);
         lore.update(item, qualityRegistry);
         durabilityStamp.accept(item);
         if (!gems.isEmpty()) player.sendMessage(Messages.TOOLS.augmentMigrated(gems.size()));
         addGems(player, gems);
         return List.copyOf(gems);
+    }
+
+    /** Builds the gems represented by the item's non-curse live enchantments without mutating it. */
+    public List<ItemStack> computeLegacyGems(ItemStack item) {
+        if (item == null || item.isEmpty()) return List.of();
+        List<ItemStack> gems = new ArrayList<>();
+        Set<Enchantment> curses = curseEnchantments();
+        for (Map.Entry<Enchantment, Integer> entry : item.getEnchantments().entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue() <= 0
+                    || curses.contains(entry.getKey())) continue;
+            ItemStack gem = gemItem.create(entry.getKey(), entry.getValue());
+            if (gem == null) return null;
+            gems.add(gem);
+        }
+        return List.copyOf(gems);
+    }
+
+    /** Removes exactly the non-curse live enchantments eligible for legacy gem migration. */
+    public void stripLegacyEnchantments(ItemStack item) {
+        if (item == null || item.isEmpty()) return;
+        Set<Enchantment> curses = curseEnchantments();
+        for (Enchantment enchantment : item.getEnchantments().keySet().toArray(Enchantment[]::new)) {
+            if (!curses.contains(enchantment)) item.removeEnchantment(enchantment);
+        }
+    }
+
+    private boolean foldLiveCursesIntoLedger(ItemStack item) {
+        List<AugmentGemItem.CurseRider> curses = liveCurseRiders(item);
+        return curses.isEmpty() || ledger.appendCurses(item, curses);
+    }
+
+    private List<AugmentGemItem.CurseRider> liveCurseRiders(ItemStack item) {
+        if (item == null || item.isEmpty()) return List.of();
+        Set<Enchantment> knownCurses = curseEnchantments();
+        List<AugmentGemItem.CurseRider> curses = new ArrayList<>();
+        for (Map.Entry<Enchantment, Integer> entry : item.getEnchantments().entrySet()) {
+            if (entry.getKey() != null && entry.getValue() != null && entry.getValue() > 0
+                    && knownCurses.contains(entry.getKey())) {
+                curses.add(new AugmentGemItem.CurseRider(entry.getKey(), entry.getValue()));
+            }
+        }
+        return List.copyOf(curses);
     }
 
     /** Populate the ledger without delivering gems before destructive recovery. */
@@ -188,6 +240,7 @@ public final class AugmentService {
         if (!plan.requiresLegacyMigration()) return true;
         Set<Enchantment> curses = curseEnchantments();
         ledger.write(item, ledger.slots(item), plan.entries(), true);
+        foldLiveCursesIntoLedger(item);
         for (Enchantment enchantment : item.getEnchantments().keySet().toArray(Enchantment[]::new)) {
             if (!curses.contains(enchantment)) item.removeEnchantment(enchantment);
         }
@@ -205,7 +258,10 @@ public final class AugmentService {
                     || isCurse(entry.getKey())) continue;
             entries.add(new AugmentEntry(entry.getKey().getKey(), entry.getValue(), true));
         }
-        ledger.write(item, 0, entries, true);
+        int purchasedSlots = item.getEnchantments().isEmpty() ? 1 : 0;
+        if (slotCalculator.capacity(item.getType()) == 0) purchasedSlots = 0;
+        ledger.write(item, purchasedSlots, entries, true);
+        foldLiveCursesIntoLedger(item);
         durabilityStamp.accept(item);
         lore.update(item, qualityRegistry);
         return true;
@@ -266,8 +322,12 @@ public final class AugmentService {
             player.sendMessage(Messages.TOOLS.augmentPurchaseRejected());
             return false;
         }
+        return purchaseSlotAtCost(player, item, cost, next);
+    }
+
+    private boolean purchaseSlotAtCost(Player player, ItemStack item, int cost, int next) {
         int level = player.getLevel();
-        if (level < cost) {
+        if (cost < 0 || level < cost) {
             player.sendMessage(Messages.TOOLS.augmentPurchaseRejected());
             return false;
         }
@@ -287,18 +347,86 @@ public final class AugmentService {
         boolean firstLedger = !AugmentLedger.hasLedger(item);
         List<AugmentEntry> previousEntries = ledger.entries(item);
         boolean previousMigrated = ledger.migrated(item);
-        ledger.write(item, next, previousEntries, true);
+        ItemMeta previousMeta = item.getItemMeta();
+        List<ItemStack> legacyGems = computeLegacyGems(item);
+        if (legacyGems == null) {
+            player.sendMessage(Messages.TOOLS.augmentIncompatible());
+            return false;
+        }
+        boolean migrated = previousMigrated || legacyGems.isEmpty();
+        ledger.write(item, next, previousEntries, migrated);
+        if (!foldLiveCursesIntoLedger(item)) {
+            item.setItemMeta(previousMeta);
+            player.sendMessage(Messages.TOOLS.augmentIncompatible());
+            return false;
+        }
         try {
             experience.changeExp(-delta);
         } catch (IllegalArgumentException | IllegalStateException failure) {
-            ledger.write(item, purchased, previousEntries, previousMigrated);
+            item.setItemMeta(previousMeta);
             player.sendMessage(Messages.TOOLS.augmentPurchaseUnsafeXp());
             return false;
         }
-        lore.update(item, qualityRegistry);
-        if (firstLedger) durabilityStamp.accept(item);
+        if (migrated) lore.update(item, qualityRegistry);
+        if (firstLedger && migrated) durabilityStamp.accept(item);
         player.sendMessage(Messages.TOOLS.augmentPurchase(cost, next));
         return true;
+    }
+
+    /** Confirms the quoted slot-one migration and returns the still-held item on success. */
+    public ItemStack confirmSlotOneUnlock(Player player) {
+        if (player == null) return null;
+        if (!enabled()) {
+            pendingConfirmations.cancel(player.getUniqueId());
+            player.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
+            return null;
+        }
+        ItemStack held = player.getInventory().getItemInMainHand();
+        AugmentPendingConfirmations.PendingRequest request = pendingConfirmations.validFor(player, held);
+        if (request == null) {
+            pendingConfirmations.cancel(player.getUniqueId());
+            player.sendMessage(Messages.TOOLS.augmentConfirmationExpired());
+            return null;
+        }
+        pendingConfirmations.cancel(player.getUniqueId());
+        if (held == null || held.isEmpty() || AugmentLedger.hasLedger(held)
+                || gemItem.read(held) != null || !ledgerStateValid(held)) {
+            player.sendMessage(Messages.TOOLS.augmentIncompatible());
+            return null;
+        }
+        if (slotCalculator.capacity(held.getType()) < 1) {
+            player.sendMessage(Messages.TOOLS.augmentNoSlots());
+            return null;
+        }
+        List<ItemStack> legacyGems = computeLegacyGems(held);
+        if (legacyGems == null) {
+            player.sendMessage(Messages.TOOLS.augmentIncompatible());
+            return null;
+        }
+        if (legacyGems.isEmpty()) {
+            player.sendMessage(Messages.TOOLS.augmentConfirmationExpired());
+            return null;
+        }
+        if (!canFit(player, legacyGems)) {
+            player.sendMessage(Messages.TOOLS.inventoryFull());
+            return null;
+        }
+        int next = ledger.slots(held) + 1;
+        if (!purchaseSlotAtCost(player, held, request.quotedCost(), next)) return null;
+        stripLegacyEnchantments(held);
+        ledger.markMigrated(held);
+        lore.update(held, qualityRegistry);
+        durabilityStamp.accept(held);
+        player.sendMessage(Messages.TOOLS.augmentMigrated(legacyGems.size()));
+        addGems(player, legacyGems);
+        return held;
+    }
+
+    public boolean cancelPending(Player player) {
+        if (player == null) return false;
+        boolean cancelled = pendingConfirmations.cancel(player.getUniqueId());
+        if (cancelled) player.sendMessage(Messages.TOOLS.augmentConfirmationCancelled());
+        return cancelled;
     }
 
     public boolean attach(Player player, ItemStack item, ItemStack gem) {
@@ -358,17 +486,13 @@ public final class AugmentService {
         List<ItemStack> migrationGems = List.of();
         if (needsMigration) {
             compatibilityItem = item.clone();
-            List<ItemStack> legacy = new ArrayList<>();
-            for (Map.Entry<Enchantment, Integer> enchantment : item.getEnchantments().entrySet()) {
-                if (knownCurses.contains(enchantment.getKey())) continue;
-                legacy.add(gemItem.create(enchantment.getKey(), enchantment.getValue()));
-                compatibilityItem.removeEnchantment(enchantment.getKey());
+            migrationGems = computeLegacyGems(item);
+            if (migrationGems == null) {
+                player.sendMessage(Messages.TOOLS.augmentIncompatible());
+                return false;
             }
-            migrationGems = List.copyOf(legacy);
-            ItemStack consumedGem = gem.clone();
-            consumedGem.setAmount(1);
-            if (!migrationGems.isEmpty() && !canFit(player, migrationGems, List.of(consumedGem))) {
-                player.sendMessage(Messages.TOOLS.inventoryFull());
+            if (!migrationGems.isEmpty()) {
+                player.sendMessage(Messages.TOOLS.augmentNoSlots());
                 return false;
             }
         }
@@ -386,13 +510,6 @@ public final class AugmentService {
 
         ItemStack consumedGem = gem.clone();
         consumedGem.setAmount(1);
-        if (needsMigration && !migrationGems.isEmpty()
-                && migrateToGems(player, item, List.of(consumedGem)) == null) {
-            player.sendMessage(Messages.TOOLS.inventoryFull());
-            return false;
-        }
-        if (needsMigration && !migrationGems.isEmpty()) callbackNeeded = false;
-
         if (!curses.isEmpty() && !ledger.appendCurses(item, curses)) {
             player.sendMessage(Messages.TOOLS.augmentIncompatible());
             return false;
@@ -465,11 +582,16 @@ public final class AugmentService {
 
     public List<GemLocation> inventoryGems(Player player) {
         List<GemLocation> result = new ArrayList<>();
-        ItemStack[] storage = player.getInventory().getStorageContents();
-        for (int i = 0; i < storage.length; i++) if (gemItem.read(storage[i]) != null) result.add(new GemLocation(i, storage[i]));
-        ItemStack[] armor = player.getInventory().getArmorContents();
-        for (int i = 0; i < armor.length; i++) if (gemItem.read(armor[i]) != null) result.add(new GemLocation(36 + i, armor[i]));
-        if (gemItem.read(player.getInventory().getItemInOffHand()) != null) result.add(new GemLocation(40, player.getInventory().getItemInOffHand()));
+        for (int i = 0; i < 36; i++) {
+            ItemStack item = player.getInventory().getItem(i);
+            if (gemItem.read(item) != null) result.add(new GemLocation(i, item));
+        }
+        for (int i = 0; i < 4; i++) {
+            ItemStack item = player.getInventory().getItem(36 + i);
+            if (gemItem.read(item) != null) result.add(new GemLocation(36 + i, item));
+        }
+        ItemStack offHand = player.getInventory().getItem(40);
+        if (gemItem.read(offHand) != null) result.add(new GemLocation(40, offHand));
         return result;
     }
 
@@ -480,7 +602,7 @@ public final class AugmentService {
     public boolean canFit(Player player, List<ItemStack> items, List<ItemStack> removed) {
         if (player == null) return false;
         List<ItemStack> simulated = new ArrayList<>();
-        for (ItemStack item : player.getInventory().getStorageContents()) simulated.add(item == null ? null : item.clone());
+        for (ItemStack item : player.getInventory().getStorageContents()) simulated.add(copyForSimulation(item));
         if (removed != null) {
             for (ItemStack source : removed) removeFromSimulation(simulated, source);
         }
@@ -488,7 +610,7 @@ public final class AugmentService {
             if (incoming == null || incoming.isEmpty()) continue;
             int remaining = incoming.getAmount();
             for (ItemStack existing : simulated) {
-                if (existing != null && existing.isSimilar(incoming)) {
+                if (sameStackForFit(existing, incoming)) {
                     int room = Math.max(0, Math.min(existing.getMaxStackSize(), incoming.getMaxStackSize()) - existing.getAmount());
                     int moved = Math.min(room, remaining);
                     existing.setAmount(existing.getAmount() + moved);
@@ -499,7 +621,7 @@ public final class AugmentService {
             if (remaining > 0) {
                 for (int i = 0; i < simulated.size() && remaining > 0; i++) {
                     if (simulated.get(i) == null || simulated.get(i).isEmpty()) {
-                        ItemStack placed = incoming.clone();
+                        ItemStack placed = copyForSimulation(incoming);
                         placed.setAmount(Math.min(placed.getMaxStackSize(), remaining));
                         simulated.set(i, placed);
                         remaining -= placed.getAmount();
@@ -516,7 +638,7 @@ public final class AugmentService {
         int remaining = source.getAmount();
         for (int i = 0; i < simulated.size() && remaining > 0; i++) {
             ItemStack existing = simulated.get(i);
-            if (existing == null || existing.isEmpty() || !existing.isSimilar(source)) continue;
+            if (!sameStackForFit(existing, source)) continue;
             int removed = Math.min(existing.getAmount(), remaining);
             remaining -= removed;
             if (removed == existing.getAmount()) simulated.set(i, null);
@@ -526,13 +648,69 @@ public final class AugmentService {
 
     public void addGems(Player player, List<ItemStack> gems) {
         for (ItemStack gem : gems) {
-            Map<Integer, ItemStack> leftovers = player.getInventory().addItem(gem);
-            for (ItemStack leftover : leftovers.values()) {
-                if (leftover == null || leftover.isEmpty()) continue;
+            if (gem == null || gem.isEmpty()) continue;
+            ItemEnchantments storedEnchantments = gem.getData(DataComponentTypes.STORED_ENCHANTMENTS);
+            int remaining = gem.getAmount();
+            for (int slot = 0; slot < 36 && remaining > 0; slot++) {
+                ItemStack existing = player.getInventory().getItem(slot);
+                if (!sameStackForFit(existing, gem)) continue;
+                int room = Math.max(0, Math.min(existing.getMaxStackSize(), gem.getMaxStackSize())
+                        - existing.getAmount());
+                int moved = Math.min(room, remaining);
+                if (moved <= 0) continue;
+                existing.setAmount(existing.getAmount() + moved);
+                restoreGemComponent(existing, storedEnchantments);
+                remaining -= moved;
+            }
+            for (int slot = 0; slot < 36 && remaining > 0; slot++) {
+                ItemStack existing = player.getInventory().getItem(slot);
+                if (existing != null && !existing.isEmpty()) continue;
+                int moved = Math.min(gem.getMaxStackSize(), remaining);
+                ItemStack placed = copyForSimulation(gem);
+                placed.setAmount(moved);
+                player.getInventory().setItem(slot, placed);
+                restoreGemComponent(player.getInventory().getItem(slot), storedEnchantments);
+                remaining -= moved;
+            }
+            if (remaining > 0) {
+                ItemStack leftover = copyForSimulation(gem);
+                leftover.setAmount(remaining);
                 plugin.getLogger().log(Level.WARNING,
                         "Dropping an augment gem because the inventory changed during delivery");
                 player.getWorld().dropItemNaturally(player.getLocation(), leftover);
             }
+        }
+    }
+
+    private ItemStack copyForSimulation(ItemStack item) {
+        if (item == null) return null;
+        ItemStack copy = item.clone();
+        restoreGemComponent(copy, item.getData(DataComponentTypes.STORED_ENCHANTMENTS));
+        return copy;
+    }
+
+    private boolean sameStackForFit(ItemStack first, ItemStack second) {
+        if (first == null || first.isEmpty() || second == null || second.isEmpty()
+                || !first.isSimilar(second)) return false;
+        if (gemItem.isGem(first) || gemItem.isGem(second)) {
+            return gemItem.isGem(first) && gemItem.isGem(second)
+                    && sameStoredEnchantments(first, second);
+        }
+        return true;
+    }
+
+    private boolean sameStoredEnchantments(ItemStack first, ItemStack second) {
+        ItemEnchantments firstEnchantments = first.getData(DataComponentTypes.STORED_ENCHANTMENTS);
+        ItemEnchantments secondEnchantments = second.getData(DataComponentTypes.STORED_ENCHANTMENTS);
+        if (firstEnchantments == null || secondEnchantments == null) {
+            return firstEnchantments == secondEnchantments;
+        }
+        return firstEnchantments.enchantments().equals(secondEnchantments.enchantments());
+    }
+
+    private void restoreGemComponent(ItemStack item, ItemEnchantments storedEnchantments) {
+        if (item != null && storedEnchantments != null) {
+            item.setData(DataComponentTypes.STORED_ENCHANTMENTS, storedEnchantments);
         }
     }
 

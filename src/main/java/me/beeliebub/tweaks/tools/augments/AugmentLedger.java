@@ -22,7 +22,8 @@ public final class AugmentLedger {
     /** Bounds hostile or accidentally oversized PDC data before it reaches menus or mutations. */
     public static final int MAX_ATTACHED_ENTRIES = 256;
     public static final int MAX_CURSE_ENTRIES = AugmentGemItem.MAX_CURSE_RIDERS;
-    private static final int MAX_OWNED_LORE_LINES = 512;
+    // One generated line per slot entry, one bounded catch-all line per entry, plus curses and the header.
+    private static final int MAX_OWNED_LORE_LINES = MAX_ATTACHED_ENTRIES * 2 + MAX_CURSE_ENTRIES + 1;
     private final Tweaks plugin;
     private final NamespacedKey slotsKey;
     private final NamespacedKey attachedKey;

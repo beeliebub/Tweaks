@@ -14,6 +14,7 @@ import java.util.Set;
 public final class SlotCalculator {
 
     public static final int MAX_RENDERED_SLOTS = 64;
+    public static final int MAX_RENDERED_ENTRY_DOTS = 16;
     public static final Set<String> FAMILY_KEYS = Set.of(
             "wooden", "stone", "iron", "copper", "gold", "diamond", "netherite",
             "shears", "fishing_rod", "mace", "elytra");
@@ -113,6 +114,15 @@ public final class SlotCalculator {
             else dots.append('◌');
         }
         if (capacity > visibleCapacity) dots.append('…');
+        return dots.toString();
+    }
+
+    public String entryDots(int weight, boolean active) {
+        int visibleWeight = Math.min(Math.max(0, weight), MAX_RENDERED_ENTRY_DOTS);
+        char marker = active ? '●' : '○';
+        StringBuilder dots = new StringBuilder(visibleWeight + (weight > visibleWeight ? 1 : 0));
+        for (int i = 0; i < visibleWeight; i++) dots.append(marker);
+        if (weight > visibleWeight) dots.append('…');
         return dots.toString();
     }
 
