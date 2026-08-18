@@ -662,6 +662,8 @@ vanilla enchanting first; conversion runs one tick later. The table preflights t
 batch and cancels the enchantment with the vanilla result preserved when the batch is refused or
 cannot fit. A gem right-click (including right-clicking air) and `/augment` open the same
 two-screen hub.
+Augment gems are protected from crafting: their marker blocks both the recipe preview and the
+craft execution, while ordinary amethyst shards remain usable.
 
 Table and book rolls bind each rolled curse to another gem from that same batch. A curse-only roll
 produces a curse-only gem. Attaching a curse is free, permanent, unsafe-applied, and shown as a
@@ -689,9 +691,10 @@ delivers the gems, and opens the hub. An unenchanted ledger-less item opens the 
 writes no PDC. The old curse-gem attachment route cannot grant free migration.
 
 Legacy curses remain real enchantments and are also folded into the ledger's permanent curse list.
-Augmented tool lore is non-italic: active entries are gray, inactive entries dark gray, each
-followed by bounded quality-weight dots, and any real enchantment not accounted for by an active
-entry or bound curse is shown in a red catch-all line. Vanilla enchantments are hidden from the
+Augmented tool lore is non-italic: active entries preserve their quality color and use white slot
+symbols, inactive entries are dark gray, levels use Roman numerals, and any real enchantment not
+accounted for by an active entry or bound curse is shown in a red catch-all line. Curse lines show
+the enchantment name without a redundant `Curse:` prefix. Vanilla enchantments are hidden from the
 tooltip while existing tooltip-hidden components are preserved. Lore ownership uses exact
 component fingerprints, so foreign lookalike lines (including exact visible copies) survive
 refreshes. A lore-bearing Disenchanting Bundle remains the destructive recovery path: it migrates

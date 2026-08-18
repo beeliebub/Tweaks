@@ -199,13 +199,13 @@ public final class ToolsMessages {
 
     public Component augmentMigrationPrompt(int cost) {
         Component confirm = Component.text("[Confirm]", NamedTextColor.GREEN)
-                .hoverEvent(HoverEvent.showText(Component.text("Unlock slot 1 for " + cost + " XP",
+                .hoverEvent(HoverEvent.showText(Component.text("Unlock slot 1 for " + cost + " levels",
                         NamedTextColor.GRAY)))
                 .clickEvent(ClickEvent.runCommand("/augment confirm"));
         Component cancel = Component.text("[Cancel]", NamedTextColor.RED)
                 .hoverEvent(HoverEvent.showText(Component.text("Leave the item unchanged", NamedTextColor.GRAY)))
                 .clickEvent(ClickEvent.runCommand("/augment cancel"));
-        return Component.text("Unlock augment slot 1 for " + cost + " XP? ", NamedTextColor.YELLOW)
+        return Component.text("Unlock augment slot 1 for " + cost + " levels? ", NamedTextColor.YELLOW)
                 .append(confirm).append(Component.text(" ")).append(cancel);
     }
 
@@ -222,7 +222,7 @@ public final class ToolsMessages {
     }
 
     public Component augmentPurchase(int cost, int slots) {
-        return Component.text("Purchased augment slot " + slots + " for " + cost + " XP.", NamedTextColor.GREEN);
+        return Component.text("Purchased augment slot " + slots + " for " + cost + " levels.", NamedTextColor.GREEN);
     }
 
     public Component augmentPurchaseRejected() {
@@ -272,6 +272,19 @@ public final class ToolsMessages {
                 .decoration(TextDecoration.ITALIC, false);
     }
 
+    public Component augmentEnchantmentName(Enchantment enchantment, int level) {
+        return enchantmentName(enchantment)
+                .append(Component.space())
+                .append(Component.text(romanNumeral(level)))
+                .decoration(TextDecoration.ITALIC, false);
+    }
+
+    public Component augmentEnchantmentName(NamespacedKey key, int level) {
+        String raw = key == null ? "unknown enchantment" : key.toString();
+        return Component.text(raw + " " + romanNumeral(level))
+                .decoration(TextDecoration.ITALIC, false);
+    }
+
     private Component fallbackEnchantmentName(String raw) {
         StringBuilder result = new StringBuilder();
         for (String word : raw.replace('_', ' ').split(" ")) {
@@ -317,15 +330,17 @@ public final class ToolsMessages {
     }
 
     public Component augmentEntryLore(Component enchantmentName, boolean active, String slotDots) {
-        NamedTextColor color = active ? NamedTextColor.GRAY : NamedTextColor.DARK_GRAY;
-        Component line = Component.text("", color)
-                .append(colorTree(enchantmentName, color))
-                .append(Component.text(" " + slotDots, color));
+        NamedTextColor inactiveColor = NamedTextColor.DARK_GRAY;
+        Component renderedName = active ? enchantmentName : colorTree(enchantmentName, inactiveColor);
+        NamedTextColor dotsColor = active ? NamedTextColor.WHITE : inactiveColor;
+        Component line = Component.empty()
+                .append(renderedName)
+                .append(Component.text(" " + slotDots, dotsColor));
         return withoutItalic(line);
     }
 
     public Component augmentCurseLore(Component enchantmentName) {
-        return withoutItalic(Component.text("Curse: ", NamedTextColor.RED).append(enchantmentName));
+        return withoutItalic(Component.text("", NamedTextColor.RED).append(enchantmentName));
     }
 
     public Component augmentForeignEnchantLore(Component enchantmentName) {
@@ -374,6 +389,21 @@ public final class ToolsMessages {
     private Component withoutItalic(Component component) {
         return component.decoration(TextDecoration.ITALIC, false).children(component.children().stream()
                 .map(this::withoutItalic).toList());
+    }
+
+    private String romanNumeral(int level) {
+        if (level <= 0 || level > 3999) return Integer.toString(level);
+        int remaining = level;
+        int[] values = {1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1};
+        String[] numerals = {"M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"};
+        StringBuilder result = new StringBuilder();
+        for (int index = 0; index < values.length; index++) {
+            while (remaining >= values[index]) {
+                result.append(numerals[index]);
+                remaining -= values[index];
+            }
+        }
+        return result.toString();
     }
 
     public Component augmentBundleRefused() {

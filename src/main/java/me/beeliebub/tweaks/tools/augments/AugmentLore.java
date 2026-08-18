@@ -51,8 +51,8 @@ public final class AugmentLore {
             var enchantment = io.papermc.paper.registry.RegistryAccess.registryAccess()
                     .getRegistry(io.papermc.paper.registry.RegistryKey.ENCHANTMENT).get(entry.enchantmentKey());
             Component name = enchantment == null
-                    ? Messages.TOOLS.enchantmentName(entry.enchantmentKey(), entry.level())
-                    : Messages.TOOLS.enchantmentName(enchantment, entry.level());
+                    ? Messages.TOOLS.augmentEnchantmentName(entry.enchantmentKey(), entry.level())
+                    : Messages.TOOLS.augmentEnchantmentName(enchantment, entry.level());
             int weight = enchantment == null
                     ? slots.qualityWeight((QualityTier) null) : slots.qualityWeight(enchantment);
             generated.add(Messages.TOOLS.augmentEntryLore(name, entry.active(),
@@ -74,7 +74,7 @@ public final class AugmentLore {
             if (renderedForeign >= AugmentLedger.MAX_ATTACHED_ENTRIES) break;
             if (!accounted.contains(enchantment)) {
                 generated.add(Messages.TOOLS.augmentForeignEnchantLore(
-                        Messages.TOOLS.enchantmentName(enchantment,
+                        Messages.TOOLS.augmentEnchantmentName(enchantment,
                                 item.getEnchantmentLevel(enchantment))));
                 renderedForeign++;
             }

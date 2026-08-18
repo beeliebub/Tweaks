@@ -44,7 +44,7 @@ class AugmentLoreTest {
     }
 
     @Test
-    void renderedLoreUsesVisibleArabicLevelsWithoutAnInvisibleMarker() {
+    void renderedLoreUsesVisibleRomanLevelsWithoutAnInvisibleMarker() {
         AugmentService augments = new AugmentService(plugin, null);
         ItemStack item = new ItemStack(Material.DIAMOND_PICKAXE);
         augments.ledger().write(item, 2,
@@ -56,7 +56,8 @@ class AugmentLoreTest {
         String plain = lore.stream()
                 .map(PlainTextComponentSerializer.plainText()::serialize)
                 .reduce("", (left, right) -> left + "\n" + right);
-        assertTrue(plain.contains("Efficiency 5"));
+        assertTrue(plain.contains("Efficiency V"));
+        assertFalse(plain.contains("Efficiency 5"));
         assertFalse(lore.stream().anyMatch(line -> line.toString().contains("\u2063")));
     }
 
@@ -100,20 +101,24 @@ class AugmentLoreTest {
         ItemStack item = augmentedItem(augments, true);
 
         String entry = PlainTextComponentSerializer.plainText().serialize(item.getItemMeta().lore().get(1));
-        assertTrue(entry.startsWith("Efficiency 5"));
+        assertTrue(entry.startsWith("Efficiency V"));
         assertFalse(entry.startsWith("Augment:"));
     }
 
     @Test
-    void entryLoreIsFullyGrayWhenActiveAndDarkGrayWhenInactive() {
+    void entryLorePreservesQualityColorAndUsesWhiteActiveDots() {
+        Component qualityName = Component.text("✤", NamedTextColor.WHITE)
+                .append(Component.text("Efficiency", NamedTextColor.AQUA));
         Component active = Messages.TOOLS.augmentEntryLore(
-                Component.text("Efficiency", NamedTextColor.AQUA), true, "●●");
+                qualityName, true, "●●");
         Component inactive = Messages.TOOLS.augmentEntryLore(
-                Component.text("Efficiency", NamedTextColor.AQUA), false, "○○");
+                qualityName, false, "○○");
 
-        assertEquals(NamedTextColor.GRAY, active.color());
-        assertEquals(NamedTextColor.DARK_GRAY, inactive.color());
-        assertTrue(allColors(active, NamedTextColor.GRAY));
+        assertEquals(NamedTextColor.WHITE, active.children().getFirst().color());
+        assertEquals(NamedTextColor.AQUA, active.children().getFirst().children().getFirst().color());
+        assertEquals(NamedTextColor.WHITE, active.children().getLast().color());
+        assertTrue(allColors(active.children().getLast(), NamedTextColor.WHITE));
+        assertEquals(NamedTextColor.DARK_GRAY, inactive.children().getFirst().color());
         assertTrue(allColors(inactive, NamedTextColor.DARK_GRAY));
     }
 
@@ -137,6 +142,28 @@ class AugmentLoreTest {
         assertTrue(item.getItemMeta().lore().stream()
                 .map(PlainTextComponentSerializer.plainText()::serialize)
                 .anyMatch(line -> line.contains("Vanishing")));
+    }
+
+    @Test
+    void curseLoreOmitsTheRedundantCursePrefix() {
+        AugmentService augments = new AugmentService(plugin, null);
+        ItemStack item = augmentedItem(augments, true);
+        augments.ledger().appendCurses(item, List.of(
+                new me.beeliebub.tweaks.tools.augments.AugmentGemItem.CurseRider(
+                        Enchantment.VANISHING_CURSE, 1)));
+        augments.updateLore(item);
+
+        List<String> lines = item.getItemMeta().lore().stream()
+                .map(PlainTextComponentSerializer.plainText()::serialize)
+                .toList();
+        assertTrue(lines.stream().anyMatch(line -> line.endsWith("Curse of Vanishing")
+                || line.endsWith("Vanishing Curse")), lines.toString());
+        assertFalse(lines.stream().anyMatch(line -> line.startsWith("Curse: ")));
+
+        Component rendered = Messages.TOOLS.augmentCurseLore(
+                Component.text("Curse of Vanishing", NamedTextColor.RED));
+        assertEquals("Curse of Vanishing", PlainTextComponentSerializer.plainText().serialize(rendered));
+        assertEquals(NamedTextColor.RED, rendered.color());
     }
 
     @Test

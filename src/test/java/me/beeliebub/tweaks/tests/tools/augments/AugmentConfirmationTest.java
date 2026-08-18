@@ -177,7 +177,7 @@ class AugmentConfirmationTest {
 
         assertTrue(augments.pendingConfirmations().contains(player.getUniqueId()));
         assertFalse(AugmentLedger.hasLedger(item));
-        MessageAssert.assertMessageSent(player, "Unlock augment slot 1 for 1 XP?");
+        MessageAssert.assertMessageSent(player, "Unlock augment slot 1 for 1 levels?");
     }
 
     @Test

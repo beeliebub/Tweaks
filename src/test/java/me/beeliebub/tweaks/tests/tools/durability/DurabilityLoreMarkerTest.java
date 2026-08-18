@@ -60,13 +60,13 @@ class DurabilityLoreMarkerTest {
         assertEquals(1, markerCount(item, "Out of durability"));
         assertTrue(lastLine(item).contains("Out of durability"));
         assertEquals(Component.text("Renamed tool"), item.getItemMeta().displayName());
-        assertTrue(plainLore(item).contains("Efficiency 5"));
+        assertTrue(plainLore(item).contains("Efficiency V"));
         assertTrue(plainLore(item).contains("Foreign lore"));
 
         assertTrue(durability.repair(item));
         assertEquals(0, markerCount(item, "Out of durability"));
         assertEquals(Component.text("Renamed tool"), item.getItemMeta().displayName());
-        assertTrue(plainLore(item).contains("Efficiency 5"));
+        assertTrue(plainLore(item).contains("Efficiency V"));
     }
 
     @Test
