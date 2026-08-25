@@ -492,8 +492,8 @@ final class RouletteSessionManager {
             // never called for it). Deliberately bypasses the endRound funnel rather than forcing
             // this into RouletteTeardownPolicy's table: every caller of beginSpin only invokes it
             // when state == BETTING with no yield point in between, so this branch is unreachable
-            // today (a review pass confirmed no live path reaches it) — it exists purely as a
-            // structural safety net should that invariant ever be relaxed. Refund-and-remove here
+            // today — it exists purely as a structural safety net should that invariant ever be
+            // relaxed. Refund-and-remove here
             // is correct either way; it just isn't routed through renderer.endRoundVisuals, so a
             // stale status hologram (if any) is left as-is rather than reset to idle.
             plugin.getLogger().log(Level.SEVERE, "Roulette: closeBetting called on a non-BETTING "

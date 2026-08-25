@@ -19,5 +19,6 @@ public enum EditorType {
     WORLD_KEY_LIST,
     MOB_LIST,
     MATERIAL_LIST,
-    NUMBER_MAP
+    NUMBER_MAP,
+    MATERIAL_GRID
 }

@@ -35,12 +35,15 @@ public final class EnchantmentsBootstrap {
         FortuneQualityListener fortuneQuality = new FortuneQualityListener(qualityRegistry);
         SilkTouchQualityListener silkTouchQuality = new SilkTouchQualityListener(qualityRegistry, telekinesis, services.resourceHunt());
         Lumberjack lumberjack = new Lumberjack(plugin, telekinesis, qualityRegistry, fortuneQuality);
+        services.setLumberjack(lumberjack);
         GemConnoisseur gemConnoisseur = new GemConnoisseur(plugin, telekinesis, services.resourceHunt());
         SpawnerPickup spawnerPickup = new SpawnerPickup(plugin);
         EggCollector eggCollector = new EggCollector(plugin, qualityRegistry);
         EnchantMode enchantMode = new EnchantMode(plugin);
         Tunneller tunneller = new Tunneller(plugin, telekinesis, smelter, gemConnoisseur, qualityRegistry, fortuneQuality, silkTouchQuality, services.resourceHunt(), enchantMode);
+        services.setTunneller(tunneller);
         Efficacy efficacy = new Efficacy(plugin, qualityRegistry, enchantMode);
+        services.setEfficacy(efficacy);
 
         plugin.getServer().getPluginManager().registerEvents(telekinesis, plugin);
         plugin.getServer().getPluginManager().registerEvents(smelter, plugin);
@@ -49,17 +52,12 @@ public final class EnchantmentsBootstrap {
         plugin.getServer().getPluginManager().registerEvents(tunneller, plugin);
         plugin.getServer().getPluginManager().registerEvents(spawnerPickup, plugin);
         plugin.getServer().getPluginManager().registerEvents(eggCollector, plugin);
-        plugin.getServer().getPluginManager().registerEvents(new AnvilListener(spawnerPickup, eggCollector), plugin);
-
         Replant replant = new Replant(plugin, telekinesis, lumberjack);
         services.setReplant(replant);
         plugin.getServer().getPluginManager().registerEvents(replant, plugin);
         plugin.getServer().getPluginManager().registerEvents(efficacy, plugin);
         enchantMode.wireEnchantments(tunneller, efficacy);
         plugin.getServer().getPluginManager().registerEvents(enchantMode, plugin);
-
-        // Disenchanting Bundle
-        plugin.getServer().getPluginManager().registerEvents(new DisenchantingBundle(plugin, qualityRegistry, spawnerPickup, eggCollector), plugin);
 
         // Quality Enchantment Listeners
         plugin.getServer().getPluginManager().registerEvents(new EnchantTableListener(plugin, qualityRegistry, services.moonSystem()), plugin);

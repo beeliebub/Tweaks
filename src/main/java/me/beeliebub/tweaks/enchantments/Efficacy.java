@@ -6,6 +6,8 @@ import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.enchantments.modes.EnchantMode;
 import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
 import me.beeliebub.tweaks.enchantments.quality.QualityTier;
+import me.beeliebub.tweaks.utils.ExternalBlockBreakHook;
+import me.beeliebub.tweaks.utils.ExternalBlockBreakGuard;
 import org.bukkit.Axis;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -16,6 +18,7 @@ import org.bukkit.block.data.Orientable;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -84,36 +87,30 @@ public class Efficacy implements Listener {
     private final Enchantment enchantment;
     private final QualityRegistry qualityRegistry;
     private final EnchantMode enchantMode;
+    private ExternalBlockBreakHook externalBlockBreakHook;
+    private ExternalBlockBreakGuard externalBlockBreakGuard;
 
     public Efficacy(Tweaks plugin, QualityRegistry qualityRegistry, EnchantMode enchantMode) {
-        String raw = plugin.getConfig().getString("efficacy");
-        this.enchantment = resolveEnchantment(plugin, raw);
+        this.enchantment = EnchantmentResolver.resolve(plugin, "efficacy", "efficacy");
         this.qualityRegistry = qualityRegistry;
         this.enchantMode = enchantMode;
     }
 
-    private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
-        if (raw == null || raw.isBlank()) {
-            plugin.getLogger().warning("No 'efficacy' key configured; efficacy enchant disabled.");
-            return null;
-        }
-        NamespacedKey key = NamespacedKey.fromString(raw);
-        if (key == null) {
-            plugin.getLogger().log(Level.WARNING, "Invalid efficacy key '" + raw + "'; efficacy enchant disabled.");
-            return null;
-        }
-        Enchantment resolved = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT).get(key);
-        if (resolved == null) {
-            plugin.getLogger().warning("Efficacy enchantment '" + raw + "' not found in registry; is the data pack loaded?");
-        }
-        return resolved;
-    }
 
     public boolean hasEnchant(ItemStack tool) {
         return enchantment != null && tool != null && !tool.isEmpty() && tool.containsEnchantment(enchantment);
     }
 
-    @EventHandler(ignoreCancelled = true)
+    /** Reserved for future efficacy actions that actually break a block; transformations do not award XP. */
+    public void setExternalBlockBreakHook(ExternalBlockBreakHook hook) {
+        this.externalBlockBreakHook = hook;
+    }
+
+    public void setExternalBlockBreakGuard(ExternalBlockBreakGuard guard) {
+        this.externalBlockBreakGuard = guard;
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPlayerInteract(PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         if (event.getHand() != EquipmentSlot.HAND) return;
@@ -169,6 +166,8 @@ public class Efficacy implements Listener {
                 Block target = clicked.getRelative(dx, 0, dz);
                 if (!SHOVELABLE.contains(target.getType())) continue;
                 if (!target.getRelative(BlockFace.UP).getType().isAir()) continue;
+                if (externalBlockBreakGuard != null
+                        && !externalBlockBreakGuard.canBreak(player, target, target.getType())) continue;
                 target.setType(Material.DIRT_PATH);
                 count++;
             }
@@ -187,6 +186,8 @@ public class Efficacy implements Listener {
                 Block target = clicked.getRelative(dx, 0, dz);
                 if (!TILLABLE.contains(target.getType())) continue;
                 if (!target.getRelative(BlockFace.UP).getType().isAir()) continue;
+                if (externalBlockBreakGuard != null
+                        && !externalBlockBreakGuard.canBreak(player, target, target.getType())) continue;
                 target.setType(Material.FARMLAND);
                 count++;
             }
@@ -212,6 +213,8 @@ public class Efficacy implements Listener {
                 );
                 Material stripped = STRIPPED.get(target.getType());
                 if (stripped == null) continue;
+                if (externalBlockBreakGuard != null
+                        && !externalBlockBreakGuard.canBreak(player, target, target.getType())) continue;
                 stripBlock(target, stripped);
                 count++;
             }

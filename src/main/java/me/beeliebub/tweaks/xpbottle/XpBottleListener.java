@@ -1,12 +1,11 @@
 package me.beeliebub.tweaks.xpbottle;
 
+import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.logging.ConsoleEventLog;
 import me.beeliebub.tweaks.logging.HotPathEventBuffer;
 import me.beeliebub.tweaks.logging.LoggingPaths;
 import io.papermc.paper.datacomponent.DataComponentTypes;
 import io.papermc.paper.potion.PotionMix;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -64,9 +63,12 @@ import java.util.logging.Level;
 // brew with no fresh placement has no brewer and is rejected.
 public class XpBottleListener implements Listener {
 
+    /** Nine emerald orbs are stored in an int, so this is the largest safe per-emerald value. */
+    public static final int MAX_ORBS_PER_EMERALD = Integer.MAX_VALUE / 9;
     private final JavaPlugin plugin;
     private final XpBottle xpBottle;
     private final NamespacedKey brewerKey;
+    private final NamespacedKey deferredBrewIdentityKey;
     private final NamespacedKey emeraldRecipeKey;
     private final NamespacedKey emeraldBlockRecipeKey;
     // Read once at construction, not live: this value is baked into a registered PotionMix
@@ -79,15 +81,23 @@ public class XpBottleListener implements Listener {
     public XpBottleListener(JavaPlugin plugin) {
         this.plugin = plugin;
         int configuredOrbs = plugin.getConfig().getInt("xpbottle.orbs-per-emerald", 1395);
+        int safeOrbs = configuredOrbs;
         if (configuredOrbs < 1) {
             plugin.getLogger().warning("xpbottle.orbs-per-emerald configured as " + configuredOrbs
                     + "; clamped to 1. This setting is baked into a boot-time brewing recipe, so"
                     + " fixing it requires correcting config.yml and restarting the server.");
+            safeOrbs = 1;
+        } else if (configuredOrbs > MAX_ORBS_PER_EMERALD) {
+            plugin.getLogger().warning("xpbottle.orbs-per-emerald configured as " + configuredOrbs
+                    + "; clamped to " + MAX_ORBS_PER_EMERALD
+                    + " so the derived emerald-block value remains representable.");
+            safeOrbs = MAX_ORBS_PER_EMERALD;
         }
-        this.orbsPerEmerald = Math.max(1, configuredOrbs);
-        this.orbsPerEmeraldBlock = orbsPerEmerald * 9;
+        this.orbsPerEmerald = safeOrbs;
+        this.orbsPerEmeraldBlock = Math.multiplyExact(orbsPerEmerald, 9);
         this.xpBottle = new XpBottle(new NamespacedKey(plugin, "xp_bottle_orbs"));
         this.brewerKey = new NamespacedKey(plugin, "xp_bottle_brewer");
+        this.deferredBrewIdentityKey = new NamespacedKey(plugin, "xp_bottle_deferred_brew");
         this.emeraldRecipeKey = new NamespacedKey(plugin, "xp_bottle_emerald");
         this.emeraldBlockRecipeKey = new NamespacedKey(plugin, "xp_bottle_emerald_block");
         registerRecipes();
@@ -214,54 +224,74 @@ public class XpBottleListener implements Listener {
         }
         if (totalBottles == 0) return;
 
+        final ItemStack ingredientSnapshot = ingredient.clone();
+        final ItemStack[] inputSnapshots = snapshotInputs(contents);
+        final Location standCenter = block.getLocation().toCenterLocation().add(0, 0.5, 0);
+        final World world = block.getWorld();
+        final BrewerInventory liveInv = contents;
+        final BrewingStand capturedStand = stand;
+        final String deferredBrewIdentity = UUID.randomUUID().toString();
+
+        // Cancel before writing the short-lived identity marker. The marker distinguishes this
+        // tile entity from a replacement brewing stand at the same coordinates.
+        event.setCancelled(true);
+        markDeferredBrewIdentity(stand, deferredBrewIdentity);
+
         String uuidStr = stand.getPersistentDataContainer().get(brewerKey, PersistentDataType.STRING);
-        Player brewer = uuidStr != null ? Bukkit.getPlayer(UUID.fromString(uuidStr)) : null;
+        UUID trackedBrewerId = null;
+        if (uuidStr != null) {
+            try {
+                trackedBrewerId = UUID.fromString(uuidStr);
+            } catch (IllegalArgumentException failure) {
+                // Contain corrupted persisted identity before the platform can continue the brew.
+                plugin.getLogger().log(Level.WARNING,
+                        "Malformed XP-bottle brewer identity on brewing stand; brew refused", failure);
+                clearBrewerTag(stand);
+                scheduleIngredientReturn(block, capturedStand, deferredBrewIdentity, liveInv,
+                        ingredientSnapshot, inputSnapshots, standCenter, world);
+                return;
+            }
+        }
+        Player brewer = trackedBrewerId == null ? null : Bukkit.getPlayer(trackedBrewerId);
         String brewerNameSnapshot = brewer == null ? null : brewer.getName();
         UUID brewerIdSnapshot = brewer == null ? null : brewer.getUniqueId();
 
         // Always clear the tag — the next brew must come from a fresh player click (prevents
         // hopper-fed automation from re-using a stale tracked player).
-        stand.getPersistentDataContainer().remove(brewerKey);
-        stand.update();
+        clearBrewerTag(stand);
 
         int affordable;
+        boolean xpUnavailable = false;
         if (brewer == null) {
             affordable = 0;
         } else {
-            int currentXp = new ExperienceManager(brewer).getCurrentExp();
-            affordable = Math.min(totalBottles, currentXp / costPerBottle);
+            try {
+                int currentXp = new ExperienceManager(brewer).getCurrentExp();
+                affordable = Math.min(totalBottles, currentXp / costPerBottle);
+            } catch (IllegalArgumentException | IllegalStateException failure) {
+                plugin.getLogger().log(Level.WARNING,
+                        "Cannot represent XP for XP-bottle brewer " + brewer.getUniqueId(), failure);
+                affordable = 0;
+                xpUnavailable = true;
+            }
         }
-
-        // Always cancel — we apply our own bottle-slot writes and ingredient consumption from a
-        // one-tick scheduled task. Mutating event.getResults() does not reliably propagate to
-        // the inventory on Paper 26.1.1, and cancelling also lets us cleanly drop the leftover
-        // ingredient stack on partial brews so the brewing stand can't auto-cycle into another
-        // 400-tick attempt with the unaffordable glass bottles still in slots.
-        event.setCancelled(true);
-
-        Location standCenter = block.getLocation().toCenterLocation().add(0, 0.5, 0);
-        World world = block.getWorld();
 
         // Live BrewerInventory reference from the event — survives across the 1-tick deferral
         // because Inventory wrappers point to the underlying tile entity. Using this avoids the
         // snapshot/update revert bug entirely (see class-level comment).
-        final BrewerInventory liveInv = contents;
-
         if (affordable == 0) {
-            ItemStack ingredientClone = ingredient.clone();
             Bukkit.getScheduler().runTask(plugin, () -> {
-                // Verify the brewing stand still exists. Use getState() instanceof check so this
-                // works under both real Paper and MockBukkit; the inventory write goes through the
-                // captured live `liveInv`, NOT a snapshot's getInventory().
-                if (!(block.getState() instanceof BrewingStand)) return;
+                if (!prepareDeferredInputs(block, capturedStand, deferredBrewIdentity, liveInv,
+                        ingredientSnapshot, inputSnapshots)) return;
                 liveInv.setIngredient(null);
                 if (world != null) {
-                    world.dropItemNaturally(standCenter, ingredientClone);
+                    world.dropItemNaturally(standCenter, ingredientSnapshot.clone());
                 }
             });
             if (brewer != null) {
-                brewer.sendMessage(Component.text("Not enough XP to brew XP bottles. Ingredients returned.",
-                        NamedTextColor.RED));
+                brewer.sendMessage(xpUnavailable
+                        ? Messages.TOOLS.xpBottleXpTotalTooLargeIngredientsReturned()
+                        : Messages.TOOLS.xpBottleNotEnoughXpIngredientsReturned());
             }
             return;
         }
@@ -273,21 +303,40 @@ public class XpBottleListener implements Listener {
         final int finalTotalBottles = totalBottles;
         final int finalCost = costPerBottle;
         final boolean[] finalBrewedSlots = brewedSlots;
-        final Material expectedIngredientType = ingredient.getType();
         final String finalBrewerName = brewerNameSnapshot;
         final UUID finalBrewerId = brewerIdSnapshot;
 
         Bukkit.getScheduler().runTask(plugin, () -> {
-            // Verify the brewing stand still exists. Use getState() instanceof check so this
-            // works under both real Paper and MockBukkit; the inventory writes go through the
-            // captured live `liveInv`, NOT a snapshot's getInventory(), and we never call
-            // BlockState.update() (which would revert our setItem/setIngredient writes).
-            if (!(block.getState() instanceof BrewingStand)) return;
+            // Revalidate the stand and every captured input before charging XP or mutating the
+            // live inventory. A hopper or another plugin may have changed the tile during the
+            // one-tick deferral; stale work must leave the replacement state untouched.
+            if (!prepareDeferredInputs(block, capturedStand, deferredBrewIdentity, liveInv,
+                    ingredientSnapshot, inputSnapshots)) return;
 
-            new ExperienceManager(finalBrewer).changeExp(-(finalAffordable * finalCost));
+            long totalCost = (long) finalAffordable * finalCost;
+            ExperienceManager experience = new ExperienceManager(finalBrewer);
+            boolean canPay;
+            try {
+                canPay = experience.getCurrentExp() >= totalCost
+                        && experience.canChangeExp(-totalCost);
+            } catch (IllegalArgumentException | IllegalStateException failure) {
+                canPay = false;
+            }
+            if (!canPay) {
+                finalBrewer.sendMessage(Messages.TOOLS.xpBottleXpChangedReturned());
+                return;
+            }
+            try {
+                experience.changeExp(-totalCost);
+            } catch (IllegalArgumentException | IllegalStateException failure) {
+                plugin.getLogger().log(Level.WARNING,
+                        "Cannot charge XP-bottle brewer " + finalBrewer.getUniqueId(), failure);
+                finalBrewer.sendMessage(Messages.TOOLS.xpBottleChargeFailed());
+                return;
+            }
             if (finalAffordable < finalTotalBottles) {
-                finalBrewer.sendMessage(Component.text("Not enough XP for all bottles — brewed "
-                        + finalAffordable + " of " + finalTotalBottles + ".", NamedTextColor.YELLOW));
+                finalBrewer.sendMessage(Messages.TOOLS.xpBottlePartialBrew(
+                        finalAffordable, finalTotalBottles));
             }
 
             // Write XP bottles to affordable brewed slots, refund the rest as glass bottles.
@@ -313,17 +362,12 @@ public class XpBottleListener implements Listener {
             // brew, drop the entire remaining stack on top of the stand and clear the slot — that
             // breaks the auto-cycle that would otherwise attempt to brew the leftover glass-bottle
             // refunds with the still-present ingredient on the next tick.
-            ItemStack currentIng = liveInv.getIngredient();
-            if (currentIng == null || currentIng.isEmpty() || currentIng.getType() != expectedIngredientType) {
-                // Player swapped the ingredient between event and task — leave whatever is there.
-                return;
-            }
             if (finalAffordable >= finalTotalBottles) {
-                int newAmount = currentIng.getAmount() - 1;
+                int newAmount = ingredientSnapshot.getAmount() - 1;
                 if (newAmount <= 0) {
                     liveInv.setIngredient(null);
                 } else {
-                    ItemStack newIng = currentIng.clone();
+                    ItemStack newIng = ingredientSnapshot.clone();
                     newIng.setAmount(newAmount);
                     liveInv.setIngredient(newIng);
                 }
@@ -333,10 +377,9 @@ public class XpBottleListener implements Listener {
                 // no full recipe completed. Refunding everything also breaks the auto-cycle that
                 // would otherwise pair the leftover glass-bottle refunds with another emerald
                 // for a fresh 400-tick attempt.
-                ItemStack drop = currentIng.clone();
                 liveInv.setIngredient(null);
                 if (world != null) {
-                    world.dropItemNaturally(standCenter, drop);
+                    world.dropItemNaturally(standCenter, ingredientSnapshot.clone());
                 }
             }
         });
@@ -351,12 +394,92 @@ public class XpBottleListener implements Listener {
         Player player = event.getPlayer();
         String actorName = player.getName();
         UUID actorId = player.getUniqueId();
-        new ExperienceManager(player).changeExp(orbs);
+        ExperienceManager experience = new ExperienceManager(player);
+        if (!experience.canChangeExp(orbs)) {
+            event.setCancelled(true);
+            player.sendMessage(Messages.TOOLS.xpBottleConsumeRejected());
+            return;
+        }
+        try {
+            experience.changeExp(orbs);
+        } catch (IllegalArgumentException | IllegalStateException failure) {
+            event.setCancelled(true);
+            plugin.getLogger().log(Level.WARNING,
+                    "Cannot award XP bottle to player " + actorId, failure);
+            player.sendMessage(Messages.TOOLS.xpBottleAwardFailed());
+            return;
+        }
         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.5f, 1.0f);
         ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
         if (eventLog != null) {
             eventLog.logHot(LoggingPaths.XPBOTTLE_RELEASED,
                     new HotPathEventBuffer.HotKey(actorId, "released", null), actorName);
         }
+    }
+
+    private void clearBrewerTag(BrewingStand stand) {
+        stand.getPersistentDataContainer().remove(brewerKey);
+        stand.update();
+    }
+
+    private void scheduleIngredientReturn(Block block, BrewingStand capturedStand,
+                                          String deferredBrewIdentity, BrewerInventory liveInv,
+                                          ItemStack ingredientSnapshot, ItemStack[] inputSnapshots,
+                                          Location standCenter, World world) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!prepareDeferredInputs(block, capturedStand, deferredBrewIdentity, liveInv,
+                    ingredientSnapshot, inputSnapshots)) return;
+            liveInv.setIngredient(null);
+            if (world != null) {
+                world.dropItemNaturally(standCenter, ingredientSnapshot.clone());
+            }
+        });
+    }
+
+    private static ItemStack[] snapshotInputs(BrewerInventory inventory) {
+        ItemStack[] snapshots = new ItemStack[3];
+        for (int i = 0; i < snapshots.length; i++) {
+            snapshots[i] = copy(inventory.getItem(i));
+        }
+        return snapshots;
+    }
+
+    private void markDeferredBrewIdentity(BrewingStand stand, String deferredBrewIdentity) {
+        stand.getPersistentDataContainer().set(deferredBrewIdentityKey,
+                PersistentDataType.STRING, deferredBrewIdentity);
+        stand.update();
+    }
+
+    private boolean prepareDeferredInputs(Block block, BrewingStand capturedStand,
+                                          String deferredBrewIdentity, BrewerInventory liveInv,
+                                          ItemStack ingredientSnapshot, ItemStack[] inputSnapshots) {
+        if (!(block.getState() instanceof BrewingStand currentStand)) return false;
+        if (currentStand != capturedStand) {
+            String currentIdentity = currentStand.getPersistentDataContainer().get(
+                    deferredBrewIdentityKey, PersistentDataType.STRING);
+            if (!deferredBrewIdentity.equals(currentIdentity)) return false;
+        }
+        if (!sameStack(ingredientSnapshot, liveInv.getIngredient())) return false;
+        for (int i = 0; i < inputSnapshots.length; i++) {
+            if (!sameStack(inputSnapshots[i], liveInv.getItem(i))) return false;
+        }
+
+        // Remove the marker before any live inventory mutation. Updating this untouched snapshot
+        // cannot revert the writes that follow, and a replacement stand never passes the marker
+        // check above.
+        currentStand.getPersistentDataContainer().remove(deferredBrewIdentityKey);
+        currentStand.update();
+        return true;
+    }
+
+    private static ItemStack copy(ItemStack item) {
+        return item == null ? null : item.clone();
+    }
+
+    private static boolean sameStack(ItemStack expected, ItemStack actual) {
+        boolean expectedEmpty = expected == null || expected.isEmpty();
+        boolean actualEmpty = actual == null || actual.isEmpty();
+        if (expectedEmpty || actualEmpty) return expectedEmpty && actualEmpty;
+        return expected.getAmount() == actual.getAmount() && expected.isSimilar(actual);
     }
 }

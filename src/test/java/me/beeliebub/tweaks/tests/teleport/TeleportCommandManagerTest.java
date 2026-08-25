@@ -489,7 +489,8 @@ class TeleportCommandManagerTest {
             verify(console).sendMessage(argThat(componentContains("shop")));
         }
 
-        // Players receive the Paper Dialog instead of a chat list.
+        // Players receive the Paper Dialog instead of a chat list. Static construction is mocked
+        // here so this command test can focus on the dispatch contract.
         @Test void warpsPlayerSenderOpensDialog() {
             Set<String> warps = new LinkedHashSet<>();
             warps.add("spawn"); warps.add("shop");

@@ -121,6 +121,15 @@ commands:
       /name <name>
       /name off
       /name blank
+  rename:
+    description: Rename the held item with optional color codes.
+    usage: /rename [name]
+  augment:
+    description: Attach, toggle, and migrate augment gems.
+    usage: /augment | /augment confirm | /augment cancel | /augment debug | /augment give <player> <enchantment-key> [level] [curse-key[:level] ...]
+  repairkit:
+    description: Give or inspect repair kits (admin).
+    usage: /repairkit give [player] [amount] | /repairkit debug
   guicopy:
     description: Save the targeted chest's contents to plugins/Tweaks/guicopies/<name>.yml (admin).
     usage: /guicopy [name]

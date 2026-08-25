@@ -63,6 +63,20 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
                 loggingBooleanChanged);
     }
 
+    /** Late-bound Tier-5 recipe owner; keeps core config parsing independent of tools. */
+    public void setMaterialGridHandler(java.util.function.BiFunction<ConfigSetting, List<String>, Boolean> handler) {
+        valueEditor.setMaterialGridHandler(handler);
+    }
+
+    /** Late-bound Tier-5 slot-capacity validation; keeps core config parsing independent of tools. */
+    public void setSlotCapacityKeyValidator(java.util.function.Predicate<String> validator) {
+        valueEditor.setSlotCapacityKeyValidator(validator);
+    }
+
+    public void addConfigChangedListener(java.util.function.Consumer<String> listener) {
+        valueEditor.addConfigChangedListener(listener);
+    }
+
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
 
@@ -243,6 +257,13 @@ public class ConfigCommand implements CommandExecutor, TabCompleter {
         ConfigSetting setting = settingOpt.get();
 
         switch (setting.type()) {
+            case MATERIAL_GRID -> {
+                if (args.length < 3) {
+                    sender.sendMessage(Messages.CONFIG.gridUsage(label, pathKey));
+                    return;
+                }
+                sendResult(sender, valueEditor.materialGridCell(setting, args[1], args[2]));
+            }
             case STRING_LIST, WORLD_KEY_LIST, MOB_LIST, MATERIAL_LIST -> {
                 if (args.length < 3 || !(args[1].equalsIgnoreCase("add") || args[1].equalsIgnoreCase("remove"))) {
                     sender.sendMessage(Messages.CONFIG.listUsage(label, pathKey));

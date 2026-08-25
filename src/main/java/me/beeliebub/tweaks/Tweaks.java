@@ -28,6 +28,7 @@ import me.beeliebub.tweaks.tab.TabBootstrap;
 import me.beeliebub.tweaks.teleport.TeleportBootstrap;
 import me.beeliebub.tweaks.economy.EconomyManager;
 import me.beeliebub.tweaks.worldmanagement.WorldManagementBootstrap;
+import me.beeliebub.tweaks.tools.ToolsBootstrap;
 import me.beeliebub.tweaks.xpbottle.XpBottleBootstrap;
 import org.bukkit.Material;
 import org.bukkit.configuration.InvalidConfigurationException;
@@ -153,6 +154,7 @@ public class Tweaks extends JavaPlugin {
             EnchantmentsBootstrap.register(this, services);
 
             // Tier 5 - leaf features
+            ToolsBootstrap.register(this, services);
             ItemAdminBootstrap.registerToolProtect(this, services);
             RecipesBootstrap.register(this, services);
             XpBottleBootstrap.register(this, services);
@@ -188,6 +190,7 @@ public class Tweaks extends JavaPlugin {
         // takes its instances directly rather than Services itself, since it cannot read those fields
         // from outside this package.
         runShutdownStep("permissions", () -> PermissionsBootstrap.shutdown(this, services.permissionManager));
+        runShutdownStep("tools", () -> ToolsBootstrap.shutdown(this));
         runShutdownStep("protection", () -> ProtectionBootstrap.shutdown(this,
                 services.protectionManager == null ? null : services.protectionManager.writer(),
                 services.pendingStampsStore, services.regionSelectionManager));

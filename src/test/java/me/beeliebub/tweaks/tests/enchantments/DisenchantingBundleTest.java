@@ -1,7 +1,7 @@
 package me.beeliebub.tweaks.tests.enchantments;
 
 import me.beeliebub.tweaks.Tweaks;
-import me.beeliebub.tweaks.enchantments.DisenchantingBundle;
+import me.beeliebub.tweaks.tools.augments.DisenchantingBundle;
 import me.beeliebub.tweaks.enchantments.EggCollector;
 import me.beeliebub.tweaks.enchantments.SpawnerPickup;
 import me.beeliebub.tweaks.enchantments.quality.QualityRegistry;
