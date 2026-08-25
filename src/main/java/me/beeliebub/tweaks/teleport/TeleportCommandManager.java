@@ -453,11 +453,9 @@ public class TeleportCommandManager implements CommandExecutor, TabCompleter, Li
         return true;
     }
 
-    // Constructs the warps Dialog. Button construction lives INSIDE the
-    // Dialog.create lambda on purpose: mockStatic(Dialog.class) in unit tests
-    // short-circuits before the lambda runs, which keeps ActionButton.builder /
-    // DialogBase.builder out of the call stack (those throw under plain Mockito
-    // because no DialogInstancesProvider service is registered).
+    // Constructs the warps Dialog. Button construction lives inside the Dialog.create lambda;
+    // static Dialog mocking in the command tests short-circuits before the lambda runs and keeps
+    // those tests focused on sender routing rather than rendering details.
     private Dialog buildWarpsDialog(Set<String> warps) {
         var title = Messages.TELEPORT.warpsDialogTitle();
         return Dialog.create(b -> {

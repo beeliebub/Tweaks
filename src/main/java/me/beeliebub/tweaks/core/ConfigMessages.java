@@ -11,8 +11,8 @@ import java.util.List;
  * Dialog GUI. Callers access this registry through {@link Messages#CONFIG}.
  *
  * <p>The six pre-existing legacy {@code /tconfig} forms keep their responses in
- * {@link CommandMessages} untouched - this class only covers the generic engine (every setting a
- * later config-migration phase adds) and the GUI's own copy.
+ * {@link CommandMessages} untouched - this class covers the generic settings engine and the GUI's
+ * own copy.
  */
 public final class ConfigMessages {
 
@@ -72,12 +72,33 @@ public final class ConfigMessages {
         return Component.text("Usage: /" + label + " " + path + " <key> <value>", NamedTextColor.RED);
     }
 
+    public Component gridUsage(String label, String path) {
+        return Component.text("Usage: /" + label + " " + path + " <cell 0-8> <material|air>", NamedTextColor.RED);
+    }
+
     public Component notAScalarSetting(String displayName) {
         return Component.text(displayName + " is not a single-value setting.", NamedTextColor.RED);
     }
 
     public Component notAMapSetting(String displayName) {
         return Component.text(displayName + " is not a map setting.", NamedTextColor.RED);
+    }
+
+    public Component notAListSetting(String displayName) {
+        return Component.text(displayName + " is not a list setting.", NamedTextColor.RED);
+    }
+
+    public Component gridCellRange() {
+        return Component.text("Recipe cell must be an index from 0 through 8.", NamedTextColor.RED);
+    }
+
+    public Component recipeRejected() {
+        return Component.text("That recipe is invalid or collides with an existing recipe; the old recipe was kept.",
+                NamedTextColor.RED);
+    }
+
+    public Component gridCellUpdated(int index, String material) {
+        return Component.text("Recipe cell " + index + " updated to " + material + ".", NamedTextColor.GREEN);
     }
 
     public Component outOfRange(String displayName, Double min, Double max) {

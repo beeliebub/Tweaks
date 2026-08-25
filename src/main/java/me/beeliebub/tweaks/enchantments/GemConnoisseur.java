@@ -36,29 +36,12 @@ public class GemConnoisseur implements Listener {
     private final ResourceHunt resourceHunt;
 
     public GemConnoisseur(Tweaks plugin, Telekinesis telekinesis, ResourceHunt resourceHunt) {
-        String raw = plugin.getConfig().getString("gem-connoisseur");
-        this.enchantment = resolveEnchantment(plugin, raw);
+        this.enchantment = EnchantmentResolver.resolve(plugin, "gem-connoisseur", "gem connoisseur");
         this.rates = loadRates(plugin);
         this.telekinesis = telekinesis;
         this.resourceHunt = resourceHunt;
     }
 
-    private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
-        if (raw == null || raw.isBlank()) {
-            plugin.getLogger().warning("No 'gem-connoisseur' key configured; gem-connoisseur enchant disabled.");
-            return null;
-        }
-        NamespacedKey key = NamespacedKey.fromString(raw);
-        if (key == null) {
-            plugin.getLogger().log(Level.WARNING, "Invalid gem-connoisseur key '" + raw + "'; gem-connoisseur enchant disabled.");
-            return null;
-        }
-        Enchantment resolved = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT).get(key);
-        if (resolved == null) {
-            plugin.getLogger().warning("Gem-connoisseur enchantment '" + raw + "' not found in registry; is the data pack loaded?");
-        }
-        return resolved;
-    }
 
     private Map<Integer, Map<String, Map<Material, Integer>>> loadRates(Tweaks plugin) {
         Map<Integer, Map<String, Map<Material, Integer>>> result = new HashMap<>();

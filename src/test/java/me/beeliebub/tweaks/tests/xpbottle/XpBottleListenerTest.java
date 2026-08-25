@@ -23,6 +23,8 @@ import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import org.mockbukkit.mockbukkit.plugin.PluginMock;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -71,6 +73,16 @@ class XpBottleListenerTest {
         plugin.getConfig().set("xpbottle.orbs-per-emerald", 0);
         XpBottleListener customListener = new XpBottleListener(plugin);
         assertEquals(1, customListener.orbsPerEmerald());
+    }
+
+    @Test
+    void orbsPerEmeraldClampsBeforeDerivedBlockValueCanOverflow() {
+        plugin.getConfig().set("xpbottle.orbs-per-emerald", Integer.MAX_VALUE);
+        XpBottleListener customListener = new XpBottleListener(plugin);
+
+        assertEquals(XpBottleListener.MAX_ORBS_PER_EMERALD, customListener.orbsPerEmerald());
+        assertEquals(XpBottleListener.MAX_ORBS_PER_EMERALD * 9,
+                customListener.orbsPerEmeraldBlock());
     }
 
     private BrewEvent mockBrewEvent(Block block, BrewerInventory inv) {
@@ -171,6 +183,83 @@ class XpBottleListenerTest {
         assertEquals(0, world.getEntities().stream()
                 .filter(e -> e instanceof org.bukkit.entity.Item)
                 .count());
+    }
+
+    @Test
+    void onBrew_InterveningInputMutationLeavesReplacementUntouched() {
+        PlayerMock player = server.addPlayer();
+        new ExperienceManager(player).changeExp(5000);
+
+        Block mockBlock = mock(Block.class);
+        BrewingStand mockStand = mock(BrewingStand.class);
+        when(mockBlock.getState()).thenReturn(mockStand);
+        var world = server.addSimpleWorld("test_deferred_mutation");
+        when(mockBlock.getWorld()).thenReturn(world);
+        when(mockBlock.getLocation()).thenReturn(new org.bukkit.Location(world, 0, 0, 0));
+
+        org.bukkit.persistence.PersistentDataContainer pdc = mock(org.bukkit.persistence.PersistentDataContainer.class);
+        when(pdc.get(brewerKey, PersistentDataType.STRING)).thenReturn(player.getUniqueId().toString());
+        when(mockStand.getPersistentDataContainer()).thenReturn(pdc);
+
+        BrewerInventory inv = mock(BrewerInventory.class);
+        when(mockStand.getInventory()).thenReturn(inv);
+        AtomicReference<ItemStack> ingredient = new AtomicReference<>(new ItemStack(Material.EMERALD));
+        AtomicReference<ItemStack> bottle = new AtomicReference<>(new ItemStack(Material.GLASS_BOTTLE));
+        when(inv.getIngredient()).thenAnswer(ignored -> ingredient.get());
+        when(inv.getItem(0)).thenAnswer(ignored -> bottle.get());
+        when(inv.getItem(1)).thenReturn(null);
+        when(inv.getItem(2)).thenReturn(null);
+
+        BrewEvent event = mockBrewEvent(mockBlock, inv);
+        server.getPluginManager().callEvent(event);
+
+        ingredient.set(new ItemStack(Material.EMERALD_BLOCK));
+        bottle.set(new ItemStack(Material.GLASS_BOTTLE, 2));
+        server.getScheduler().performOneTick();
+
+        assertEquals(5000, new ExperienceManager(player).getCurrentExp());
+        verify(inv, never()).setItem(anyInt(), any(ItemStack.class));
+        verify(inv, never()).setIngredient(any());
+        assertEquals(Material.EMERALD_BLOCK, ingredient.get().getType());
+        assertEquals(2, bottle.get().getAmount());
+    }
+
+    @Test
+    void onBrew_ReplacementStandAtSameCoordinatesIsIgnored() {
+        PlayerMock player = server.addPlayer();
+        new ExperienceManager(player).changeExp(5000);
+
+        Block mockBlock = mock(Block.class);
+        BrewingStand originalStand = mock(BrewingStand.class);
+        BrewingStand replacementStand = mock(BrewingStand.class);
+        AtomicReference<BrewingStand> currentStand = new AtomicReference<>(originalStand);
+        when(mockBlock.getState()).thenAnswer(ignored -> currentStand.get());
+        var world = server.addSimpleWorld("test_replaced_stand");
+        when(mockBlock.getWorld()).thenReturn(world);
+        when(mockBlock.getLocation()).thenReturn(new org.bukkit.Location(world, 0, 0, 0));
+
+        org.bukkit.persistence.PersistentDataContainer originalPdc = mock(org.bukkit.persistence.PersistentDataContainer.class);
+        when(originalPdc.get(brewerKey, PersistentDataType.STRING)).thenReturn(player.getUniqueId().toString());
+        when(originalStand.getPersistentDataContainer()).thenReturn(originalPdc);
+        org.bukkit.persistence.PersistentDataContainer replacementPdc = mock(org.bukkit.persistence.PersistentDataContainer.class);
+        when(replacementStand.getPersistentDataContainer()).thenReturn(replacementPdc);
+
+        BrewerInventory inv = mock(BrewerInventory.class);
+        when(originalStand.getInventory()).thenReturn(inv);
+        when(inv.getIngredient()).thenReturn(new ItemStack(Material.EMERALD));
+        when(inv.getItem(0)).thenReturn(new ItemStack(Material.GLASS_BOTTLE));
+        when(inv.getItem(1)).thenReturn(null);
+        when(inv.getItem(2)).thenReturn(null);
+
+        BrewEvent event = mockBrewEvent(mockBlock, inv);
+        server.getPluginManager().callEvent(event);
+
+        currentStand.set(replacementStand);
+        server.getScheduler().performOneTick();
+
+        assertEquals(5000, new ExperienceManager(player).getCurrentExp());
+        verify(inv, never()).setItem(anyInt(), any(ItemStack.class));
+        verify(inv, never()).setIngredient(any());
     }
 
     @Test
@@ -398,5 +487,39 @@ class XpBottleListenerTest {
         assertTrue(world.getEntities().stream().anyMatch(e -> e instanceof org.bukkit.entity.Item && ((org.bukkit.entity.Item) e).getItemStack().getType() == Material.EMERALD));
 
         MessageAssert.assertMessageSent(player, "Not enough XP to brew XP bottles");
+    }
+
+    @Test
+    void onBrew_MalformedBrewerId_CancelsAndReturnsIngredient() {
+        Block mockBlock = mock(Block.class);
+        BrewingStand mockStand = mock(BrewingStand.class);
+        when(mockBlock.getState()).thenReturn(mockStand);
+        var world = server.addSimpleWorld("test_malformed_brewer");
+        when(mockBlock.getWorld()).thenReturn(world);
+        when(mockBlock.getLocation()).thenReturn(new org.bukkit.Location(world, 0, 0, 0));
+
+        org.bukkit.persistence.PersistentDataContainer pdc = mock(org.bukkit.persistence.PersistentDataContainer.class);
+        when(pdc.get(brewerKey, PersistentDataType.STRING)).thenReturn("not-a-uuid");
+        when(mockStand.getPersistentDataContainer()).thenReturn(pdc);
+
+        BrewerInventory inv = mock(BrewerInventory.class);
+        when(mockStand.getInventory()).thenReturn(inv);
+        when(inv.getIngredient()).thenReturn(new ItemStack(Material.EMERALD, 2));
+        when(inv.getItem(0)).thenReturn(new ItemStack(Material.GLASS_BOTTLE));
+        when(inv.getItem(1)).thenReturn(null);
+        when(inv.getItem(2)).thenReturn(null);
+
+        BrewEvent event = mockBrewEvent(mockBlock, inv);
+        server.getPluginManager().callEvent(event);
+
+        assertTrue(event.isCancelled());
+        server.getScheduler().performOneTick();
+
+        verify(pdc).remove(brewerKey);
+        verify(inv).setIngredient(isNull());
+        verify(inv, never()).setItem(anyInt(), any(ItemStack.class));
+        assertTrue(world.getEntities().stream().anyMatch(e -> e instanceof org.bukkit.entity.Item
+                && ((org.bukkit.entity.Item) e).getItemStack().getType() == Material.EMERALD
+                && ((org.bukkit.entity.Item) e).getItemStack().getAmount() == 2));
     }
 }

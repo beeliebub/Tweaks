@@ -60,6 +60,33 @@ class ExperienceManagerTest {
     }
 
     @Test
+    void getXpForLevelRejectsLevelsWhoseTotalCannotFitBukkitInt() {
+        ExperienceManager em = new ExperienceManager(playerNamed("Bee"));
+
+        assertEquals(2_147_407_943, em.getXpForLevel(21_863));
+        assertThrows(IllegalArgumentException.class, () -> em.getXpForLevel(21_864));
+    }
+
+    @Test
+    void xpChangePreflightRejectsAnUnrepresentableTargetWithoutMutatingThePlayer() {
+        Player p = playerNamed("Bee");
+        when(p.getLevel()).thenReturn(21_863);
+        when(p.getExp()).thenReturn(0.5f);
+        ExperienceManager em = new ExperienceManager(p);
+
+        assertFalse(em.canChangeExp(1));
+        verify(p, never()).setLevel(anyInt());
+        verify(p, never()).setExp(anyFloat());
+    }
+
+    @Test
+    void maximumIntegerXpResolvesToTheLastRepresentableLevel() {
+        ExperienceManager em = new ExperienceManager(playerNamed("Bee"));
+
+        assertEquals(21_863, em.getLevelForExp(Integer.MAX_VALUE));
+    }
+
+    @Test
     void getLevelForExpInvertsGetXpForLevel() {
         ExperienceManager em = new ExperienceManager(playerNamed("Bee"));
         for (int level : new int[]{0, 1, 5, 15, 16, 30, 31, 32, 50}) {

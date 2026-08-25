@@ -203,6 +203,127 @@ enchantments:
   lumberjack:
     max-logs: 256
 
+# Live XP-economy settings. Mob XP removal deliberately skips player death XP.
+xp:
+  mob-drops:
+    remove: true
+  custom-drops:
+    enabled: true
+    amount: 1
+    crop-chance-percent: 5.0
+    leaf-break-chance-percent: 5.0
+    leaf-decay-chance-percent: 5.0
+    stone-chance-percent: 5.0
+    stone-materials:
+      - stone
+      - deepslate
+      - granite
+      - diorite
+      - andesite
+      - tuff
+      - netherrack
+      - basalt
+      - blackstone
+      - calcite
+      - cobblestone
+    leaf-materials:
+      - oak_leaves
+      - spruce_leaves
+      - birch_leaves
+      - jungle_leaves
+      - acacia_leaves
+      - dark_oak_leaves
+      - mangrove_leaves
+      - cherry_leaves
+      - pale_oak_leaves
+      - azalea_leaves
+      - flowering_azalea_leaves
+    taint-ttl-days: 30
+  mending:
+    enabled: true
+    dollars-per-xp: 1
+    enchantment-key: minecraft:mending
+
+# Live player tools. All datapack-coupled item models and enchantment keys are editable through
+# /tconfig; items are recognized by PDC markers rather than display text.
+tools:
+  augments:
+    enabled: true
+    gem-material: AMETHYST_SHARD
+    gem-item-model: jass:augment_gem
+    # Slot prices are in player levels. Unlisted slots use the highest configured price;
+    # an empty price map makes slots unpriced rather than free.
+    slot-prices:
+      1: 30
+      2: 35
+      3: 40
+      4: 45
+      5: 50
+      6: 55
+      7: 60
+      8: 65
+      9: 70
+      10: 75
+      11: 80
+    # Capacity accepts shared material families and exact material overrides.
+    # Exact material keys win over their family; leather, chainmail, and turtle armor
+    # resolve through the wooden, stone, and iron families respectively.
+    # Configured capacities remain exact for purchases; indicators above 64 slots abbreviate with an ellipsis.
+    slot-capacity:
+      wooden: 3
+      stone: 4
+      iron: 5
+      copper: 5
+      gold: 5
+      diamond: 7
+      netherite: 11
+      shears: 6
+      fishing_rod: 6
+      mace: 11
+      elytra: 7
+    # Used when neither an exact material nor a family key has a configured value.
+    slot-capacity-default: 5
+    quality-slot-cost:
+      none: 1
+      uncommon: 2
+      rare: 3
+      epic: 4
+      legendary: 5
+    enforce-vanilla-exclusivity: true
+    convert-enchanted-books: true
+  repair-kit:
+    enabled: true
+    material: PAPER
+    item-model: jass:repair_kit
+    durability-multiplier: 3.0
+    max-tier: 9
+    tier-step-percent: 10.0
+    recipe:
+      - iron_ingot
+      - iron_ingot
+      - iron_ingot
+      - iron_ingot
+      - nether_star
+      - iron_ingot
+      - iron_ingot
+      - iron_ingot
+      - iron_ingot
+    recipe-shapeless: false
+  never-break:
+    # When enabled, augmented items stop at one durability remaining, stay in the inventory,
+    # and become unusable; plain items still break normally. When disabled, augmented items
+    # also break normally.
+    enabled: true
+  anvil:
+    lockout-enabled: true
+    grindstone-lockout-enabled: true
+  rename:
+    enabled: true
+    max-length: 50
+  cash-item:
+    enabled: true
+    pdc-key: cash
+
 itemadmin:
   tool-protect:
     default-threshold: 100

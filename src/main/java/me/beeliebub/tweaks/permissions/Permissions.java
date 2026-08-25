@@ -247,6 +247,15 @@ public final class Permissions {
     /** Allows access to the Skyblock administration command suite. */
     public static final String ADMIN_SKYBLOCK = "tweaks.admin.skyblock";
 
+    /** Allows staff to bypass the plugin's anvil and grindstone lockout. */
+    public static final String ANVIL_BYPASS = "tweaks.tools.anvilbypass";
+
+    /** Allows administering augment gems and migration diagnostics. */
+    public static final String AUGMENT_ADMIN = "tweaks.admin.augment";
+
+    /** Allows giving and inspecting repair kits. */
+    public static final String REPAIRKIT_ADMIN = "tweaks.admin.repairkit";
+
     // ---------------------------------------------------------------- Categories
 
     /**
@@ -292,6 +301,9 @@ public final class Permissions {
         register(m, ADMIN_GAMEMODE, "tools", "Switch gamemodes through commands.");
         register(m, ADMIN_PERMISSIONS, "tools", "Manage permission groups, user overrides, and the permissions GUI.");
         register(m, ADMIN_DEATH_INVENTORY, "tools", "View and restore saved player death inventories.");
+        register(m, ANVIL_BYPASS, "tools", "Bypass the anvil and grindstone lockout.");
+        register(m, AUGMENT_ADMIN, "tools", "Administer augment gems and migration.");
+        register(m, REPAIRKIT_ADMIN, "tools", "Give and inspect repair kits.");
 
         // teleport — home and warp administration
         register(m, ADMIN_HOME, "teleport", "Teleport to any player's home.");

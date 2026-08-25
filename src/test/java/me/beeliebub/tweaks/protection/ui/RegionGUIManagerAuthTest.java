@@ -33,13 +33,9 @@ import static org.mockito.Mockito.when;
  * that gate, a plain region manager could promote/demote other managers through the GUI —
  * something the CLI explicitly forbids.
  *
- * <p>These tests only exercise the DENIAL path for a non-owner, non-admin manager. The authorized
- * path is not covered here because it proceeds to build a Paper {@code Dialog}, which MockBukkit
- * cannot construct (no {@code DialogInstancesProvider} service — see {@code RegionGUITest}'s and
- * {@code ui/CLAUDE.md}'s note on the same caveat). If the owner-only guard were ever removed, a
- * denied-path test calling into the authorized branch would fail loudly with
- * {@code NoSuchElementException} rather than silently passing — that failure mode is itself part
- * of what makes this regression test meaningful.
+ * <p>These tests focus on the DENIAL path for a non-owner, non-admin manager. Authorized Dialog
+ * construction is covered by {@code RegionDialogTest}; keeping the two concerns separate makes
+ * the authorization regression easy to diagnose.
  */
 class RegionGUIManagerAuthTest {
 

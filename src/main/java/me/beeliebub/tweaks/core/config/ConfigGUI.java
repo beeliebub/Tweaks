@@ -8,6 +8,7 @@ import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.permissions.Permissions;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -23,10 +24,8 @@ import java.util.function.Consumer;
  * that class for the pattern this mirrors. Every mutation delegates to {@link ConfigValueEditor};
  * this class holds no parse/validate/write logic of its own.
  *
- * <p>Untested: MockBukkit cannot construct {@code Dialog}/{@code ActionButton} (no
- * {@code DialogInstancesProvider} service), so this dialog-open path is a documented MockBukkit
- * boundary, same as {@code PermissionGUI}/{@code RegionGUI}. {@link ConfigValueEditor} is the
- * unit-testable core this class calls into.
+ * <p>Dialog construction follows the same Paper 26.2 idiom as the protection and permission
+ * surfaces. The value editor remains the parse/validate/write boundary used by both CLI and GUI.
  */
 @SuppressWarnings("UnstableApiUsage") // Paper's Dialog API is @ApiStatus.Experimental in 26.2.
 public final class ConfigGUI {
@@ -39,21 +38,34 @@ public final class ConfigGUI {
     // ------------------------------------------------------------------ Main
 
     public static void openMainMenu(Player player, ConfigValueEditor valueEditor) {
-        List<ActionButton> buttons = new ArrayList<>();
-        buttons.add(dialogButton(
+        openMainMenu(player, valueEditor, 0);
+    }
+
+    private static void openMainMenu(Player player, ConfigValueEditor valueEditor, int page) {
+        List<ActionButton> allButtons = new ArrayList<>();
+        allButtons.add(dialogButton(
                 Messages.CONFIG.worldProfileCategoryLabel(),
                 Messages.CONFIG.worldProfileCategoryTooltip(),
                 p -> openWorldProfileList(p, valueEditor, 0)));
         for (ConfigCategory category : ConfigRegistry.mainMenuCategories()) {
-            buttons.add(dialogButton(
+            allButtons.add(dialogButton(
                     Messages.CONFIG.categoryLabel(category.displayName()),
                     Messages.CONFIG.categoryTooltip(category.settings().size()),
                     p -> openCategory(p, valueEditor, category.key(), 0)));
         }
-        buttons.add(dialogButton(
+        allButtons.add(dialogButton(
                 Messages.CONFIG.loggingCategoryLabel(),
                 Messages.CONFIG.loggingCategoryTooltip(),
                 p -> openLoggingMenu(p, valueEditor, 0)));
+
+        int totalPages = Math.max(1, (allButtons.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
+        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
+        int start = currentPage * DIALOG_PAGE_SIZE;
+        int end = Math.min(start + DIALOG_PAGE_SIZE, allButtons.size());
+        List<ActionButton> buttons = new ArrayList<>(allButtons.subList(start, end));
+        addPageNavButtons(buttons, currentPage, totalPages,
+                p -> openMainMenu(p, valueEditor, currentPage - 1),
+                p -> openMainMenu(p, valueEditor, currentPage + 1));
 
         DialogBase base = DialogBase.builder(Messages.CONFIG.mainTitle())
                 .body(List.of(DialogBody.plainMessage(Messages.CONFIG.mainBody())))
@@ -183,6 +195,7 @@ public final class ConfigGUI {
             case STRING_LIST, WORLD_KEY_LIST, MOB_LIST, MATERIAL_LIST ->
                     openListEditor(player, valueEditor, categoryKey, setting, page);
             case NUMBER_MAP -> openMapEditor(player, valueEditor, categoryKey, setting);
+            case MATERIAL_GRID -> openGridEditor(player, valueEditor, categoryKey, setting);
             default -> openScalarEditor(player, valueEditor, categoryKey, setting);
         }
     }
@@ -195,7 +208,7 @@ public final class ConfigGUI {
                 .tooltip(Messages.CONFIG.saveTooltip())
                 .action(DialogAction.customClick(
                         (view, audience) -> {
-                            if (audience instanceof Player p) {
+                            if (audience instanceof Player p && authorized(p)) {
                                 EditResult result = valueEditor.applyScalar(setting, view.getText("value"));
                                 p.sendMessage(result.message());
                                 openCategory(p, valueEditor, categoryKey, 0);
@@ -311,7 +324,7 @@ public final class ConfigGUI {
                 .tooltip(Messages.CONFIG.saveTooltip())
                 .action(DialogAction.customClick(
                         (view, audience) -> {
-                            if (audience instanceof Player p) {
+                            if (audience instanceof Player p && authorized(p)) {
                                 EditResult result = valueEditor.listAdd(setting, view.getText("value"));
                                 p.sendMessage(result.message());
                                 openListEditor(p, valueEditor, categoryKey, setting, 0);
@@ -339,6 +352,49 @@ public final class ConfigGUI {
                 .type(DialogType.confirmation(add, cancel)));
 
         player.showDialog(dialog);
+    }
+
+    // ------------------------------------------------------------------ NUMBER_MAP
+
+    private static void openGridEditor(Player player, ConfigValueEditor valueEditor,
+                                       String categoryKey, ConfigSetting setting) {
+        List<String> cells = valueEditor.currentGridValues(setting);
+        List<ActionButton> buttons = new ArrayList<>();
+        for (int i = 0; i < cells.size(); i++) {
+            int index = i;
+            buttons.add(dialogButton(
+                    Messages.CONFIG.settingLabel("Cell " + index + ": " + cells.get(i)),
+                    Messages.CONFIG.settingTooltip("Set this recipe cell"),
+                    p -> openGridCellEditor(p, valueEditor, categoryKey, setting, index)));
+        }
+        ActionButton back = dialogButton(
+                Messages.CONFIG.backToCategoryLabel(), Messages.CONFIG.backToMainTooltip(),
+                p -> openCategory(p, valueEditor, categoryKey, 0));
+        DialogBase base = DialogBase.builder(Messages.CONFIG.editTitle(setting.displayName()))
+                .body(List.of(DialogBody.plainMessage(Messages.CONFIG.categoryBody())))
+                .build();
+        player.showDialog(Dialog.create(b -> b.empty().base(base)
+                .type(DialogType.multiAction(buttons).columns(DIALOG_COLUMNS).exitAction(back).build())));
+    }
+
+    private static void openGridCellEditor(Player player, ConfigValueEditor valueEditor,
+                                           String categoryKey, ConfigSetting setting, int index) {
+        ActionButton save = ActionButton.builder(Messages.CONFIG.saveLabel().decoration(TextDecoration.ITALIC, false))
+                .tooltip(Messages.CONFIG.saveTooltip())
+                .action(DialogAction.customClick((view, audience) -> {
+                    if (audience instanceof Player p && authorized(p)) {
+                        EditResult result = valueEditor.materialGridCell(setting, String.valueOf(index), view.getText("material"));
+                        p.sendMessage(result.message());
+                        openGridEditor(p, valueEditor, categoryKey, setting);
+                    }
+                }, unlimitedClicks())).build();
+        ActionButton cancel = dialogButton(Messages.CONFIG.cancelLabel(), Messages.CONFIG.cancelTooltip(),
+                p -> openGridEditor(p, valueEditor, categoryKey, setting));
+        DialogBase base = DialogBase.builder(Messages.CONFIG.editTitle("Recipe Cell " + index))
+                .body(List.of(DialogBody.plainMessage(Messages.CONFIG.editBody(valueEditor.currentGridValues(setting).get(index)))))
+                .inputs(List.of(DialogInput.text("material", Messages.CONFIG.valueInputLabel()).maxLength(64).build()))
+                .build();
+        player.showDialog(Dialog.create(b -> b.empty().base(base).type(DialogType.confirmation(save, cancel))));
     }
 
     // ------------------------------------------------------------------ NUMBER_MAP
@@ -386,7 +442,7 @@ public final class ConfigGUI {
                 .tooltip(Messages.CONFIG.saveTooltip())
                 .action(DialogAction.customClick(
                         (view, audience) -> {
-                            if (audience instanceof Player p) {
+                            if (audience instanceof Player p && authorized(p)) {
                                 EditResult result = valueEditor.mapPut(setting, key, view.getText("value"));
                                 p.sendMessage(result.message());
                                 openMapEditor(p, valueEditor, categoryKey, setting);
@@ -422,7 +478,7 @@ public final class ConfigGUI {
                 .tooltip(Messages.CONFIG.saveTooltip())
                 .action(DialogAction.customClick(
                         (view, audience) -> {
-                            if (audience instanceof Player p) {
+                            if (audience instanceof Player p && authorized(p)) {
                                 EditResult result = valueEditor.mapPut(setting, view.getText("key"), view.getText("value"));
                                 p.sendMessage(result.message());
                                 openMapEditor(p, valueEditor, categoryKey, setting);
@@ -549,7 +605,7 @@ public final class ConfigGUI {
                 .tooltip(Messages.CONFIG.saveTooltip())
                 .action(DialogAction.customClick(
                         (view, audience) -> {
-                            if (audience instanceof Player p) {
+                            if (audience instanceof Player p && authorized(p)) {
                                 EditResult result = valueEditor.worldProfileEdit(
                                         worldKey, view.getText("label"), view.getText("color"));
                                 p.sendMessage(result.message());
@@ -591,7 +647,7 @@ public final class ConfigGUI {
                 .tooltip(Messages.CONFIG.saveTooltip())
                 .action(DialogAction.customClick(
                         (view, audience) -> {
-                            if (audience instanceof Player p) {
+                            if (audience instanceof Player p && authorized(p)) {
                                 EditResult result = valueEditor.worldProfileAdd(
                                         view.getText("world_key"), view.getText("profile"),
                                         view.getText("label"), view.getText("color"));
@@ -643,12 +699,18 @@ public final class ConfigGUI {
                 .tooltip(tooltip.decoration(TextDecoration.ITALIC, false))
                 .action(DialogAction.customClick(
                         (_, audience) -> {
-                            if (audience instanceof Player p) {
+                            if (audience instanceof Player p && authorized(p)) {
                                 action.accept(p);
                             }
                         },
                         unlimitedClicks()))
                 .build();
+    }
+
+    private static boolean authorized(Player player) {
+        if (player.hasPermission(Permissions.ADMIN_CONFIG)) return true;
+        player.sendMessage(Messages.noPermission());
+        return false;
     }
 
     private static void addPageNavButtons(List<ActionButton> buttons, int currentPage, int totalPages,

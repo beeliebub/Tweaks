@@ -41,8 +41,7 @@ public class SpawnerPickup implements Listener {
 
     public SpawnerPickup(Tweaks plugin) {
         this.plugin = plugin;
-        String raw = plugin.getConfig().getString("spawner-pickup");
-        this.enchantment = resolveEnchantment(plugin, raw);
+        this.enchantment = EnchantmentResolver.resolve(plugin, "spawner-pickup", "spawner pickup");
         this.counterKey = new NamespacedKey(plugin, "spawner_pickup_count");
     }
 
@@ -50,22 +49,6 @@ public class SpawnerPickup implements Listener {
         return enchantment;
     }
 
-    private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
-        if (raw == null || raw.isBlank()) {
-            plugin.getLogger().warning("No 'spawner-pickup' key configured; spawner-pickup enchant disabled.");
-            return null;
-        }
-        NamespacedKey key = NamespacedKey.fromString(raw);
-        if (key == null) {
-            plugin.getLogger().log(Level.WARNING, "Invalid spawner-pickup key '" + raw + "'; spawner-pickup enchant disabled.");
-            return null;
-        }
-        Enchantment resolved = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT).get(key);
-        if (resolved == null) {
-            plugin.getLogger().warning("Spawner-pickup enchantment '" + raw + "' not found in registry; is the data pack loaded?");
-        }
-        return resolved;
-    }
 
     // Package-private (not private) so a config knob test can exercise the percent/clamp
     // conversion directly without widening visibility to public.

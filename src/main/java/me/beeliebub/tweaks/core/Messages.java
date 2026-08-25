@@ -76,6 +76,9 @@ public final class Messages {
     /** Player-feedback factories for Skyblock islands, progression, and economy. */
     public static final SkyblockMessages SKYBLOCK = new SkyblockMessages();
 
+    /** Player-feedback factories for the live tools, XP, cash, durability, and augment systems. */
+    public static final ToolsMessages TOOLS = new ToolsMessages();
+
     // ---------------------------------------------------------------- Permissions
 
     /**

@@ -8,6 +8,7 @@ import me.beeliebub.tweaks.core.config.EditResult;
 import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.minigames.resource.ResourceHuntItems;
 import me.beeliebub.tweaks.profiles.WorldProfileTable;
+import me.beeliebub.tweaks.tools.augments.SlotCalculator;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,13 +20,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.List;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.spy;
 
 /**
- * Exercises ConfigValueEditor directly - the unit-testable core both ConfigCommand (CLI) and
- * ConfigGUI (Dialog, untestable under MockBukkit) delegate to. See core/config/CLAUDE.md.
+ * Exercises ConfigValueEditor directly - the parse/validate/write core both ConfigCommand (CLI)
+ * and ConfigGUI (Dialog) delegate to. ConfigGUI's real Dialog construction is covered separately.
  */
 class ConfigValueEditorTest {
 
@@ -40,6 +42,7 @@ class ConfigValueEditorTest {
         plugin = MockBukkit.load(Tweaks.class);
         resourceHuntItems = mock(ResourceHuntItems.class);
         editor = new ConfigValueEditor(plugin, resourceHuntItems, new WorldProfileTable(plugin));
+        editor.setSlotCapacityKeyValidator(SlotCalculator::isValidCapacityKey);
     }
 
     @AfterEach
@@ -245,5 +248,42 @@ class ConfigValueEditorTest {
 
         ConfigSetting setting = ConfigRegistry.byPath(ConfigRegistry.EGGDROP_SENTINEL_PATH).orElseThrow();
         assertEquals(2, editor.currentListValues(setting).size());
+    }
+
+    @Test
+    void materialGridEditsOneCellAndInvokesTheLateRecipeOwner() {
+        ConfigSetting setting = ConfigRegistry.byPath("tools.repair-kit.recipe").orElseThrow();
+        AtomicReference<List<String>> handled = new AtomicReference<>();
+        editor.setMaterialGridHandler((ignored, cells) -> {
+            handled.set(List.copyOf(cells));
+            return true;
+        });
+
+        EditResult result = editor.materialGridCell(setting, "4", "nether_star");
+
+        assertInstanceOf(EditResult.Ok.class, result);
+        assertEquals("nether_star", plugin.getConfig().getStringList(setting.path()).get(4));
+        assertEquals("nether_star", handled.get().get(4));
+        assertEquals(9, handled.get().size());
+    }
+
+    @Test
+    void slotCapacityAcceptsFamilyAndMaterialKeys() {
+        ConfigSetting setting = ConfigRegistry.byPath("tools.augments.slot-capacity").orElseThrow();
+
+        assertInstanceOf(EditResult.Ok.class, editor.mapPut(setting, "wooden", "4"));
+        assertEquals(4, plugin.getConfig().getInt("tools.augments.slot-capacity.wooden"));
+        assertInstanceOf(EditResult.Ok.class, editor.mapPut(setting, "netherite_pickaxe", "12"));
+        assertEquals(12, plugin.getConfig().getInt("tools.augments.slot-capacity.netherite_pickaxe"));
+    }
+
+    @Test
+    void slotCapacityRejectsUnknownKeysWithoutWriting() {
+        ConfigSetting setting = ConfigRegistry.byPath("tools.augments.slot-capacity").orElseThrow();
+
+        EditResult result = editor.mapPut(setting, "wood", "4");
+
+        assertInstanceOf(EditResult.Invalid.class, result);
+        assertTrue(!plugin.getConfig().contains("tools.augments.slot-capacity.wood"));
     }
 }

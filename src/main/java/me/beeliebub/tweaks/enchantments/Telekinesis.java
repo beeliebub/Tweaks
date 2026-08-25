@@ -46,27 +46,10 @@ public class Telekinesis implements Listener {
     private final Map<UUID, Location> pendingTelekinesis = new HashMap<>();
 
     public Telekinesis(Tweaks plugin, ItemFilterCommand itemFilter) {
-        String raw = plugin.getConfig().getString("telekinesis");
-        this.enchantment = resolveEnchantment(plugin, raw);
+        this.enchantment = EnchantmentResolver.resolve(plugin, "telekinesis", "telekinesis");
         this.itemFilter = itemFilter;
     }
 
-    private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
-        if (raw == null || raw.isBlank()) {
-            plugin.getLogger().warning("No 'telekinesis' key configured; telekinesis enchant disabled.");
-            return null;
-        }
-        NamespacedKey key = NamespacedKey.fromString(raw);
-        if (key == null) {
-            plugin.getLogger().log(Level.WARNING, "Invalid telekinesis key '" + raw + "'; telekinesis enchant disabled.");
-            return null;
-        }
-        Enchantment resolved = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT).get(key);
-        if (resolved == null) {
-            plugin.getLogger().warning("Telekinesis enchantment '" + raw + "' not found in registry; is the data pack loaded?");
-        }
-        return resolved;
-    }
 
     public Enchantment getEnchantment() {
         return enchantment;

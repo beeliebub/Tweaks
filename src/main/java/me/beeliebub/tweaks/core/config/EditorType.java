@@ -20,5 +20,6 @@ public enum EditorType {
     MOB_LIST,
     MATERIAL_LIST,
     NUMBER_MAP,
-    STRING
+    STRING,
+    MATERIAL_GRID
 }

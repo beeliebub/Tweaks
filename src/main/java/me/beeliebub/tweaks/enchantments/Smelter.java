@@ -29,28 +29,11 @@ public class Smelter implements Listener {
     private final ResourceHunt resourceHunt;
 
     public Smelter(Tweaks plugin, Telekinesis telekinesis, ResourceHunt resourceHunt) {
-        String raw = plugin.getConfig().getString("smelter");
-        this.enchantment = resolveEnchantment(plugin, raw);
+        this.enchantment = EnchantmentResolver.resolve(plugin, "smelter", "smelter");
         this.telekinesis = telekinesis;
         this.resourceHunt = resourceHunt;
     }
 
-    private Enchantment resolveEnchantment(Tweaks plugin, String raw) {
-        if (raw == null || raw.isBlank()) {
-            plugin.getLogger().warning("No 'smelter' key configured; smelter enchant disabled.");
-            return null;
-        }
-        NamespacedKey key = NamespacedKey.fromString(raw);
-        if (key == null) {
-            plugin.getLogger().log(Level.WARNING, "Invalid smelter key '" + raw + "'; smelter enchant disabled.");
-            return null;
-        }
-        Enchantment resolved = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT).get(key);
-        if (resolved == null) {
-            plugin.getLogger().warning("Smelter enchantment '" + raw + "' not found in registry; is the data pack loaded?");
-        }
-        return resolved;
-    }
 
     public boolean hasEnchant(ItemStack tool) {
         return enchantment != null && !tool.isEmpty() && tool.containsEnchantment(enchantment);
