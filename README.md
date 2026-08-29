@@ -701,7 +701,9 @@ entries render in vanilla gray, inactive entries are dark gray, multi-level ench
 Roman numeral while single-level enchantments (Silk Touch, Numismatic, ...) show none, and any real
 enchantment not accounted for by an active entry or bound curse is shown in a red catch-all line.
 The Numismatic enchantment (vanilla Mending, repurposed for the XP-to-cash payout) always renders
-by that name. Curse lines show the enchantment name without a redundant `Curse:` prefix. Vanilla enchantments are hidden from the
+by that name. The `/augment` dialog buttons and the attach/detach chat feedback use the same names:
+a Roman numeral only for multi-level enchantments, none for single-level ones, and no level at all
+for a curse. Curse lines show the enchantment name without a redundant `Curse:` prefix. Vanilla enchantments are hidden from the
 tooltip while existing tooltip-hidden components are preserved. Lore ownership uses exact
 component fingerprints, so foreign lookalike lines (including exact visible copies) survive
 refreshes. A lore-bearing Disenchanting Bundle remains the destructive recovery path: it migrates

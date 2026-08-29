@@ -150,7 +150,7 @@ public final class AugmentCommand implements CommandExecutor, TabCompleter {
         if (augments.canFit(target, List.of(gem))) {
             augments.addGems(target, List.of(gem));
             sender.sendMessage(Messages.TOOLS.augmentAttached(
-                    Messages.TOOLS.enchantmentName(enchantment, level), riders.size()));
+                    Messages.TOOLS.augmentEnchantmentName(enchantment, level), riders.size()));
         } else {
             sender.sendMessage(Messages.TOOLS.inventoryFull());
         }

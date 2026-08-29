@@ -215,8 +215,8 @@ public final class AugmentDialog {
                         ItemStack currentTarget = getSlot(p, target.slot());
                         if (currentGem == null || currentGem.isEmpty() || currentTarget == null
                                 || currentTarget.isEmpty() || !currentTarget.isSimilar(target.item())) return;
-                        augments.attach(p, currentTarget, currentGem);
-                        openGemFirst(p, currentGem, page);
+                        boolean attached = augments.attach(p, currentTarget, currentGem);
+                        reopenAfterGemAttach(p, currentTarget, data, attached, page);
                     }));
         }
         showPaged(player, Messages.TOOLS.augmentListLabel(), buttons, buttons.size(), page,
@@ -228,8 +228,8 @@ public final class AugmentDialog {
     private ActionButton attachedButton(ItemStack item, AugmentEntry entry, int index, int page) {
         var enchantment = registry().get(entry.enchantmentKey());
         Component name = enchantment == null
-                ? Messages.TOOLS.enchantmentName(entry.enchantmentKey(), entry.level())
-                : Messages.TOOLS.enchantmentName(enchantment, entry.level());
+                ? Messages.TOOLS.augmentEnchantmentName(entry.enchantmentKey(), entry.level())
+                : Messages.TOOLS.augmentEnchantmentName(enchantment, entry.level());
         Component label = Messages.TOOLS.augmentEntry(name, entry.active());
         return button(label, label, p -> {
             if (!augments.enabled()) {
@@ -266,10 +266,13 @@ public final class AugmentDialog {
     }
 
     private Component gemLabel(AugmentGemItem.GemData data) {
-        Component name = Messages.TOOLS.enchantmentName(data.enchantment(), data.level());
-        return augments.isCurse(data.enchantment())
-                ? Messages.TOOLS.augmentInventoryCurseGem(name)
-                : Messages.TOOLS.augmentInventoryGem(name);
+        if (augments.isCurse(data.enchantment())) {
+            // Curses carry no level in any augment surface, matching the item lore.
+            return Messages.TOOLS.augmentInventoryCurseGem(
+                    Messages.TOOLS.enchantmentName(data.enchantment()));
+        }
+        return Messages.TOOLS.augmentInventoryGem(
+                Messages.TOOLS.augmentEnchantmentName(data.enchantment(), data.level()));
     }
 
     private Component gemTooltip(AugmentGemItem.GemData data) {
@@ -277,7 +280,7 @@ public final class AugmentDialog {
         for (AugmentGemItem.CurseRider rider : data.curses()) {
             tooltip = tooltip.append(Component.newline())
                     .append(Messages.TOOLS.augmentGemRider(
-                            Messages.TOOLS.enchantmentName(rider.enchantment(), rider.level())));
+                            Messages.TOOLS.enchantmentName(rider.enchantment())));
         }
         return tooltip;
     }
@@ -328,6 +331,41 @@ public final class AugmentDialog {
             if (sameGem(stack, expected)) return stack;
         }
         return null;
+    }
+
+    /**
+     * Chooses the follow-up screen after a gem-first attach attempt. A successful attach consumes
+     * one gem, so re-opening the gem-first screen is only correct while a usable gem of this type
+     * is still in the inventory; reopening it against an emptied stack would read no gem data and
+     * wrongly report the gem as incompatible. When the last matching gem was just spent, the item's
+     * augment list is shown instead so the new entry is visible.
+     */
+    void reopenAfterGemAttach(Player player, ItemStack target, AugmentGemItem.GemData gemData,
+                              boolean attached, int page) {
+        ItemStack remainingGem = findGemMatching(player, gemData);
+        if (remainingGem != null) {
+            openGemFirst(player, remainingGem, page);
+        } else if (attached) {
+            openAugments(player, target, 0);
+        }
+    }
+
+    private ItemStack findGemMatching(Player player, AugmentGemItem.GemData data) {
+        if (data == null) return null;
+        for (ItemStack stack : player.getInventory().getStorageContents()) {
+            if (gemMatches(stack, data)) return stack;
+        }
+        ItemStack offhand = player.getInventory().getItemInOffHand();
+        if (gemMatches(offhand, data)) return offhand;
+        for (ItemStack stack : player.getInventory().getArmorContents()) {
+            if (gemMatches(stack, data)) return stack;
+        }
+        return null;
+    }
+
+    private boolean gemMatches(ItemStack stack, AugmentGemItem.GemData data) {
+        AugmentGemItem.GemData candidate = augments.gemItem().read(stack);
+        return candidate != null && candidate.equals(data);
     }
 
     private boolean sameGem(ItemStack first, ItemStack second) {

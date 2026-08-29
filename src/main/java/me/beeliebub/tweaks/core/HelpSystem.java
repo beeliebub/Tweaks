@@ -629,7 +629,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("Enchanting tables charge and complete normally, then convert the result into gems one tick later."),
                 yellow("The complete gem batch is preflighted before the table result is accepted; a refusal or full inventory cancels the enchantment and keeps the vanilla result."),
                 white("Enchanted books produce gems; a gem right-click on air or a block opens the same attach flow."),
-                white("Gems use readable enchantment names; tool lore puts each augment on one compact line with Roman numeral levels for multi-level enchantments and no numeral for single-level ones; table and book curses ride another gem, while an all-curse roll produces one curse-only gem."),
+                white("Gems use readable enchantment names; tool lore, the dialog buttons, and the attach/detach chat all name augments the same way — a Roman numeral only for multi-level enchantments, none for single-level ones, and no level for a curse; table and book curses ride another gem, while an all-curse roll produces one curse-only gem."),
                 yellow("Augment Gems cannot be used as ingredients in crafting recipes; ordinary amethyst shards remain craftable."),
                 white("A curse primary uses Bind and rider curses appear under that gem's action; attaching a curse is permanent, free, and occupies no slot."),
                 white("Slots use ◌ for unpurchased, ○ for purchased, and ● for occupied slots."),

@@ -480,7 +480,7 @@ public final class AugmentService {
             }
             if (!incomingCurses.add(curse.enchantment().getKey()) || boundCurses.contains(curse.enchantment().getKey())) {
                 player.sendMessage(Messages.TOOLS.augmentCurseAlreadyAttached(
-                        Messages.TOOLS.enchantmentName(curse.enchantment(), curse.level())));
+                        Messages.TOOLS.enchantmentName(curse.enchantment())));
                 return false;
             }
         }
@@ -553,7 +553,7 @@ public final class AugmentService {
             player.sendMessage(Messages.TOOLS.augmentCursesAttached(curses.size()));
         } else {
             player.sendMessage(Messages.TOOLS.augmentAttached(
-                    Messages.TOOLS.enchantmentName(augment, data.level()), curses.size()));
+                    Messages.TOOLS.augmentEnchantmentName(augment, data.level()), curses.size()));
         }
         if (callbackNeeded && AugmentLedger.hasLedger(item)) durabilityStamp.accept(item);
         return true;
@@ -575,7 +575,7 @@ public final class AugmentService {
             ledger.write(item, ledger.slots(item), current, ledger.migrated(item));
             lore.update(item, qualityRegistry);
             player.sendMessage(Messages.TOOLS.augmentDetached(
-                    Messages.TOOLS.enchantmentName(enchantment, entry.level())));
+                    Messages.TOOLS.augmentEnchantmentName(enchantment, entry.level())));
             return true;
         }
         List<AugmentEntry> others = new ArrayList<>(current);
