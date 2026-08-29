@@ -7,6 +7,8 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.NamespacedKey;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 
 /** Player-facing feedback for the tools, XP, cash, durability, and augment features. */
 public final class ToolsMessages {
@@ -326,8 +328,46 @@ public final class ToolsMessages {
         return Component.text("Manage Augments", NamedTextColor.AQUA);
     }
 
-    public Component augmentTargetItem(String material) {
-        return Component.text(material, NamedTextColor.WHITE);
+    public Component augmentTargetItem(ItemStack item) {
+        return toolMenuName(item);
+    }
+
+    /**
+     * Label for a tool row in a picker menu. A tool the player has renamed (via {@code /rename} or
+     * an anvil) shows that name so two stacks of the same material stay distinguishable; an
+     * un-renamed tool shows its ordinary item name rather than the raw material enum.
+     */
+    private Component toolMenuName(ItemStack item) {
+        if (item != null) {
+            ItemMeta meta = item.getItemMeta();
+            if (meta != null && meta.hasDisplayName()) {
+                Component displayName = meta.displayName();
+                if (displayName != null) {
+                    return displayName.colorIfAbsent(NamedTextColor.WHITE)
+                            .decoration(TextDecoration.ITALIC, false);
+                }
+            }
+        }
+        Component fallback = item == null
+                ? Component.text("Unknown item")
+                : Component.translatable(item.getType().translationKey());
+        return fallback.colorIfAbsent(NamedTextColor.WHITE).decoration(TextDecoration.ITALIC, false);
+    }
+
+    public Component augmentToolTooltipHeader() {
+        return Component.text("Currently attached:", NamedTextColor.GRAY)
+                .decoration(TextDecoration.ITALIC, false);
+    }
+
+    public Component augmentToolTooltipNone() {
+        return Component.text("  (no augments attached)", NamedTextColor.DARK_GRAY)
+                .decoration(TextDecoration.ITALIC, false);
+    }
+
+    public Component augmentToolTooltipEntry(Component line) {
+        return Component.text("  ", NamedTextColor.GRAY)
+                .append(line)
+                .decoration(TextDecoration.ITALIC, false);
     }
 
     public Component augmentSlotsBody(String dots, int used, int capacity) {
@@ -525,8 +565,8 @@ public final class ToolsMessages {
         return Component.text("Choose an augmented item to repair.", NamedTextColor.WHITE);
     }
 
-    public Component repairKitTargetName(String material) {
-        return Component.text(material, NamedTextColor.WHITE);
+    public Component repairKitTargetName(ItemStack item) {
+        return toolMenuName(item);
     }
 
     public Component repairKitDebug(boolean damageable, boolean ledger, boolean stamp, int tier, int maxTier,

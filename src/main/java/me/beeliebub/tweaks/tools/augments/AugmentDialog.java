@@ -204,8 +204,8 @@ public final class AugmentDialog {
         for (AugmentService.GemLocation target : inventoryItems(player)) {
             if (target.item() == gem || sameGem(target.item(), gem)) continue;
             if (!augments.compatibleForDisplay(target.item(), data, augments.entries(target.item()))) continue;
-            buttons.add(button(Messages.TOOLS.augmentTargetItem(target.item().getType().name()),
-                    gemTooltip(data),
+            buttons.add(button(Messages.TOOLS.augmentTargetItem(target.item()),
+                    toolButtonTooltip(target.item(), data),
                     p -> {
                         if (!augments.enabled()) {
                             p.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
@@ -273,6 +273,37 @@ public final class AugmentDialog {
         }
         return Messages.TOOLS.augmentInventoryGem(
                 Messages.TOOLS.augmentEnchantmentName(data.enchantment(), data.level()));
+    }
+
+    /**
+     * Tooltip for a candidate tool: what this gem would attach (and any curse riders it carries),
+     * followed by the tool's own currently attached augments and bound curses, so a player can
+     * distinguish an already-loaded tool from a bare one before committing the attach.
+     */
+    Component toolButtonTooltip(ItemStack item, AugmentGemItem.GemData data) {
+        Component tooltip = gemTooltip(data)
+                .append(Component.newline())
+                .append(Messages.TOOLS.augmentToolTooltipHeader());
+        List<AugmentEntry> entries = augments.entries(item);
+        List<AugmentGemItem.CurseRider> curses = augments.ledger().curses(item);
+        if (entries.isEmpty() && curses.isEmpty()) {
+            return tooltip.append(Component.newline()).append(Messages.TOOLS.augmentToolTooltipNone());
+        }
+        for (AugmentEntry entry : entries) {
+            var enchantment = registry().get(entry.enchantmentKey());
+            Component name = enchantment == null
+                    ? Messages.TOOLS.augmentEnchantmentName(entry.enchantmentKey(), entry.level())
+                    : Messages.TOOLS.augmentEnchantmentName(enchantment, entry.level());
+            tooltip = tooltip.append(Component.newline())
+                    .append(Messages.TOOLS.augmentToolTooltipEntry(
+                            Messages.TOOLS.augmentEntry(name, entry.active())));
+        }
+        for (AugmentGemItem.CurseRider curse : curses) {
+            tooltip = tooltip.append(Component.newline())
+                    .append(Messages.TOOLS.augmentToolTooltipEntry(
+                            Messages.TOOLS.augmentCurseLore(Messages.TOOLS.enchantmentName(curse.enchantment()))));
+        }
+        return tooltip;
     }
 
     private Component gemTooltip(AugmentGemItem.GemData data) {

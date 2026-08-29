@@ -645,7 +645,9 @@ selected as Repair Kit targets.
 Repair Kits are craftable from the live `/tconfig tools.repair-kit.recipe` nine-cell grid. The
 recipe can be shaped or shapeless and is rejected if invalid or if its ingredient signature
 collides with an existing recipe. Right-click a kit to open a paginated menu of augmented storage,
-armor, and offhand damageable items; plain and full-durability items are not shown. Selecting one
+armor, and offhand damageable items; plain and full-durability items are not shown. Each entry is
+labelled by its `/rename` name when it has one, and otherwise by its ordinary item name rather than
+the raw material enum, so two tools of the same type stay distinguishable. Selecting one
 repairs it and consumes exactly one kit; a full or stale target is refused at callback time without
 consuming a kit. A successful repair reports `Repair kit applied! Repair X/Y`; terminal items
 remain unusable. Kits use a stable `ITEM_NAME` and are recognized by PDC, not display text. Admins
@@ -662,7 +664,10 @@ cross-checked rider metadata, and gems have no generated lore. Their `ITEM_NAME`
 vanilla enchanting first; conversion runs one tick later. The table preflights the complete gem
 batch and cancels the enchantment with the vanilla result preserved when the batch is refused or
 cannot fit. A gem right-click (including right-clicking air) and `/augment` open the same
-two-screen hub.
+two-screen hub. The gem-first menu lists every compatible tool in your inventory: a tool you have
+renamed with `/rename` (or an anvil) shows that name, and each tool's hover tooltip lists the
+augments and bound curses it already carries, so two tools of the same material stay
+distinguishable before you commit the attach.
 Augment gems are protected from crafting: their marker blocks both the recipe preview and the
 craft execution, while ordinary amethyst shards remain usable.
 

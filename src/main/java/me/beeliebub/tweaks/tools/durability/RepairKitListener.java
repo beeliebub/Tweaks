@@ -111,7 +111,7 @@ public final class RepairKitListener implements Listener {
         List<ActionButton> buttons = new ArrayList<>();
         for (int i = start; i < end; i++) {
             Target target = targets.get(i);
-            buttons.add(button(Messages.TOOLS.repairKitTargetName(target.item().getType().name()),
+            buttons.add(button(Messages.TOOLS.repairKitTargetName(target.item()),
                     p -> apply(p, target.slot(), target.item())));
         }
         if (currentPage > 0) {
