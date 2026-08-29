@@ -119,11 +119,11 @@ public final class ToolsMessages {
     }
 
     public Component anvilLocked() {
-        return Component.text("Anvils are disabled for this item while the tools lockout is enabled.", NamedTextColor.RED);
+        return Component.text("Anvils are disabled.", NamedTextColor.RED);
     }
 
     public Component grindstoneLocked() {
-        return Component.text("Grindstones are disabled for augmented or quality items.", NamedTextColor.RED);
+        return Component.text("Grindstones are disabled.", NamedTextColor.RED);
     }
 
     public Component augmentUsage() {

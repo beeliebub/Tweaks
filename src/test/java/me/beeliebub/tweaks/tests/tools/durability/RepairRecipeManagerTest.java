@@ -4,14 +4,18 @@ import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.tools.durability.RepairKitItem;
 import me.beeliebub.tweaks.tools.durability.RepairRecipeManager;
 import org.bukkit.Bukkit;
+import org.bukkit.Keyed;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.Recipe;
 import org.bukkit.inventory.ShapedRecipe;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
+
+import java.util.Iterator;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -29,6 +33,38 @@ class RepairRecipeManagerTest {
     @AfterEach
     void tearDown() {
         MockBukkit.unmock();
+    }
+
+    private boolean repairKitRecipeRegistered() {
+        NamespacedKey key = new NamespacedKey(plugin, "repair_kit");
+        Iterator<Recipe> it = Bukkit.recipeIterator();
+        while (it.hasNext()) {
+            Recipe recipe = it.next();
+            if (recipe instanceof Keyed keyed && key.equals(keyed.getKey())) return true;
+        }
+        return false;
+    }
+
+    @Test
+    void registersTheDefaultConfiguredRecipe() {
+        Bukkit.removeRecipe(new NamespacedKey(plugin, "repair_kit"));
+        RepairRecipeManager manager = new RepairRecipeManager(plugin, new RepairKitItem(plugin));
+
+        assertTrue(manager.registerConfigured());
+        assertTrue(repairKitRecipeRegistered());
+    }
+
+    @Test
+    void reRegistersAfterTheRecipeWasWipedFromTheServer() {
+        Bukkit.removeRecipe(new NamespacedKey(plugin, "repair_kit"));
+        RepairRecipeManager manager = new RepairRecipeManager(plugin, new RepairKitItem(plugin));
+        assertTrue(manager.registerConfigured());
+
+        Bukkit.removeRecipe(new NamespacedKey(plugin, "repair_kit"));
+        assertFalse(repairKitRecipeRegistered());
+
+        assertTrue(manager.refresh());
+        assertTrue(repairKitRecipeRegistered());
     }
 
     @Test

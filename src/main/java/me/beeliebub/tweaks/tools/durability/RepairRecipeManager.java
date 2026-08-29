@@ -136,10 +136,22 @@ public final class RepairRecipeManager {
         if (candidateSignature == null) return true;
         Iterator<Recipe> recipes = Bukkit.recipeIterator();
         while (recipes.hasNext()) {
-            Recipe existing = recipes.next();
+            Recipe existing;
+            try {
+                existing = recipes.next();
+            } catch (RuntimeException ex) {
+                continue;
+            }
             if (existing == candidate) continue;
             if (existing instanceof Keyed keyed && recipeKey.equals(keyed.getKey())) continue;
-            if (candidateSignature.equals(ingredientSignature(existing))) return true;
+            String existingSignature;
+            try {
+                existingSignature = ingredientSignature(existing);
+            } catch (RuntimeException ex) {
+                // A malformed datapack or third-party recipe must not abort our own registration.
+                continue;
+            }
+            if (candidateSignature.equals(existingSignature)) return true;
         }
         return false;
     }

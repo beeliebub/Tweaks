@@ -10,6 +10,7 @@ import me.beeliebub.tweaks.tools.durability.RepairKitCommand;
 import me.beeliebub.tweaks.tools.durability.RepairKitItem;
 import me.beeliebub.tweaks.tools.durability.RepairKitListener;
 import me.beeliebub.tweaks.tools.durability.RepairRecipeManager;
+import me.beeliebub.tweaks.tools.durability.RepairRecipeReloadListener;
 import me.beeliebub.tweaks.tools.xp.BlockExpListener;
 import me.beeliebub.tweaks.tools.xp.MendingPayoutListener;
 import me.beeliebub.tweaks.tools.xp.MobExpListener;
@@ -71,6 +72,7 @@ public final class ToolsBootstrap {
         if (!recipes.refresh()) {
             plugin.getLogger().warning("Repair kit recipe is invalid or collides with an existing recipe; it was not registered.");
         }
+        plugin.getServer().getPluginManager().registerEvents(new RepairRecipeReloadListener(plugin, recipes), plugin);
         RepairKitCommand repairKitCommand = new RepairKitCommand(repairKit, durability);
         plugin.getCommand("repairkit").setExecutor(repairKitCommand);
         plugin.getCommand("repairkit").setTabCompleter(repairKitCommand);

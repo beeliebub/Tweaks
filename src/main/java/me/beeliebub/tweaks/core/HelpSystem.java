@@ -801,6 +801,21 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 yellow("Wait until you are in the resource world to see your bar update.")
         ), Material.EMERALD, 22, ColorUtil.HELP_GRAD_RESOURCE_HUNT, List.of("resource_hunt", "resource_rupee")));
 
+        articles.add(new HelpArticle("resource_rupee", "Resource Rupee", List.of(
+                gray("A currency item found while gathering in the resource worlds or earned as a reward."),
+                white("Resource Rupees are special emeralds with a green name and a"),
+                white("\"...the Wanderer's Path...\" lore line; the plugin recognizes them"),
+                white("as currency even when they come from datapacks or /give."),
+                aqua("Conversion (any crafting grid):"),
+                white("9 Resource Rupees -> 1 Resource Rupee Block."),
+                white("1 Resource Rupee Block -> 9 Resource Rupees."),
+                aqua("Spent on:"),
+                white("- Re-rolling your Resource Hunt target after the free re-roll."),
+                white("- Purchasing land claims with /claim."),
+                red("Carrying any lore-marked emerald blocks regular villager trades; stash it first. Wandering Traders still work."),
+                green("Both forms stack normally and can be stored in any container.")
+        ), Material.EMERALD, 26, ColorUtil.HELP_GRAD_RESOURCE_HUNT, List.of("reroll", "protection_purchaseable")));
+
         articles.add(new HelpArticle("rewards", "Rewards", List.of(
                 gray("Pending-reward inbox for minigames."),
                 cmd("/reward claim", "Claim pending rewards."),
