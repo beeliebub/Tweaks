@@ -39,6 +39,7 @@ public final class AugmentService {
     private final AugmentLore lore;
     private final Consumer<ItemStack> durabilityStamp;
     private final Consumer<ItemStack> durabilityTailRefresh;
+    private final Consumer<ItemStack> durabilityFullRepair;
     private final AugmentPendingConfirmations pendingConfirmations;
 
     public AugmentService(Tweaks plugin, QualityRegistry qualityRegistry) {
@@ -61,10 +62,20 @@ public final class AugmentService {
                           Consumer<ItemStack> durabilityStamp,
                           Consumer<ItemStack> durabilityTailRefresh,
                           AugmentPendingConfirmations pendingConfirmations) {
+        this(plugin, qualityRegistry, durabilityStamp, durabilityTailRefresh,
+                item -> {}, pendingConfirmations);
+    }
+
+    public AugmentService(Tweaks plugin, QualityRegistry qualityRegistry,
+                          Consumer<ItemStack> durabilityStamp,
+                          Consumer<ItemStack> durabilityTailRefresh,
+                          Consumer<ItemStack> durabilityFullRepair,
+                          AugmentPendingConfirmations pendingConfirmations) {
         this.plugin = plugin;
         this.qualityRegistry = qualityRegistry;
         this.durabilityStamp = durabilityStamp == null ? item -> {} : durabilityStamp;
         this.durabilityTailRefresh = durabilityTailRefresh == null ? item -> {} : durabilityTailRefresh;
+        this.durabilityFullRepair = durabilityFullRepair == null ? item -> {} : durabilityFullRepair;
         this.pendingConfirmations = pendingConfirmations == null
                 ? new AugmentPendingConfirmations(plugin) : pendingConfirmations;
         this.ledger = new AugmentLedger(plugin);
@@ -433,7 +444,9 @@ public final class AugmentService {
         stripLegacyEnchantments(held);
         ledger.markMigrated(held);
         lore.update(held, qualityRegistry);
-        durabilityStamp.accept(held);
+        // Converting a legacy tool stamps the custom durability projection and clears the wear it
+        // accumulated as a plain tool, so it lands in the player's hand at full projected durability.
+        durabilityFullRepair.accept(held);
         player.sendMessage(Messages.TOOLS.augmentMigrated(legacyGems.size()));
         addGems(player, legacyGems);
         return held;

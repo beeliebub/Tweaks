@@ -97,7 +97,8 @@ public final class ToolsBootstrap {
 
         pendingConfirmations = new AugmentPendingConfirmations(plugin);
         AugmentService augments = new AugmentService(plugin, services.qualityRegistry(),
-                durability::ensureStamped, durability::refreshLoreTail, pendingConfirmations);
+                durability::ensureStamped, durability::refreshLoreTail,
+                durability::restoreFullDurability, pendingConfirmations);
         AugmentDialog augmentDialog = new AugmentDialog(augments);
         AugmentCommand augmentCommand = new AugmentCommand(augments, augmentDialog);
         plugin.getCommand("augment").setExecutor(augmentCommand);

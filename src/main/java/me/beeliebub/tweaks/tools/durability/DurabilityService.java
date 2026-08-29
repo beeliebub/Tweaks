@@ -108,6 +108,28 @@ public final class DurabilityService implements ExternalDurabilityHook {
         return true;
     }
 
+    /**
+     * Stamps the item if needed, then clears all accumulated damage without advancing the repair
+     * tier. Applied when a plain tool first becomes augmented so it arrives at the full projected
+     * durability pool instead of carrying the wear it built up before it had a ledger. Any depleted
+     * marker line is removed in the same write. Returns {@code false} when there was nothing to do
+     * (undamaged, no marker) or the item cannot carry the projection.
+     */
+    public boolean restoreFullDurability(ItemStack item) {
+        if (!ensureStamped(item)) return false;
+        ItemMeta meta = item.getItemMeta();
+        if (!(meta instanceof Damageable damageable)) return false;
+        boolean markerCleared = updateMarker(meta, MarkerState.NONE, false);
+        if (!markerCleared && damage(item, damageable) <= 0) return false;
+
+        int targetMax = maxDamage(item);
+        damageable.setDamage(0);
+        item.setItemMeta(meta);
+        item.setData(DataComponentTypes.MAX_DAMAGE, targetMax);
+        item.setData(DataComponentTypes.DAMAGE, 0);
+        return true;
+    }
+
     public boolean repair(ItemStack item) {
         if (!ensureStamped(item)) return false;
         ItemMeta meta = item.getItemMeta();

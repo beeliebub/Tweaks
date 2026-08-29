@@ -2,14 +2,18 @@ package me.beeliebub.tweaks.tests.tools.augments;
 
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.tests.MessageAssert;
+import io.papermc.paper.datacomponent.DataComponentTypes;
 import me.beeliebub.tweaks.tools.augments.AugmentDialog;
 import me.beeliebub.tweaks.tools.augments.AugmentGemItem;
 import me.beeliebub.tweaks.tools.augments.AugmentLedger;
+import me.beeliebub.tweaks.tools.augments.AugmentPendingConfirmations;
 import me.beeliebub.tweaks.tools.augments.AugmentService;
+import me.beeliebub.tweaks.tools.durability.DurabilityService;
 import me.beeliebub.tweaks.xpbottle.ExperienceManager;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.Damageable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,6 +71,26 @@ class AugmentConfirmationTest {
         assertEquals(Enchantment.EFFICIENCY, augments.inventoryGems(player).getFirst().item()
                 .getData(io.papermc.paper.datacomponent.DataComponentTypes.STORED_ENCHANTMENTS)
                 .enchantments().keySet().stream().findFirst().orElseThrow());
+    }
+
+    @Test
+    void confirmSlotOneUnlockFullyRepairsTheConvertedTool() {
+        DurabilityService durability = new DurabilityService(plugin);
+        AugmentPendingConfirmations pending = new AugmentPendingConfirmations(plugin);
+        AugmentService wired = new AugmentService(plugin, null,
+                durability::ensureStamped, durability::refreshLoreTail,
+                durability::restoreFullDurability, pending);
+
+        ItemStack item = legacyItem();
+        item.setData(DataComponentTypes.DAMAGE, 900);
+        player.getInventory().setItemInMainHand(item);
+        pending.create(player, item, 1);
+
+        ItemStack confirmed = wired.confirmSlotOneUnlock(player);
+        assertTrue(confirmed != null);
+        assertTrue(wired.ledger().migrated(confirmed));
+        assertEquals(0, ((Damageable) confirmed.getItemMeta()).getDamage());
+        assertEquals(0, (int) confirmed.getData(DataComponentTypes.DAMAGE));
     }
 
     @Test

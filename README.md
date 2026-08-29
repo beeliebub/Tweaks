@@ -695,7 +695,7 @@ ledger-less item migrate into gems only after a clickable `/augment confirm` pro
 slot-1 XP price; `/augment cancel` or the 30-second expiry leaves the item and XP unchanged.
 Confirmation is one-shot, tolerates ordinary durability loss, rejects item swaps or meaningful
 metadata changes, preflights inventory space, charges the quoted price, migrates the enchantments,
-delivers the gems, and opens the hub. An unenchanted ledger-less item opens the hub for free and
+delivers the gems, fully repairs the tool to its projected durability, and opens the hub. An unenchanted ledger-less item opens the hub for free and
 writes no PDC. The old curse-gem attachment route cannot grant free migration.
 
 Legacy curses remain real enchantments and are also folded into the ledger's permanent curse list.
@@ -1380,7 +1380,7 @@ When an action occurs, the system checks rules in this order:
 | `/toolprotect durability <n>` | Set remaining-durability threshold for ToolProtect. |
 | `/rename [name]` | Free rename/reset for the main-hand item; supports legacy color codes. |
 | `/augment` | Open the augment slot and gem menu for the held item. |
-| `/augment confirm` | Confirm the quoted XP charge and migrate a held legacy-enchanted item. |
+| `/augment confirm` | Confirm the quoted XP charge, migrate a held legacy-enchanted item, and repair it to full durability. |
 | `/augment cancel` | Cancel the pending legacy-migration confirmation. |
 | Right-click an Augment Gem (air or block) | Open the gem-first augment menu. |
 | `/afk` | Toggle AFK status. |

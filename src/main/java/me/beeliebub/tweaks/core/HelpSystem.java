@@ -625,7 +625,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
         articles.add(new HelpArticle("augments", "Augments", List.of(
                 gray("Augment Gems hold real registry enchantments in the vanilla stored-enchantment component while the item ledger owns slot state."),
                 cmd("/augment", "Open the two-screen slot and augment menu for the held item."),
-                cmd("/augment confirm", "Confirm the quoted XP charge and migrate a legacy-enchanted held item."),
+                cmd("/augment confirm", "Confirm the quoted XP charge, migrate a legacy-enchanted held item, and repair it to full durability."),
                 cmd("/augment cancel", "Cancel a pending legacy-migration confirmation."),
                 white("Enchanting tables charge and complete normally, then convert the result into gems one tick later."),
                 yellow("The complete gem batch is preflighted before the table result is accepted; a refusal or full inventory cancels the enchantment and keeps the vanilla result."),
@@ -640,7 +640,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 white("Turning an augment off removes the active enchantment but keeps its slot occupied."),
                 yellow("A Disenchanting Bundle validates every ledger record before mutation, randomizes highest-tier ties, and keeps the current chance after a failure."),
                 white("Unenchanted crafted, smithed, and villager-traded damageable results receive one free slot; enchanted results receive none. A netherite upgrade keeps its existing ledger and grants no free slot, but its slot ceiling rises to the netherite maximum right away — buy the extra slots one at a time."),
-                white("A ledger-less enchanted item gets a 30-second quoted confirmation; confirm charges that quote before migrating enchantments into gems, while cancel, expiry, or an item change leaves it untouched."),
+                white("A ledger-less enchanted item gets a 30-second quoted confirmation; confirm charges that quote, migrates enchantments into gems, and fully repairs the tool, while cancel, expiry, or an item change leaves it untouched."),
                 white("Legacy curses stay real on the item and are recorded in the ledger's permanent curse list; curse lore uses the enchantment name directly without a redundant Curse: prefix. Tool lore is non-italic: active quality entries keep their tier color and rarity icon, active plain enchantments are gray, inactive entries are dark gray, symbols are white, dots are bounded, unaccounted real enchantments show in red, and the repurposed Mending enchantment always reads as Numismatic."),
                 white("Plain items gain no augment PDC until a slot is purchased or a gem is attached."),
                 white("Book conversion rechecks exact post-event stack deltas; crafted results initialize their own ledger; foreign lookalike lore is preserved by exact component fingerprints."),
