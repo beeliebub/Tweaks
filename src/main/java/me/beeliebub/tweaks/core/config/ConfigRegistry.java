@@ -88,7 +88,10 @@ public final class ConfigRegistry {
                             "Disabled Nether Portal Worlds", EditorType.WORLD_KEY_LIST),
                     ConfigSetting.bounded("worldmanagement.blood-moon-chance-percent",
                             "worldmanagement.blood-moon-chance-percent",
-                            "Blood Moon Chance", EditorType.PERCENT, 0.0, 100.0)
+                            "Blood Moon Chance", EditorType.PERCENT, 0.0, 100.0),
+                    ConfigSetting.of("worldmanagement.villager-trade-xp-disabled",
+                            "worldmanagement.villager-trade-xp-disabled",
+                            "Villager Trade XP Disabled", EditorType.BOOLEAN)
             )),
             new ConfigCategory("teleport", "Teleport", List.of(
                     ConfigSetting.bounded("teleport.tpa-timeout-seconds", "teleport.tpa-timeout-seconds",

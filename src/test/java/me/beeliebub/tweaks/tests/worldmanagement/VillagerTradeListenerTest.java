@@ -9,6 +9,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Villager;
 import org.bukkit.entity.WanderingTrader;
 import org.bukkit.event.inventory.InventoryAction;
+import io.papermc.paper.event.player.PlayerTradeEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryType;
@@ -140,5 +141,24 @@ class VillagerTradeListenerTest {
         listener.onDrag(mockEvent);
 
         verify(mockEvent).setCancelled(true);
+    }
+
+    @Test
+    void onVillagerTradeSuppressesXpByDefault() {
+        PlayerTradeEvent event = mock(PlayerTradeEvent.class);
+
+        listener.onVillagerTrade(event);
+
+        verify(event).setRewardExp(false);
+    }
+
+    @Test
+    void onVillagerTradeLeavesXpAloneWhenDisabled() {
+        plugin.getConfig().set("worldmanagement.villager-trade-xp-disabled", false);
+        PlayerTradeEvent event = mock(PlayerTradeEvent.class);
+
+        listener.onVillagerTrade(event);
+
+        verify(event, never()).setRewardExp(anyBoolean());
     }
 }

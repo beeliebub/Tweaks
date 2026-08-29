@@ -358,6 +358,11 @@ teleport:
 
 worldmanagement:
   blood-moon-chance-percent: 50.0
+  # When true, a completed trade with a villager or wandering trader no longer
+  # drops experience orbs to the player. The villager still gains its own trade
+  # experience and levels up as normal. Read live - a /tconfig change applies
+  # immediately with no restart.
+  villager-trade-xp-disabled: true
 
 # Worlds where the nether portal is disabled.
 disabled-nether-portal-worlds:

@@ -6,6 +6,7 @@ import me.beeliebub.tweaks.logging.HotPathEventBuffer;
 import me.beeliebub.tweaks.logging.LoggingPaths;
 import me.beeliebub.tweaks.protection.region.ProtectionManager;
 import me.beeliebub.tweaks.protection.region.RegionFlag;
+import io.papermc.paper.event.player.PlayerTradeEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -44,6 +45,7 @@ import java.util.Locale;
 public class WorldRuleListener implements Listener {
 
     private static final String SPAWNER_EGG_CONFIG_KEY = "spawner-egg-disabled-mobs";
+    private static final String TRADE_XP_DISABLED_KEY = "worldmanagement.villager-trade-xp-disabled";
     private static final String SPAWN_EGG_SUFFIX = "_spawn_egg";
     private static final int COST_SLOT_A = 0;
     private static final int COST_SLOT_B = 1;
@@ -253,5 +255,19 @@ public class WorldRuleListener implements Listener {
                 "This villager won't accept emeralds with lore. Try a wandering trader.",
                 NamedTextColor.RED));
         player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
+    }
+
+    // ─── Trade XP suppression ────────────────────────────────────────────────
+
+    // Suppresses the experience-orb reward a player gets for completing a trade
+    // with a villager or wandering trader. The merchant still accrues its own
+    // trade experience and levels up as normal - only the player-facing orb drop
+    // is removed. Config key is read live so a /tconfig toggle applies with no
+    // restart, matching the other rules in this class.
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onVillagerTrade(PlayerTradeEvent event) {
+        if (plugin.getConfig().getBoolean(TRADE_XP_DISABLED_KEY, true)) {
+            event.setRewardExp(false);
+        }
     }
 }

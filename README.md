@@ -867,7 +867,7 @@ Any armor trim pattern can be used to activate these effects, as long as the mat
 
 ## World Protections
 
-These protections are always active and require no commands or configuration:
+These protections are active by default; a few expose a `/tconfig` toggle or world list:
 
 | Protection | What it does |
 |---|---|
@@ -876,6 +876,7 @@ These protections are always active and require no commands or configuration:
 | **Enderman Grief Protection** | Endermen cannot pick up or place blocks. |
 | **End Portal Control** | End portals are disabled in configured worlds (`jass:archive` by default). Players who try receive a red message. |
 | **Lore-Tagged Emerald Trade Block** | Emeralds carrying any lore cannot be placed into a regular Villager's trade cost slots. Wandering Traders are exempt and still accept lore-tagged emeralds. |
+| **Villager Trade XP Removal** | Completed trades with villagers and wandering traders no longer drop experience orbs to the player. The merchant still gains its own trade experience and levels up normally. Enabled by default; toggle with `/tconfig worldmanagement.villager-trade-xp-disabled <true\|false>`. |
 
 ### Spawn Egg Restrictions
 
@@ -1624,6 +1625,7 @@ teleport:
     - "jass:resource_nether"
 worldmanagement:
   blood-moon-chance-percent: 50.0
+  villager-trade-xp-disabled: true  # completed villager/wandering-trader trades drop no player XP
 disabled-nether-portal-worlds:   # nether portals refused in these worlds
   - "jass:resource"
   - "jass:resource_nether"
