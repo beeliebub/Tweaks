@@ -14,7 +14,6 @@ import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Creeper;
 import org.bukkit.entity.Enderman;
-import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Villager;
 import org.bukkit.event.EventHandler;
@@ -24,16 +23,12 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntityInteractEvent;
-import org.bukkit.event.inventory.InventoryAction;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
-import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.Merchant;
-import org.bukkit.inventory.MerchantInventory;
 
 import java.util.List;
 import java.util.Locale;
@@ -47,9 +42,6 @@ public class WorldRuleListener implements Listener {
     private static final String SPAWNER_EGG_CONFIG_KEY = "spawner-egg-disabled-mobs";
     private static final String TRADE_XP_DISABLED_KEY = "worldmanagement.villager-trade-xp-disabled";
     private static final String SPAWN_EGG_SUFFIX = "_spawn_egg";
-    private static final int COST_SLOT_A = 0;
-    private static final int COST_SLOT_B = 1;
-    private static final int RESULT_SLOT = 2;
 
     private final Tweaks plugin;
     private final ProtectionManager protection;
@@ -178,122 +170,62 @@ public class WorldRuleListener implements Listener {
         }
     }
 
-    // ─── Villager trade blocking (was VillagerTradeListener) ──────────────────
+    // ─── Villager trade access (was VillagerTradeListener) ────────────────────
 
-    // Keeps lore-bearing emeralds from being used at a regular Villager's merchant
-    // GUI. Wandering Traders are a sibling type, so their trades are unaffected.
-    // This handler covers manual placement into the cost slots (cursor, shift-click,
-    // drag, hotbar swap) and — because selecting a trade offer auto-fills the cost
-    // slots without firing InventoryClickEvent — also refuses the result slot while
-    // a lore emerald is staged there. onPlayerTrade is the final backstop.
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onClick(InventoryClickEvent event) {
-        if (!(event.getInventory() instanceof MerchantInventory mi)) return;
-        if (!isRegularVillagerMerchant(mi.getMerchant())) return;
-
-        InventoryAction action = event.getAction();
-        int rawSlot = event.getRawSlot();
-        boolean topSlotClicked = rawSlot == COST_SLOT_A || rawSlot == COST_SLOT_B;
-
-        // Taking the result while a lore emerald is staged in a cost slot completes
-        // the trade. Shift-clicking the result in particular makes vanilla move the
-        // output into the player inventory before PlayerTradeEvent fires, so this
-        // has to be stopped here, before vanilla acts, rather than only at the
-        // trade event. Any interaction with the result slot is refused outright
-        // while a cost slot holds a lore emerald.
-        if (rawSlot == RESULT_SLOT && costSlotsHaveLoreEmerald(mi)) {
-            rejectLoreEmerald(event);
-            return;
-        }
-
-        switch (action) {
-            case PLACE_ALL, PLACE_ONE, PLACE_SOME, SWAP_WITH_CURSOR -> {
-                if (topSlotClicked && hasLoreEmerald(event.getCursor())) {
-                    rejectLoreEmerald(event);
-                }
-            }
-            case MOVE_TO_OTHER_INVENTORY -> {
-                Inventory clicked = event.getClickedInventory();
-                if (clicked != null && clicked != mi && hasLoreEmerald(event.getCurrentItem())) {
-                    rejectLoreEmerald(event);
-                }
-            }
-            case HOTBAR_SWAP, HOTBAR_MOVE_AND_READD -> {
-                if (topSlotClicked) {
-                    HumanEntity who = event.getWhoClicked();
-                    int hotbar = event.getHotbarButton();
-                    if (hotbar >= 0 && who instanceof Player p) {
-                        ItemStack hotbarItem = p.getInventory().getItem(hotbar);
-                        if (hasLoreEmerald(hotbarItem)) {
-                            rejectLoreEmerald(event);
-                        }
-                    }
-                }
-            }
-            default -> { /* nothing else can place a new item into the cost slots */ }
-        }
-    }
-
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onDrag(InventoryDragEvent event) {
-        if (!(event.getInventory() instanceof MerchantInventory mi)) return;
-        if (!isRegularVillagerMerchant(mi.getMerchant())) return;
-        if (!hasLoreEmerald(event.getOldCursor())) return;
-
-        for (int rawSlot : event.getRawSlots()) {
-            if (rawSlot == COST_SLOT_A || rawSlot == COST_SLOT_B) {
-                event.setCancelled(true);
-                notifyRejection(event.getWhoClicked());
-                return;
-            }
-        }
-    }
-
-    // Final backstop: cancels the trade outright if a lore-bearing emerald reached
-    // a cost slot by any path onClick/onDrag didn't already stop (a trade completed
-    // without an InventoryClickEvent on the result slot). A cancelled trade consumes
-    // nothing; the cost-slot items stay put and are returned to the player when the
-    // GUI closes. Wandering Traders are not Villagers, so they never match.
+    // A regular Villager will not open its trade menu for a player carrying any
+    // lore-bearing emerald or emerald block. That covers the plugin's Resource
+    // Rupee currency (a renamed, lore-tagged emerald / emerald block) as well as
+    // any custom emerald an admin or datapack has given lore, without needing to
+    // match specific names. Wandering Traders are a separate entity type and keep
+    // working normally. A player must stash the currency (ender chest, a container,
+    // drop it) before a regular villager will trade.
     //
-    // A trade can only complete while its merchant GUI is the player's open top
-    // inventory, so that inventory carries the payment slots being inspected. If
-    // that ever isn't the case the guard falls through and the trade proceeds —
-    // the safe direction, since it can't wrongly block a legitimate trade.
+    // The block is on the interaction, not the inventory-open event: cancelling
+    // the open after the villager has already engaged the player leaves it stuck
+    // in a "busy" state with no API to clear it. Stopping the right-click here
+    // means the villager is never engaged in the first place. A name tag renames
+    // the villager rather than opening a trade, so that interaction is left alone.
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onPlayerTrade(PlayerTradeEvent event) {
-        if (!(event.getVillager() instanceof Villager)) return;
-        if (!(event.getPlayer().getOpenInventory().getTopInventory() instanceof MerchantInventory mi)) return;
-        if (!costSlotsHaveLoreEmerald(mi)) return;
+    public void onVillagerInteract(PlayerInteractEntityEvent event) {
+        if (!(event.getRightClicked() instanceof Villager)) return;
+
+        Player player = event.getPlayer();
+        ItemStack inHand = event.getHand() == EquipmentSlot.OFF_HAND
+                ? player.getInventory().getItemInOffHand()
+                : player.getInventory().getItemInMainHand();
+        if (inHand.getType() == Material.NAME_TAG) return;
+
+        if (!carriesLoreEmerald(player)) return;
 
         event.setCancelled(true);
-        notifyRejection(event.getPlayer());
+        // The event fires once per hand for a single physical click; greet only the
+        // main hand so the player gets one message and one sound.
+        if (event.getHand() == EquipmentSlot.HAND) {
+            player.sendMessage(Component.text(
+                    "You can't trade with a villager while carrying Resource Rupees or other lore-marked emeralds. Wandering traders still work.",
+                    NamedTextColor.RED));
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
+        }
     }
 
-    private boolean isRegularVillagerMerchant(Merchant merchant) {
-        return merchant instanceof Villager;
+    // Scans the 36 main inventory slots plus the off-hand slot (armor slots cannot
+    // hold emeralds). A lore-bearing emerald or emerald block is treated as currency
+    // regardless of its name, since the lore is what separates Resource Rupees (and
+    // admin / datapack custom emeralds) from the plain item a villager expects as
+    // payment.
+    private boolean carriesLoreEmerald(Player player) {
+        for (ItemStack stack : player.getInventory().getStorageContents()) {
+            if (isLoreEmerald(stack)) return true;
+        }
+        return isLoreEmerald(player.getInventory().getItemInOffHand());
     }
 
-    private boolean costSlotsHaveLoreEmerald(MerchantInventory mi) {
-        return hasLoreEmerald(mi.getItem(COST_SLOT_A)) || hasLoreEmerald(mi.getItem(COST_SLOT_B));
-    }
-
-    private boolean hasLoreEmerald(ItemStack item) {
-        if (item == null || item.getType() != Material.EMERALD) return false;
+    private boolean isLoreEmerald(ItemStack item) {
+        if (item == null) return false;
+        Material type = item.getType();
+        if (type != Material.EMERALD && type != Material.EMERALD_BLOCK) return false;
         if (!item.hasItemMeta()) return false;
         return item.getItemMeta().hasLore();
-    }
-
-    private void rejectLoreEmerald(InventoryClickEvent event) {
-        event.setCancelled(true);
-        notifyRejection(event.getWhoClicked());
-    }
-
-    private void notifyRejection(HumanEntity who) {
-        if (!(who instanceof Player player)) return;
-        player.sendMessage(Component.text(
-                "This villager won't accept emeralds with lore. Try a wandering trader.",
-                NamedTextColor.RED));
-        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
     }
 
     // ─── Trade XP suppression ────────────────────────────────────────────────

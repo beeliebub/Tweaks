@@ -3,19 +3,15 @@ package me.beeliebub.tweaks.tests.worldmanagement;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.protection.region.ProtectionManager;
 import me.beeliebub.tweaks.worldmanagement.WorldRuleListener;
+import io.papermc.paper.event.player.PlayerTradeEvent;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
-import org.bukkit.entity.Player;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Villager;
 import org.bukkit.entity.WanderingTrader;
-import org.bukkit.event.inventory.InventoryAction;
-import io.papermc.paper.event.player.PlayerTradeEvent;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.event.inventory.InventoryType;
-import org.bukkit.inventory.InventoryView;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.MerchantInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,10 +19,8 @@ import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
-import org.mockbukkit.mockbukkit.inventory.InventoryViewMock;
 
-import java.util.Collections;
-import java.util.Map;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -49,192 +43,118 @@ class VillagerTradeListenerTest {
         MockBukkit.unmock();
     }
 
-    private ItemStack createLoreEmerald() {
-        ItemStack item = new ItemStack(Material.EMERALD);
+    private ItemStack loreItem(Material material) {
+        ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
-        meta.lore(Collections.singletonList(Component.text("Special Lore")));
+        meta.lore(List.of(Component.text("...the Wanderer's Path...")));
         item.setItemMeta(meta);
         return item;
     }
 
+    // A joining PlayerMock is sent login tips by HelpSystem; clear them so message
+    // assertions only see what onVillagerInteract produced.
+    private void drainMessages(PlayerMock player) {
+        while (player.nextMessage() != null) {
+            // discard
+        }
+    }
+
+    private PlayerInteractEntityEvent interactEvent(PlayerMock player, Entity target, EquipmentSlot hand) {
+        PlayerInteractEntityEvent event = mock(PlayerInteractEntityEvent.class);
+        when(event.getRightClicked()).thenReturn(target);
+        when(event.getPlayer()).thenReturn(player);
+        when(event.getHand()).thenReturn(hand);
+        return event;
+    }
+
     @Test
-    void onClickRejectsLoreEmeraldInCostSlot() {
+    void blocksVillagerInteractWhenCarryingLoreEmerald() {
         PlayerMock player = server.addPlayer();
-        Villager villager = mock(Villager.class);
-        MerchantInventory inventory = mock(MerchantInventory.class);
-        when(inventory.getMerchant()).thenReturn(villager);
+        player.getInventory().addItem(loreItem(Material.EMERALD));
+        drainMessages(player);
 
-        ItemStack loreEmerald = createLoreEmerald();
-        InventoryClickEvent event = new InventoryClickEvent(
-                player.getOpenInventory(), InventoryType.SlotType.CONTAINER, 0,
-                org.bukkit.event.inventory.ClickType.LEFT, InventoryAction.PLACE_ALL
-        );
-        // Using reflection or mocking to set the inventory and cursor is hard with real event objects
-        // Let's try mocking the event as it's often easier for inventory events in MockBukkit
-        InventoryClickEvent mockEvent = mock(InventoryClickEvent.class);
-        when(mockEvent.getInventory()).thenReturn(inventory);
-        when(mockEvent.getWhoClicked()).thenReturn(player);
-        when(mockEvent.getRawSlot()).thenReturn(0);
-        when(mockEvent.getAction()).thenReturn(InventoryAction.PLACE_ALL);
-        when(mockEvent.getCursor()).thenReturn(loreEmerald);
+        PlayerInteractEntityEvent event = interactEvent(player, mock(Villager.class), EquipmentSlot.HAND);
+        listener.onVillagerInteract(event);
 
-        listener.onClick(mockEvent);
-
-        verify(mockEvent).setCancelled(true);
+        verify(event).setCancelled(true);
         assertNotNull(player.nextMessage());
     }
 
     @Test
-    void onClickAllowsNormalEmerald() {
+    void blocksWhenCarryingLoreEmeraldBlock() {
         PlayerMock player = server.addPlayer();
-        Villager villager = mock(Villager.class);
-        MerchantInventory inventory = mock(MerchantInventory.class);
-        when(inventory.getMerchant()).thenReturn(villager);
+        player.getInventory().addItem(loreItem(Material.EMERALD_BLOCK));
 
-        ItemStack normalEmerald = new ItemStack(Material.EMERALD);
-        InventoryClickEvent mockEvent = mock(InventoryClickEvent.class);
-        when(mockEvent.getInventory()).thenReturn(inventory);
-        when(mockEvent.getWhoClicked()).thenReturn(player);
-        when(mockEvent.getRawSlot()).thenReturn(0);
-        when(mockEvent.getAction()).thenReturn(InventoryAction.PLACE_ALL);
-        when(mockEvent.getCursor()).thenReturn(normalEmerald);
-
-        listener.onClick(mockEvent);
-
-        verify(mockEvent, never()).setCancelled(true);
-    }
-
-    @Test
-    void onClickAllowsWanderingTrader() {
-        PlayerMock player = server.addPlayer();
-        WanderingTrader trader = mock(WanderingTrader.class);
-        MerchantInventory inventory = mock(MerchantInventory.class);
-        when(inventory.getMerchant()).thenReturn(trader);
-
-        ItemStack loreEmerald = createLoreEmerald();
-        InventoryClickEvent mockEvent = mock(InventoryClickEvent.class);
-        when(mockEvent.getInventory()).thenReturn(inventory);
-        when(mockEvent.getWhoClicked()).thenReturn(player);
-        when(mockEvent.getRawSlot()).thenReturn(0);
-        when(mockEvent.getAction()).thenReturn(InventoryAction.PLACE_ALL);
-        when(mockEvent.getCursor()).thenReturn(loreEmerald);
-
-        listener.onClick(mockEvent);
-
-        verify(mockEvent, never()).setCancelled(true);
-    }
-
-    @Test
-    void onDragRejectsLoreEmeraldInCostSlot() {
-        PlayerMock player = server.addPlayer();
-        Villager villager = mock(Villager.class);
-        MerchantInventory inventory = mock(MerchantInventory.class);
-        when(inventory.getMerchant()).thenReturn(villager);
-
-        ItemStack loreEmerald = createLoreEmerald();
-        InventoryDragEvent mockEvent = mock(InventoryDragEvent.class);
-        when(mockEvent.getInventory()).thenReturn(inventory);
-        when(mockEvent.getWhoClicked()).thenReturn(player);
-        when(mockEvent.getRawSlots()).thenReturn(Collections.singleton(0));
-        when(mockEvent.getOldCursor()).thenReturn(loreEmerald);
-
-        listener.onDrag(mockEvent);
-
-        verify(mockEvent).setCancelled(true);
-    }
-
-    @Test
-    void onClickRejectsResultSlotWhenLoreEmeraldStagedInCostSlot() {
-        PlayerMock player = server.addPlayer();
-        Villager villager = mock(Villager.class);
-        MerchantInventory inventory = mock(MerchantInventory.class);
-        when(inventory.getMerchant()).thenReturn(villager);
-        when(inventory.getItem(0)).thenReturn(createLoreEmerald());
-        when(inventory.getItem(1)).thenReturn(null);
-
-        InventoryClickEvent mockEvent = mock(InventoryClickEvent.class);
-        when(mockEvent.getInventory()).thenReturn(inventory);
-        when(mockEvent.getWhoClicked()).thenReturn(player);
-        when(mockEvent.getRawSlot()).thenReturn(2);
-        when(mockEvent.getAction()).thenReturn(InventoryAction.MOVE_TO_OTHER_INVENTORY);
-
-        listener.onClick(mockEvent);
-
-        verify(mockEvent).setCancelled(true);
-    }
-
-    @Test
-    void onClickAllowsResultSlotWithPlainEmeraldInCostSlot() {
-        PlayerMock player = server.addPlayer();
-        Villager villager = mock(Villager.class);
-        MerchantInventory inventory = mock(MerchantInventory.class);
-        when(inventory.getMerchant()).thenReturn(villager);
-        when(inventory.getItem(0)).thenReturn(new ItemStack(Material.EMERALD));
-        when(inventory.getItem(1)).thenReturn(null);
-
-        InventoryClickEvent mockEvent = mock(InventoryClickEvent.class);
-        when(mockEvent.getInventory()).thenReturn(inventory);
-        when(mockEvent.getWhoClicked()).thenReturn(player);
-        when(mockEvent.getRawSlot()).thenReturn(2);
-        when(mockEvent.getAction()).thenReturn(InventoryAction.MOVE_TO_OTHER_INVENTORY);
-
-        listener.onClick(mockEvent);
-
-        verify(mockEvent, never()).setCancelled(true);
-    }
-
-    @Test
-    void onPlayerTradeCancelsWhenLoreEmeraldInCostSlot() {
-        Player player = mock(Player.class);
-        InventoryView view = mock(InventoryView.class);
-        MerchantInventory inventory = mock(MerchantInventory.class);
-        when(player.getOpenInventory()).thenReturn(view);
-        when(view.getTopInventory()).thenReturn(inventory);
-        when(inventory.getItem(0)).thenReturn(createLoreEmerald());
-        when(inventory.getItem(1)).thenReturn(null);
-
-        PlayerTradeEvent event = mock(PlayerTradeEvent.class);
-        when(event.getVillager()).thenReturn(mock(Villager.class));
-        when(event.getPlayer()).thenReturn(player);
-
-        listener.onPlayerTrade(event);
+        PlayerInteractEntityEvent event = interactEvent(player, mock(Villager.class), EquipmentSlot.HAND);
+        listener.onVillagerInteract(event);
 
         verify(event).setCancelled(true);
     }
 
     @Test
-    void onPlayerTradeAllowsPlainEmeraldInCostSlot() {
-        Player player = mock(Player.class);
-        InventoryView view = mock(InventoryView.class);
-        MerchantInventory inventory = mock(MerchantInventory.class);
-        when(player.getOpenInventory()).thenReturn(view);
-        when(view.getTopInventory()).thenReturn(inventory);
-        when(inventory.getItem(0)).thenReturn(new ItemStack(Material.EMERALD));
-        when(inventory.getItem(1)).thenReturn(null);
+    void blocksWhenLoreEmeraldInOffHand() {
+        PlayerMock player = server.addPlayer();
+        player.getInventory().setItemInOffHand(loreItem(Material.EMERALD));
 
-        PlayerTradeEvent event = mock(PlayerTradeEvent.class);
-        when(event.getVillager()).thenReturn(mock(Villager.class));
-        when(event.getPlayer()).thenReturn(player);
+        PlayerInteractEntityEvent event = interactEvent(player, mock(Villager.class), EquipmentSlot.HAND);
+        listener.onVillagerInteract(event);
 
-        listener.onPlayerTrade(event);
+        verify(event).setCancelled(true);
+    }
+
+    @Test
+    void offHandInteractIsCancelledButNotMessaged() {
+        PlayerMock player = server.addPlayer();
+        player.getInventory().addItem(loreItem(Material.EMERALD));
+        drainMessages(player);
+
+        PlayerInteractEntityEvent event = interactEvent(player, mock(Villager.class), EquipmentSlot.OFF_HAND);
+        listener.onVillagerInteract(event);
+
+        verify(event).setCancelled(true);
+        assertNull(player.nextMessage());
+    }
+
+    @Test
+    void allowsVillagerInteractWithPlainEmerald() {
+        PlayerMock player = server.addPlayer();
+        player.getInventory().addItem(new ItemStack(Material.EMERALD));
+
+        PlayerInteractEntityEvent event = interactEvent(player, mock(Villager.class), EquipmentSlot.HAND);
+        listener.onVillagerInteract(event);
 
         verify(event, never()).setCancelled(true);
     }
 
     @Test
-    void onPlayerTradeIgnoresWanderingTrader() {
-        Player player = mock(Player.class);
-        InventoryView view = mock(InventoryView.class);
-        MerchantInventory inventory = mock(MerchantInventory.class);
-        when(player.getOpenInventory()).thenReturn(view);
-        when(view.getTopInventory()).thenReturn(inventory);
-        when(inventory.getItem(0)).thenReturn(createLoreEmerald());
+    void allowsVillagerInteractWithEmptyInventory() {
+        PlayerMock player = server.addPlayer();
 
-        PlayerTradeEvent event = mock(PlayerTradeEvent.class);
-        when(event.getVillager()).thenReturn(mock(WanderingTrader.class));
-        when(event.getPlayer()).thenReturn(player);
+        PlayerInteractEntityEvent event = interactEvent(player, mock(Villager.class), EquipmentSlot.HAND);
+        listener.onVillagerInteract(event);
 
-        listener.onPlayerTrade(event);
+        verify(event, never()).setCancelled(true);
+    }
+
+    @Test
+    void allowsWanderingTraderInteractWhileCarryingLoreEmerald() {
+        PlayerMock player = server.addPlayer();
+        player.getInventory().addItem(loreItem(Material.EMERALD));
+
+        PlayerInteractEntityEvent event = interactEvent(player, mock(WanderingTrader.class), EquipmentSlot.HAND);
+        listener.onVillagerInteract(event);
+
+        verify(event, never()).setCancelled(true);
+    }
+
+    @Test
+    void allowsNameTagInteractWhileCarryingLoreEmerald() {
+        PlayerMock player = server.addPlayer();
+        player.getInventory().setItemInMainHand(new ItemStack(Material.NAME_TAG));
+        player.getInventory().setItem(1, loreItem(Material.EMERALD));
+
+        PlayerInteractEntityEvent event = interactEvent(player, mock(Villager.class), EquipmentSlot.HAND);
+        listener.onVillagerInteract(event);
 
         verify(event, never()).setCancelled(true);
     }

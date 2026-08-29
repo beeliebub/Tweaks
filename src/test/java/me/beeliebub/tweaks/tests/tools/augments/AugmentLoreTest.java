@@ -7,6 +7,7 @@ import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.tools.augments.AugmentEntry;
 import me.beeliebub.tweaks.tools.augments.AugmentService;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -110,16 +111,91 @@ class AugmentLoreTest {
         Component qualityName = Component.text("✤", NamedTextColor.WHITE)
                 .append(Component.text("Efficiency", NamedTextColor.AQUA));
         Component active = Messages.TOOLS.augmentEntryLore(
-                qualityName, true, "●●");
+                qualityName, true, true, "●●");
         Component inactive = Messages.TOOLS.augmentEntryLore(
-                qualityName, false, "○○");
+                qualityName, false, true, "○○");
 
-        assertEquals(NamedTextColor.WHITE, active.children().getFirst().color());
-        assertEquals(NamedTextColor.AQUA, active.children().getFirst().children().getFirst().color());
+        // The line root is the name component itself; the dots ride as its last child.
+        assertEquals(NamedTextColor.WHITE, active.color());
+        assertEquals(NamedTextColor.AQUA, active.children().getFirst().color());
         assertEquals(NamedTextColor.WHITE, active.children().getLast().color());
         assertTrue(allColors(active.children().getLast(), NamedTextColor.WHITE));
-        assertEquals(NamedTextColor.DARK_GRAY, inactive.children().getFirst().color());
+        assertEquals(TextDecoration.State.FALSE, active.decoration(TextDecoration.ITALIC));
+        assertEquals(NamedTextColor.DARK_GRAY, inactive.color());
         assertTrue(allColors(inactive, NamedTextColor.DARK_GRAY));
+    }
+
+    @Test
+    void plainVanillaSilkTouchAugmentRendersGrayWithoutANumeral() {
+        AugmentService augments = new AugmentService(plugin, null);
+        ItemStack item = new ItemStack(Material.DIAMOND_PICKAXE);
+        augments.ledger().write(item, 1,
+                List.of(new AugmentEntry(NamespacedKey.minecraft("silk_touch"), 1, true)), true);
+        item.addUnsafeEnchantment(Enchantment.SILK_TOUCH, 1);
+
+        augments.updateLore(item);
+
+        Component entryLine = item.getItemMeta().lore().get(1);
+        String plain = PlainTextComponentSerializer.plainText().serialize(entryLine);
+        assertTrue(plain.startsWith("Silk Touch"), plain);
+        assertFalse(plain.contains("Silk Touch I"), plain);
+        // Line root is the gray name; only the trailing dots child is white.
+        assertEquals(NamedTextColor.GRAY, entryLine.color(), entryLine.toString());
+        assertEquals(NamedTextColor.WHITE, entryLine.children().getLast().color());
+    }
+
+    @Test
+    void mendingAugmentRendersAsNumismaticLiteralText() {
+        AugmentService augments = new AugmentService(plugin, null);
+        ItemStack item = new ItemStack(Material.DIAMOND_PICKAXE);
+        augments.ledger().write(item, 1,
+                List.of(new AugmentEntry(NamespacedKey.minecraft("mending"), 1, true)), true);
+        item.addUnsafeEnchantment(Enchantment.MENDING, 1);
+
+        augments.updateLore(item);
+
+        String line = PlainTextComponentSerializer.plainText()
+                .serialize(item.getItemMeta().lore().get(1));
+        assertTrue(line.startsWith("Numismatic"), line);
+        assertFalse(line.contains("Mending"), line);
+    }
+
+    @Test
+    void generatedLoreCarriesNoEmptyFillerComponents() {
+        AugmentService augments = new AugmentService(plugin, null);
+        ItemStack item = new ItemStack(Material.DIAMOND_PICKAXE);
+        augments.ledger().write(item, 3, List.of(
+                new AugmentEntry(NamespacedKey.minecraft("silk_touch"), 1, true),
+                new AugmentEntry(NamespacedKey.minecraft("efficiency"), 5, false)), true);
+        item.addUnsafeEnchantment(Enchantment.SILK_TOUCH, 1);
+        item.addUnsafeEnchantment(Enchantment.VANISHING_CURSE, 1);
+
+        augments.updateLore(item);
+
+        List<Component> lore = item.getItemMeta().lore();
+        for (Component line : lore) {
+            assertFalse(hasEmptyLeaf(line), line.toString());
+        }
+        // The active entry line matches the screenshot standard: italic is set once, at the
+        // line root, and every descendant inherits it rather than restating it.
+        Component entryLine = lore.get(1);
+        assertEquals(TextDecoration.State.FALSE, entryLine.decoration(TextDecoration.ITALIC));
+        assertFalse(entryLine.children().stream().anyMatch(this::carriesExplicitItalic), entryLine.toString());
+    }
+
+    @Test
+    void entryLoreSuppressesAnItalicSpanFromADatapackEnchantName() {
+        Component datapackName = Component.text("⚔ ", NamedTextColor.GOLD)
+                .append(Component.text("Bloodthirst", NamedTextColor.DARK_RED)
+                        .decoration(TextDecoration.ITALIC, true));
+
+        Component activeLine = Messages.TOOLS.augmentEntryLore(datapackName, true, true, "●●");
+        Component curseLine = Messages.TOOLS.augmentCurseLore(datapackName);
+        Component foreignLine = Messages.TOOLS.augmentForeignEnchantLore(datapackName);
+
+        assertFalse(hasItalic(activeLine), activeLine.toString());
+        assertFalse(hasItalic(curseLine), curseLine.toString());
+        assertFalse(hasItalic(foreignLine), foreignLine.toString());
     }
 
     @Test
@@ -221,6 +297,19 @@ class AugmentLoreTest {
                 List.of(new AugmentEntry(NamespacedKey.minecraft("efficiency"), 5, active)), true);
         augments.updateLore(item);
         return item;
+    }
+
+    private boolean hasEmptyLeaf(Component component) {
+        if (component instanceof TextComponent text
+                && text.content().isEmpty() && component.children().isEmpty()) {
+            return true;
+        }
+        return component.children().stream().anyMatch(this::hasEmptyLeaf);
+    }
+
+    private boolean carriesExplicitItalic(Component component) {
+        if (component.decoration(TextDecoration.ITALIC) != TextDecoration.State.NOT_SET) return true;
+        return component.children().stream().anyMatch(this::carriesExplicitItalic);
     }
 
     private boolean hasItalic(Component component) {

@@ -267,6 +267,23 @@ public final class AugmentService {
         return true;
     }
 
+    /**
+     * Reconciles augment state on a smithing-table result. A plain upgrade target that has no
+     * ledger yet is initialized like any other newly delivered damageable. An item that carried
+     * its ledger through the transform keeps every purchase and attachment untouched, but its
+     * slot indicator is re-rendered: the new material can raise the capacity ceiling (a diamond
+     * tool upgraded to netherite gains the netherite slot maximum, still bought one slot at a
+     * time), and the stale lore would otherwise keep showing the old ceiling until the next
+     * purchase or toggle.
+     */
+    public boolean reconcileSmithingResult(ItemStack item) {
+        if (!enabled() || item == null || item.isEmpty()) return false;
+        if (!AugmentLedger.hasLedger(item)) return initializeCraftedItem(item);
+        if (!ledgerStateValid(item)) return false;
+        updateLore(item);
+        return true;
+    }
+
     public RecoveryPlan recoveryPlan(ItemStack item) {
         if (item == null || item.isEmpty() || !ledgerStateValid(item)) {
             return RecoveryPlan.invalid();

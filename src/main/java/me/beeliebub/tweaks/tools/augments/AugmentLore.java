@@ -55,7 +55,9 @@ public final class AugmentLore {
                     : Messages.TOOLS.augmentEnchantmentName(enchantment, entry.level());
             int weight = enchantment == null
                     ? slots.qualityWeight((QualityTier) null) : slots.qualityWeight(enchantment);
-            generated.add(Messages.TOOLS.augmentEntryLore(name, entry.active(),
+            boolean quality = qualityRegistry != null && enchantment != null
+                    && qualityRegistry.getTier(enchantment) != null;
+            generated.add(Messages.TOOLS.augmentEntryLore(name, entry.active(), quality,
                     slots.entryDots(weight, entry.active())));
         }
         Set<Enchantment> accounted = new HashSet<>();

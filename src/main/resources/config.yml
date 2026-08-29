@@ -239,6 +239,8 @@ xp:
       - azalea_leaves
       - flowering_azalea_leaves
     taint-ttl-days: 30
+  # The mending enchantment no longer repairs; carrying it converts collected XP to dollars.
+  # It is shown in-game as "Numismatic" wherever the enchantment name is rendered.
   mending:
     enabled: true
     dollars-per-xp: 1

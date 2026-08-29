@@ -82,7 +82,9 @@ public final class AugmentCraftListener implements Listener {
         if (!(event.getInventory() instanceof SmithingInventory inventory)) return;
         ItemStack result = inventory.getResult();
         if (!isDamageableResult(result)) return;
-        deferDelta(player, result.getType());
+        deferDelta(player, result.getType(),
+                new TradeSnapshot(copyContents(player.getInventory().getStorageContents()),
+                        copy(player.getItemOnCursor())), true);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -106,11 +108,15 @@ public final class AugmentCraftListener implements Listener {
     }
 
     private void deferDelta(Player player, Material resultMaterial, TradeSnapshot before) {
+        deferDelta(player, resultMaterial, before, false);
+    }
+
+    private void deferDelta(Player player, Material resultMaterial, TradeSnapshot before, boolean smithing) {
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             try {
                 if (!plugin.isEnabled() || !player.isOnline() || !augments.enabled()) return;
-                stampStorageDelta(player, resultMaterial, before.storage());
-                stampCursorDelta(player, resultMaterial, before.cursor());
+                stampStorageDelta(player, resultMaterial, before.storage(), smithing);
+                stampCursorDelta(player, resultMaterial, before.cursor(), smithing);
             } catch (RuntimeException failure) {
                 plugin.getLogger().log(Level.WARNING,
                         "Failed to establish augment state on a crafted item", failure);
@@ -131,22 +137,30 @@ public final class AugmentCraftListener implements Listener {
         });
     }
 
-    private void stampStorageDelta(Player player, Material resultMaterial, ItemStack[] before) {
+    private void stampStorageDelta(Player player, Material resultMaterial, ItemStack[] before, boolean smithing) {
         ItemStack[] current = player.getInventory().getStorageContents();
         int count = Math.min(before.length, current.length);
         for (int slot = 0; slot < count; slot++) {
             ItemStack candidate = current[slot];
             if (!isResult(candidate, resultMaterial) || !newlyDelivered(before[slot], candidate)) continue;
-            augments.initializeCraftedItem(candidate);
+            establishResultState(candidate, smithing);
             player.getInventory().setItem(slot, candidate);
         }
     }
 
-    private void stampCursorDelta(Player player, Material resultMaterial, ItemStack before) {
+    private void stampCursorDelta(Player player, Material resultMaterial, ItemStack before, boolean smithing) {
         ItemStack candidate = player.getItemOnCursor();
         if (isResult(candidate, resultMaterial) && newlyDelivered(before, candidate)) {
-            augments.initializeCraftedItem(candidate);
+            establishResultState(candidate, smithing);
             player.setItemOnCursor(candidate);
+        }
+    }
+
+    private void establishResultState(ItemStack candidate, boolean smithing) {
+        if (smithing) {
+            augments.reconcileSmithingResult(candidate);
+        } else {
+            augments.initializeCraftedItem(candidate);
         }
     }
 

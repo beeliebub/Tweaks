@@ -34,7 +34,7 @@ public final class ToolsMessages {
     }
 
     public Component mendingPaid(long xp, long dollars) {
-        return Component.text("Mending converted " + xp + " XP into $" + dollars + ".", NamedTextColor.GREEN);
+        return Component.text("Numismatic converted " + xp + " XP into $" + dollars + ".", NamedTextColor.GREEN);
     }
 
     public Component repairKitGiven() {
@@ -249,11 +249,27 @@ public final class ToolsMessages {
         return Component.text("Augment Gem");
     }
 
+    /**
+     * Enchantments whose displayed name must be a literal string rather than the vanilla
+     * translation key. The Mending enchantment is repurposed as the XP-to-cash "Numismatic"
+     * mechanic, and a client resolving {@code enchantment.minecraft.mending} would otherwise
+     * show the stale vanilla name.
+     */
+    private static final java.util.Map<String, String> DISPLAY_NAME_OVERRIDES =
+            java.util.Map.of("minecraft:mending", "Numismatic");
+
     public Component enchantmentName(Enchantment enchantment) {
         if (enchantment == null) return Component.text("Unknown enchantment")
                 .decoration(TextDecoration.ITALIC, false);
+        String override = DISPLAY_NAME_OVERRIDES.get(enchantment.getKey().toString());
+        if (override != null) {
+            return Component.text(override).decoration(TextDecoration.ITALIC, false);
+        }
         try {
-            return enchantment.description().decoration(TextDecoration.ITALIC, false);
+            // A data pack description may opt a child span into italic; clear it everywhere so
+            // the name matches the non-italic vanilla enchantment tooltip in lore, dialogs, and
+            // chat rather than relying on root inheritance a child can override.
+            return clearItalic(enchantment.description()).decoration(TextDecoration.ITALIC, false);
         } catch (RuntimeException unavailable) {
             return fallbackEnchantmentName(enchantment.getKey().getKey());
         }
@@ -273,10 +289,13 @@ public final class ToolsMessages {
     }
 
     public Component augmentEnchantmentName(Enchantment enchantment, int level) {
-        return enchantmentName(enchantment)
-                .append(Component.space())
-                .append(Component.text(romanNumeral(level)))
-                .decoration(TextDecoration.ITALIC, false);
+        Component name = enchantmentName(enchantment);
+        // Single-level enchantments (Silk Touch, Numismatic, Infinity, ...) carry no numeral,
+        // matching the vanilla enchantment tooltip.
+        if (enchantment == null || enchantment.getMaxLevel() <= 1) {
+            return name;
+        }
+        return name.append(Component.text(" " + romanNumeral(level)));
     }
 
     public Component augmentEnchantmentName(NamespacedKey key, int level) {
@@ -329,23 +348,36 @@ public final class ToolsMessages {
                 .decoration(TextDecoration.ITALIC, false);
     }
 
-    public Component augmentEntryLore(Component enchantmentName, boolean active, String slotDots) {
+    public Component augmentEntryLore(Component enchantmentName, boolean active, boolean quality, String slotDots) {
         NamedTextColor inactiveColor = NamedTextColor.DARK_GRAY;
-        Component renderedName = active ? enchantmentName : colorTree(enchantmentName, inactiveColor);
+        Component base = clearItalic(enchantmentName);
+        Component renderedName;
+        if (!active) {
+            renderedName = colorTree(base, inactiveColor);
+        } else if (quality) {
+            // A quality variant keeps the tier color supplied by its enchantment component.
+            renderedName = base;
+        } else {
+            // A plain vanilla enchantment follows the gray vanilla tooltip color instead of
+            // falling through to the default lore tint.
+            renderedName = colorTree(base, NamedTextColor.GRAY);
+        }
         NamedTextColor dotsColor = active ? NamedTextColor.WHITE : inactiveColor;
-        Component line = Component.empty()
-                .append(renderedName)
-                .append(Component.text(" " + slotDots, dotsColor));
-        return withoutItalic(line);
+        // The line root is the name component itself; the weight dots ride as a single child.
+        // Only the root carries italic:false — descendants inherit it.
+        return renderedName.append(Component.text(" " + slotDots, dotsColor))
+                .decoration(TextDecoration.ITALIC, false);
     }
 
     public Component augmentCurseLore(Component enchantmentName) {
-        return withoutItalic(Component.text("", NamedTextColor.RED).append(enchantmentName));
+        return clearItalic(enchantmentName).colorIfAbsent(NamedTextColor.RED)
+                .decoration(TextDecoration.ITALIC, false);
     }
 
     public Component augmentForeignEnchantLore(Component enchantmentName) {
-        return withoutItalic(Component.text("Enchantment: ", NamedTextColor.RED)
-                .append(enchantmentName));
+        return Component.text("Enchantment: ", NamedTextColor.RED)
+                .append(clearItalic(enchantmentName))
+                .decoration(TextDecoration.ITALIC, false);
     }
 
     public Component augmentInventoryGem(Component enchantmentName) {
@@ -381,14 +413,41 @@ public final class ToolsMessages {
                 + page + " of " + totalPages + ".", NamedTextColor.GRAY);
     }
 
+    // Enchantment descriptions come from data packs, which control their nesting depth. Both
+    // tree walks below stop recursing past this bound so a pathologically deep component cannot
+    // overflow the stack while rendering lore inside an event handler.
+    private static final int MAX_COMPONENT_DEPTH = 40;
+
     private Component colorTree(Component component, NamedTextColor color) {
-        return component.color(color).children(component.children().stream()
-                .map(child -> colorTree(child, color)).toList());
+        return colorTree(component, color, 0);
     }
 
-    private Component withoutItalic(Component component) {
-        return component.decoration(TextDecoration.ITALIC, false).children(component.children().stream()
-                .map(this::withoutItalic).toList());
+    private Component colorTree(Component component, NamedTextColor color, int depth) {
+        if (depth >= MAX_COMPONENT_DEPTH || component.children().isEmpty()) {
+            return component.color(color);
+        }
+        return component.color(color).children(component.children().stream()
+                .map(child -> colorTree(child, color, depth + 1)).toList());
+    }
+
+    /**
+     * Clears an explicitly-enabled italic decoration anywhere in a component so a lore line
+     * stays non-italic even when a data pack opts a child span into italic. Nodes that leave
+     * the decoration unset are untouched and inherit the line root's value.
+     */
+    private Component clearItalic(Component component) {
+        return clearItalic(component, 0);
+    }
+
+    private Component clearItalic(Component component, int depth) {
+        Component base = component.decoration(TextDecoration.ITALIC) == TextDecoration.State.TRUE
+                ? component.decoration(TextDecoration.ITALIC, false)
+                : component;
+        if (depth >= MAX_COMPONENT_DEPTH || base.children().isEmpty()) {
+            return base;
+        }
+        return base.children(base.children().stream()
+                .map(child -> clearItalic(child, depth + 1)).toList());
     }
 
     private String romanNumeral(int level) {

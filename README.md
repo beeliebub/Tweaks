@@ -605,7 +605,8 @@ crops are rolled once, not once per replant callback.
 When Mending is enabled, XP collected by a player carrying Mending in either hand or armor is
 converted to dollars at the configured rate. The XP is consumed only after the economy accepts the
 credit. The normal repair step is cancelled so the full orb amount reaches the payout conversion.
-The enchantment key is resolved from the live `xp.mending.enchantment-key` setting.
+The enchantment key is resolved from the live `xp.mending.enchantment-key` setting. Because the
+enchantment no longer mends, it is displayed everywhere as **Numismatic** rather than "Mending".
 
 ### Cash Items
 
@@ -681,8 +682,10 @@ quality through Legendary; quality exclusivity is always enforced and vanilla ex
 configurable. Turning an augment off removes its active enchantment but keeps its slot occupied.
 
 Unenchanted crafted, smithed, and villager-traded damageable results receive a migrated ledger with
-slot 1 free; results carrying live enchantments receive zero purchased slots. Netherite upgrades
-carry an existing ledger without another free slot. Existing non-curse enchantments on a
+slot 1 free; results carrying live enchantments receive zero purchased slots. A netherite upgrade
+carries an existing ledger through unchanged, granting no free slot, but its slot indicator is
+re-rendered so the netherite capacity ceiling shows immediately — the extra slots still have to be
+purchased one at a time. Existing non-curse enchantments on a
 ledger-less item migrate into gems only after a clickable `/augment confirm` prompt quotes the
 slot-1 XP price; `/augment cancel` or the 30-second expiry leaves the item and XP unchanged.
 Confirmation is one-shot, tolerates ordinary durability loss, rejects item swaps or meaningful
@@ -691,10 +694,14 @@ delivers the gems, and opens the hub. An unenchanted ledger-less item opens the 
 writes no PDC. The old curse-gem attachment route cannot grant free migration.
 
 Legacy curses remain real enchantments and are also folded into the ledger's permanent curse list.
-Augmented tool lore is non-italic: active entries preserve their quality color and use white slot
-symbols, inactive entries are dark gray, levels use Roman numerals, and any real enchantment not
-accounted for by an active entry or bound curse is shown in a red catch-all line. Curse lines show
-the enchantment name without a redundant `Curse:` prefix. Vanilla enchantments are hidden from the
+Augmented tool lore is non-italic and compact — one line per entry, with the enchantment name, its
+level, and its slot-weight dots on that single line rather than spread across filler components.
+Active quality entries preserve their quality color and rarity icon, active plain (non-quality)
+entries render in vanilla gray, inactive entries are dark gray, multi-level enchantments show a
+Roman numeral while single-level enchantments (Silk Touch, Numismatic, ...) show none, and any real
+enchantment not accounted for by an active entry or bound curse is shown in a red catch-all line.
+The Numismatic enchantment (vanilla Mending, repurposed for the XP-to-cash payout) always renders
+by that name. Curse lines show the enchantment name without a redundant `Curse:` prefix. Vanilla enchantments are hidden from the
 tooltip while existing tooltip-hidden components are preserved. Lore ownership uses exact
 component fingerprints, so foreign lookalike lines (including exact visible copies) survive
 refreshes. A lore-bearing Disenchanting Bundle remains the destructive recovery path: it migrates
@@ -875,7 +882,7 @@ These protections are active by default; a few expose a `/tconfig` toggle or wor
 | **Creeper Block Protection** | Creeper explosions still deal damage but no longer destroy blocks. |
 | **Enderman Grief Protection** | Endermen cannot pick up or place blocks. |
 | **End Portal Control** | End portals are disabled in configured worlds (`jass:archive` by default). Players who try receive a red message. |
-| **Lore-Tagged Emerald Trade Block** | Emeralds carrying any lore cannot be used to trade with a regular Villager. They are refused from the trade cost slots, and any trade that still has one in a cost slot — e.g. from clicking a trade offer to auto-fill it, or shift-clicking the result to quick-trade — is cancelled outright. This includes the plugin's own Resource Rupees. Wandering Traders are exempt and still accept lore-tagged emeralds. |
+| **Villager Trade Currency Lockout** | A regular Villager's trade menu will not open while you are carrying any lore-marked emerald or emerald block — this covers the plugin's Resource Rupees and Resource Rupee Blocks, plus any custom lore-tagged emerald. Stash the currency (ender chest, a container, or drop it) to trade. You can still rename a villager with a name tag. Wandering Traders are unaffected and still work while you carry currency. |
 | **Villager Trade XP Removal** | Completed trades with villagers and wandering traders no longer drop experience orbs to the player. The merchant still gains its own trade experience and levels up normally. Enabled by default; toggle with `/tconfig worldmanagement.villager-trade-xp-disabled <true\|false>`. |
 
 ### Spawn Egg Restrictions
@@ -1033,6 +1040,7 @@ A rare currency item that can be found while gathering in resource worlds or ear
   - 1 **Resource Rupee Block** → 9 **Resource Rupees**.
 - **Stackable**: Both Rupees and Rupee Blocks stack normally and can be stored in any container.
 - **Visuals**: They feature a distinct green name and a `"...the Wanderer's Path..."` lore line to distinguish them from regular emeralds.
+- **Villager trades**: A regular Villager will not open its trade menu while you carry Rupees or Rupee Blocks (or any lore-marked emerald) — stash them first. Wandering Traders are unaffected. See [World Protections](#world-protections).
 
 ### Whack an Andrew
 

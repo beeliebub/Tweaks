@@ -24,6 +24,7 @@ import org.bukkit.inventory.SmithingInventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.MerchantRecipe;
 import org.bukkit.persistence.PersistentDataType;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -298,6 +299,30 @@ class AugmentCraftListenerTest {
         server.getScheduler().performOneTick();
 
         assertEquals(4, augments.ledger().slots(player.getItemOnCursor()));
+    }
+
+    @Test
+    void netheriteUpgradeWidensTheRenderedSlotCeilingToTheNewMaterial() {
+        PlayerMock player = server.addPlayer("SmithingCeiling");
+        SmithingInventory inventory = (SmithingInventory) Bukkit.createInventory(null, InventoryType.SMITHING);
+        ItemStack result = new ItemStack(Material.NETHERITE_PICKAXE);
+        augments.ledger().write(result, 4, java.util.List.of(), true);
+        inventory.setResult(result);
+        SmithItemEvent event = mock(SmithItemEvent.class);
+        when(event.getWhoClicked()).thenReturn(player);
+        when(event.getInventory()).thenReturn(inventory);
+
+        listener.onSmith(event);
+        player.setItemOnCursor(inventory.getResult());
+        server.getScheduler().performOneTick();
+
+        ItemStack delivered = player.getItemOnCursor();
+        String slotLine = delivered.getItemMeta().lore().stream()
+                .map(PlainTextComponentSerializer.plainText()::serialize)
+                .filter(line -> line.startsWith("Augment Slots:"))
+                .findFirst().orElseThrow();
+        long markers = slotLine.chars().filter(c -> c == '●' || c == '○' || c == '◌').count();
+        assertEquals(11, markers, slotLine);
     }
 
     private static CraftItemEvent craftEvent(PlayerMock player, Recipe recipe) {
