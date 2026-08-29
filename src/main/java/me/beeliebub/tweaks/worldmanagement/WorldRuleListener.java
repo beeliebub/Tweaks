@@ -49,6 +49,7 @@ public class WorldRuleListener implements Listener {
     private static final String SPAWN_EGG_SUFFIX = "_spawn_egg";
     private static final int COST_SLOT_A = 0;
     private static final int COST_SLOT_B = 1;
+    private static final int RESULT_SLOT = 2;
 
     private final Tweaks plugin;
     private final ProtectionManager protection;
@@ -179,9 +180,12 @@ public class WorldRuleListener implements Listener {
 
     // ─── Villager trade blocking (was VillagerTradeListener) ──────────────────
 
-    // Blocks emeralds carrying lore from being placed in the cost slots of a
-    // regular Villager's merchant GUI. Wandering Traders are sibling type, so
-    // their trades are unaffected.
+    // Keeps lore-bearing emeralds from being used at a regular Villager's merchant
+    // GUI. Wandering Traders are a sibling type, so their trades are unaffected.
+    // This handler covers manual placement into the cost slots (cursor, shift-click,
+    // drag, hotbar swap) and — because selecting a trade offer auto-fills the cost
+    // slots without firing InventoryClickEvent — also refuses the result slot while
+    // a lore emerald is staged there. onPlayerTrade is the final backstop.
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onClick(InventoryClickEvent event) {
         if (!(event.getInventory() instanceof MerchantInventory mi)) return;
@@ -190,6 +194,17 @@ public class WorldRuleListener implements Listener {
         InventoryAction action = event.getAction();
         int rawSlot = event.getRawSlot();
         boolean topSlotClicked = rawSlot == COST_SLOT_A || rawSlot == COST_SLOT_B;
+
+        // Taking the result while a lore emerald is staged in a cost slot completes
+        // the trade. Shift-clicking the result in particular makes vanilla move the
+        // output into the player inventory before PlayerTradeEvent fires, so this
+        // has to be stopped here, before vanilla acts, rather than only at the
+        // trade event. Any interaction with the result slot is refused outright
+        // while a cost slot holds a lore emerald.
+        if (rawSlot == RESULT_SLOT && costSlotsHaveLoreEmerald(mi)) {
+            rejectLoreEmerald(event);
+            return;
+        }
 
         switch (action) {
             case PLACE_ALL, PLACE_ONE, PLACE_SOME, SWAP_WITH_CURSOR -> {
@@ -234,8 +249,32 @@ public class WorldRuleListener implements Listener {
         }
     }
 
+    // Final backstop: cancels the trade outright if a lore-bearing emerald reached
+    // a cost slot by any path onClick/onDrag didn't already stop (a trade completed
+    // without an InventoryClickEvent on the result slot). A cancelled trade consumes
+    // nothing; the cost-slot items stay put and are returned to the player when the
+    // GUI closes. Wandering Traders are not Villagers, so they never match.
+    //
+    // A trade can only complete while its merchant GUI is the player's open top
+    // inventory, so that inventory carries the payment slots being inspected. If
+    // that ever isn't the case the guard falls through and the trade proceeds —
+    // the safe direction, since it can't wrongly block a legitimate trade.
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPlayerTrade(PlayerTradeEvent event) {
+        if (!(event.getVillager() instanceof Villager)) return;
+        if (!(event.getPlayer().getOpenInventory().getTopInventory() instanceof MerchantInventory mi)) return;
+        if (!costSlotsHaveLoreEmerald(mi)) return;
+
+        event.setCancelled(true);
+        notifyRejection(event.getPlayer());
+    }
+
     private boolean isRegularVillagerMerchant(Merchant merchant) {
         return merchant instanceof Villager;
+    }
+
+    private boolean costSlotsHaveLoreEmerald(MerchantInventory mi) {
+        return hasLoreEmerald(mi.getItem(COST_SLOT_A)) || hasLoreEmerald(mi.getItem(COST_SLOT_B));
     }
 
     private boolean hasLoreEmerald(ItemStack item) {

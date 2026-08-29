@@ -144,6 +144,102 @@ class VillagerTradeListenerTest {
     }
 
     @Test
+    void onClickRejectsResultSlotWhenLoreEmeraldStagedInCostSlot() {
+        PlayerMock player = server.addPlayer();
+        Villager villager = mock(Villager.class);
+        MerchantInventory inventory = mock(MerchantInventory.class);
+        when(inventory.getMerchant()).thenReturn(villager);
+        when(inventory.getItem(0)).thenReturn(createLoreEmerald());
+        when(inventory.getItem(1)).thenReturn(null);
+
+        InventoryClickEvent mockEvent = mock(InventoryClickEvent.class);
+        when(mockEvent.getInventory()).thenReturn(inventory);
+        when(mockEvent.getWhoClicked()).thenReturn(player);
+        when(mockEvent.getRawSlot()).thenReturn(2);
+        when(mockEvent.getAction()).thenReturn(InventoryAction.MOVE_TO_OTHER_INVENTORY);
+
+        listener.onClick(mockEvent);
+
+        verify(mockEvent).setCancelled(true);
+    }
+
+    @Test
+    void onClickAllowsResultSlotWithPlainEmeraldInCostSlot() {
+        PlayerMock player = server.addPlayer();
+        Villager villager = mock(Villager.class);
+        MerchantInventory inventory = mock(MerchantInventory.class);
+        when(inventory.getMerchant()).thenReturn(villager);
+        when(inventory.getItem(0)).thenReturn(new ItemStack(Material.EMERALD));
+        when(inventory.getItem(1)).thenReturn(null);
+
+        InventoryClickEvent mockEvent = mock(InventoryClickEvent.class);
+        when(mockEvent.getInventory()).thenReturn(inventory);
+        when(mockEvent.getWhoClicked()).thenReturn(player);
+        when(mockEvent.getRawSlot()).thenReturn(2);
+        when(mockEvent.getAction()).thenReturn(InventoryAction.MOVE_TO_OTHER_INVENTORY);
+
+        listener.onClick(mockEvent);
+
+        verify(mockEvent, never()).setCancelled(true);
+    }
+
+    @Test
+    void onPlayerTradeCancelsWhenLoreEmeraldInCostSlot() {
+        Player player = mock(Player.class);
+        InventoryView view = mock(InventoryView.class);
+        MerchantInventory inventory = mock(MerchantInventory.class);
+        when(player.getOpenInventory()).thenReturn(view);
+        when(view.getTopInventory()).thenReturn(inventory);
+        when(inventory.getItem(0)).thenReturn(createLoreEmerald());
+        when(inventory.getItem(1)).thenReturn(null);
+
+        PlayerTradeEvent event = mock(PlayerTradeEvent.class);
+        when(event.getVillager()).thenReturn(mock(Villager.class));
+        when(event.getPlayer()).thenReturn(player);
+
+        listener.onPlayerTrade(event);
+
+        verify(event).setCancelled(true);
+    }
+
+    @Test
+    void onPlayerTradeAllowsPlainEmeraldInCostSlot() {
+        Player player = mock(Player.class);
+        InventoryView view = mock(InventoryView.class);
+        MerchantInventory inventory = mock(MerchantInventory.class);
+        when(player.getOpenInventory()).thenReturn(view);
+        when(view.getTopInventory()).thenReturn(inventory);
+        when(inventory.getItem(0)).thenReturn(new ItemStack(Material.EMERALD));
+        when(inventory.getItem(1)).thenReturn(null);
+
+        PlayerTradeEvent event = mock(PlayerTradeEvent.class);
+        when(event.getVillager()).thenReturn(mock(Villager.class));
+        when(event.getPlayer()).thenReturn(player);
+
+        listener.onPlayerTrade(event);
+
+        verify(event, never()).setCancelled(true);
+    }
+
+    @Test
+    void onPlayerTradeIgnoresWanderingTrader() {
+        Player player = mock(Player.class);
+        InventoryView view = mock(InventoryView.class);
+        MerchantInventory inventory = mock(MerchantInventory.class);
+        when(player.getOpenInventory()).thenReturn(view);
+        when(view.getTopInventory()).thenReturn(inventory);
+        when(inventory.getItem(0)).thenReturn(createLoreEmerald());
+
+        PlayerTradeEvent event = mock(PlayerTradeEvent.class);
+        when(event.getVillager()).thenReturn(mock(WanderingTrader.class));
+        when(event.getPlayer()).thenReturn(player);
+
+        listener.onPlayerTrade(event);
+
+        verify(event, never()).setCancelled(true);
+    }
+
+    @Test
     void onVillagerTradeSuppressesXpByDefault() {
         PlayerTradeEvent event = mock(PlayerTradeEvent.class);
 

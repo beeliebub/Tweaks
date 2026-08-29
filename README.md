@@ -875,7 +875,7 @@ These protections are active by default; a few expose a `/tconfig` toggle or wor
 | **Creeper Block Protection** | Creeper explosions still deal damage but no longer destroy blocks. |
 | **Enderman Grief Protection** | Endermen cannot pick up or place blocks. |
 | **End Portal Control** | End portals are disabled in configured worlds (`jass:archive` by default). Players who try receive a red message. |
-| **Lore-Tagged Emerald Trade Block** | Emeralds carrying any lore cannot be placed into a regular Villager's trade cost slots. Wandering Traders are exempt and still accept lore-tagged emeralds. |
+| **Lore-Tagged Emerald Trade Block** | Emeralds carrying any lore cannot be used to trade with a regular Villager. They are refused from the trade cost slots, and any trade that still has one in a cost slot — e.g. from clicking a trade offer to auto-fill it, or shift-clicking the result to quick-trade — is cancelled outright. This includes the plugin's own Resource Rupees. Wandering Traders are exempt and still accept lore-tagged emeralds. |
 | **Villager Trade XP Removal** | Completed trades with villagers and wandering traders no longer drop experience orbs to the player. The merchant still gains its own trade experience and levels up normally. Enabled by default; toggle with `/tconfig worldmanagement.villager-trade-xp-disabled <true\|false>`. |
 
 ### Spawn Egg Restrictions
