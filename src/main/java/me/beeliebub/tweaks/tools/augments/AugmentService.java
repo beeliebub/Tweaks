@@ -62,8 +62,11 @@ public final class AugmentService {
                           Consumer<ItemStack> durabilityStamp,
                           Consumer<ItemStack> durabilityTailRefresh,
                           AugmentPendingConfirmations pendingConfirmations) {
+        // Constructors that do not supply a dedicated full-repair seam fall back to the plain
+        // durability stamp, matching the behavior legacy-tool conversion had before the seam existed
+        // rather than silently doing nothing.
         this(plugin, qualityRegistry, durabilityStamp, durabilityTailRefresh,
-                item -> {}, pendingConfirmations);
+                durabilityStamp, pendingConfirmations);
     }
 
     public AugmentService(Tweaks plugin, QualityRegistry qualityRegistry,
@@ -446,7 +449,15 @@ public final class AugmentService {
         lore.update(held, qualityRegistry);
         // Converting a legacy tool stamps the custom durability projection and clears the wear it
         // accumulated as a plain tool, so it lands in the player's hand at full projected durability.
-        durabilityFullRepair.accept(held);
+        // The XP is already spent and the enchantments already stripped by this point; a failure in
+        // the cosmetic repair step must not abort the gem delivery that compensates the player.
+        try {
+            durabilityFullRepair.accept(held);
+        } catch (RuntimeException repairFailure) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Full-repair step failed during legacy tool conversion; the conversion still completed",
+                    repairFailure);
+        }
         player.sendMessage(Messages.TOOLS.augmentMigrated(legacyGems.size()));
         addGems(player, legacyGems);
         return held;

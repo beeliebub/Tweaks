@@ -185,6 +185,55 @@ class DurabilityServiceTest {
     }
 
     @Test
+    void restoreFullDurabilityClearsWearAndTheDepletedMarkerWithoutAdvancingTheTier() {
+        DurabilityService durability = new DurabilityService(plugin);
+        ItemStack item = augmented(Material.IRON_PICKAXE, durability);
+        setDamage(item, durability.maxDamage(item) - 1);
+        durability.ensureStamped(item);
+        assertTrue(durability.isSpent(item));
+
+        assertTrue(durability.restoreFullDurability(item));
+        assertEquals(0, durability.damage(item));
+        assertEquals(0, item.getData(DataComponentTypes.DAMAGE));
+        assertEquals(0, durability.tier(item));
+        assertEquals(java.util.List.of(), item.getItemMeta().getPersistentDataContainer().get(
+                new NamespacedKey(plugin, "durability_owned_lore"), PersistentDataType.LIST.strings()));
+    }
+
+    @Test
+    void restoreFullDurabilityIsANoOpForAnUndamagedUnmarkedItem() {
+        DurabilityService durability = new DurabilityService(plugin);
+        ItemStack item = augmented(Material.IRON_PICKAXE, durability);
+
+        assertFalse(durability.restoreFullDurability(item));
+        assertEquals(0, durability.damage(item));
+    }
+
+    @Test
+    void restoreFullDurabilityPreservesForeignMetadata() {
+        DurabilityService durability = new DurabilityService(plugin);
+        ItemStack item = new ItemStack(Material.IRON_PICKAXE);
+        Damageable meta = (Damageable) item.getItemMeta();
+        meta.displayName(Component.text("Renamed"));
+        meta.lore(java.util.List.of(Component.text("foreign lore")));
+        meta.getPersistentDataContainer().set(new NamespacedKey(plugin, "foreign_key"),
+                PersistentDataType.STRING, "kept");
+        item.setItemMeta(meta);
+        new AugmentLedger(plugin).write(item, 0, java.util.List.of(), true);
+        durability.ensureStamped(item);
+        setDamage(item, 200);
+
+        assertTrue(durability.restoreFullDurability(item));
+
+        assertEquals(0, durability.damage(item));
+        Damageable after = (Damageable) item.getItemMeta();
+        assertEquals(Component.text("Renamed"), after.displayName());
+        assertEquals(java.util.List.of(Component.text("foreign lore")), after.lore());
+        assertEquals("kept", after.getPersistentDataContainer().get(
+                new NamespacedKey(plugin, "foreign_key"), PersistentDataType.STRING));
+    }
+
+    @Test
     void pdcRepairStampChangesStillReassertBothComponents() {
         DurabilityService durability = new DurabilityService(plugin);
         ItemStack item = augmented(Material.IRON_PICKAXE, durability);
