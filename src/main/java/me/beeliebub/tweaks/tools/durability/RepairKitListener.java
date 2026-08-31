@@ -27,7 +27,6 @@ import java.util.List;
 @SuppressWarnings("UnstableApiUsage")
 public final class RepairKitListener implements Listener {
 
-    private static final int PAGE_SIZE = 12;
     private final RepairKitItem kitItem;
     private final DurabilityService durability;
 
@@ -45,7 +44,7 @@ public final class RepairKitListener implements Listener {
         ItemStack kit = event.getItem();
         if (!kitItem.isKit(kit)) return;
         event.setCancelled(true);
-        openDialog(event.getPlayer(), 0);
+        openDialog(event.getPlayer());
     }
 
     public List<Target> targets(Player player) {
@@ -98,32 +97,17 @@ public final class RepairKitListener implements Listener {
         return true;
     }
 
-    private void openDialog(Player player, int page) {
+    private void openDialog(Player player) {
         List<Target> targets = targets(player);
         if (targets.isEmpty()) {
             player.sendMessage(Messages.TOOLS.repairKitNoTarget());
             return;
         }
-        int totalPages = Math.max(1, (targets.size() + PAGE_SIZE - 1) / PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * PAGE_SIZE;
-        int end = Math.min(start + PAGE_SIZE, targets.size());
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            Target target = targets.get(i);
+        for (Target target : targets) {
             buttons.add(button(Messages.TOOLS.repairKitTargetName(target.item()),
                     Messages.TOOLS.repairKitTargetTooltip(target.item(), durability.tier(target.item()), maxTier()),
                     p -> apply(p, target.slot(), target.item())));
-        }
-        if (currentPage > 0) {
-            buttons.add(button(Messages.TOOLS.repairKitPreviousPage(),
-                    Messages.TOOLS.repairKitPageTooltip(currentPage, totalPages),
-                    p -> openDialog(p, currentPage - 1)));
-        }
-        if (currentPage + 1 < totalPages) {
-            buttons.add(button(Messages.TOOLS.repairKitNextPage(),
-                    Messages.TOOLS.repairKitPageTooltip(currentPage + 2, totalPages),
-                    p -> openDialog(p, currentPage + 1)));
         }
         DialogBase base = DialogBase.builder(Messages.TOOLS.repairKitName())
                 .body(List.of(DialogBody.plainMessage(Messages.TOOLS.repairKitDialogBody())))

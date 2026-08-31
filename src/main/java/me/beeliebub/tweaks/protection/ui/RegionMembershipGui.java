@@ -24,17 +24,11 @@ import java.util.UUID;
 final class RegionMembershipGui {
 
     private static final int COLUMNS = 2;
-    private static final int PAGE_SIZE = 12;
 
     private RegionMembershipGui() {}
 
     static void openMembersMenu(Player player, Region region, ProtectionManager pm,
                                 PermissionManager permissions) {
-        openMembersMenu(player, region, pm, permissions, 0);
-    }
-
-    private static void openMembersMenu(Player player, Region region, ProtectionManager pm,
-                                       PermissionManager permissions, int page) {
         Region fresh = RegionGUI.refreshRegion(pm, region);
         if (fresh == null) {
             player.sendMessage(Messages.PROTECTION.text(Text.REGION_GONE));
@@ -44,30 +38,20 @@ final class RegionMembershipGui {
         members.sort(java.util.Comparator.comparing(RegionGUI::lookupName, String.CASE_INSENSITIVE_ORDER));
         List<String> groups = new ArrayList<>(fresh.memberGroups());
         int total = members.size() + groups.size();
-        int pages = Math.max(1, (total + PAGE_SIZE - 1) / PAGE_SIZE);
-        int current = Math.max(0, Math.min(page, pages - 1));
-        int start = current * PAGE_SIZE;
-        int end = Math.min(start + PAGE_SIZE, total);
 
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            if (i < members.size()) {
-                UUID target = members.get(i);
+        for (UUID target : members) {
                 buttons.add(RegionGUI.dialogButton(
                         Messages.PROTECTION.text(Text.GUI_MEMBER_REMOVE, RegionGUI.lookupName(target)),
                         Messages.PROTECTION.text(Text.GUI_MEMBER_REMOVE_TIP),
-                        p -> removeMember(p, fresh, pm, permissions, target, current)));
-            } else {
-                String group = groups.get(i - members.size());
-                buttons.add(RegionGUI.dialogButton(
-                        Messages.PROTECTION.text(Text.GUI_GROUP_REMOVE, group),
-                        Messages.PROTECTION.text(Text.GUI_GROUP_REMOVE_TIP),
-                        p -> removeMemberGroup(p, fresh, pm, permissions, group, current)));
-            }
+                        p -> removeMember(p, fresh, pm, permissions, target)));
         }
-        RegionGUI.addPageNavButtons(buttons, current, pages,
-                p -> openMembersMenu(p, fresh, pm, permissions, current - 1),
-                p -> openMembersMenu(p, fresh, pm, permissions, current + 1));
+        for (String group : groups) {
+            buttons.add(RegionGUI.dialogButton(
+                    Messages.PROTECTION.text(Text.GUI_GROUP_REMOVE, group),
+                    Messages.PROTECTION.text(Text.GUI_GROUP_REMOVE_TIP),
+                    p -> removeMemberGroup(p, fresh, pm, permissions, group)));
+        }
         buttons.add(RegionGUI.dialogButton(Messages.PROTECTION.text(Text.GUI_ADD_MEMBER),
                 Messages.PROTECTION.text(Text.GUI_ADD_MEMBER_TIP),
                 p -> openAddMemberDialog(p, fresh, pm, permissions)));
@@ -76,7 +60,7 @@ final class RegionMembershipGui {
                 p -> RegionGUI.openRegionHub(p, fresh, pm, permissions));
         DialogBase base = DialogBase.builder(Messages.PROTECTION.title(Text.GUI_MEMBERS_TITLE, fresh.id()))
                 .body(List.of(io.papermc.paper.registry.data.dialog.body.DialogBody.plainMessage(
-                        RegionGUI.pageSummary(total, Text.GUI_WORD_MEMBER, Text.GUI_WORD_MEMBERS, current, pages))))
+                        RegionGUI.listSummary(total, Text.GUI_WORD_MEMBER, Text.GUI_WORD_MEMBERS))))
                 .build();
         Dialog dialog = Dialog.create(b -> b.empty().base(base)
                 .type(DialogType.multiAction(buttons).columns(COLUMNS).exitAction(back).build()));
@@ -84,7 +68,7 @@ final class RegionMembershipGui {
     }
 
     private static void removeMember(Player player, Region region, ProtectionManager pm,
-                                     PermissionManager permissions, UUID target, int page) {
+                                     PermissionManager permissions, UUID target) {
         World world = RegionGUI.worldOf(region);
         if (!pm.removeMember(world, region.id(), target)) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_MEMBER_NOT_PRESENT));
@@ -92,17 +76,17 @@ final class RegionMembershipGui {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_MEMBER_REMOVED,
                     RegionGUI.lookupName(target), region.id()));
         }
-        openMembersMenu(player, region, pm, permissions, page);
+        openMembersMenu(player, region, pm, permissions);
     }
 
     private static void removeMemberGroup(Player player, Region region, ProtectionManager pm,
-                                          PermissionManager permissions, String group, int page) {
+                                          PermissionManager permissions, String group) {
         if (!pm.removeMemberGroup(RegionGUI.worldOf(region), region.id(), group)) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_MEMBER_GROUP_NOT_PRESENT, group));
         } else {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_MEMBER_GROUP_REMOVED, group, region.id()));
         }
-        openMembersMenu(player, region, pm, permissions, page);
+        openMembersMenu(player, region, pm, permissions);
     }
 
     private static void openAddMemberDialog(Player player, Region region, ProtectionManager pm,
@@ -157,11 +141,6 @@ final class RegionMembershipGui {
 
     static void openManagersMenu(Player player, Region region, ProtectionManager pm,
                                  PermissionManager permissions) {
-        openManagersMenu(player, region, pm, permissions, 0);
-    }
-
-    static void openManagersMenu(Player player, Region region, ProtectionManager pm,
-                                 PermissionManager permissions, int page) {
         if (!RegionAuth.isOwnerOrAdmin(player, region, pm)) {
             player.sendMessage(Messages.PROTECTION.text(Text.MANAGER_EDIT_AUTH));
             return;
@@ -175,28 +154,18 @@ final class RegionMembershipGui {
         managers.sort(java.util.Comparator.comparing(RegionGUI::lookupName, String.CASE_INSENSITIVE_ORDER));
         List<String> groups = new ArrayList<>(fresh.managerGroups());
         int total = managers.size() + groups.size();
-        int pages = Math.max(1, (total + PAGE_SIZE - 1) / PAGE_SIZE);
-        int current = Math.max(0, Math.min(page, pages - 1));
-        int start = current * PAGE_SIZE;
-        int end = Math.min(start + PAGE_SIZE, total);
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            if (i < managers.size()) {
-                UUID target = managers.get(i);
-                buttons.add(RegionGUI.dialogButton(
-                        Messages.PROTECTION.text(Text.GUI_MEMBER_REMOVE, RegionGUI.lookupName(target)),
-                        Messages.PROTECTION.text(Text.GUI_MANAGER_REMOVE_TIP),
-                        p -> handleRemoveManager(p, fresh, pm, permissions, target, current)));
-            } else {
-                String group = groups.get(i - managers.size());
-                buttons.add(RegionGUI.dialogButton(Messages.PROTECTION.text(Text.GUI_GROUP_REMOVE, group),
-                        Messages.PROTECTION.text(Text.GUI_MANAGER_GROUP_REMOVE_TIP),
-                        p -> handleRemoveManagerGroup(p, fresh, pm, permissions, group, current)));
-            }
+        for (UUID target : managers) {
+            buttons.add(RegionGUI.dialogButton(
+                    Messages.PROTECTION.text(Text.GUI_MEMBER_REMOVE, RegionGUI.lookupName(target)),
+                    Messages.PROTECTION.text(Text.GUI_MANAGER_REMOVE_TIP),
+                    p -> handleRemoveManager(p, fresh, pm, permissions, target)));
         }
-        RegionGUI.addPageNavButtons(buttons, current, pages,
-                p -> openManagersMenu(p, fresh, pm, permissions, current - 1),
-                p -> openManagersMenu(p, fresh, pm, permissions, current + 1));
+        for (String group : groups) {
+            buttons.add(RegionGUI.dialogButton(Messages.PROTECTION.text(Text.GUI_GROUP_REMOVE, group),
+                    Messages.PROTECTION.text(Text.GUI_MANAGER_GROUP_REMOVE_TIP),
+                    p -> handleRemoveManagerGroup(p, fresh, pm, permissions, group)));
+        }
         buttons.add(RegionGUI.dialogButton(Messages.PROTECTION.text(Text.GUI_ADD_MANAGER),
                 Messages.PROTECTION.text(Text.GUI_ADD_MEMBER_TIP),
                 p -> openAddManagerDialog(p, fresh, pm, permissions)));
@@ -205,15 +174,21 @@ final class RegionMembershipGui {
                 p -> RegionGUI.openRegionHub(p, fresh, pm, permissions));
         DialogBase base = DialogBase.builder(Messages.PROTECTION.title(Text.GUI_MANAGERS_TITLE, fresh.id()))
                 .body(List.of(io.papermc.paper.registry.data.dialog.body.DialogBody.plainMessage(
-                        RegionGUI.pageSummary(total, Text.GUI_WORD_MANAGER, Text.GUI_WORD_MANAGERS, current, pages))))
+                        RegionGUI.listSummary(total, Text.GUI_WORD_MANAGER, Text.GUI_WORD_MANAGERS))))
                 .build();
         Dialog dialog = Dialog.create(b -> b.empty().base(base)
                 .type(DialogType.multiAction(buttons).columns(COLUMNS).exitAction(back).build()));
         player.showDialog(dialog);
     }
 
-    static void handleRemoveManager(Player player, Region region, ProtectionManager pm,
-                                    PermissionManager permissions, UUID target, int page) {
+    /** Compatibility overload for callers that used the former page argument. */
+    static void openManagersMenu(Player player, Region region, ProtectionManager pm,
+                                 PermissionManager permissions, int ignoredPage) {
+        openManagersMenu(player, region, pm, permissions);
+    }
+
+    private static void handleRemoveManager(Player player, Region region, ProtectionManager pm,
+                                            PermissionManager permissions, UUID target) {
         if (!RegionAuth.isOwnerOrAdmin(player, region, pm)) {
             player.sendMessage(Messages.PROTECTION.text(Text.MANAGER_EDIT_AUTH));
             return;
@@ -224,11 +199,16 @@ final class RegionMembershipGui {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_MANAGER_DEMOTED,
                     RegionGUI.lookupName(target), region.id()));
         }
-        openManagersMenu(player, region, pm, permissions, page);
+        openManagersMenu(player, region, pm, permissions);
     }
 
-    static void handleRemoveManagerGroup(Player player, Region region, ProtectionManager pm,
-                                         PermissionManager permissions, String group, int page) {
+    static void handleRemoveManager(Player player, Region region, ProtectionManager pm,
+                                    PermissionManager permissions, UUID target, int ignoredPage) {
+        handleRemoveManager(player, region, pm, permissions, target);
+    }
+
+    private static void handleRemoveManagerGroup(Player player, Region region, ProtectionManager pm,
+                                                 PermissionManager permissions, String group) {
         if (!RegionAuth.isOwnerOrAdmin(player, region, pm)) {
             player.sendMessage(Messages.PROTECTION.text(Text.MANAGER_EDIT_AUTH));
             return;
@@ -238,7 +218,12 @@ final class RegionMembershipGui {
         } else {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_MANAGER_GROUP_REMOVED, group, region.id()));
         }
-        openManagersMenu(player, region, pm, permissions, page);
+        openManagersMenu(player, region, pm, permissions);
+    }
+
+    static void handleRemoveManagerGroup(Player player, Region region, ProtectionManager pm,
+                                         PermissionManager permissions, String group, int ignoredPage) {
+        handleRemoveManagerGroup(player, region, pm, permissions, group);
     }
 
     static void openAddManagerDialog(Player player, Region region, ProtectionManager pm,

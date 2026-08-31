@@ -154,25 +154,13 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
     }
 
     public void openCategoryMenu(Player player, HelpCategory category) {
-        openCategoryMenu(player, category, 0);
-    }
-
-    private void openCategoryMenu(Player player, HelpCategory category, int page) {
         List<HelpArticle> visible = category.articles().stream()
                 .filter(article -> article.permission() == null || player.hasPermission(article.permission()))
                 .toList();
-        int totalPages = Math.max(1, (visible.size() + 11) / 12);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * 12;
-        int end = Math.min(start + 12, visible.size());
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            HelpArticle article = visible.get(i);
-            if (article.permission() != null && !player.hasPermission(article.permission())) continue;
+        for (HelpArticle article : visible) {
             buttons.add(buildArticleButton(article));
         }
-        if (currentPage > 0) buttons.add(pageButton("◀ Previous Page", p -> openCategoryMenu(p, category, currentPage - 1)));
-        if (currentPage + 1 < totalPages) buttons.add(pageButton("Next Page ▶", p -> openCategoryMenu(p, category, currentPage + 1)));
         ActionButton back = ActionButton.builder(
                         Component.text("Back", NamedTextColor.RED, TextDecoration.BOLD)
                                 .decoration(TextDecoration.ITALIC, false))
@@ -275,17 +263,6 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 .type(DialogType.multiAction(jumpButtons, back, 1)));
         player.showDialog(dialog);
         player.playSound(player.getLocation(), Sound.ITEM_BOOK_PAGE_TURN, 0.5f, 1.0f);
-    }
-
-    private static ActionButton pageButton(String label, java.util.function.Consumer<Player> action) {
-        return ActionButton.builder(Component.text(label, NamedTextColor.GREEN)
-                        .decoration(TextDecoration.ITALIC, false))
-                .tooltip(Component.text("Change help page", NamedTextColor.GRAY))
-                .width(BUTTON_WIDTH)
-                .action(DialogAction.customClick((view, audience) -> {
-                    if (audience instanceof Player p) action.accept(p);
-                }, ClickCallback.Options.builder().build()))
-                .build();
     }
 
     private HelpCategory findCategoryOf(HelpArticle article) {
@@ -731,7 +708,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 cmd("/tconfig resourceitems <add|remove> <item>", "Manage resource world allowed items."),
                 cmd("/tconfig world-profiles <list|add|remove|edit>", "Manage world-key -> profile/tag/color mappings (see /help profiles)."),
                 cmd("/tconfig logging.<feature>.<event> <true|false>", "Toggle one console-only event record."),
-                white("The GUI main menu has a Logging tab with 20 categories over two pages."),
+                white("The GUI main menu has a Logging tab with 20 categories in a scrollable list."),
                 white("Logging records are disabled by default; a confirmed CLI/GUI save applies immediately, while hand edits require a restart."),
                 cmd("/tconfig <path> <value>", "Generic setter for any other registered setting (Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Xp Bottle categories)."),
                 white("Ranks: /ranks edit  ·  Permissions: /tprm  ·  Whack: /whack"),
@@ -922,7 +899,7 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 aqua("Features:"),
                 white("- Dynamic listing of all server groups."),
                 white("- Create new groups via a name-entry dialog."),
-                white("- Pagination support for many groups."),
+                white("- Long group lists scroll in place."),
                 white("- Click any group to open the Group Hub."),
                 red("Requires permission: tweaks.admin.permissions.")
         ), Material.CHEST, 22, ColorUtil.HELP_GRAD_PERMS_GROUPS,
@@ -973,10 +950,11 @@ public class HelpSystem implements CommandExecutor, TabCompleter, Listener {
                 aqua("Navigation:"),
                 white("Main → Groups → Group Hub → Categories → perms."),
                 white("Main → Players → User Hub → Categories → perms."),
-                white("Lists paginate at 12 entries; use Prev/Next Page buttons."),
+                white("Long option lists scroll in place; there are no page buttons to navigate."),
                 aqua("Interactions:"),
                 white("Hover a permission toggle for its full node and description."),
                 white("✓ prefix → currently granted/active (click to revoke)."),
+                white("Light-blue ✓ → inherited from a group (click to add a direct grant)."),
                 white("✗ prefix → currently denied/inactive (click to grant)."),
                 white("Categories: perms are organized by system (Protection, Minigames, etc.)."),
                 white("External catalogs: trusted UTF-8 *.txt files in plugins/Tweaks/external-permissions/."),

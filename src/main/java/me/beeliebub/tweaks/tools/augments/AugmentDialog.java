@@ -20,7 +20,6 @@ import java.util.function.Consumer;
 @SuppressWarnings("UnstableApiUsage")
 public final class AugmentDialog {
 
-    private static final int PAGE_SIZE = 12;
     private final AugmentService augments;
 
     public AugmentDialog(AugmentService augments) {
@@ -145,10 +144,6 @@ public final class AugmentDialog {
     }
 
     public void openAugments(Player player, ItemStack item) {
-        openAugments(player, item, 0);
-    }
-
-    private void openAugments(Player player, ItemStack item, int page) {
         if (item == null || item.isEmpty()) {
             player.sendMessage(Messages.TOOLS.augmentRequiresItem());
             return;
@@ -166,36 +161,26 @@ public final class AugmentDialog {
             }
         }
         int totalEntries = attached.size() + compatibleGems.size();
-        int totalPages = Math.max(1, (totalEntries + PAGE_SIZE - 1) / PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * PAGE_SIZE;
-        int end = Math.min(start + PAGE_SIZE, totalEntries);
-        List<ActionButton> visible = new ArrayList<>();
-        for (int option = start; option < end; option++) {
+        List<ActionButton> buttons = new ArrayList<>();
+        for (int option = 0; option < totalEntries; option++) {
             if (option < attached.size()) {
-                visible.add(attachedButton(item, attached.get(option), option, currentPage));
+                buttons.add(attachedButton(item, attached.get(option), option));
             } else {
-                visible.add(gemButton(item, compatibleGems.get(option - attached.size()), currentPage));
+                buttons.add(gemButton(item, compatibleGems.get(option - attached.size())));
             }
         }
-        showPaged(player, Messages.TOOLS.augmentListLabel(), visible, totalEntries, page,
-                Messages.TOOLS.augmentListLabel(), Messages.TOOLS.augmentNoGems(),
-                Messages.TOOLS.augmentNoGemsTooltip(),
+        if (buttons.isEmpty()) {
+            buttons.add(button(Messages.TOOLS.augmentNoGems(),
+                    Messages.TOOLS.augmentNoGemsTooltip(), p -> {}));
+        }
+        show(player, Messages.TOOLS.augmentListLabel(), Messages.TOOLS.augmentListLabel(), buttons,
                 p -> {
                     ItemStack target = currentHeldOrSame(p, item);
                     if (target != null) openHub(p, target);
-                },
-                (p, nextPage) -> {
-                    ItemStack target = currentHeldOrSame(p, item);
-                    if (target != null) openAugments(p, target, nextPage);
                 });
     }
 
     public void openGemFirst(Player player, ItemStack gem) {
-        openGemFirst(player, gem, 0);
-    }
-
-    private void openGemFirst(Player player, ItemStack gem, int page) {
         AugmentGemItem.GemData data = augments.gemItem().read(gem);
         if (data == null) {
             player.sendMessage(Messages.TOOLS.augmentIncompatible());
@@ -217,17 +202,17 @@ public final class AugmentDialog {
                         if (currentGem == null || currentGem.isEmpty() || currentTarget == null
                                 || currentTarget.isEmpty() || !currentTarget.isSimilar(target.item())) return;
                         boolean attached = augments.attach(p, currentTarget, currentGem);
-                        reopenAfterGemAttach(p, currentTarget, data, attached, page);
+                        reopenAfterGemAttach(p, currentTarget, data, attached);
                     }));
         }
-        showPaged(player, Messages.TOOLS.augmentListLabel(), buttons, buttons.size(), page,
-                gemTooltip(data), Messages.TOOLS.augmentNoTools(),
-                Messages.TOOLS.augmentNoToolsTooltip(),
-                null,
-                (p, nextPage) -> openGemFirst(p, gem, nextPage));
+        if (buttons.isEmpty()) {
+            buttons.add(button(Messages.TOOLS.augmentNoTools(),
+                    Messages.TOOLS.augmentNoToolsTooltip(), p -> {}));
+        }
+        show(player, Messages.TOOLS.augmentListLabel(), gemTooltip(data), buttons, null);
     }
 
-    private ActionButton attachedButton(ItemStack item, AugmentEntry entry, int index, int page) {
+    private ActionButton attachedButton(ItemStack item, AugmentEntry entry, int index) {
         var enchantment = registry().get(entry.enchantmentKey());
         Component name = enchantment == null
                 ? Messages.TOOLS.augmentEnchantmentName(entry.enchantmentKey(), entry.level())
@@ -244,11 +229,11 @@ public final class AugmentDialog {
                 return;
             }
             augments.toggle(p, target, index);
-            openAugments(p, target, page);
+            openAugments(p, target);
         });
     }
 
-    private ActionButton gemButton(ItemStack item, GemOption option, int page) {
+    private ActionButton gemButton(ItemStack item, GemOption option) {
         AugmentService.GemLocation gem = option.location();
         AugmentGemItem.GemData data = option.data();
         Component label = gemLabel(data);
@@ -264,7 +249,7 @@ public final class AugmentDialog {
                 return;
             }
             augments.attach(p, target, currentGem);
-            openAugments(p, target, page);
+            openAugments(p, target);
         });
     }
 
@@ -319,33 +304,6 @@ public final class AugmentDialog {
         return tooltip;
     }
 
-    private void showPaged(Player player, Component title, List<ActionButton> visibleButtons, int totalEntries, int page,
-                           Component body, Component emptyMessage, Component emptyTooltip, Consumer<Player> back,
-                           java.util.function.BiConsumer<Player, Integer> pageOpener) {
-        int totalPages = Math.max(1, (totalEntries + PAGE_SIZE - 1) / PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        List<ActionButton> buttons = new ArrayList<>();
-        if (totalEntries == 0) {
-            buttons.add(button(emptyMessage, emptyTooltip, p -> {}));
-        } else {
-            buttons.addAll(visibleButtons);
-        }
-        if (currentPage > 0) {
-            buttons.add(button(Messages.TOOLS.augmentPreviousPage(),
-                    Messages.TOOLS.augmentPageSummary(currentPage, totalPages, totalEntries),
-                    p -> pageOpener.accept(p, currentPage - 1)));
-        }
-        if (currentPage + 1 < totalPages) {
-            buttons.add(button(Messages.TOOLS.augmentNextPage(),
-                    Messages.TOOLS.augmentPageSummary(currentPage + 2, totalPages, totalEntries),
-                    p -> pageOpener.accept(p, currentPage + 1)));
-        }
-        Component pageBody = totalPages == 1 ? body
-                : body.append(Component.text("\n")
-                .append(Messages.TOOLS.augmentPageSummary(currentPage + 1, totalPages, totalEntries)));
-        show(player, title, pageBody, buttons, back);
-    }
-
     private static ItemStack currentHeldOrSame(Player player, ItemStack item) {
         ItemStack current = player.getInventory().getItemInMainHand();
         return current == null || current.isEmpty() || item == null || item.isEmpty()
@@ -375,13 +333,19 @@ public final class AugmentDialog {
      * augment list is shown instead so the new entry is visible.
      */
     void reopenAfterGemAttach(Player player, ItemStack target, AugmentGemItem.GemData gemData,
-                              boolean attached, int page) {
+                              boolean attached) {
         ItemStack remainingGem = findGemMatching(player, gemData);
         if (remainingGem != null) {
-            openGemFirst(player, remainingGem, page);
+            openGemFirst(player, remainingGem);
         } else if (attached) {
-            openAugments(player, target, 0);
+            openAugments(player, target);
         }
+    }
+
+    /** Compatibility overload for callers that used the former page argument. */
+    void reopenAfterGemAttach(Player player, ItemStack target, AugmentGemItem.GemData gemData,
+                              boolean attached, int ignoredPage) {
+        reopenAfterGemAttach(player, target, gemData, attached);
     }
 
     private ItemStack findGemMatching(Player player, AugmentGemItem.GemData data) {

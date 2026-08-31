@@ -32,40 +32,26 @@ public final class ConfigGUI {
 
     private ConfigGUI() {}
 
-    private static final int DIALOG_PAGE_SIZE = 12;
     private static final int DIALOG_COLUMNS = 2;
 
     // ------------------------------------------------------------------ Main
 
     public static void openMainMenu(Player player, ConfigValueEditor valueEditor) {
-        openMainMenu(player, valueEditor, 0);
-    }
-
-    private static void openMainMenu(Player player, ConfigValueEditor valueEditor, int page) {
-        List<ActionButton> allButtons = new ArrayList<>();
-        allButtons.add(dialogButton(
+        List<ActionButton> buttons = new ArrayList<>();
+        buttons.add(dialogButton(
                 Messages.CONFIG.worldProfileCategoryLabel(),
                 Messages.CONFIG.worldProfileCategoryTooltip(),
-                p -> openWorldProfileList(p, valueEditor, 0)));
+                p -> openWorldProfileList(p, valueEditor)));
         for (ConfigCategory category : ConfigRegistry.mainMenuCategories()) {
-            allButtons.add(dialogButton(
+            buttons.add(dialogButton(
                     Messages.CONFIG.categoryLabel(category.displayName()),
                     Messages.CONFIG.categoryTooltip(category.settings().size()),
-                    p -> openCategory(p, valueEditor, category.key(), 0)));
+                    p -> openCategory(p, valueEditor, category.key())));
         }
-        allButtons.add(dialogButton(
+        buttons.add(dialogButton(
                 Messages.CONFIG.loggingCategoryLabel(),
                 Messages.CONFIG.loggingCategoryTooltip(),
-                p -> openLoggingMenu(p, valueEditor, 0)));
-
-        int totalPages = Math.max(1, (allButtons.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * DIALOG_PAGE_SIZE;
-        int end = Math.min(start + DIALOG_PAGE_SIZE, allButtons.size());
-        List<ActionButton> buttons = new ArrayList<>(allButtons.subList(start, end));
-        addPageNavButtons(buttons, currentPage, totalPages,
-                p -> openMainMenu(p, valueEditor, currentPage - 1),
-                p -> openMainMenu(p, valueEditor, currentPage + 1));
+                p -> openLoggingMenu(p, valueEditor)));
 
         DialogBase base = DialogBase.builder(Messages.CONFIG.mainTitle())
                 .body(List.of(DialogBody.plainMessage(Messages.CONFIG.mainBody())))
@@ -80,7 +66,7 @@ public final class ConfigGUI {
 
     // --------------------------------------------------------------- Category
 
-    public static void openCategory(Player player, ConfigValueEditor valueEditor, String categoryKey, int page) {
+    public static void openCategory(Player player, ConfigValueEditor valueEditor, String categoryKey) {
         ConfigCategory category = ConfigRegistry.category(categoryKey).orElse(null);
         if (category == null) {
             player.sendMessage(Messages.CONFIG.unknownCategory(categoryKey));
@@ -89,24 +75,15 @@ public final class ConfigGUI {
         }
 
         List<ConfigSetting> settings = category.settings();
-        int totalPages = Math.max(1, (settings.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * DIALOG_PAGE_SIZE;
-        int end = Math.min(start + DIALOG_PAGE_SIZE, settings.size());
 
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            ConfigSetting setting = settings.get(i);
+        for (ConfigSetting setting : settings) {
             String currentValue = valueEditor.currentValueDisplay(setting);
             buttons.add(dialogButton(
                     Messages.CONFIG.settingLabel(setting.displayName()),
                     Messages.CONFIG.settingTooltip(currentValue),
-                    p -> openSetting(p, valueEditor, categoryKey, setting.path(), 0)));
+                    p -> openSetting(p, valueEditor, categoryKey, setting.path())));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                target -> openCategory(target, valueEditor, categoryKey, currentPage - 1),
-                target -> openCategory(target, valueEditor, categoryKey, currentPage + 1));
 
         ActionButton back = dialogButton(
                 Messages.CONFIG.backLabel(),
@@ -129,27 +106,24 @@ public final class ConfigGUI {
         player.showDialog(dialog);
     }
 
+    /** Compatibility overload for callers that used the former page argument. */
+    public static void openCategory(Player player, ConfigValueEditor valueEditor,
+                                    String categoryKey, int ignoredPage) {
+        openCategory(player, valueEditor, categoryKey);
+    }
+
     // --------------------------------------------------------------- Logging
 
-    public static void openLoggingMenu(Player player, ConfigValueEditor valueEditor, int page) {
+    public static void openLoggingMenu(Player player, ConfigValueEditor valueEditor) {
         List<ConfigCategory> categories = ConfigRegistry.loggingCategories();
-        int totalPages = Math.max(1, (categories.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * DIALOG_PAGE_SIZE;
-        int end = Math.min(start + DIALOG_PAGE_SIZE, categories.size());
 
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            ConfigCategory category = categories.get(i);
+        for (ConfigCategory category : categories) {
             buttons.add(dialogButton(
                     Messages.CONFIG.categoryLabel(category.displayName()),
                     Messages.CONFIG.categoryTooltip(category.settings().size()),
-                    p -> openCategory(p, valueEditor, category.key(), 0)));
+                    p -> openCategory(p, valueEditor, category.key())));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                target -> openLoggingMenu(target, valueEditor, currentPage - 1),
-                target -> openLoggingMenu(target, valueEditor, currentPage + 1));
 
         ActionButton back = dialogButton(
                 Messages.CONFIG.backLabel(),
@@ -170,10 +144,15 @@ public final class ConfigGUI {
         player.showDialog(dialog);
     }
 
+    /** Compatibility overload for callers that used the former page argument. */
+    public static void openLoggingMenu(Player player, ConfigValueEditor valueEditor, int ignoredPage) {
+        openLoggingMenu(player, valueEditor);
+    }
+
     private static void openCategoryParent(Player player, ConfigValueEditor valueEditor,
                                            ConfigCategory category) {
         if (category.group() == ConfigCategory.Group.LOGGING) {
-            openLoggingMenu(player, valueEditor, 0);
+            openLoggingMenu(player, valueEditor);
         } else {
             openMainMenu(player, valueEditor);
         }
@@ -181,18 +160,18 @@ public final class ConfigGUI {
 
     // ---------------------------------------------------------------- Setting
 
-    private static void openSetting(Player player, ConfigValueEditor valueEditor, String categoryKey, String path, int page) {
+    private static void openSetting(Player player, ConfigValueEditor valueEditor, String categoryKey, String path) {
         ConfigSetting setting = ConfigRegistry.byPath(path).orElse(null);
         if (setting == null) {
             player.sendMessage(Messages.CONFIG.unknownSetting(path));
-            openCategory(player, valueEditor, categoryKey, 0);
+            openCategory(player, valueEditor, categoryKey);
             return;
         }
 
         switch (setting.type()) {
             case BOOLEAN -> openBooleanEditor(player, valueEditor, categoryKey, setting);
             case STRING_LIST, WORLD_KEY_LIST, MOB_LIST, MATERIAL_LIST ->
-                    openListEditor(player, valueEditor, categoryKey, setting, page);
+                    openListEditor(player, valueEditor, categoryKey, setting);
             case NUMBER_MAP -> openMapEditor(player, valueEditor, categoryKey, setting);
             case MATERIAL_GRID -> openGridEditor(player, valueEditor, categoryKey, setting);
             default -> openScalarEditor(player, valueEditor, categoryKey, setting);
@@ -210,7 +189,7 @@ public final class ConfigGUI {
                             if (audience instanceof Player p && authorized(p)) {
                                 EditResult result = valueEditor.applyScalar(setting, view.getText("value"));
                                 p.sendMessage(result.message());
-                                openCategory(p, valueEditor, categoryKey, 0);
+                                openCategory(p, valueEditor, categoryKey);
                             }
                         },
                         unlimitedClicks()))
@@ -219,7 +198,7 @@ public final class ConfigGUI {
         ActionButton cancel = dialogButton(
                 Messages.CONFIG.cancelLabel(),
                 Messages.CONFIG.cancelTooltip(),
-                p -> openCategory(p, valueEditor, categoryKey, 0));
+                p -> openCategory(p, valueEditor, categoryKey));
 
         DialogBase base = DialogBase.builder(Messages.CONFIG.editTitle(setting.displayName()))
                 .body(List.of(DialogBody.plainMessage(Messages.CONFIG.editBody(currentValue))))
@@ -242,18 +221,18 @@ public final class ConfigGUI {
                 Messages.CONFIG.settingLabel("True"), Messages.CONFIG.settingTooltip("true"),
                 p -> {
                     p.sendMessage(valueEditor.applyScalar(setting, "true").message());
-                    openCategory(p, valueEditor, categoryKey, 0);
+                    openCategory(p, valueEditor, categoryKey);
                 });
         ActionButton falseButton = dialogButton(
                 Messages.CONFIG.settingLabel("False"), Messages.CONFIG.settingTooltip("false"),
                 p -> {
                     p.sendMessage(valueEditor.applyScalar(setting, "false").message());
-                    openCategory(p, valueEditor, categoryKey, 0);
+                    openCategory(p, valueEditor, categoryKey);
                 });
         ActionButton back = dialogButton(
                 Messages.CONFIG.backToCategoryLabel(),
                 Messages.CONFIG.backToMainTooltip(),
-                p -> openCategory(p, valueEditor, categoryKey, 0));
+                p -> openCategory(p, valueEditor, categoryKey));
 
         DialogBase base = DialogBase.builder(Messages.CONFIG.editTitle(setting.displayName()))
                 .body(List.of(DialogBody.plainMessage(Messages.CONFIG.editBody(valueEditor.currentValueDisplay(setting)))))
@@ -269,29 +248,19 @@ public final class ConfigGUI {
         player.showDialog(dialog);
     }
 
-    private static void openListEditor(Player player, ConfigValueEditor valueEditor, String categoryKey, ConfigSetting setting, int page) {
+    private static void openListEditor(Player player, ConfigValueEditor valueEditor, String categoryKey, ConfigSetting setting) {
         List<String> values = valueEditor.currentListValues(setting);
 
-        int totalPages = Math.max(1, (values.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * DIALOG_PAGE_SIZE;
-        int end = Math.min(start + DIALOG_PAGE_SIZE, values.size());
-
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            String value = values.get(i);
+        for (String value : values) {
             buttons.add(dialogButton(
                     Messages.CONFIG.listEntryLabel(value),
                     Messages.CONFIG.listEntryTooltip(),
                     p -> {
                         p.sendMessage(valueEditor.listRemove(setting, value).message());
-                        openListEditor(p, valueEditor, categoryKey, setting, currentPage);
+                        openListEditor(p, valueEditor, categoryKey, setting);
                     }));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                target -> openListEditor(target, valueEditor, categoryKey, setting, currentPage - 1),
-                target -> openListEditor(target, valueEditor, categoryKey, setting, currentPage + 1));
 
         buttons.add(dialogButton(
                 Messages.CONFIG.addEntryLabel(),
@@ -301,7 +270,7 @@ public final class ConfigGUI {
         ActionButton back = dialogButton(
                 Messages.CONFIG.backToCategoryLabel(),
                 Messages.CONFIG.backToMainTooltip(),
-                p -> openCategory(p, valueEditor, categoryKey, 0));
+                p -> openCategory(p, valueEditor, categoryKey));
 
         DialogBase base = DialogBase.builder(Messages.CONFIG.editTitle(setting.displayName()))
                 .body(List.of(DialogBody.plainMessage(Messages.CONFIG.categoryBody())))
@@ -326,7 +295,7 @@ public final class ConfigGUI {
                             if (audience instanceof Player p && authorized(p)) {
                                 EditResult result = valueEditor.listAdd(setting, view.getText("value"));
                                 p.sendMessage(result.message());
-                                openListEditor(p, valueEditor, categoryKey, setting, 0);
+                                openListEditor(p, valueEditor, categoryKey, setting);
                             }
                         },
                         unlimitedClicks()))
@@ -335,7 +304,7 @@ public final class ConfigGUI {
         ActionButton cancel = dialogButton(
                 Messages.CONFIG.cancelLabel(),
                 Messages.CONFIG.cancelTooltip(),
-                p -> openListEditor(p, valueEditor, categoryKey, setting, 0));
+                p -> openListEditor(p, valueEditor, categoryKey, setting));
 
         DialogBase base = DialogBase.builder(Messages.CONFIG.addEntryTitle(setting.displayName()))
                 .body(List.of(DialogBody.plainMessage(Messages.CONFIG.addEntryBody())))
@@ -368,7 +337,7 @@ public final class ConfigGUI {
         }
         ActionButton back = dialogButton(
                 Messages.CONFIG.backToCategoryLabel(), Messages.CONFIG.backToMainTooltip(),
-                p -> openCategory(p, valueEditor, categoryKey, 0));
+                p -> openCategory(p, valueEditor, categoryKey));
         DialogBase base = DialogBase.builder(Messages.CONFIG.editTitle(setting.displayName()))
                 .body(List.of(DialogBody.plainMessage(Messages.CONFIG.categoryBody())))
                 .build();
@@ -419,7 +388,7 @@ public final class ConfigGUI {
         ActionButton back = dialogButton(
                 Messages.CONFIG.backToCategoryLabel(),
                 Messages.CONFIG.backToMainTooltip(),
-                p -> openCategory(p, valueEditor, categoryKey, 0));
+                p -> openCategory(p, valueEditor, categoryKey));
 
         DialogBase base = DialogBase.builder(Messages.CONFIG.editTitle(setting.displayName()))
                 .body(List.of(DialogBody.plainMessage(Messages.CONFIG.categoryBody())))
@@ -515,26 +484,16 @@ public final class ConfigGUI {
     // section for why this is special-cased like eggdrop/spawneregg/resourceitems rather than a
     // generic EditorType.
 
-    private static void openWorldProfileList(Player player, ConfigValueEditor valueEditor, int page) {
+    private static void openWorldProfileList(Player player, ConfigValueEditor valueEditor) {
         List<String> keys = valueEditor.worldProfileKeys();
 
-        int totalPages = Math.max(1, (keys.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * DIALOG_PAGE_SIZE;
-        int end = Math.min(start + DIALOG_PAGE_SIZE, keys.size());
-
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            String key = keys.get(i);
+        for (String key : keys) {
             buttons.add(dialogButton(
                     Messages.CONFIG.worldProfileEntryLabel(valueEditor.worldProfileEntryDisplay(key)),
                     Messages.CONFIG.worldProfileEntryTooltip(),
                     p -> openWorldProfileEntry(p, valueEditor, key)));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                target -> openWorldProfileList(target, valueEditor, currentPage - 1),
-                target -> openWorldProfileList(target, valueEditor, currentPage + 1));
 
         buttons.add(dialogButton(
                 Messages.CONFIG.addEntryLabel(),
@@ -574,13 +533,13 @@ public final class ConfigGUI {
                 Messages.CONFIG.worldProfileRemoveButtonTooltip(),
                 p -> {
                     p.sendMessage(valueEditor.worldProfileRemove(worldKey).message());
-                    openWorldProfileList(p, valueEditor, 0);
+                    openWorldProfileList(p, valueEditor);
                 });
 
         ActionButton back = dialogButton(
                 Messages.CONFIG.backLabel(),
                 Messages.CONFIG.backToMainTooltip(),
-                p -> openWorldProfileList(p, valueEditor, 0));
+                p -> openWorldProfileList(p, valueEditor));
 
         DialogBase base = DialogBase.builder(Messages.CONFIG.worldProfileEntryTitle(worldKey))
                 .body(List.of(DialogBody.plainMessage(
@@ -651,7 +610,7 @@ public final class ConfigGUI {
                                         view.getText("world_key"), view.getText("profile"),
                                         view.getText("label"), view.getText("color"));
                                 p.sendMessage(result.message());
-                                openWorldProfileList(p, valueEditor, 0);
+                                openWorldProfileList(p, valueEditor);
                             }
                         },
                         unlimitedClicks()))
@@ -660,7 +619,7 @@ public final class ConfigGUI {
         ActionButton cancel = dialogButton(
                 Messages.CONFIG.cancelLabel(),
                 Messages.CONFIG.cancelTooltip(),
-                p -> openWorldProfileList(p, valueEditor, 0));
+                p -> openWorldProfileList(p, valueEditor));
 
         DialogBase base = DialogBase.builder(Messages.CONFIG.worldProfileAddTitle())
                 .body(List.of(DialogBody.plainMessage(Messages.CONFIG.worldProfileAddBody())))
@@ -712,19 +671,4 @@ public final class ConfigGUI {
         return false;
     }
 
-    private static void addPageNavButtons(List<ActionButton> buttons, int currentPage, int totalPages,
-                                          Consumer<Player> prevAction, Consumer<Player> nextAction) {
-        if (currentPage > 0) {
-            buttons.add(dialogButton(
-                    Messages.CONFIG.previousPageLabel(),
-                    Messages.CONFIG.pageTooltip(currentPage, totalPages),
-                    prevAction));
-        }
-        if (currentPage + 1 < totalPages) {
-            buttons.add(dialogButton(
-                    Messages.CONFIG.nextPageLabel(),
-                    Messages.CONFIG.pageTooltip(currentPage + 2, totalPages),
-                    nextAction));
-        }
-    }
 }

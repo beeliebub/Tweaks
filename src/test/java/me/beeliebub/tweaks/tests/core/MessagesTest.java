@@ -130,6 +130,29 @@ class MessagesTest {
     }
 
     @Test
+    void inheritedPermissionToggleIsAquaWithCheckMarkWhileDirectIsGreen() {
+        Component inherited = Messages.PERMISSIONS.permissionToggleLabel(
+                "tweaks.inherited", false, true);
+        Component direct = Messages.PERMISSIONS.permissionToggleLabel(
+                "tweaks.direct", true, false);
+
+        assertEquals("✓ tweaks.inherited", fullContent(inherited));
+        assertEquals(NamedTextColor.AQUA, inherited.color());
+        assertEquals("✓ tweaks.direct", fullContent(direct));
+        assertEquals(NamedTextColor.GREEN, direct.color());
+    }
+
+    @Test
+    void permissionListSummaryUsesCountOnlyCopyForScrollableLists() {
+        assertEquals("2 groups", fullContent(Messages.PERMISSIONS.listSummary(
+                2, me.beeliebub.tweaks.core.PermissionMessages.PageNoun.GROUP)));
+        assertEquals("1 permission", fullContent(Messages.PERMISSIONS.listSummary(
+                1, me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PERMISSION)));
+        assertEquals("3 players", fullContent(Messages.PERMISSIONS.listSummary(
+                3, me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PLAYER)));
+    }
+
+    @Test
     void e1ResourceWorldAndProfileMessagesPreservePresentationContracts() {
         assertMessage(Messages.MINIGAMES.resourceWorldLoginEjected(),
                 "For your safety, returning you to the main survival world!", NamedTextColor.YELLOW);

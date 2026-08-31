@@ -564,8 +564,9 @@ A hybrid GUI/CLI permission system with **multi-group membership**, single-paren
 
 When two of the player's groups share an ancestor in the inheritance graph, that ancestor's permissions are added exactly once. Cycles in the inheritance graph are skipped safely.
 
-**Permissions GUI**: The visual editor is a tree of Paper Dialogs (multi-action and confirmation) that organizes permissions into logical categories (Admin & Tools, Minigames, etc.) for easier management. Groups and players can be managed with simple click toggles. List screens paginate at 12 entries per page; toggle buttons prefix `✓` for "on" and `✗` for "off".
+**Permissions GUI**: The visual editor is a tree of Paper Dialogs (multi-action and confirmation) that organizes permissions into logical categories (Admin & Tools, Minigames, etc.) for easier management. Groups and players can be managed with simple click toggles. Long lists scroll in place; toggle buttons prefix `✓` for "on" and `✗` for "off".
 - **Permission Details**: Hover any permission toggle to see its complete node, a concise description of what it permits, and the pending grant/revoke action.
+- **Inherited Permissions**: Direct grants are green. Permissions supplied by an ancestor group are shown with a light-blue/aqua `✓`; clicking one adds a direct grant while leaving the source group unchanged. Inherited nodes missing from the current catalog appear under **Unlisted**.
 - **Main Menu**: Entry point with `Groups` and `Players` buttons.
 - **Groups Hub**: Manage group permissions (organized by category), member list (toggle-based), and inheritance. The **+ Create Group** button opens a name-entry dialog; **Delete Group** is hidden for the protected `default` group.
 - **Users Hub**: Manage player-specific overrides (organized by category) and additional group memberships. The **Edit Groups** panel lists non-default groups with a `✓` marker on the ones the player already belongs to — click any entry to toggle membership. The Players list contains online users only; use **⌕ Search Player** to look up an offline player who has previously joined.
@@ -661,7 +662,7 @@ selected as Repair Kit targets.
 
 Repair Kits are craftable from the live `/tconfig tools.repair-kit.recipe` nine-cell grid. The
 recipe can be shaped or shapeless and is rejected if invalid or if its ingredient signature
-collides with an existing recipe. Right-click a kit to open a paginated menu of augmented storage,
+collides with an existing recipe. Right-click a kit to open a scrollable menu of augmented storage,
 armor, and offhand damageable items; plain and full-durability items are not shown. Each entry is
 labelled by its `/rename` name when it has one, and otherwise by its ordinary item name rather than
 the raw material enum, so two tools of the same type stay distinguishable. Selecting one
@@ -1027,7 +1028,7 @@ Console event records are opt-in and console-only. Every `logging.*` switch in `
 disabled, so enable only the event families you need. Use `/tconfig logging.<feature>.<event>
 <true|false>`, `/tconfig list logging` to print all 20 logging categories, `/tconfig list
 logging-core` (or another logging category), or the `/tconfig gui`'s main-menu **Logging** tab.
-The GUI shows the 20 logging categories over two pages. A confirmed `/tconfig` save updates the
+The GUI shows the 20 logging categories in a scrollable list. A confirmed `/tconfig` save updates the
 running logger immediately; editing `config.yml` by hand while the server is running requires a
 restart.
 
@@ -1588,7 +1589,7 @@ The plugin generates a `config.yml` on first startup. Custom enchantments requir
 
 On every startup, any key present in the bundled default `config.yml` but missing from your live file is automatically added back with its default value (an admin-modified value is never overwritten, and an explicit empty list you've saved stays empty — only a genuinely absent key is filled in).
 
-A growing set of settings — spanning General, Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Experience (`xp`), Player Tools (`tools`), Xp Bottle, Discord, and Console Event Logging — is also editable at runtime without touching `config.yml` by hand, via `/tconfig`. Six have dedicated CLI forms (see the [Commands Reference](#commands-reference) table above); the rest use the generic `/tconfig <path> <value>` grammar. Run `/tconfig gui` in-game for a Dialog-based editor with the same categories and a main-menu **Logging** tab, or `/tconfig list [category]` to print every registered setting and its current value from the console or in chat. `/tconfig list logging` filters that output to the 20 logging categories; `/tconfig list discord` filters to the Discord settings. XP chances, Mending, cash conversion, durability, Repair Kit recipes, rename length, lockouts, and augment settings take effect live after a successful edit.
+A growing set of settings — spanning General, Protection, Player Admin, World Management, Teleport, Minigames, Economy, Block Log, Death Inventory, Enchantments, Item Admin, Experience (`xp`), Player Tools (`tools`), Xp Bottle, Discord, and Console Event Logging — is also editable at runtime without touching `config.yml` by hand, via `/tconfig`. Six have dedicated CLI forms (see the [Commands Reference](#commands-reference) table above); the rest use the generic `/tconfig <path> <value>` grammar. Run `/tconfig gui` in-game for a Dialog-based editor with the same categories and a main-menu **Logging** tab; long Dialog option lists scroll in place. Use `/tconfig list [category]` to print every registered setting and its current value from the console or in chat. `/tconfig list logging` filters that output to the 20 logging categories; `/tconfig list discord` filters to the Discord settings. XP chances, Mending, cash conversion, durability, Repair Kit recipes, rename length, lockouts, and augment settings take effect live after a successful edit.
 
 ### Experience and player tools
 

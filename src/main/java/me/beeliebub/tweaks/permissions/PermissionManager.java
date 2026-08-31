@@ -345,6 +345,26 @@ public class PermissionManager implements Listener {
         return effective;
     }
 
+    /** Returns permissions supplied by a group's parent chain, excluding the group's direct set. */
+    public Set<String> inheritedPermissions(String groupName) {
+        Set<String> inherited = new HashSet<>();
+        if (groupName == null) return inherited;
+
+        PermissionGroup group = groups.get(groupName.toLowerCase());
+        if (group == null) return inherited;
+
+        addInheritedPermissions(group.getParentName(), inherited, new HashSet<>());
+        return inherited;
+    }
+
+    /** Returns permissions supplied by the user's groups rather than direct user overrides. */
+    public Set<String> inheritedPermissions(UUID uuid) {
+        Set<String> inherited = calculateEffectivePermissions(uuid);
+        UserPermissions user = users.get(uuid);
+        if (user != null) inherited.removeAll(user.getPermissions());
+        return inherited;
+    }
+
     private void addInheritedPermissions(String groupName, Set<String> effective, Set<String> visited) {
         if (groupName == null || visited.contains(groupName.toLowerCase())) return;
 

@@ -171,6 +171,49 @@ class PermissionManagerTest {
     }
 
     @Test
+    void groupInheritedPermissionsIncludeParentChainButExcludeDirectPermissions() {
+        PermissionGroup root = new PermissionGroup("root");
+        root.addPermission("tweaks.root");
+        PermissionGroup parent = new PermissionGroup("parent");
+        parent.addPermission("tweaks.parent");
+        parent.setParentName("root");
+        PermissionGroup child = new PermissionGroup("child");
+        child.addPermission("tweaks.child");
+        child.setParentName("parent");
+        manager.getGroups().put("root", root);
+        manager.getGroups().put("parent", parent);
+        manager.getGroups().put("child", child);
+
+        assertEquals(Set.of("tweaks.root", "tweaks.parent"),
+                manager.inheritedPermissions("CHILD"));
+    }
+
+    @Test
+    void userInheritedPermissionsIncludeDefaultAndGroupAncestorsButExcludeDirectOverrides() {
+        manager.getGroups().get("default").addPermission("tweaks.default");
+        PermissionGroup root = new PermissionGroup("root");
+        root.addPermission("tweaks.from-root");
+        PermissionGroup parent = new PermissionGroup("parent");
+        parent.addPermission("tweaks.from-parent");
+        parent.setParentName("root");
+        PermissionGroup child = new PermissionGroup("child");
+        child.addPermission("tweaks.overridden");
+        child.setParentName("parent");
+        manager.getGroups().put("root", root);
+        manager.getGroups().put("parent", parent);
+        manager.getGroups().put("child", child);
+
+        UUID uuid = UUID.randomUUID();
+        UserPermissions user = manager.getUserPermissions(uuid);
+        user.addGroup("child");
+        user.addPermission("tweaks.direct");
+        user.addPermission("tweaks.overridden");
+
+        assertEquals(Set.of("tweaks.default", "tweaks.from-root", "tweaks.from-parent"),
+                manager.inheritedPermissions(uuid));
+    }
+
+    @Test
     void multipleGroupsWithSharedAncestorAreVisitedOnce() {
         // Inheritance DAG: groupA -> shared, groupB -> shared.
         // The visited set is shared so 'shared' contributes once even though both

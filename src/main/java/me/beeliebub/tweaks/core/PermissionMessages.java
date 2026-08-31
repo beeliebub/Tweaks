@@ -11,7 +11,7 @@ public final class PermissionMessages {
 
     PermissionMessages() {}
 
-    /** Logical page nouns used by the permission-administration dialog copy. */
+    /** Logical list nouns used by the permission-administration dialog copy. */
     public enum PageNoun { GROUP, PERMISSION, PLAYER }
 
     // ---------------------------------------------------------------- Commands
@@ -112,7 +112,8 @@ public final class PermissionMessages {
     public String unlistedCategoryName() { return "Unlisted"; }
     public Component unlistedCategoryLabel() { return bold("Unlisted", NamedTextColor.YELLOW); }
     public Component unlistedCategoryTooltip(int total) {
-        return lines(gray(total + " direct permission(s) not in the catalog."), gray("Click to view and revoke."));
+        return lines(gray(total + " direct or inherited permission(s) not in the catalog."),
+                gray("Click to view and manage."));
     }
     public Component backToGroupLabel() { return bold("← Back to Group", NamedTextColor.RED); }
     public Component groupMenuTooltip() { return gray("Return to the group menu."); }
@@ -124,13 +125,28 @@ public final class PermissionMessages {
     public Component selectCategoryBody() { return plainGray("Select a category to edit."); }
 
     public Component permissionToggleLabel(String permission, boolean granted) {
-        return bold((granted ? "✓ " : "✗ ") + permission, granted ? NamedTextColor.GREEN : NamedTextColor.RED);
+        return permissionToggleLabel(permission, granted, false);
+    }
+    public Component permissionToggleLabel(String permission, boolean granted, boolean inherited) {
+        boolean visible = granted || inherited;
+        NamedTextColor color = granted ? NamedTextColor.GREEN
+                : inherited ? NamedTextColor.AQUA : NamedTextColor.RED;
+        return bold((visible ? "✓ " : "✗ ") + permission, color);
     }
     public Component permissionToggleTooltip(String permission, String description, boolean granted) {
+        return permissionToggleTooltip(permission, description, granted, false);
+    }
+    public Component permissionToggleTooltip(String permission, String description,
+                                             boolean granted, boolean inherited) {
+        Component state = granted
+                ? gray("Click to revoke.")
+                : inherited
+                ? gray("Inherited from a group. Click to add a direct grant; the parent remains unchanged.")
+                : gray("Click to grant.");
         return lines(
                 gray("Permission: ").append(Component.text(permission, NamedTextColor.YELLOW)),
                 gray("Description: ").append(Component.text(description, NamedTextColor.WHITE)),
-                gray(granted ? "Click to revoke." : "Click to grant."));
+                state);
     }
     public Component backToCategoriesLabel() { return bold("← Back to Categories", NamedTextColor.RED); }
     public Component categoriesTooltip() { return gray("Return to the category list."); }
@@ -209,6 +225,14 @@ public final class PermissionMessages {
         };
         String pluralized = total == 1 ? singular : singular + "s";
         return plainGray(total + " " + pluralized + " — Page " + (currentPage + 1) + " of " + totalPages);
+    }
+    public Component listSummary(int total, PageNoun noun) {
+        String singular = switch (noun) {
+            case GROUP -> "group";
+            case PERMISSION -> "permission";
+            case PLAYER -> "player";
+        };
+        return plainGray(total + " " + (total == 1 ? singular : singular + "s"));
     }
     public Component previousPageLabel() { return bold("◀ Prev Page", NamedTextColor.GREEN); }
     public Component nextPageLabel() { return bold("Next Page ▶", NamedTextColor.GREEN); }

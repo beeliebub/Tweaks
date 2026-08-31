@@ -501,6 +501,7 @@ public final class ProtectionMessages {
         GUI_NEXT_PAGE("Next Page ▶", NamedTextColor.GREEN, true),
         GUI_PAGE("Page %s of %s", NamedTextColor.GRAY),
         GUI_PAGE_SUMMARY("%s %s — Page %s of %s", NamedTextColor.GRAY),
+        GUI_LIST_SUMMARY("%s %s", NamedTextColor.GRAY),
         GUI_WORD_FLAG("flag", NamedTextColor.GRAY),
         GUI_WORD_FLAGS("flags", NamedTextColor.GRAY),
         GUI_WORD_MATERIAL("material", NamedTextColor.GRAY),

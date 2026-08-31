@@ -47,28 +47,6 @@ final class RegionGuiSupport {
                 .build();
     }
 
-    static void addPageNavButtons(List<ActionButton> buttons, int currentPage, int totalPages,
-                                  Consumer<Player> prevAction, Consumer<Player> nextAction) {
-        if (currentPage > 0) {
-            buttons.add(dialogButton(
-                    Messages.PROTECTION.text(Text.GUI_PREV_PAGE),
-                    Messages.PROTECTION.text(Text.GUI_PAGE, currentPage, totalPages),
-                    prevAction));
-        }
-        if (currentPage + 1 < totalPages) {
-            buttons.add(dialogButton(
-                    Messages.PROTECTION.text(Text.GUI_NEXT_PAGE),
-                    Messages.PROTECTION.text(Text.GUI_PAGE, currentPage + 2, totalPages),
-                    nextAction));
-        }
-    }
-
-    static Component pageSummary(int total, Text singular, Text plural, int currentPage, int totalPages) {
-        return Messages.PROTECTION.text(Text.GUI_PAGE_SUMMARY, total,
-                Messages.PROTECTION.value(total == 1 ? singular : plural),
-                currentPage + 1, totalPages).decoration(TextDecoration.ITALIC, false);
-    }
-
     static void openTextInputDialog(Player player, Component title, Component prompt, String inputKey,
                                     Component inputLabel, int maxLength, Component submitTooltip,
                                     BiConsumer<Player, String> onSubmit, Consumer<Player> onCancel) {

@@ -28,18 +28,18 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 // /perms GUI hierarchy — fully Paper Dialog-driven. Multi-action dialogs hold
-// paginated lists of buttons; each button's DialogAction.customClick callback
+// scrollable lists of buttons; each button's DialogAction.customClick callback
 // re-opens the same dialog with fresh state after the underlying mutation,
-// which is how toggles and navigation cycles work without needing a separate
-// inventory click listener. The two text-entry prompts (Create Group, Search
-// Player) are confirmation dialogs with a DialogInput.text field; they
-// replaced the previous AsyncChatEvent-based prompts.
+// which is how toggles work without needing a separate inventory click listener.
+// The two text-entry prompts (Create Group, Search Player) are confirmation
+// dialogs with a DialogInput.text field; they replaced the previous
+// AsyncChatEvent-based prompts.
 //
 // Hierarchy:
-//   MAIN ──┬─ GROUPS_LIST ──── GROUP_HUB ──┬─ GROUP_PERM_CATEGORIES ── GROUP_PERMS (paginated per category)
+//   MAIN ──┬─ GROUPS_LIST ──── GROUP_HUB ──┬─ GROUP_PERM_CATEGORIES ── GROUP_PERMS (scrollable per category)
 //          │       │                       ├─ GROUP_MEMBERS_TOGGLE
 //          │       └─ CREATE_GROUP         └─ GROUP_INHERITANCE_PICKER
-//          └─ USERS_LIST ──┬─ USER_HUB ──┬─ USER_PERM_CATEGORIES ── USER_PERMS (paginated per category)
+//          └─ USERS_LIST ──┬─ USER_HUB ──┬─ USER_PERM_CATEGORIES ── USER_PERMS (scrollable per category)
 //                          │             └─ USER_GROUP_PICKER
 //                          └─ SEARCH_USER → USER_HUB
 @SuppressWarnings("UnstableApiUsage") // Paper's Dialog API is @ApiStatus.Experimental in 26.2.
@@ -47,8 +47,7 @@ public final class PermissionGUI {
 
     private PermissionGUI() {}
 
-    // Pagination layout shared by every multi-action list dialog.
-    private static final int DIALOG_PAGE_SIZE = 12;
+    // Native Paper multi-action dialogs scroll when their action list exceeds the visible area.
     private static final int DIALOG_COLUMNS = 2;
     private static final String UNLISTED_CATEGORY = "unlisted";
 
@@ -60,12 +59,12 @@ public final class PermissionGUI {
         ActionButton groupsButton = dialogButton(
                 Messages.PERMISSIONS.groupsLabel(),
                 Messages.PERMISSIONS.groupsTooltip(),
-                p -> openGroupsMenu(p, manager, 0));
+                p -> openGroupsMenu(p, manager));
 
         ActionButton playersButton = dialogButton(
                 Messages.PERMISSIONS.playersLabel(),
                 Messages.PERMISSIONS.playersTooltip(),
-                p -> openUsersMenu(p, manager, 0));
+                p -> openUsersMenu(p, manager));
 
         DialogBase base = DialogBase.builder(
                         Messages.PERMISSIONS.mainTitle())
@@ -85,24 +84,15 @@ public final class PermissionGUI {
 
     // ----------------------------------------------------------- Groups list
 
-    public static void openGroupsMenu(Player player, PermissionManager manager, int page) {
+    public static void openGroupsMenu(Player player, PermissionManager manager) {
         List<String> groupNames = new ArrayList<>(manager.getGroups().keySet());
         groupNames.sort(String.CASE_INSENSITIVE_ORDER);
 
-        int totalPages = Math.max(1, (groupNames.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * DIALOG_PAGE_SIZE;
-        int end = Math.min(start + DIALOG_PAGE_SIZE, groupNames.size());
-
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            PermissionGroup group = manager.getGroups().get(groupNames.get(i));
+        for (String groupName : groupNames) {
+            PermissionGroup group = manager.getGroups().get(groupName);
             buttons.add(groupListEntryButton(group, manager));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                target -> openGroupsMenu(target, manager, currentPage - 1),
-                target -> openGroupsMenu(target, manager, currentPage + 1));
 
         buttons.add(dialogButton(
                 Messages.PERMISSIONS.createGroupLabel(),
@@ -115,8 +105,8 @@ public final class PermissionGUI {
                 p -> openMainMenu(p, manager));
 
         DialogBase base = DialogBase.builder(Messages.PERMISSIONS.groupsTitle())
-                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.pageSummary(
-                        groupNames.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.GROUP, currentPage, totalPages))))
+                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.listSummary(
+                        groupNames.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.GROUP))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -127,6 +117,11 @@ public final class PermissionGUI {
                         .build()));
 
         player.showDialog(dialog);
+    }
+
+    /** Compatibility overload for callers that used the former page argument. */
+    public static void openGroupsMenu(Player player, PermissionManager manager, int ignoredPage) {
+        openGroupsMenu(player, manager);
     }
 
     private static ActionButton groupListEntryButton(PermissionGroup group, PermissionManager manager) {
@@ -154,7 +149,7 @@ public final class PermissionGUI {
         ActionButton cancel = dialogButton(
                 Messages.PERMISSIONS.cancelLabel(),
                 Messages.PERMISSIONS.cancelGroupsTooltip(),
-                p -> openGroupsMenu(p, manager, 0));
+                p -> openGroupsMenu(p, manager));
 
         DialogBase base = DialogBase.builder(Messages.PERMISSIONS.createGroupTitle())
                 .body(List.of(DialogBody.plainMessage(
@@ -179,13 +174,13 @@ public final class PermissionGUI {
         String trimmed = rawName == null ? "" : rawName.trim();
         if (trimmed.isEmpty() || trimmed.contains(" ")) {
             player.sendMessage(Messages.PERMISSIONS.invalidGroupName());
-            openGroupsMenu(player, manager, 0);
+            openGroupsMenu(player, manager);
             return;
         }
         String key = trimmed.toLowerCase();
         if (manager.getGroups().containsKey(key)) {
             player.sendMessage(Messages.PERMISSIONS.groupAlreadyExists());
-            openGroupsMenu(player, manager, 0);
+            openGroupsMenu(player, manager);
             return;
         }
         PermissionManager.StateSnapshot previous = manager.snapshotState();
@@ -193,9 +188,9 @@ public final class PermissionGUI {
         persistGroups(player, manager, previous,
                 () -> {
                     player.sendMessage(Messages.PERMISSIONS.groupCreated(trimmed));
-                    openGroupsMenu(player, manager, 0);
+                    openGroupsMenu(player, manager);
                 },
-                () -> openGroupsMenu(player, manager, 0));
+                () -> openGroupsMenu(player, manager));
     }
 
     // ---------------------------------------------------------- Group editor
@@ -203,7 +198,7 @@ public final class PermissionGUI {
     public static void openGroupHub(Player player, PermissionManager manager, String groupName) {
         PermissionGroup group = manager.getGroups().get(groupName.toLowerCase());
         if (group == null) {
-            openGroupsMenu(player, manager, 0);
+            openGroupsMenu(player, manager);
             return;
         }
         String name = group.getName();
@@ -219,13 +214,13 @@ public final class PermissionGUI {
             buttons.add(dialogButton(
                     Messages.PERMISSIONS.manageMembersLabel(),
                     Messages.PERMISSIONS.manageMembersTooltip(),
-                    p -> openGroupMembersToggle(p, manager, name, 0)));
+                    p -> openGroupMembersToggle(p, manager, name)));
         }
 
         buttons.add(dialogButton(
                 Messages.PERMISSIONS.inheritanceLabel(),
                 Messages.PERMISSIONS.inheritanceTooltip(group.getParentName()),
-                p -> openGroupInheritancePicker(p, manager, name, 0)));
+                p -> openGroupInheritancePicker(p, manager, name)));
 
         if (!name.equalsIgnoreCase("default")) {
             buttons.add(dialogButton(
@@ -237,7 +232,7 @@ public final class PermissionGUI {
         ActionButton back = dialogButton(
                 Messages.PERMISSIONS.backToGroupsLabel(),
                 Messages.PERMISSIONS.groupsListTooltip(),
-                p -> openGroupsMenu(p, manager, 0));
+                p -> openGroupsMenu(p, manager));
 
         DialogBase base = DialogBase.builder(Messages.PERMISSIONS.groupTitle(name))
                 .body(List.of(DialogBody.plainMessage(
@@ -262,16 +257,16 @@ public final class PermissionGUI {
         }
         PermissionManager.StateSnapshot previous = manager.snapshotState();
         if (!manager.deleteGroup(groupName)) {
-            openGroupsMenu(player, manager, 0);
+            openGroupsMenu(player, manager);
             return;
         }
         persistGroupsAndUsers(player, manager, previous,
                 () -> {
                     manager.refreshAllOnlinePlayers();
                     player.sendMessage(Messages.PERMISSIONS.groupDeleted(groupName));
-                    openGroupsMenu(player, manager, 0);
+                    openGroupsMenu(player, manager);
                 },
-                () -> openGroupsMenu(player, manager, 0));
+                () -> openGroupsMenu(player, manager));
     }
 
     public static void openGroupPermCategories(Player player, PermissionManager manager, String groupName) {
@@ -283,7 +278,7 @@ public final class PermissionGUI {
                                                  List<ExternalPermissionCatalog.ExternalCategory> external) {
         PermissionGroup group = manager.getGroups().get(groupName.toLowerCase());
         if (group == null) {
-            openGroupsMenu(player, manager, 0);
+            openGroupsMenu(player, manager);
             return;
         }
         String name = group.getName();
@@ -298,7 +293,7 @@ public final class PermissionGUI {
             Component label = Messages.PERMISSIONS.categoryLabel(catDisplay);
             Component tip = Messages.PERMISSIONS.categoryTooltip(catPerms.size(), grantedCount);
             buttons.add(dialogButton(label, tip,
-                    p -> openGroupPerms(p, manager, name, catKey, 0, external)));
+                    p -> openGroupPerms(p, manager, name, catKey, external)));
         }
 
         for (ExternalPermissionCatalog.ExternalCategory category : external) {
@@ -308,15 +303,16 @@ public final class PermissionGUI {
             buttons.add(dialogButton(
                     Messages.PERMISSIONS.categoryLabel(category.displayName()),
                     Messages.PERMISSIONS.categoryTooltip(category.nodes().size(), grantedCount),
-                    p -> openGroupPerms(p, manager, name, category.key(), 0, external)));
+                    p -> openGroupPerms(p, manager, name, category.key(), external)));
         }
 
-        List<String> unlisted = unlistedPermissions(group.getPermissions(), external);
+        Set<String> inherited = manager.inheritedPermissions(name);
+        List<String> unlisted = unlistedPermissions(group.getPermissions(), external, inherited);
         if (!unlisted.isEmpty()) {
             buttons.add(dialogButton(
                     Messages.PERMISSIONS.unlistedCategoryLabel(),
                     Messages.PERMISSIONS.unlistedCategoryTooltip(unlisted.size()),
-                    p -> openGroupPerms(p, manager, name, UNLISTED_CATEGORY, 0, external)));
+                    p -> openGroupPerms(p, manager, name, UNLISTED_CATEGORY, external)));
         }
 
         ActionButton back = dialogButton(
@@ -339,41 +335,40 @@ public final class PermissionGUI {
         player.showDialog(dialog);
     }
 
-    public static void openGroupPerms(Player player, PermissionManager manager, String groupName, String category, int page) {
-        openGroupPerms(player, manager, groupName, category, page, scanExternal(manager));
+    public static void openGroupPerms(Player player, PermissionManager manager, String groupName, String category) {
+        openGroupPerms(player, manager, groupName, category, scanExternal(manager));
+    }
+
+    /** Compatibility overload for callers that used the former page argument. */
+    public static void openGroupPerms(Player player, PermissionManager manager, String groupName,
+                                     String category, int ignoredPage) {
+        openGroupPerms(player, manager, groupName, category);
     }
 
     private static void openGroupPerms(Player player, PermissionManager manager, String groupName,
-                                       String category, int page,
+                                       String category,
                                        List<ExternalPermissionCatalog.ExternalCategory> external) {
         PermissionGroup group = manager.getGroups().get(groupName.toLowerCase());
         if (group == null) {
-            openGroupsMenu(player, manager, 0);
+            openGroupsMenu(player, manager);
             return;
         }
         String name = group.getName();
-        List<PermissionEntry> entries = groupPermissionEntries(group, category, external);
         String catDisplay = permissionCategoryDisplay(category, external);
-
-        int totalPages = Math.max(1, (entries.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * DIALOG_PAGE_SIZE;
-        int end = Math.min(start + DIALOG_PAGE_SIZE, entries.size());
+        Set<String> inherited = manager.inheritedPermissions(name);
+        List<PermissionEntry> entries = groupPermissionEntries(group, category, external, inherited);
 
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            PermissionEntry entry = entries.get(i);
+        for (PermissionEntry entry : entries) {
             String perm = entry.permission();
-            boolean has = group.hasDirectPermission(perm);
-            Component label = Messages.PERMISSIONS.permissionToggleLabel(perm, has);
-            Component tip = Messages.PERMISSIONS.permissionToggleTooltip(perm, entry.description(), has);
+            boolean direct = group.hasDirectPermission(perm);
+            boolean inheritedOnly = !direct && inherited.contains(perm);
+            Component label = Messages.PERMISSIONS.permissionToggleLabel(perm, direct, inheritedOnly);
+            Component tip = Messages.PERMISSIONS.permissionToggleTooltip(
+                    perm, entry.description(), direct, inheritedOnly);
             buttons.add(dialogButton(label, tip,
-                    p -> toggleGroupPermission(p, manager, name, perm, category, currentPage, external)));
+                    p -> toggleGroupPermission(p, manager, name, perm, category, external)));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                target -> openGroupPerms(target, manager, name, category, currentPage - 1, external),
-                target -> openGroupPerms(target, manager, name, category, currentPage + 1, external));
 
         ActionButton back = dialogButton(
                 Messages.PERMISSIONS.backToCategoriesLabel(),
@@ -381,8 +376,8 @@ public final class PermissionGUI {
                 p -> openGroupPermCategories(p, manager, name));
 
         DialogBase base = DialogBase.builder(Messages.PERMISSIONS.permissionsTitle(catDisplay, name))
-                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.pageSummary(
-                        entries.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PERMISSION, currentPage, totalPages))))
+                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.listSummary(
+                        entries.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PERMISSION))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -396,11 +391,11 @@ public final class PermissionGUI {
     }
 
     private static void toggleGroupPermission(Player player, PermissionManager manager, String groupName,
-                                               String permission, String category, int returnPage,
+                                               String permission, String category,
                                                List<ExternalPermissionCatalog.ExternalCategory> external) {
         PermissionGroup group = manager.getGroups().get(groupName.toLowerCase());
         if (group == null) {
-            openGroupsMenu(player, manager, 0);
+            openGroupsMenu(player, manager);
             return;
         }
         PermissionManager.StateSnapshot previous = manager.snapshotState();
@@ -409,32 +404,26 @@ public final class PermissionGUI {
         persistGroups(player, manager, previous,
                 () -> {
                     manager.refreshAllOnlinePlayers();
-                    openGroupPerms(player, manager, group.getName(), category, returnPage, external);
+                    openGroupPerms(player, manager, group.getName(), category, external);
                 },
-                () -> openGroupPerms(player, manager, groupName, category, returnPage, external));
+                () -> openGroupPerms(player, manager, groupName, category, external));
     }
 
-    public static void openGroupMembersToggle(Player player, PermissionManager manager, String groupName, int page) {
+    public static void openGroupMembersToggle(Player player, PermissionManager manager, String groupName) {
         if (groupName.equalsIgnoreCase("default")) {
             openGroupHub(player, manager, groupName);
             return;
         }
         PermissionGroup group = manager.getGroups().get(groupName.toLowerCase());
         if (group == null) {
-            openGroupsMenu(player, manager, 0);
+            openGroupsMenu(player, manager);
             return;
         }
         String name = group.getName();
         List<UUID> all = knownPlayerIds(manager);
 
-        int totalPages = Math.max(1, (all.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * DIALOG_PAGE_SIZE;
-        int end = Math.min(start + DIALOG_PAGE_SIZE, all.size());
-
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            UUID uuid = all.get(i);
+        for (UUID uuid : all) {
             OfflinePlayer target = Bukkit.getOfflinePlayer(uuid);
             UserPermissions u = manager.getUsers().get(uuid);
             boolean isMember = u != null && u.hasGroup(name);
@@ -444,12 +433,8 @@ public final class PermissionGUI {
             Component label = Messages.PERMISSIONS.playerMembershipLabel(playerName, isMember, NamedTextColor.GRAY);
             Component tip = Messages.PERMISSIONS.playerDetailsTooltip(target.isOnline(), groupsLabel, isMember);
             buttons.add(dialogButton(label, tip,
-                    p -> toggleGroupMembership(p, manager, name, uuid, currentPage)));
+                    p -> toggleGroupMembership(p, manager, name, uuid)));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                target -> openGroupMembersToggle(target, manager, name, currentPage - 1),
-                target -> openGroupMembersToggle(target, manager, name, currentPage + 1));
 
         ActionButton back = dialogButton(
                 Messages.PERMISSIONS.backToGroupLabel(),
@@ -457,8 +442,8 @@ public final class PermissionGUI {
                 p -> openGroupHub(p, manager, name));
 
         DialogBase base = DialogBase.builder(Messages.PERMISSIONS.membersTitle(name))
-                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.pageSummary(
-                        all.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PLAYER, currentPage, totalPages))))
+                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.listSummary(
+                        all.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PLAYER))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -471,7 +456,13 @@ public final class PermissionGUI {
         player.showDialog(dialog);
     }
 
-    private static void toggleGroupMembership(Player player, PermissionManager manager, String groupName, UUID target, int returnPage) {
+    /** Compatibility overload for callers that used the former page argument. */
+    public static void openGroupMembersToggle(Player player, PermissionManager manager,
+                                              String groupName, int ignoredPage) {
+        openGroupMembersToggle(player, manager, groupName);
+    }
+
+    private static void toggleGroupMembership(Player player, PermissionManager manager, String groupName, UUID target) {
         if (groupName.equalsIgnoreCase("default")) {
             openGroupHub(player, manager, groupName);
             return;
@@ -483,15 +474,15 @@ public final class PermissionGUI {
         persistUsers(player, manager, previous,
                 () -> {
                     refreshOnlinePlayer(manager, target);
-                    openGroupMembersToggle(player, manager, groupName, returnPage);
+                    openGroupMembersToggle(player, manager, groupName);
                 },
-                () -> openGroupMembersToggle(player, manager, groupName, returnPage));
+                () -> openGroupMembersToggle(player, manager, groupName));
     }
 
-    public static void openGroupInheritancePicker(Player player, PermissionManager manager, String groupName, int page) {
+    public static void openGroupInheritancePicker(Player player, PermissionManager manager, String groupName) {
         PermissionGroup group = manager.getGroups().get(groupName.toLowerCase());
         if (group == null) {
-            openGroupsMenu(player, manager, 0);
+            openGroupsMenu(player, manager);
             return;
         }
         String name = group.getName();
@@ -499,14 +490,9 @@ public final class PermissionGUI {
         candidates.remove(name.toLowerCase());
         candidates.sort(String.CASE_INSENSITIVE_ORDER);
 
-        int totalPages = Math.max(1, (candidates.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * DIALOG_PAGE_SIZE;
-        int end = Math.min(start + DIALOG_PAGE_SIZE, candidates.size());
-
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            PermissionGroup candidate = manager.getGroups().get(candidates.get(i));
+        for (String candidateName : candidates) {
+            PermissionGroup candidate = manager.getGroups().get(candidateName);
             boolean isCurrentParent = candidate.getName().equalsIgnoreCase(group.getParentName());
 
             Component label = Messages.PERMISSIONS.parentCandidateLabel(candidate.getName(), isCurrentParent);
@@ -520,18 +506,14 @@ public final class PermissionGUI {
                 Messages.PERMISSIONS.clearInheritanceTooltip(),
                 p -> setGroupParent(p, manager, name, null)));
 
-        addPageNavButtons(buttons, currentPage, totalPages,
-                target -> openGroupInheritancePicker(target, manager, name, currentPage - 1),
-                target -> openGroupInheritancePicker(target, manager, name, currentPage + 1));
-
         ActionButton back = dialogButton(
                 Messages.PERMISSIONS.backToGroupLabel(),
                 Messages.PERMISSIONS.groupMenuTooltip(),
                 p -> openGroupHub(p, manager, name));
 
         DialogBase base = DialogBase.builder(Messages.PERMISSIONS.inheritanceTitle(name))
-                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.pageSummary(
-                        candidates.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.GROUP, currentPage, totalPages))))
+                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.listSummary(
+                        candidates.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.GROUP))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -544,10 +526,16 @@ public final class PermissionGUI {
         player.showDialog(dialog);
     }
 
+    /** Compatibility overload for callers that used the former page argument. */
+    public static void openGroupInheritancePicker(Player player, PermissionManager manager,
+                                                  String groupName, int ignoredPage) {
+        openGroupInheritancePicker(player, manager, groupName);
+    }
+
     private static void setGroupParent(Player player, PermissionManager manager, String groupName, String parentName) {
         PermissionGroup group = manager.getGroups().get(groupName.toLowerCase());
         if (group == null) {
-            openGroupsMenu(player, manager, 0);
+            openGroupsMenu(player, manager);
             return;
         }
         PermissionManager.StateSnapshot previous = manager.snapshotState();
@@ -564,17 +552,11 @@ public final class PermissionGUI {
 
     // ------------------------------------------------------------ Users list
 
-    public static void openUsersMenu(Player player, PermissionManager manager, int page) {
+    public static void openUsersMenu(Player player, PermissionManager manager) {
         List<UUID> uuids = onlinePlayerIds();
 
-        int totalPages = Math.max(1, (uuids.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * DIALOG_PAGE_SIZE;
-        int end = Math.min(start + DIALOG_PAGE_SIZE, uuids.size());
-
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            UUID uuid = uuids.get(i);
+        for (UUID uuid : uuids) {
             OfflinePlayer target = Bukkit.getOfflinePlayer(uuid);
             UserPermissions u = manager.getUsers().get(uuid);
             String playerName = target.getName() == null ? uuid.toString() : target.getName();
@@ -584,10 +566,6 @@ public final class PermissionGUI {
             Component tip = Messages.PERMISSIONS.playerListTooltip(target.isOnline(), groupsLabel);
             buttons.add(dialogButton(label, tip, p -> openUserHub(p, manager, uuid)));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                target -> openUsersMenu(target, manager, currentPage - 1),
-                target -> openUsersMenu(target, manager, currentPage + 1));
 
         buttons.add(dialogButton(
                 Messages.PERMISSIONS.searchPlayerLabel(),
@@ -600,8 +578,8 @@ public final class PermissionGUI {
                 p -> openMainMenu(p, manager));
 
         DialogBase base = DialogBase.builder(Messages.PERMISSIONS.playersTitle())
-                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.pageSummary(
-                        uuids.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PLAYER, currentPage, totalPages))))
+                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.listSummary(
+                        uuids.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PLAYER))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -612,6 +590,11 @@ public final class PermissionGUI {
                         .build()));
 
         player.showDialog(dialog);
+    }
+
+    /** Compatibility overload for callers that used the former page argument. */
+    public static void openUsersMenu(Player player, PermissionManager manager, int ignoredPage) {
+        openUsersMenu(player, manager);
     }
 
     // ----------------------------------------------------------- Search Player
@@ -633,7 +616,7 @@ public final class PermissionGUI {
         ActionButton cancel = dialogButton(
                 Messages.PERMISSIONS.cancelLabel(),
                 Messages.PERMISSIONS.cancelPlayersTooltip(),
-                p -> openUsersMenu(p, manager, 0));
+                p -> openUsersMenu(p, manager));
 
         DialogBase base = DialogBase.builder(Messages.PERMISSIONS.searchPlayerTitle())
                 .body(List.of(DialogBody.plainMessage(
@@ -658,13 +641,13 @@ public final class PermissionGUI {
         String trimmed = rawName == null ? "" : rawName.trim();
         if (trimmed.isEmpty()) {
             player.sendMessage(Messages.PERMISSIONS.invalidPlayerName());
-            openUsersMenu(player, manager, 0);
+            openUsersMenu(player, manager);
             return;
         }
         OfflinePlayer target = Bukkit.getOfflinePlayer(trimmed);
         if (!target.hasPlayedBefore() && !target.isOnline()) {
             player.sendMessage(Messages.PERMISSIONS.playerNeverPlayed(trimmed));
-            openUsersMenu(player, manager, 0);
+            openUsersMenu(player, manager);
             return;
         }
         openUserHub(player, manager, target.getUniqueId());
@@ -688,7 +671,7 @@ public final class PermissionGUI {
         buttons.add(dialogButton(
                 Messages.PERMISSIONS.editGroupsLabel(),
                 Messages.PERMISSIONS.editGroupsTooltip(groupsLabel),
-                p -> openUserGroupPicker(p, manager, targetUuid, 0)));
+                p -> openUserGroupPicker(p, manager, targetUuid)));
 
         buttons.add(dialogButton(
                 Messages.PERMISSIONS.resetUserLabel(),
@@ -698,7 +681,7 @@ public final class PermissionGUI {
         ActionButton back = dialogButton(
                 Messages.PERMISSIONS.backToPlayersLabel(),
                 Messages.PERMISSIONS.playersListTooltip(),
-                p -> openUsersMenu(p, manager, 0));
+                p -> openUsersMenu(p, manager));
 
         DialogBase base = DialogBase.builder(Messages.PERMISSIONS.userTitle(name))
                 .body(List.of(DialogBody.plainMessage(
@@ -749,7 +732,7 @@ public final class PermissionGUI {
             Component label = Messages.PERMISSIONS.categoryLabel(catDisplay);
             Component tip = Messages.PERMISSIONS.categoryTooltip(catPerms.size(), grantedCount);
             buttons.add(dialogButton(label, tip,
-                    p -> openUserPerms(p, manager, targetUuid, catKey, 0, external)));
+                    p -> openUserPerms(p, manager, targetUuid, catKey, external)));
         }
 
         for (ExternalPermissionCatalog.ExternalCategory category : external) {
@@ -759,15 +742,16 @@ public final class PermissionGUI {
             buttons.add(dialogButton(
                     Messages.PERMISSIONS.categoryLabel(category.displayName()),
                     Messages.PERMISSIONS.categoryTooltip(category.nodes().size(), grantedCount),
-                    p -> openUserPerms(p, manager, targetUuid, category.key(), 0, external)));
+                    p -> openUserPerms(p, manager, targetUuid, category.key(), external)));
         }
 
-        List<String> unlisted = unlistedPermissions(user.getPermissions(), external);
+        Set<String> inherited = manager.inheritedPermissions(targetUuid);
+        List<String> unlisted = unlistedPermissions(user.getPermissions(), external, inherited);
         if (!unlisted.isEmpty()) {
             buttons.add(dialogButton(
                     Messages.PERMISSIONS.unlistedCategoryLabel(),
                     Messages.PERMISSIONS.unlistedCategoryTooltip(unlisted.size()),
-                    p -> openUserPerms(p, manager, targetUuid, UNLISTED_CATEGORY, 0, external)));
+                    p -> openUserPerms(p, manager, targetUuid, UNLISTED_CATEGORY, external)));
         }
 
         ActionButton back = dialogButton(
@@ -790,38 +774,37 @@ public final class PermissionGUI {
         player.showDialog(dialog);
     }
 
-    public static void openUserPerms(Player player, PermissionManager manager, UUID targetUuid, String category, int page) {
-        openUserPerms(player, manager, targetUuid, category, page, scanExternal(manager));
+    public static void openUserPerms(Player player, PermissionManager manager, UUID targetUuid, String category) {
+        openUserPerms(player, manager, targetUuid, category, scanExternal(manager));
+    }
+
+    /** Compatibility overload for callers that used the former page argument. */
+    public static void openUserPerms(Player player, PermissionManager manager, UUID targetUuid,
+                                    String category, int ignoredPage) {
+        openUserPerms(player, manager, targetUuid, category);
     }
 
     private static void openUserPerms(Player player, PermissionManager manager, UUID targetUuid,
-                                      String category, int page,
+                                      String category,
                                       List<ExternalPermissionCatalog.ExternalCategory> external) {
         OfflinePlayer target = Bukkit.getOfflinePlayer(targetUuid);
         UserPermissions user = manager.getUserPermissions(targetUuid);
         String name = target.getName() == null ? targetUuid.toString() : target.getName();
-        List<PermissionEntry> entries = userPermissionEntries(user, category, external);
         String catDisplay = permissionCategoryDisplay(category, external);
-
-        int totalPages = Math.max(1, (entries.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * DIALOG_PAGE_SIZE;
-        int end = Math.min(start + DIALOG_PAGE_SIZE, entries.size());
+        Set<String> inherited = manager.inheritedPermissions(targetUuid);
+        List<PermissionEntry> entries = userPermissionEntries(user, category, external, inherited);
 
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            PermissionEntry entry = entries.get(i);
+        for (PermissionEntry entry : entries) {
             String perm = entry.permission();
-            boolean has = user.hasDirectPermission(perm);
-            Component label = Messages.PERMISSIONS.permissionToggleLabel(perm, has);
-            Component tip = Messages.PERMISSIONS.permissionToggleTooltip(perm, entry.description(), has);
+            boolean direct = user.hasDirectPermission(perm);
+            boolean inheritedOnly = !direct && inherited.contains(perm);
+            Component label = Messages.PERMISSIONS.permissionToggleLabel(perm, direct, inheritedOnly);
+            Component tip = Messages.PERMISSIONS.permissionToggleTooltip(
+                    perm, entry.description(), direct, inheritedOnly);
             buttons.add(dialogButton(label, tip,
-                    p -> toggleUserPermission(p, manager, targetUuid, perm, category, currentPage, external)));
+                    p -> toggleUserPermission(p, manager, targetUuid, perm, category, external)));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                target2 -> openUserPerms(target2, manager, targetUuid, category, currentPage - 1, external),
-                target2 -> openUserPerms(target2, manager, targetUuid, category, currentPage + 1, external));
 
         ActionButton back = dialogButton(
                 Messages.PERMISSIONS.backToCategoriesLabel(),
@@ -829,8 +812,8 @@ public final class PermissionGUI {
                 p -> openUserPermCategories(p, manager, targetUuid));
 
         DialogBase base = DialogBase.builder(Messages.PERMISSIONS.permissionsTitle(catDisplay, name))
-                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.pageSummary(
-                        entries.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PERMISSION, currentPage, totalPages))))
+                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.listSummary(
+                        entries.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.PERMISSION))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -844,7 +827,7 @@ public final class PermissionGUI {
     }
 
     private static void toggleUserPermission(Player player, PermissionManager manager, UUID targetUuid,
-                                              String permission, String category, int returnPage,
+                                              String permission, String category,
                                               List<ExternalPermissionCatalog.ExternalCategory> external) {
         PermissionManager.StateSnapshot previous = manager.snapshotState();
         UserPermissions u = manager.getUserPermissions(targetUuid);
@@ -853,12 +836,12 @@ public final class PermissionGUI {
         persistUsers(player, manager, previous,
                 () -> {
                     refreshOnlinePlayer(manager, targetUuid);
-                    openUserPerms(player, manager, targetUuid, category, returnPage, external);
+                    openUserPerms(player, manager, targetUuid, category, external);
                 },
-                () -> openUserPerms(player, manager, targetUuid, category, returnPage, external));
+                () -> openUserPerms(player, manager, targetUuid, category, external));
     }
 
-    public static void openUserGroupPicker(Player player, PermissionManager manager, UUID targetUuid, int page) {
+    public static void openUserGroupPicker(Player player, PermissionManager manager, UUID targetUuid) {
         OfflinePlayer target = Bukkit.getOfflinePlayer(targetUuid);
         UserPermissions user = manager.getUserPermissions(targetUuid);
         String name = target.getName() == null ? targetUuid.toString() : target.getName();
@@ -867,25 +850,16 @@ public final class PermissionGUI {
         groupNames.removeIf(groupKey -> groupKey.equalsIgnoreCase("default"));
         groupNames.sort(String.CASE_INSENSITIVE_ORDER);
 
-        int totalPages = Math.max(1, (groupNames.size() + DIALOG_PAGE_SIZE - 1) / DIALOG_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * DIALOG_PAGE_SIZE;
-        int end = Math.min(start + DIALOG_PAGE_SIZE, groupNames.size());
-
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            PermissionGroup group = manager.getGroups().get(groupNames.get(i));
+        for (String groupName : groupNames) {
+            PermissionGroup group = manager.getGroups().get(groupName);
             boolean isMember = user.hasGroup(group.getName());
 
             Component label = Messages.PERMISSIONS.playerMembershipLabel(group.getName(), isMember, NamedTextColor.YELLOW);
             buttons.add(dialogButton(label, Messages.PERMISSIONS.userGroupTooltip(
                     group.getPermissions().size(), group.getParentName(), isMember),
-                    p -> toggleUserGroup(p, manager, targetUuid, group.getName(), currentPage)));
+                    p -> toggleUserGroup(p, manager, targetUuid, group.getName())));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                target2 -> openUserGroupPicker(target2, manager, targetUuid, currentPage - 1),
-                target2 -> openUserGroupPicker(target2, manager, targetUuid, currentPage + 1));
 
         ActionButton back = dialogButton(
                 Messages.PERMISSIONS.backToUserLabel(),
@@ -893,8 +867,8 @@ public final class PermissionGUI {
                 p -> openUserHub(p, manager, targetUuid));
 
         DialogBase base = DialogBase.builder(Messages.PERMISSIONS.editGroupsTitle(name))
-                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.pageSummary(
-                        groupNames.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.GROUP, currentPage, totalPages))))
+                .body(List.of(DialogBody.plainMessage(Messages.PERMISSIONS.listSummary(
+                        groupNames.size(), me.beeliebub.tweaks.core.PermissionMessages.PageNoun.GROUP))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -907,9 +881,15 @@ public final class PermissionGUI {
         player.showDialog(dialog);
     }
 
-    private static void toggleUserGroup(Player player, PermissionManager manager, UUID targetUuid, String groupName, int returnPage) {
+    /** Compatibility overload for callers that used the former page argument. */
+    public static void openUserGroupPicker(Player player, PermissionManager manager,
+                                           UUID targetUuid, int ignoredPage) {
+        openUserGroupPicker(player, manager, targetUuid);
+    }
+
+    private static void toggleUserGroup(Player player, PermissionManager manager, UUID targetUuid, String groupName) {
         if (groupName.equalsIgnoreCase("default")) {
-            openUserGroupPicker(player, manager, targetUuid, returnPage);
+            openUserGroupPicker(player, manager, targetUuid);
             return;
         }
         PermissionManager.StateSnapshot previous = manager.snapshotState();
@@ -919,9 +899,9 @@ public final class PermissionGUI {
         persistUsers(player, manager, previous,
                 () -> {
                     refreshOnlinePlayer(manager, targetUuid);
-                    openUserGroupPicker(player, manager, targetUuid, returnPage);
+                    openUserGroupPicker(player, manager, targetUuid);
                 },
-                () -> openUserGroupPicker(player, manager, targetUuid, returnPage));
+                () -> openUserGroupPicker(player, manager, targetUuid));
     }
 
     // -------------------------------------------------------------- Helpers
@@ -1020,7 +1000,8 @@ public final class PermissionGUI {
 
     private static List<PermissionEntry> groupPermissionEntries(
             PermissionGroup group, String category,
-            List<ExternalPermissionCatalog.ExternalCategory> external) {
+            List<ExternalPermissionCatalog.ExternalCategory> external,
+            Set<String> inherited) {
         ExternalPermissionCatalog.ExternalCategory externalCategory = findExternal(category, external);
         if (externalCategory != null) {
             return externalCategory.nodes().stream()
@@ -1028,7 +1009,7 @@ public final class PermissionGUI {
                     .toList();
         }
         if (UNLISTED_CATEGORY.equals(category)) {
-            return unlistedPermissions(group.getPermissions(), external).stream()
+            return unlistedPermissions(group.getPermissions(), external, inherited).stream()
                     .map(permission -> new PermissionEntry(permission, permission))
                     .toList();
         }
@@ -1039,7 +1020,8 @@ public final class PermissionGUI {
 
     private static List<PermissionEntry> userPermissionEntries(
             UserPermissions user, String category,
-            List<ExternalPermissionCatalog.ExternalCategory> external) {
+            List<ExternalPermissionCatalog.ExternalCategory> external,
+            Set<String> inherited) {
         ExternalPermissionCatalog.ExternalCategory externalCategory = findExternal(category, external);
         if (externalCategory != null) {
             return externalCategory.nodes().stream()
@@ -1047,7 +1029,7 @@ public final class PermissionGUI {
                     .toList();
         }
         if (UNLISTED_CATEGORY.equals(category)) {
-            return unlistedPermissions(user.getPermissions(), external).stream()
+            return unlistedPermissions(user.getPermissions(), external, inherited).stream()
                     .map(permission -> new PermissionEntry(permission, permission))
                     .toList();
         }
@@ -1069,10 +1051,13 @@ public final class PermissionGUI {
     }
 
     private static List<String> unlistedPermissions(
-            Set<String> directPermissions, List<ExternalPermissionCatalog.ExternalCategory> external) {
+            Set<String> directPermissions, List<ExternalPermissionCatalog.ExternalCategory> external,
+            Set<String> inherited) {
         Set<String> known = new HashSet<>(Permissions.getAllPermissions());
         external.forEach(category -> category.nodes().forEach(node -> known.add(node.node())));
-        return directPermissions.stream()
+        Set<String> candidates = new HashSet<>(directPermissions);
+        candidates.addAll(inherited);
+        return candidates.stream()
                 .filter(permission -> permission != null && !known.contains(permission.toLowerCase()))
                 .sorted(String.CASE_INSENSITIVE_ORDER)
                 .toList();
@@ -1111,22 +1096,6 @@ public final class PermissionGUI {
             result = result.append(lines[i].decoration(TextDecoration.ITALIC, false));
         }
         return result;
-    }
-
-    private static void addPageNavButtons(List<ActionButton> buttons, int currentPage, int totalPages,
-                                          Consumer<Player> prevAction, Consumer<Player> nextAction) {
-        if (currentPage > 0) {
-            buttons.add(dialogButton(
-                    Messages.PERMISSIONS.previousPageLabel(),
-                    Messages.PERMISSIONS.pageTooltip(currentPage, totalPages),
-                    prevAction));
-        }
-        if (currentPage + 1 < totalPages) {
-            buttons.add(dialogButton(
-                    Messages.PERMISSIONS.nextPageLabel(),
-                    Messages.PERMISSIONS.pageTooltip(currentPage + 2, totalPages),
-                    nextAction));
-        }
     }
 
     private static void refreshOnlinePlayer(PermissionManager manager, UUID uuid) {

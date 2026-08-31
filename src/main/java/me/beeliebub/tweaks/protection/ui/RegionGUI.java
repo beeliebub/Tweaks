@@ -46,12 +46,9 @@ public final class RegionGUI {
     private RegionGUI() {}
 
     private static final int DIALOG_COLUMNS = 1;
-    // List-screen layout. Two columns at twelve entries per page matches the
-    // PermissionGUI cadence — large enough to scan an active region's roster
-    // without scrolling, small enough that pagination buttons stay above the
-    // fold for tall dialogs (header + 12 entries + 2 nav buttons + add + back).
+    // Native Paper multi-action dialogs scroll when their action list exceeds
+    // the visible area, so list screens pass their complete option set.
     private static final int LIST_COLUMNS = 2;
-    private static final int LIST_PAGE_SIZE = 12;
 
     // Open the region management dashboard for `region`. The caller is
     // responsible for the authorization check (isOwnerManagerOrAdmin); this
@@ -115,30 +112,17 @@ public final class RegionGUI {
     // ------------------------------------------------------------ Flags menu
 
     static void openFlagsMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager) {
-        openFlagsMenu(player, region, pm, permissionManager, 0);
-    }
-
-    private static void openFlagsMenu(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, int page) {
         Region fresh = refreshRegion(pm, region);
         if (fresh == null) {
             player.sendMessage(Messages.PROTECTION.text(Text.REGION_GONE));
             return;
         }
         RegionFlag[] all = RegionFlag.values();
-        int totalPages = Math.max(1, (all.length + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * LIST_PAGE_SIZE;
-        int end = Math.min(start + LIST_PAGE_SIZE, all.length);
 
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            RegionFlag flag = all[i];
+        for (RegionFlag flag : all) {
             buttons.add(flagListEntryButton(fresh, pm, permissionManager, flag));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                p -> openFlagsMenu(p, fresh, pm, permissionManager, currentPage - 1),
-                p -> openFlagsMenu(p, fresh, pm, permissionManager, currentPage + 1));
 
         ActionButton back = dialogButton(
                 Messages.PROTECTION.text(Text.GUI_BACK_REGION),
@@ -147,7 +131,9 @@ public final class RegionGUI {
 
         DialogBase base = DialogBase.builder(Messages.PROTECTION.title(Text.GUI_FLAGS_TITLE, fresh.id()))
                 .body(List.of(DialogBody.plainMessage(
-                        pageSummary(all.length, Text.GUI_WORD_FLAG, Text.GUI_WORD_FLAGS, currentPage, totalPages))))
+                        Messages.PROTECTION.text(Text.GUI_FLAG_SUMMARY, all.length,
+                                Messages.PROTECTION.value(all.length == 1
+                                        ? Text.GUI_WORD_FLAG : Text.GUI_WORD_FLAGS)))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -191,9 +177,9 @@ public final class RegionGUI {
     // Route by flag type to the appropriate detail screen.
     private static void openFlagDetail(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, RegionFlag flag) {
         if (flag.isMaterialFlag()) {
-            openMaterialListMenu(player, region, pm, permissionManager, flag, 0);
+            openMaterialListMenu(player, region, pm, permissionManager, flag);
         } else if (flag.isEntityFlag()) {
-            openEntityListMenu(player, region, pm, permissionManager, flag, 0);
+            openEntityListMenu(player, region, pm, permissionManager, flag);
         } else {
             openBooleanTargetsMenu(player, region, pm, permissionManager, flag);
         }
@@ -293,7 +279,7 @@ public final class RegionGUI {
     // --- Material list flag (ALLOW_BLOCK_BREAK etc.) ---
 
     private static void openMaterialListMenu(Player player, Region region, ProtectionManager pm,
-                                             PermissionManager permissionManager, RegionFlag flag, int page) {
+                                             PermissionManager permissionManager, RegionFlag flag) {
         Region fresh = refreshRegion(pm, region);
         if (fresh == null) {
             player.sendMessage(Messages.PROTECTION.text(Text.REGION_GONE));
@@ -302,23 +288,13 @@ public final class RegionGUI {
         List<Material> materials = new ArrayList<>(fresh.materialsFor(flag));
         materials.sort(java.util.Comparator.comparing(Enum::name));
 
-        int totalPages = Math.max(1, (materials.size() + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * LIST_PAGE_SIZE;
-        int end = Math.min(start + LIST_PAGE_SIZE, materials.size());
-
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            Material m = materials.get(i);
+        for (Material m : materials) {
             buttons.add(dialogButton(
                     Messages.PROTECTION.text(Text.GUI_REMOVE_ENTRY, m.name()),
                     Messages.PROTECTION.text(Text.GUI_REMOVE_LIST_TIP),
-                    p -> handleRemoveMaterial(p, fresh, pm, permissionManager, flag, m, currentPage)));
+                    p -> handleRemoveMaterial(p, fresh, pm, permissionManager, flag, m)));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                p -> openMaterialListMenu(p, fresh, pm, permissionManager, flag, currentPage - 1),
-                p -> openMaterialListMenu(p, fresh, pm, permissionManager, flag, currentPage + 1));
 
         buttons.add(dialogButton(
                 Messages.PROTECTION.text(Text.GUI_ADD_MATERIAL),
@@ -332,8 +308,8 @@ public final class RegionGUI {
 
         DialogBase base = DialogBase.builder(Messages.PROTECTION.title(
                 Text.GUI_FLAG_DETAIL_TITLE, flag.name(), fresh.id()))
-                .body(List.of(DialogBody.plainMessage(pageSummary(materials.size(),
-                        Text.GUI_WORD_MATERIAL, Text.GUI_WORD_MATERIALS, currentPage, totalPages))))
+                .body(List.of(DialogBody.plainMessage(listSummary(materials.size(),
+                        Text.GUI_WORD_MATERIAL, Text.GUI_WORD_MATERIALS))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -346,12 +322,12 @@ public final class RegionGUI {
     }
 
     private static void handleRemoveMaterial(Player player, Region region, ProtectionManager pm,
-                                             PermissionManager permissionManager, RegionFlag flag, Material material, int returnPage) {
+                                             PermissionManager permissionManager, RegionFlag flag, Material material) {
         EnumSet<Material> current = EnumSet.noneOf(Material.class);
         current.addAll(region.materialsFor(flag));
         if (!current.remove(material)) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_MATERIAL_NOT_PRESENT));
-            openMaterialListMenu(player, region, pm, permissionManager, flag, returnPage);
+            openMaterialListMenu(player, region, pm, permissionManager, flag);
             return;
         }
         if (!pm.setMaterials(worldOf(region), region.id(), flag, current)) {
@@ -360,7 +336,7 @@ public final class RegionGUI {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_MATERIAL_REMOVED,
                     material.name(), flag.name()));
         }
-        openMaterialListMenu(player, region, pm, permissionManager, flag, returnPage);
+        openMaterialListMenu(player, region, pm, permissionManager, flag);
     }
 
     private static void openAddMaterialDialog(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, RegionFlag flag) {
@@ -370,7 +346,7 @@ public final class RegionGUI {
                 "material_name", Messages.PROTECTION.text(Text.GUI_INPUT_VALUE), 32,
                 Messages.PROTECTION.text(Text.GUI_APPLY_VALUE_TIP),
                 (p, raw) -> handleAddMaterialSubmission(p, region, pm, permissionManager, flag, raw),
-                p -> openMaterialListMenu(p, region, pm, permissionManager, flag, 0));
+                p -> openMaterialListMenu(p, region, pm, permissionManager, flag));
     }
 
     private static void handleAddMaterialSubmission(Player player, Region region, ProtectionManager pm,
@@ -378,20 +354,20 @@ public final class RegionGUI {
         String trimmed = rawValue == null ? "" : rawValue.trim();
         if (trimmed.isEmpty()) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_INVALID_MATERIAL));
-            openMaterialListMenu(player, region, pm, permissionManager, flag, 0);
+            openMaterialListMenu(player, region, pm, permissionManager, flag);
             return;
         }
         Material m = Material.matchMaterial(trimmed);
         if (m == null || !m.isBlock()) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_UNKNOWN_BLOCK, trimmed));
-            openMaterialListMenu(player, region, pm, permissionManager, flag, 0);
+            openMaterialListMenu(player, region, pm, permissionManager, flag);
             return;
         }
         EnumSet<Material> current = EnumSet.noneOf(Material.class);
         current.addAll(region.materialsFor(flag));
         if (!current.add(m)) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_MATERIAL_EXISTS));
-            openMaterialListMenu(player, region, pm, permissionManager, flag, 0);
+            openMaterialListMenu(player, region, pm, permissionManager, flag);
             return;
         }
         if (!pm.setMaterials(worldOf(region), region.id(), flag, current)) {
@@ -399,13 +375,13 @@ public final class RegionGUI {
         } else {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_MATERIAL_ADDED, m.name(), flag.name()));
         }
-        openMaterialListMenu(player, region, pm, permissionManager, flag, 0);
+        openMaterialListMenu(player, region, pm, permissionManager, flag);
     }
 
     // --- Entity list flag (ALLOW_MOB_SPAWN / DENY_MOB_SPAWN) ---
 
     private static void openEntityListMenu(Player player, Region region, ProtectionManager pm,
-                                           PermissionManager permissionManager, RegionFlag flag, int page) {
+                                           PermissionManager permissionManager, RegionFlag flag) {
         Region fresh = refreshRegion(pm, region);
         if (fresh == null) {
             player.sendMessage(Messages.PROTECTION.text(Text.REGION_GONE));
@@ -414,23 +390,13 @@ public final class RegionGUI {
         List<EntityType> entities = new ArrayList<>(fresh.entitiesFor(flag));
         entities.sort(java.util.Comparator.comparing(Enum::name));
 
-        int totalPages = Math.max(1, (entities.size() + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE);
-        int currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = currentPage * LIST_PAGE_SIZE;
-        int end = Math.min(start + LIST_PAGE_SIZE, entities.size());
-
         List<ActionButton> buttons = new ArrayList<>();
-        for (int i = start; i < end; i++) {
-            EntityType t = entities.get(i);
+        for (EntityType t : entities) {
             buttons.add(dialogButton(
                     Messages.PROTECTION.text(Text.GUI_REMOVE_ENTRY, t.name()),
                     Messages.PROTECTION.text(Text.GUI_REMOVE_LIST_TIP),
-                    p -> handleRemoveEntity(p, fresh, pm, permissionManager, flag, t, currentPage)));
+                    p -> handleRemoveEntity(p, fresh, pm, permissionManager, flag, t)));
         }
-
-        addPageNavButtons(buttons, currentPage, totalPages,
-                p -> openEntityListMenu(p, fresh, pm, permissionManager, flag, currentPage - 1),
-                p -> openEntityListMenu(p, fresh, pm, permissionManager, flag, currentPage + 1));
 
         buttons.add(dialogButton(
                 Messages.PROTECTION.text(Text.GUI_ADD_ENTITY),
@@ -444,8 +410,8 @@ public final class RegionGUI {
 
         DialogBase base = DialogBase.builder(Messages.PROTECTION.title(
                 Text.GUI_FLAG_DETAIL_TITLE, flag.name(), fresh.id()))
-                .body(List.of(DialogBody.plainMessage(pageSummary(entities.size(),
-                        Text.GUI_WORD_ENTITY_TYPE, Text.GUI_WORD_ENTITY_TYPES, currentPage, totalPages))))
+                .body(List.of(DialogBody.plainMessage(listSummary(entities.size(),
+                        Text.GUI_WORD_ENTITY_TYPE, Text.GUI_WORD_ENTITY_TYPES))))
                 .build();
 
         Dialog dialog = Dialog.create(b -> b.empty()
@@ -458,12 +424,12 @@ public final class RegionGUI {
     }
 
     private static void handleRemoveEntity(Player player, Region region, ProtectionManager pm,
-                                           PermissionManager permissionManager, RegionFlag flag, EntityType type, int returnPage) {
+                                           PermissionManager permissionManager, RegionFlag flag, EntityType type) {
         EnumSet<EntityType> current = EnumSet.noneOf(EntityType.class);
         current.addAll(region.entitiesFor(flag));
         if (!current.remove(type)) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_ENTITY_NOT_PRESENT));
-            openEntityListMenu(player, region, pm, permissionManager, flag, returnPage);
+            openEntityListMenu(player, region, pm, permissionManager, flag);
             return;
         }
         if (!pm.setEntities(worldOf(region), region.id(), flag, current)) {
@@ -472,7 +438,7 @@ public final class RegionGUI {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_ENTITY_REMOVED,
                     type.name(), flag.name()));
         }
-        openEntityListMenu(player, region, pm, permissionManager, flag, returnPage);
+        openEntityListMenu(player, region, pm, permissionManager, flag);
     }
 
     private static void openAddEntityDialog(Player player, Region region, ProtectionManager pm, PermissionManager permissionManager, RegionFlag flag) {
@@ -482,7 +448,7 @@ public final class RegionGUI {
                 "entity_name", Messages.PROTECTION.text(Text.GUI_INPUT_VALUE), 48,
                 Messages.PROTECTION.text(Text.GUI_APPLY_VALUE_TIP),
                 (p, raw) -> handleAddEntitySubmission(p, region, pm, permissionManager, flag, raw),
-                p -> openEntityListMenu(p, region, pm, permissionManager, flag, 0));
+                p -> openEntityListMenu(p, region, pm, permissionManager, flag));
     }
 
     private static void handleAddEntitySubmission(Player player, Region region, ProtectionManager pm,
@@ -490,7 +456,7 @@ public final class RegionGUI {
         String trimmed = rawValue == null ? "" : rawValue.trim();
         if (trimmed.isEmpty()) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_INVALID_ENTITY));
-            openEntityListMenu(player, region, pm, permissionManager, flag, 0);
+            openEntityListMenu(player, region, pm, permissionManager, flag);
             return;
         }
         EntityType t;
@@ -498,14 +464,14 @@ public final class RegionGUI {
             t = EntityType.valueOf(trimmed.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             player.sendMessage(Messages.PROTECTION.text(Text.UNKNOWN_ENTITY, trimmed));
-            openEntityListMenu(player, region, pm, permissionManager, flag, 0);
+            openEntityListMenu(player, region, pm, permissionManager, flag);
             return;
         }
         EnumSet<EntityType> current = EnumSet.noneOf(EntityType.class);
         current.addAll(region.entitiesFor(flag));
         if (!current.add(t)) {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_ENTITY_EXISTS));
-            openEntityListMenu(player, region, pm, permissionManager, flag, 0);
+            openEntityListMenu(player, region, pm, permissionManager, flag);
             return;
         }
         if (!pm.setEntities(worldOf(region), region.id(), flag, current)) {
@@ -513,7 +479,7 @@ public final class RegionGUI {
         } else {
             player.sendMessage(Messages.PROTECTION.text(Text.GUI_ENTITY_ADDED, t.name(), flag.name()));
         }
-        openEntityListMenu(player, region, pm, permissionManager, flag, 0);
+        openEntityListMenu(player, region, pm, permissionManager, flag);
     }
 
     // ---------------------------------------------------------- Members menu
@@ -790,13 +756,10 @@ public final class RegionGUI {
         return RegionGuiSupport.lookupName(uuid);
     }
 
-    static Component pageSummary(int total, Text singular, Text plural, int currentPage, int totalPages) {
-        return RegionGuiSupport.pageSummary(total, singular, plural, currentPage, totalPages);
-    }
-
-    static void addPageNavButtons(List<ActionButton> buttons, int currentPage, int totalPages,
-                                  Consumer<Player> prevAction, Consumer<Player> nextAction) {
-        RegionGuiSupport.addPageNavButtons(buttons, currentPage, totalPages, prevAction, nextAction);
+    static Component listSummary(int total, Text singular, Text plural) {
+        return Messages.PROTECTION.text(Text.GUI_LIST_SUMMARY, total,
+                Messages.PROTECTION.value(total == 1 ? singular : plural))
+                .decoration(TextDecoration.ITALIC, false);
     }
 
     static ActionButton dialogButton(Component label, Component tooltip, Consumer<Player> action) {
