@@ -35,4 +35,14 @@ class CasinoDiscordMessagesTest {
         assertEquals("@@ Roulette — 17 Black @@",
                 Messages.CASINO_DISCORD.rouletteResultHeader(17, "BLACK"));
     }
+
+    @Test
+    void rouletteBigWinMarkerIsLimitedToTheExplicitPublicForm() {
+        assertEquals("[Roulette] Alice +$800 (BIG WIN!)",
+                Messages.CASINO_DISCORD.rouletteRound("Alice", 800, true));
+        assertEquals("[Roulette] Alice +$800",
+                Messages.CASINO_DISCORD.rouletteRound("Alice", 800, false));
+        assertFalse(Messages.CASINO_DISCORD.rouletteBettorOutcome("Alice", 17, "BLACK", 800)
+                .contains("BIG WIN"));
+    }
 }

@@ -21,11 +21,16 @@ public final class CasinoDiscordMessages {
     }
 
     public String rouletteRound(String name, long net) {
-        return "[Roulette] " + sanitizeName(name) + " " + signedMoney(net);
+        return rouletteRound(name, net, false);
+    }
+
+    public String rouletteRound(String name, long net, boolean bigWin) {
+        String suffix = bigWin ? " (BIG WIN!)" : "";
+        return "[Roulette] " + sanitizeName(name) + " " + signedMoney(net) + suffix;
     }
 
     public String rouletteBettorOutcome(String name, int pocket, String colorName, long net) {
-        return rouletteRound(name, net) + " | result: " + pocket + " " + titleCase(colorName);
+        return rouletteRound(name, net, false) + " | result: " + pocket + " " + titleCase(colorName);
     }
 
     /** Header placed immediately before one grouped Roulette settlement. */

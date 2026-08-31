@@ -274,7 +274,27 @@ public final class ConfigMessages {
     }
     public Component valueInputLabel() { return plainYellow("Value"); }
     public Component saveLabel() { return bold("Save", NamedTextColor.GREEN); }
-    public Component saveTooltip() { return plainGray("Apply the entered value."); }
+    public Component saveScalarTooltip(String displayName) {
+        return plainGray("Save the " + displayName + " value.");
+    }
+    public Component addListEntrySaveTooltip(String displayName) {
+        return plainGray("Add this value to the " + displayName + " list.");
+    }
+    public Component saveGridCellTooltip(int index) {
+        return plainGray("Save the material for recipe cell " + index + ".");
+    }
+    public Component saveMapEntryTooltip(String displayName, String key) {
+        return plainGray("Save the " + displayName + " value for key " + key + ".");
+    }
+    public Component addMapEntrySaveTooltip(String displayName) {
+        return plainGray("Add a key and value to " + displayName + ".");
+    }
+    public Component saveWorldProfileTooltip() {
+        return plainGray("Save this world's tag and color.");
+    }
+    public Component addWorldProfileTooltip() {
+        return plainGray("Add this world profile and its display settings.");
+    }
     public Component cancelLabel() { return bold("Cancel", NamedTextColor.RED); }
     public Component cancelTooltip() { return gray("Discard and go back."); }
 

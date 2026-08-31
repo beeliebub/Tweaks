@@ -33,8 +33,14 @@ public final class PermissionMessages {
         return green("Set inheritance for group '" + name + "' to " + (parent == null ? "none" : parent) + ".");
     }
     public Component unknownAction() { return red("Unknown action."); }
+    public Component storageFailed() {
+        return red("Permission changes could not be saved; no durable change was confirmed.");
+    }
     public Component userUsage() { return red("Usage: /tprm user <player> <addperm|delperm|setgroup>"); }
     public Component playerNeverPlayed(String name) { return red("Player '" + name + "' has never played before."); }
+    public Component playerLookupFailed(String name) {
+        return red("Could not look up player '" + name + "'. Please try again.");
+    }
     public Component userAddPermissionUsage() { return red("Usage: /tprm user <player> addperm <permission>"); }
     public Component userPermissionAdded(String name) { return green("Added permission to user " + name + "."); }
     public Component userRemovePermissionUsage() { return red("Usage: /tprm user <player> delperm <permission>"); }
@@ -102,6 +108,11 @@ public final class PermissionMessages {
     public Component categoryLabel(String category) { return bold(category, NamedTextColor.YELLOW); }
     public Component categoryTooltip(int total, long granted) {
         return lines(gray(total + " permission(s) — " + granted + " granted."), gray("Click to view and toggle."));
+    }
+    public String unlistedCategoryName() { return "Unlisted"; }
+    public Component unlistedCategoryLabel() { return bold("Unlisted", NamedTextColor.YELLOW); }
+    public Component unlistedCategoryTooltip(int total) {
+        return lines(gray(total + " direct permission(s) not in the catalog."), gray("Click to view and revoke."));
     }
     public Component backToGroupLabel() { return bold("← Back to Group", NamedTextColor.RED); }
     public Component groupMenuTooltip() { return gray("Return to the group menu."); }

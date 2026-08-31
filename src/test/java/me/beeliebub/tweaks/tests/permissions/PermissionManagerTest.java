@@ -7,15 +7,19 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.MockedStatic;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -44,6 +48,29 @@ class PermissionManagerTest {
     void constructorAlwaysCreatesADefaultGroup() {
         assertTrue(manager.getGroups().containsKey("default"),
                 "PermissionManager must seed a 'default' group when none exist");
+    }
+
+    @Test
+    void asyncGroupSavePersistsTheCapturedSnapshot() throws Exception {
+        manager.getGroups().get("default").addPermission("tweaks.async");
+
+        assertTrue(manager.saveGroupsAsync().get(5, TimeUnit.SECONDS));
+
+        YamlConfiguration saved = YamlConfiguration.loadConfiguration(
+                new File(dataFolder, "groups.yml"));
+        assertTrue(saved.getStringList("default.permissions").contains("tweaks.async"));
+    }
+
+    @Test
+    void malformedGroupsFileIsPreservedAndPermissionWritesFailClosed() throws Exception {
+        File groupsFile = new File(dataFolder, "groups.yml");
+        String malformed = "default: [unclosed\n";
+        Files.writeString(groupsFile.toPath(), malformed, StandardCharsets.UTF_8);
+
+        PermissionManager broken = new PermissionManager(plugin);
+
+        assertThrows(IllegalStateException.class, broken::saveGroups);
+        assertEquals(malformed, Files.readString(groupsFile.toPath(), StandardCharsets.UTF_8));
     }
 
     @Test

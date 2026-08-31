@@ -25,7 +25,9 @@ class RegionFlagTest {
             RegionFlag.MOB_GRIEFING,
             RegionFlag.MOB_SPAWNING,
             RegionFlag.INVINCIBILITY,
-            RegionFlag.ENTRY
+            RegionFlag.ENTRY,
+            RegionFlag.HOSTILE_MOB_ENTRY,
+            RegionFlag.PASSIVE_MOB_ENTRY
     );
 
     private static final Set<RegionFlag> MATERIAL_FLAGS = EnumSet.of(

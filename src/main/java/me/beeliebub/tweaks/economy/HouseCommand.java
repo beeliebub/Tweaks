@@ -86,13 +86,25 @@ public final class HouseCommand implements CommandExecutor, TabCompleter {
     private boolean add(CommandSender sender, String[] args) {
         Long amount = positiveAmount(sender, args, "add <amount>");
         if (amount == null) return true;
-        if (!houseAccount.credit(amount)) {
-            sender.sendMessage(Messages.houseOverflow());
-            return true;
-        }
-        sender.sendMessage(Messages.houseMutation("added", amount, houseAccount.balance()));
-        logHouseMutation(sender, "added", amount);
+        java.util.concurrent.CompletableFuture<Boolean> durable = houseAccount.creditDurably(amount);
+        if (durable == null) durable = java.util.concurrent.CompletableFuture.completedFuture(houseAccount.credit(amount));
+        durable.whenComplete((success, error) -> runOnMain(() -> {
+            if (error != null || !Boolean.TRUE.equals(success)) {
+                sender.sendMessage(error == null ? Messages.houseOverflow() : Messages.housePersistenceFailed());
+                return;
+            }
+            sender.sendMessage(Messages.houseMutation("added", amount, houseAccount.balance()));
+            logHouseMutation(sender, "added", amount);
+        }));
         return true;
+    }
+
+    private void runOnMain(Runnable action) {
+        if (!plugin.isEnabled() || Bukkit.isPrimaryThread()) {
+            if (plugin.isEnabled()) action.run();
+            return;
+        }
+        Bukkit.getScheduler().runTask(plugin, action);
     }
 
     private boolean remove(CommandSender sender, String[] args) {

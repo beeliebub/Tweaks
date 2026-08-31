@@ -142,7 +142,12 @@ public final class BlackjackRenderer {
             for (UUID id : ids) {
                 var entity = Bukkit.getEntity(id);
                 if (entity != null) {
-                    entity.remove();
+                    try {
+                        entity.remove();
+                    } catch (RuntimeException ex) {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING,
+                                "Blackjack: failed to remove table hologram " + id, ex);
+                    }
                 }
             }
         }
@@ -177,7 +182,12 @@ public final class BlackjackRenderer {
         if (best != null) {
             var entity = Bukkit.getEntity(best);
             if (entity != null) {
-                entity.remove();
+                try {
+                    entity.remove();
+                } catch (RuntimeException ex) {
+                    plugin.getLogger().log(java.util.logging.Level.WARNING,
+                            "Blackjack: failed to remove table hologram " + best, ex);
+                }
             }
             ids.remove(best);
         }
@@ -192,7 +202,12 @@ public final class BlackjackRenderer {
             for (UUID id : ids) {
                 var entity = Bukkit.getEntity(id);
                 if (entity != null) {
-                    entity.remove();
+                    try {
+                        entity.remove();
+                    } catch (RuntimeException ex) {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING,
+                                "Blackjack: failed to remove table hologram " + id, ex);
+                    }
                 }
             }
         }
@@ -272,13 +287,21 @@ public final class BlackjackRenderer {
      * (non-fatal — the caller's game continues without a mannequin).
      */
     UUID spawnDealerMannequin(World world, Location dealerLoc) {
+        Mannequin dealer = null;
         try {
-            Mannequin dealer = (Mannequin) world.spawnEntity(dealerLoc, EntityType.MANNEQUIN);
+            dealer = (Mannequin) world.spawnEntity(dealerLoc, EntityType.MANNEQUIN);
             dealer.setProfile(ResolvableProfile.resolvableProfile().name(DEALER_PROFILE_NAME).build());
             dealer.getEquipment().clear();
             dealer.setPersistent(false);
             return dealer.getUniqueId();
         } catch (RuntimeException ex) {
+            if (dealer != null) {
+                try {
+                    dealer.remove();
+                } catch (RuntimeException cleanupError) {
+                    ex.addSuppressed(cleanupError);
+                }
+            }
             plugin.getLogger().warning(
                     "Blackjack: failed to spawn dealer mannequin at game start: " + ex.getMessage());
             return null;
@@ -323,7 +346,12 @@ public final class BlackjackRenderer {
                 if (world != null) {
                     world.playSound(session.tableCenter, Sound.ENTITY_VILLAGER_YES, 1.0f, 1.0f);
                 }
-                dealer.remove();
+                try {
+                    dealer.remove();
+                } catch (RuntimeException ex) {
+                    plugin.getLogger().warning(
+                            "Blackjack: failed to remove the resolved dealer mannequin: " + ex.getMessage());
+                }
             }
         }
     }
@@ -421,6 +449,9 @@ public final class BlackjackRenderer {
         ItemStack stack = CardItemFactory.createCardItem(card, faceDown, session.backColor);
 
         ItemDisplay display = (ItemDisplay) world.spawnEntity(loc, EntityType.ITEM_DISPLAY);
+        // Track immediately so a failure in any subsequent display configuration
+        // still gives the session teardown a handle to the partially configured entity.
+        session.displayIds.add(display.getUniqueId());
         display.setItemStack(stack);
         try {
             display.setBillboard(Display.Billboard.FIXED);
@@ -443,7 +474,6 @@ public final class BlackjackRenderer {
         display.getPersistentDataContainer().set(
                 cardOwnerKey, PersistentDataType.STRING, session.game.playerId().toString());
 
-        session.displayIds.add(display.getUniqueId());
     }
 
     /** Replace the rendered grid with one reflecting the current hand state. */
@@ -464,7 +494,12 @@ public final class BlackjackRenderer {
         for (UUID id : session.displayIds) {
             var entity = Bukkit.getEntity(id);
             if (entity instanceof ItemDisplay) {
-                entity.remove();
+                try {
+                    entity.remove();
+                } catch (RuntimeException ex) {
+                    plugin.getLogger().log(java.util.logging.Level.WARNING,
+                            "Blackjack: failed to remove card display " + id, ex);
+                }
             }
         }
         session.displayIds.clear();
@@ -483,7 +518,13 @@ public final class BlackjackRenderer {
         if (session.dealerMannequinId != null) {
             var dealer = Bukkit.getEntity(session.dealerMannequinId);
             if (dealer != null) {
-                dealer.remove();
+                try {
+                    dealer.remove();
+                } catch (RuntimeException ex) {
+                    plugin.getLogger().log(java.util.logging.Level.WARNING,
+                            "Blackjack: failed to remove dealer mannequin "
+                                    + session.dealerMannequinId, ex);
+                }
             }
             session.dealerMannequinId = null;
         }

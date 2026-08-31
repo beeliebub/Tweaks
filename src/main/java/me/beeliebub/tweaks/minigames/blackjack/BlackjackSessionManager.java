@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Owns {@link BlackjackGame} session lifecycle (start/hit/stand/settle), the economy flow
@@ -47,6 +48,9 @@ public final class BlackjackSessionManager {
 
     /** Per-player active game session. At most one game per player at a time. */
     private final Map<UUID, Session> sessions = new HashMap<>();
+
+    /** Active player UUID keyed by the canonical centre block of each occupied table. */
+    private final Map<String, UUID> occupiedTables = new HashMap<>();
 
     /**
      * Task id of the repeating inactivity-sweep scheduler, or {@code -1} when not yet
@@ -124,6 +128,7 @@ public final class BlackjackSessionManager {
         Session session = new Session(game, center.getWorld(), anchorChunk.getChunkKey(), center,
                 BlockFace.SOUTH, null);
         sessions.put(playerId, session);
+        occupiedTables.put(BlackjackTableStore.blockKey(center), playerId);
     }
 
     // ---- Gameplay entry points --------------------------------------------------
@@ -137,6 +142,12 @@ public final class BlackjackSessionManager {
         UUID playerId = player.getUniqueId();
         Session session = sessions.get(playerId);
         Location tableCenter = table.center();
+
+        UUID occupant = occupiedTables.get(BlackjackTableStore.blockKey(tableCenter));
+        if (occupant != null && !occupant.equals(playerId)) {
+            player.sendMessage(Messages.MINIGAMES.blackjackTableOccupied());
+            return;
+        }
 
         if (session != null && session.waitingToClear) {
             endSession(playerId);
@@ -220,14 +231,22 @@ public final class BlackjackSessionManager {
             renderer.renderOnTable(session, tableCenter);
         } catch (RuntimeException ex) {
             if (session != null) {
-                renderer.removeDisplays(session);
+                try {
+                    renderer.removeDisplays(session);
+                } catch (RuntimeException cleanupError) {
+                    ex.addSuppressed(cleanupError);
+                    plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                            "Blackjack: startup cleanup failed after a render error for "
+                                    + player.getUniqueId(), cleanupError);
+                }
             }
-            plugin.getLogger().warning(
-                    "Blackjack: failed to start a game for " + player.getName() + ": " + ex.getMessage());
+            plugin.getLogger().log(java.util.logging.Level.WARNING,
+                    "Blackjack: failed to start a game for " + player.getName(), ex);
             return false;
         }
 
         sessions.put(player.getUniqueId(), session);
+        occupiedTables.put(BlackjackTableStore.blockKey(tableCenter), player.getUniqueId());
 
         if (session.game.isFinished()) {
             finish(player, session);
@@ -277,83 +296,94 @@ public final class BlackjackSessionManager {
      */
     private void finish(Player player, Session session) {
         BlackjackGame game = session.game;
-
-        // Rakeback rate is only meaningful on a non-free dealer win, so avoid the rank
-        // lookup entirely otherwise.
-        double rakebackRate = (game.bet() > 0 && game.result() == BlackjackGame.Result.DEALER_WIN)
-                ? rankManager.getCasinoRakebackRate(player.getUniqueId())
-                : 0.0;
-        Settlement settlement = computeSettlement(game.result(), game.bet(), game.payout(), rakebackRate);
-
-        if (settlement.payoutAmount() > 0) {
-            creditOrRouteToHouse(player.getUniqueId(), player.getName(), settlement.payoutAmount(), "payout");
-        }
-        if (settlement.rakebackAmount() > 0) {
-            creditOrRouteToHouse(player.getUniqueId(), player.getName(), settlement.rakebackAmount(), "rakeback");
-        }
-        if (settlement.houseWinnings() > 0) {
-            if (houseAccount.credit(settlement.houseWinnings())) {
-                enterLottery(player.getUniqueId(), settlement.houseWinnings(), "blackjack settlement");
-            } else {
-                plugin.getLogger().severe("Blackjack: could not record house winnings of $"
-                        + settlement.houseWinnings() + " for " + player.getUniqueId()
-                        + "; lottery entry was not created.");
-            }
-        }
-
-        player.sendMessage(settlement.summaryMessage());
-        player.sendMessage(Messages.MINIGAMES.blackjackFinalValues(game.playerValue(), game.dealerValue()));
-        player.sendMessage(Messages.MINIGAMES.blackjackClearBoard());
-
-        if (settlement.netChange() != 0) {
-            try {
-                discordAnnouncer.announceSettlement(SettlementLine.forNet(
-                        Messages.CASINO_DISCORD.blackjackHand(
-                                player.getName(), settlement.netChange(),
-                                game.result() == BlackjackGame.Result.PLAYER_BLACKJACK),
-                        settlement.netChange()));
-            } catch (Throwable throwable) {
-                // Discord is an optional reporting surface. The hand is already settled and the
-                // auto-clear below must still be scheduled if formatting or delivery fails.
-                plugin.getLogger().log(java.util.logging.Level.WARNING,
-                        "Blackjack Discord settlement announcement failed for " + player.getUniqueId(),
-                        throwable);
-            }
-        }
-
-        ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
-        if (eventLog != null) eventLog.log(LoggingPaths.BLACKJACK_SETTLED, () ->
-                "[Blackjack] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
-                        + " settled " + game.result().name().toLowerCase(java.util.Locale.ROOT)
-                        + " for bet $" + game.bet() + ", payout $" + settlement.payoutAmount()
-                        + ", rakeback $" + settlement.rakebackAmount());
-
         try {
-            // Re-render so dealer's hole card is revealed.
+            // Rakeback rate is only meaningful on a non-free dealer win, so avoid the rank
+            // lookup entirely otherwise.
+            double rakebackRate = (game.bet() > 0 && game.result() == BlackjackGame.Result.DEALER_WIN)
+                    ? rankManager.getCasinoRakebackRate(player.getUniqueId())
+                    : 0.0;
+            Settlement settlement = computeSettlement(game.result(), game.bet(), game.payout(), rakebackRate);
+
+            if (settlement.payoutAmount() > 0) {
+                creditOrRouteToHouse(player.getUniqueId(), player.getName(), settlement.payoutAmount(), "payout");
+            }
+            if (settlement.rakebackAmount() > 0) {
+                creditOrRouteToHouse(player.getUniqueId(), player.getName(), settlement.rakebackAmount(), "rakeback");
+            }
+            if (settlement.houseWinnings() > 0) {
+                long houseWinnings = settlement.houseWinnings();
+                creditHouseDurably(houseWinnings).whenComplete((success, error) -> {
+                    if (error == null && Boolean.TRUE.equals(success)) {
+                        enterLottery(player.getUniqueId(), houseWinnings, "blackjack settlement");
+                    } else {
+                        plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                                "Blackjack: could not durably record house winnings of $"
+                                        + houseWinnings + " for " + player.getUniqueId()
+                                        + "; lottery entry was not created.", error);
+                    }
+                });
+            }
+
+            player.sendMessage(settlement.summaryMessage());
+            player.sendMessage(Messages.MINIGAMES.blackjackFinalValues(game.playerValue(), game.dealerValue()));
+            player.sendMessage(Messages.MINIGAMES.blackjackClearBoard());
+
+            if (settlement.netChange() != 0) {
+                try {
+                    discordAnnouncer.announceSettlement(SettlementLine.forNet(
+                            Messages.CASINO_DISCORD.blackjackHand(
+                                    player.getName(), settlement.netChange(),
+                                    game.result() == BlackjackGame.Result.PLAYER_BLACKJACK),
+                            settlement.netChange()));
+                } catch (Throwable throwable) {
+                    // Discord is an optional reporting surface. The hand is already settled and
+                    // the auto-clear below must still be scheduled if formatting or delivery fails.
+                    plugin.getLogger().log(java.util.logging.Level.WARNING,
+                            "Blackjack Discord settlement announcement failed for " + player.getUniqueId(),
+                            throwable);
+                }
+            }
+
+            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+            if (eventLog != null) eventLog.log(LoggingPaths.BLACKJACK_SETTLED, () ->
+                    "[Blackjack] " + ConsoleEventLog.actorLabel(player.getName(), player.getUniqueId())
+                            + " settled " + game.result().name().toLowerCase(java.util.Locale.ROOT)
+                            + " for bet $" + game.bet() + ", payout $" + settlement.payoutAmount()
+                            + ", rakeback $" + settlement.rakebackAmount());
+
+            // Re-render so dealer's hole card is revealed, then resolve the mannequin reaction.
             renderer.redraw(session);
-            // Resolve the dealer mannequin reaction against the already-spawned mannequin.
             renderer.resolveDealerMannequin(session, game.result());
         } catch (RuntimeException ex) {
-            // Economy is already settled above; a render/mannequin failure here must not
-            // prevent the auto-clear below from being scheduled, or the table would be stuck
-            // forever (waitingToClear would never be set, exempting the session from both the
-            // inactivity sweep and the MIDDLE-click early-clear path).
-            plugin.getLogger().warning(
-                    "Blackjack: post-settlement render/mannequin update failed for "
-                            + player.getName() + ": " + ex.getMessage());
+            // Economy or rendering failures must not strand a finished session. The finally
+            // block below always marks it for cleanup and schedules the delayed teardown.
+            plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                    "Blackjack: settlement failed for " + player.getName()
+                            + "; the board will still be cleared", ex);
+        } finally {
+            scheduleAutoClear(player, session);
         }
+    }
 
-        // Schedule auto-clear; store the task id so it can be cancelled early.
+    /** Mark a finished session for teardown, or remove it immediately if scheduling fails. */
+    private void scheduleAutoClear(Player player, Session session) {
         session.waitingToClear = true;
         UUID playerId = player.getUniqueId();
-        int taskId = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            // Guard: session may have been replaced or removed by the time this fires.
-            Session current = sessions.get(playerId);
-            if (current == session && session.waitingToClear) {
-                endSession(playerId);
-            }
-        }, autoClearTicks()).getTaskId();
-        session.autoClearTaskId = taskId;
+        try {
+            int taskId = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                // Guard: session may have been replaced or removed by the time this fires.
+                Session current = sessions.get(playerId);
+                if (current == session && session.waitingToClear) {
+                    endSession(playerId);
+                }
+            }, autoClearTicks()).getTaskId();
+            session.autoClearTaskId = taskId;
+        } catch (RuntimeException ex) {
+            plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                    "Blackjack: could not schedule auto-clear for " + playerId
+                            + "; clearing the session immediately", ex);
+            endSession(playerId);
+        }
     }
 
     // Live read (no constructor-time caching) so a /tconfig edit to
@@ -407,8 +437,21 @@ public final class BlackjackSessionManager {
         if (session == null) {
             return;
         }
+        occupiedTables.remove(BlackjackTableStore.blockKey(session.tableCenter));
         cancelAutoClear(session);
-        renderer.removeDisplays(session);
+        try {
+            renderer.removeDisplays(session);
+        } catch (RuntimeException ex) {
+            // The session and occupancy index are already released. Keep teardown of one
+            // broken renderer from aborting shutdown or leaving other sessions untouched.
+            plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                    "Blackjack: renderer cleanup failed for session " + playerId, ex);
+        }
+    }
+
+    /** Returns whether a table centre is currently occupied by an active game. */
+    boolean isTableOccupied(String key) {
+        return occupiedTables.containsKey(key);
     }
 
     /** End every session anchored in the given chunk (identified by chunk key + world). */
@@ -451,13 +494,16 @@ public final class BlackjackSessionManager {
                     int bet = session.game.bet();
                     endSession(playerId);
                     if (bet > 0) {
-                        if (houseAccount.credit(bet)) {
-                            enterLottery(playerId, bet, "blackjack inactivity forfeiture");
-                        } else {
-                            plugin.getLogger().severe("Blackjack inactivity forfeiture of $"
-                                    + bet + " for " + playerId
-                                    + " could not be recorded; lottery entry was not created.");
-                        }
+                        creditHouseDurably(bet).whenComplete((success, error) -> {
+                            if (error == null && Boolean.TRUE.equals(success)) {
+                                enterLottery(playerId, bet, "blackjack inactivity forfeiture");
+                            } else {
+                                plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                                        "Blackjack inactivity forfeiture of $" + bet + " for "
+                                                + playerId + " could not be durably recorded; lottery entry "
+                                                + "was not created.", error);
+                            }
+                        });
                     }
 
                     var player = Bukkit.getPlayer(playerId);
@@ -506,21 +552,32 @@ public final class BlackjackSessionManager {
             return;
         }
         try {
-            if (houseAccount.credit(amount)) {
-                plugin.getLogger().severe("Blackjack " + purpose + " of $" + amount + " for "
-                        + playerIdentity + " (" + playerId + ") could not be represented; "
-                        + "the amount was routed to the House for manual reconciliation.");
-            } else {
-                plugin.getLogger().severe("Blackjack " + purpose + " of $" + amount + " for "
-                        + playerIdentity + " (" + playerId + ") could not be represented, and the "
-                        + "House fallback overflowed; the amount is unrecoverable by this code path.");
-            }
+            creditHouseDurably(amount).whenComplete((success, error) -> {
+                if (error == null && Boolean.TRUE.equals(success)) {
+                    plugin.getLogger().severe("Blackjack " + purpose + " of $" + amount + " for "
+                            + playerIdentity + " (" + playerId + ") could not be represented; "
+                            + "the amount was routed to the House for manual reconciliation.");
+                } else {
+                    plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                            "Blackjack " + purpose + " of $" + amount + " for " + playerIdentity
+                                    + " (" + playerId + ") could not be represented, and the House "
+                                    + "fallback was not durably recorded; manual reconciliation is required.",
+                            error);
+                }
+            });
         } catch (RuntimeException error) {
             plugin.getLogger().log(java.util.logging.Level.SEVERE,
                     "Blackjack " + purpose + " of $" + amount + " for " + playerIdentity + " ("
                             + playerId + ") could not be represented, and the House fallback failed; "
                             + "manual reconciliation is required.", error);
         }
+    }
+
+    private CompletableFuture<Boolean> creditHouseDurably(long amount) {
+        CompletableFuture<Boolean> durable = houseAccount.creditDurably(amount);
+        // Preserve the lightweight test seam and compatibility with injected legacy account
+        // doubles that only implement the original boolean credit method.
+        return durable != null ? durable : CompletableFuture.completedFuture(houseAccount.credit(amount));
     }
 
     /**

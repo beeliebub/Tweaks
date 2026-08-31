@@ -107,4 +107,28 @@ class EntryFlagDefaultTest {
 
         assertFalse(protection.isAllowed(List.of(parent, child), location(), PLAYER, RegionFlag.ENTRY));
     }
+
+    @Test
+    void mobEntryFlagsArePermissiveWhenUnset() {
+        ProtectionManager protection = new ProtectionManager(mock(Tweaks.class));
+        Region protectedRegion = new Region("plot", OWNER, List.of(), Map.of());
+
+        assertTrue(protection.isAllowed(List.of(protectedRegion), location(), null,
+                RegionFlag.HOSTILE_MOB_ENTRY));
+        assertTrue(protection.isAllowed(List.of(protectedRegion), location(), null,
+                RegionFlag.PASSIVE_MOB_ENTRY));
+    }
+
+    @Test
+    void explicitMobEntryRuleCanDeny() {
+        ProtectionManager protection = new ProtectionManager(mock(Tweaks.class));
+        Region restricted = new Region("plot", OWNER, List.of(), Map.of(
+                RegionFlag.HOSTILE_MOB_ENTRY, Map.of(FlagTarget.DEFAULT, false),
+                RegionFlag.PASSIVE_MOB_ENTRY, Map.of(FlagTarget.DEFAULT, false)));
+
+        assertFalse(protection.isAllowed(List.of(restricted), location(), null,
+                RegionFlag.HOSTILE_MOB_ENTRY));
+        assertFalse(protection.isAllowed(List.of(restricted), location(), null,
+                RegionFlag.PASSIVE_MOB_ENTRY));
+    }
 }

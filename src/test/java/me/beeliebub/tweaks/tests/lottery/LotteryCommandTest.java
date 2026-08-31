@@ -200,7 +200,8 @@ class LotteryCommandTest {
             when(manager.draw()).thenReturn(CompletableFuture.completedFuture(outcome));
             command.onCommand(admin, bukkitCommand, "lottery", new String[]{"draw"});
             server.getScheduler().performOneTick();
-            assertEquals(1, discord.cards.size(), outcome.getClass().getSimpleName());
+            int expectedCards = outcome instanceof LotteryManager.DrawResult.Awarded ? 1 : 0;
+            assertEquals(expectedCards, discord.cards.size(), outcome.getClass().getSimpleName());
         }
 
         List<LotteryManager.DrawResult> privateOutcomes = List.of(

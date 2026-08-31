@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import java.util.random.RandomGenerator;
 
@@ -711,25 +712,37 @@ final class RouletteSessionManager {
 
         // The house is credited exactly once per round, from this pure result — never incrementally
         // per bet as clicks arrived.
+        CompletableFuture<Boolean> houseCredit = CompletableFuture.completedFuture(true);
         try {
-            if (settlement.houseCredit() > 0 && !houseAccount.credit(settlement.houseCredit())) {
-                plugin.getLogger().warning("Roulette: house credit of " + settlement.houseCredit()
-                        + " was refused (overflow) for board at " + board.center());
+            if (settlement.houseCredit() > 0) {
+                houseCredit = creditHouseDurably(settlement.houseCredit());
+                houseCredit.whenComplete((success, error) -> {
+                    if (error != null || !Boolean.TRUE.equals(success)) {
+                        plugin.getLogger().log(Level.SEVERE,
+                                "Roulette: house credit of " + settlement.houseCredit()
+                                        + " was not durably recorded for board at " + board.center(), error);
+                    }
+                });
             }
         } catch (RuntimeException e) {
             plugin.getLogger().log(Level.SEVERE, "Roulette: house credit of " + settlement.houseCredit()
                     + " threw for board at " + board.center(), e);
+            houseCredit = CompletableFuture.completedFuture(false);
         }
 
+        CompletableFuture<Boolean> settledHouseCredit = houseCredit;
         if (lotteryManager != null && lotteryManager.isLoaded()) {
-            for (UUID playerId : settlement.netLosers()) {
-                try {
-                    lotteryManager.enter(playerId);
-                } catch (RuntimeException e) {
-                    plugin.getLogger().log(Level.WARNING,
-                            "Roulette lottery entry failed after settlement for " + playerId, e);
+            settledHouseCredit.whenComplete((success, error) -> {
+                if (error != null || !Boolean.TRUE.equals(success)) return;
+                for (UUID playerId : settlement.netLosers()) {
+                    try {
+                        lotteryManager.enter(playerId);
+                    } catch (RuntimeException entryError) {
+                        plugin.getLogger().log(Level.WARNING,
+                                "Roulette lottery entry failed after settlement for " + playerId, entryError);
+                    }
                 }
-            }
+            });
         }
 
         ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
@@ -760,6 +773,7 @@ final class RouletteSessionManager {
 
         // Discord records money that actually settled, so this deliberately ignores the
         // presentation flag used for in-world cosmetics during chunk unload and shutdown.
+        long bigWinMultiplier = bigWinMultiplier();
         if (!settlement.credits().isEmpty()) {
             long groupId = nextSettlementGroupId();
             try {
@@ -777,7 +791,9 @@ final class RouletteSessionManager {
                     long net = credit.payout() + credit.rakeback() - credit.wagered();
                     String displayName = name == null ? entry.getKey().toString() : name;
                     discordAnnouncer.announceSettlement(SettlementLine.forNet(
-                            Messages.CASINO_DISCORD.rouletteRound(displayName, net), net, groupId));
+                            Messages.CASINO_DISCORD.rouletteRound(displayName, net,
+                                    presentation && isBigWin(credit.wagered(), credit.payout(), bigWinMultiplier)),
+                            net, groupId));
                     discordAnnouncer.announceRouletteOutcome(entry.getKey(),
                             Messages.CASINO_DISCORD.rouletteBettorOutcome(displayName, pocket, colorName, net));
                 } catch (Throwable throwable) {
@@ -795,7 +811,7 @@ final class RouletteSessionManager {
             for (Map.Entry<UUID, RouletteRound.PlayerCredit> entry : settlement.credits().entrySet()) {
                 long wagered = entry.getValue().wagered();
                 long payout = entry.getValue().payout();
-                if (isBigWin(wagered, payout, bigWinMultiplier())) {
+                if (isBigWin(wagered, payout, bigWinMultiplier)) {
                     announceBigWin(entry.getKey(), payout, pocket, colorName);
                 }
             }
@@ -965,23 +981,31 @@ final class RouletteSessionManager {
             return;
         }
         try {
-            if (houseAccount.credit(amount)) {
-                plugin.getLogger().severe("Roulette " + purpose + " of $" + amount + " for "
-                        + playerId + " on board at " + board.center()
-                        + " could not be represented; the amount was routed to the House for "
-                        + "manual reconciliation.");
-            } else {
-                plugin.getLogger().severe("Roulette " + purpose + " of $" + amount + " for "
-                        + playerId + " on board at " + board.center()
-                        + " could not be represented, and the House fallback overflowed; the "
-                        + "amount is unrecoverable by this code path.");
-            }
+            creditHouseDurably(amount).whenComplete((success, error) -> {
+                if (error == null && Boolean.TRUE.equals(success)) {
+                    plugin.getLogger().severe("Roulette " + purpose + " of $" + amount + " for "
+                            + playerId + " on board at " + board.center()
+                            + " could not be represented; the amount was routed to the House for "
+                            + "manual reconciliation.");
+                } else {
+                    plugin.getLogger().log(Level.SEVERE,
+                            "Roulette " + purpose + " of $" + amount + " for " + playerId
+                                    + " on board at " + board.center() + " could not be represented, "
+                                    + "and the House fallback was not durably recorded; manual "
+                                    + "reconciliation is required.", error);
+                }
+            });
         } catch (RuntimeException error) {
             plugin.getLogger().log(Level.SEVERE, "Roulette " + purpose + " of $" + amount + " for "
                     + playerId + " on board at " + board.center()
                     + " could not be represented, and the House fallback failed; manual "
                     + "reconciliation is required.", error);
         }
+    }
+
+    private CompletableFuture<Boolean> creditHouseDurably(long amount) {
+        CompletableFuture<Boolean> durable = houseAccount.creditDurably(amount);
+        return durable != null ? durable : CompletableFuture.completedFuture(houseAccount.credit(amount));
     }
 
     private static boolean presentationAllowed(RouletteTeardownPolicy.EndReason reason) {

@@ -328,6 +328,16 @@ public final class ToolsMessages {
         return Component.text("Manage Augments", NamedTextColor.AQUA);
     }
 
+    public Component augmentListTooltip() {
+        return plainGray("View attached augments and compatible gems.");
+    }
+
+    public Component augmentEntryTooltip(boolean active) {
+        return plainGray(active
+                ? "Click to deactivate this augment."
+                : "Click to activate this augment.");
+    }
+
     public Component augmentTargetItem(ItemStack item) {
         return toolMenuName(item);
     }
@@ -436,8 +446,24 @@ public final class ToolsMessages {
         return Component.text("No compatible augment gems are in your inventory.", NamedTextColor.YELLOW);
     }
 
+    public Component augmentNoGemsTooltip() {
+        return plainGray("Find a compatible augment gem in your inventory to continue.");
+    }
+
     public Component augmentNoTools() {
         return Component.text("No compatible tools are in your inventory.", NamedTextColor.YELLOW);
+    }
+
+    public Component augmentNoToolsTooltip() {
+        return plainGray("Put a compatible tool in your inventory to attach this gem.");
+    }
+
+    public Component augmentGemActionTooltip() {
+        return plainGray("Click to attach this gem to the selected tool.");
+    }
+
+    public Component augmentReturnToHubTooltip() {
+        return plainGray("Return to the Augments menu.");
     }
 
     public Component augmentPreviousPage() {
@@ -569,6 +595,13 @@ public final class ToolsMessages {
         return toolMenuName(item);
     }
 
+    public Component repairKitTargetTooltip(ItemStack item, int tier, int maxTier) {
+        int remaining = Math.max(0, maxTier - tier);
+        return plainGray("Repair ")
+                .append(toolMenuName(item))
+                .append(plainGray(" to full durability. Repairs remaining: " + remaining + "/" + maxTier + "."));
+    }
+
     public Component repairKitDebug(boolean damageable, boolean ledger, boolean stamp, int tier, int maxTier,
                                     int damage, int maxDamage, int threshold, boolean depleted,
                                     double effectiveTierStep) {
@@ -598,7 +631,15 @@ public final class ToolsMessages {
         return Component.text("Next Page ▶", NamedTextColor.GREEN);
     }
 
+    public Component repairKitPageTooltip(int page, int totalPages) {
+        return plainGray("Page " + page + " of " + totalPages + ".");
+    }
+
     public Component inventoryFull() {
         return Component.text("Your inventory does not have enough room for that result.", NamedTextColor.RED);
+    }
+
+    private static Component plainGray(String text) {
+        return Component.text(text, NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false);
     }
 }

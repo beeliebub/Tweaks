@@ -266,14 +266,51 @@ public final class LotteryManager {
 
     public boolean enter(UUID playerId) {
         Objects.requireNonNull(playerId, "playerId");
+        CompletableFuture<Void> persistence;
         synchronized (stateLock) {
             if (!isLoaded() || !entrants.add(playerId)) return false;
-            persistSnapshot();
-            ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
-            if (eventLog != null) eventLog.log(LoggingPaths.LOTTERY_ENTERED, () ->
-                    "[Lottery] " + ConsoleEventLog.actorLabel(null, playerId) + " entered the draw");
-            return true;
+            try {
+                persistence = persistSnapshot();
+            } catch (RuntimeException error) {
+                entrants.remove(playerId);
+                plugin.getLogger().log(Level.WARNING,
+                        "Lottery entry could not be persisted for " + playerId, error);
+                return false;
+            }
         }
+
+        persistence.whenComplete((ignored, error) -> {
+            if (error == null) {
+                ConsoleEventLog eventLog = ConsoleEventLog.forPlugin(plugin);
+                if (eventLog != null) eventLog.log(LoggingPaths.LOTTERY_ENTERED, () ->
+                        "[Lottery] " + ConsoleEventLog.actorLabel(null, playerId) + " entered the draw");
+                return;
+            }
+
+            boolean removed;
+            synchronized (stateLock) {
+                removed = entrants.remove(playerId);
+            }
+            plugin.getLogger().log(Level.WARNING,
+                    "Lottery entry persistence failed for " + playerId
+                            + (removed ? "; the entry was rolled back" : "; the entry was retained"), error);
+            if (!removed) return;
+
+            try {
+                persistSnapshot().whenComplete((ignoredRollback, rollbackError) -> {
+                    if (rollbackError != null) {
+                        plugin.getLogger().log(Level.SEVERE,
+                                "Lottery entry rollback could not be persisted for " + playerId,
+                                rollbackError);
+                    }
+                });
+            } catch (RuntimeException rollbackError) {
+                plugin.getLogger().log(Level.SEVERE,
+                        "Lottery entry rollback could not be started for " + playerId,
+                        rollbackError);
+            }
+        });
+        return true;
     }
 
     public CompletableFuture<Boolean> setBaseline(long value) {

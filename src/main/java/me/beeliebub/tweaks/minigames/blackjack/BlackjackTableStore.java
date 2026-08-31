@@ -269,6 +269,13 @@ public final class BlackjackTableStore {
         return buttonMap.get(key);
     }
 
+    /** Returns whether a persisted table already occupies the same canonical surface centre. */
+    boolean hasTableAtCenter(Location center) {
+        String target = blockKey(center);
+        return loadTablesForChunk(center.getChunk()).stream()
+                .anyMatch(entry -> target.equals(blockKey(entry.center())));
+    }
+
     /** Clears the entire button index. Called from {@link BlackjackListener#shutdown()}. */
     void clearButtons() {
         buttonMap.clear();

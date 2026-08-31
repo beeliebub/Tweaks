@@ -186,23 +186,95 @@ public final class HouseAccount {
     /**
      * Credits casino proceeds. This is the only mutator minigames may call.
      *
-     * @return {@code true} when credited; {@code false} if the amount would overflow the account
+     * <p>This compatibility method reports whether the in-memory admission succeeded. Callers
+     * that must gate a downstream action on durable persistence should use
+     * {@link #creditDurably(long)}.
+     *
+     * @return {@code true} when credited in memory; {@code false} if the amount would overflow
+     *         the account
      */
     public boolean credit(long amount) {
+        CreditAttempt attempt = beginCredit(amount);
+        if (!attempt.accepted()) return false;
+        attempt.durable().whenComplete((success, error) -> {
+            if (error != null || !Boolean.TRUE.equals(success)) {
+                plugin.getLogger().warning("House account credit of " + amount
+                        + " was not persisted durably");
+            }
+        });
+        return true;
+    }
+
+    /**
+     * Credits casino proceeds and completes with {@code true} only after the updated snapshot is
+     * durably written. A failed write is logged, the in-memory mutation is rolled back when no
+     * newer mutation superseded it, and the future completes with {@code false}.
+     */
+    public CompletableFuture<Boolean> creditDurably(long amount) {
+        CreditAttempt attempt = beginCredit(amount);
+        return attempt.accepted() ? attempt.durable() : CompletableFuture.completedFuture(false);
+    }
+
+    private CreditAttempt beginCredit(long amount) {
         requireNonNegative(amount);
         synchronized (stateLock) {
+            long previous = balance.get();
+            long updated;
             try {
-                balance.set(Math.addExact(balance.get(), amount));
+                updated = Math.addExact(previous, amount);
             } catch (ArithmeticException exception) {
                 plugin.getLogger().log(Level.SEVERE, "House account credit would overflow: " + amount, exception);
-                return false;
+                return new CreditAttempt(false, CompletableFuture.completedFuture(false));
             }
-            if (isLoaded()) {
-                persistSnapshot(balance.get());
+
+            balance.set(updated);
+            CompletableFuture<Void> persistence;
+            try {
+                persistence = isLoaded()
+                        ? persistSnapshot(updated)
+                        : loadFuture.thenCompose(ignored -> {
+                            synchronized (stateLock) {
+                                return isLoaded() ? persistSnapshot(balance.get()) : failedLoadFuture();
+                            }
+                        });
+            } catch (RuntimeException error) {
+                balance.set(previous);
+                plugin.getLogger().log(Level.WARNING,
+                        "House account credit snapshot could not be built", error);
+                return new CreditAttempt(false, CompletableFuture.completedFuture(false));
             }
-            return true;
+
+            CompletableFuture<Boolean> durable = persistence.handle((ignored, error) -> {
+                if (error == null) return CompletableFuture.completedFuture(true);
+
+                CompletableFuture<Void> recovery;
+                synchronized (stateLock) {
+                    // A later mutation's snapshot includes this credit, so do not erase newer
+                    // state while unwinding this failed write. Re-emit the current state either
+                    // way so a transient failure gets another ordered attempt.
+                    if (balance.get() == updated) balance.set(previous);
+                    try {
+                        recovery = isLoaded() ? persistSnapshot(balance.get()) : failedLoadFuture();
+                    } catch (RuntimeException recoveryBuildError) {
+                        plugin.getLogger().log(Level.SEVERE,
+                                "House account credit recovery snapshot could not be built", recoveryBuildError);
+                        return CompletableFuture.completedFuture(false);
+                    }
+                }
+                return recovery.handle((ignoredRecovery, recoveryError) -> {
+                    if (recoveryError != null) {
+                        plugin.getLogger().log(Level.SEVERE,
+                                "House account credit persistence failed and recovery could not be written",
+                                recoveryError);
+                    }
+                    return false;
+                });
+            }).thenCompose(future -> future);
+            return new CreditAttempt(true, durable);
         }
     }
+
+    private record CreditAttempt(boolean accepted, CompletableFuture<Boolean> durable) {}
 
     /** Administrative-only debit. Refuses to take the balance below zero. */
     public boolean debit(long amount) {

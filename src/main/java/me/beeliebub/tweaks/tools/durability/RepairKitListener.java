@@ -112,14 +112,17 @@ public final class RepairKitListener implements Listener {
         for (int i = start; i < end; i++) {
             Target target = targets.get(i);
             buttons.add(button(Messages.TOOLS.repairKitTargetName(target.item()),
+                    Messages.TOOLS.repairKitTargetTooltip(target.item(), durability.tier(target.item()), maxTier()),
                     p -> apply(p, target.slot(), target.item())));
         }
         if (currentPage > 0) {
             buttons.add(button(Messages.TOOLS.repairKitPreviousPage(),
+                    Messages.TOOLS.repairKitPageTooltip(currentPage, totalPages),
                     p -> openDialog(p, currentPage - 1)));
         }
         if (currentPage + 1 < totalPages) {
             buttons.add(button(Messages.TOOLS.repairKitNextPage(),
+                    Messages.TOOLS.repairKitPageTooltip(currentPage + 2, totalPages),
                     p -> openDialog(p, currentPage + 1)));
         }
         DialogBase base = DialogBase.builder(Messages.TOOLS.repairKitName())
@@ -142,8 +145,9 @@ public final class RepairKitListener implements Listener {
         return durability.maxTier();
     }
 
-    private static ActionButton button(Component label, java.util.function.Consumer<Player> action) {
-        return ActionButton.builder(label)
+    private static ActionButton button(Component label, Component tooltip,
+                                       java.util.function.Consumer<Player> action) {
+        return ActionButton.builder(label).tooltip(tooltip)
                 .action(DialogAction.customClick((view, audience) -> {
                     if (audience instanceof Player player) action.accept(player);
                 }, ClickCallback.Options.builder().uses(ClickCallback.UNLIMITED_USES).build()))

@@ -92,7 +92,7 @@ public final class AugmentDialog {
                                 augments.slotCalculator().used(augments.entries(item)),
                                 augments.slotCalculator().capacity(item.getType())),
                         p -> openSlots(p, item)),
-                button(Messages.TOOLS.augmentListLabel(), Messages.TOOLS.augmentListLabel(),
+                button(Messages.TOOLS.augmentListLabel(), Messages.TOOLS.augmentListTooltip(),
                         p -> openAugments(p, item)));
         show(player, Messages.TOOLS.augmentHubTitle(), Messages.TOOLS.augmentHubTitle(), buttons, null);
     }
@@ -131,7 +131,7 @@ public final class AugmentDialog {
                         }));
             }
         }
-        buttons.add(button(Messages.TOOLS.augmentListLabel(), Messages.TOOLS.augmentListLabel(), p -> {
+        buttons.add(button(Messages.TOOLS.augmentListLabel(), Messages.TOOLS.augmentListTooltip(), p -> {
             ItemStack target = currentHeldOrSame(p, item);
             if (target == null) {
                 p.sendMessage(Messages.TOOLS.augmentRequiresItem());
@@ -180,6 +180,7 @@ public final class AugmentDialog {
         }
         showPaged(player, Messages.TOOLS.augmentListLabel(), visible, totalEntries, page,
                 Messages.TOOLS.augmentListLabel(), Messages.TOOLS.augmentNoGems(),
+                Messages.TOOLS.augmentNoGemsTooltip(),
                 p -> {
                     ItemStack target = currentHeldOrSame(p, item);
                     if (target != null) openHub(p, target);
@@ -221,6 +222,7 @@ public final class AugmentDialog {
         }
         showPaged(player, Messages.TOOLS.augmentListLabel(), buttons, buttons.size(), page,
                 gemTooltip(data), Messages.TOOLS.augmentNoTools(),
+                Messages.TOOLS.augmentNoToolsTooltip(),
                 null,
                 (p, nextPage) -> openGemFirst(p, gem, nextPage));
     }
@@ -231,7 +233,7 @@ public final class AugmentDialog {
                 ? Messages.TOOLS.augmentEnchantmentName(entry.enchantmentKey(), entry.level())
                 : Messages.TOOLS.augmentEnchantmentName(enchantment, entry.level());
         Component label = Messages.TOOLS.augmentEntry(name, entry.active());
-        return button(label, label, p -> {
+        return button(label, Messages.TOOLS.augmentEntryTooltip(entry.active()), p -> {
             if (!augments.enabled()) {
                 p.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
                 return;
@@ -250,7 +252,8 @@ public final class AugmentDialog {
         AugmentService.GemLocation gem = option.location();
         AugmentGemItem.GemData data = option.data();
         Component label = gemLabel(data);
-        return button(label, gemTooltip(data), p -> {
+        return button(label, gemTooltip(data).append(Component.newline())
+                .append(Messages.TOOLS.augmentGemActionTooltip()), p -> {
             if (!augments.enabled()) {
                 p.sendMessage(Messages.TOOLS.featureDisabled("Augments"));
                 return;
@@ -317,13 +320,13 @@ public final class AugmentDialog {
     }
 
     private void showPaged(Player player, Component title, List<ActionButton> visibleButtons, int totalEntries, int page,
-                           Component body, Component emptyMessage, Consumer<Player> back,
+                           Component body, Component emptyMessage, Component emptyTooltip, Consumer<Player> back,
                            java.util.function.BiConsumer<Player, Integer> pageOpener) {
         int totalPages = Math.max(1, (totalEntries + PAGE_SIZE - 1) / PAGE_SIZE);
         int currentPage = Math.max(0, Math.min(page, totalPages - 1));
         List<ActionButton> buttons = new ArrayList<>();
         if (totalEntries == 0) {
-            buttons.add(button(emptyMessage, emptyMessage, p -> {}));
+            buttons.add(button(emptyMessage, emptyTooltip, p -> {}));
         } else {
             buttons.addAll(visibleButtons);
         }
@@ -418,7 +421,8 @@ public final class AugmentDialog {
 
     private void show(Player player, Component title, Component body, List<ActionButton> buttons,
                       Consumer<Player> back) {
-        ActionButton exit = back == null ? null : button(Messages.TOOLS.augmentHubTitle(), Messages.TOOLS.augmentHubTitle(), back);
+        ActionButton exit = back == null ? null : button(Messages.TOOLS.augmentHubTitle(),
+                Messages.TOOLS.augmentReturnToHubTooltip(), back);
         DialogBase base = DialogBase.builder(title).body(List.of(DialogBody.plainMessage(body))).build();
         var type = DialogType.multiAction(buttons).columns(2);
         if (exit != null) type.exitAction(exit);

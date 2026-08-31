@@ -105,8 +105,8 @@ commands:
     usage: /tprm <group|user|gui>
     aliases: [tweaksperms, perms]
   displaychest:
-    description: Toggle display chest setup mode. Click a chest to show its top-left item, or your held item with the [hand] override.
-    usage: /displaychest [hand|off]
+    description: Toggle open Display Chest setup/removal mode. Use an optional hand or side flag, item material, and quoted display name; click a chest to place or remove its display.
+    usage: '/displaychest [hand] [side] [<material>] [name:"<text>"] | /displaychest off'
   logs:
     description: View chest interaction logs (admin). Toggle inspector mode then punch a chest.
     usage: /logs

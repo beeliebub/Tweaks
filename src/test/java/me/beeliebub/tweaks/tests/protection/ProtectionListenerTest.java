@@ -6,11 +6,13 @@ import me.beeliebub.tweaks.protection.ui.RegionSelectionManager;
 import me.beeliebub.tweaks.protection.region.ProtectionManager;
 import me.beeliebub.tweaks.protection.region.Region;
 import me.beeliebub.tweaks.protection.region.RegionFlag;
+import io.papermc.paper.event.entity.EntityMoveEvent;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Enemy;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -257,6 +259,89 @@ class ProtectionListenerTest {
 
         listener.onPlayerTeleport(event);
 
+        verify(event, never()).setCancelled(true);
+    }
+
+    @Test
+    void hostileMobMoveUsesHostileEntryFlagAtChunkBoundary() {
+        ProtectionManager mockedProtection = mock(ProtectionManager.class);
+        listener = new ProtectionListeners(mock(Tweaks.class), mockedProtection,
+                mock(RegionSelectionManager.class));
+        Enemy mob = mock(Enemy.class);
+        EntityMoveEvent event = mock(EntityMoveEvent.class);
+        org.bukkit.World world = mock(org.bukkit.World.class);
+        Location from = mock(Location.class);
+        Location to = mock(Location.class);
+        when(event.hasChangedBlock()).thenReturn(true);
+        when(event.getEntity()).thenReturn(mob);
+        when(event.getFrom()).thenReturn(from);
+        when(event.getTo()).thenReturn(to);
+        when(from.getWorld()).thenReturn(world);
+        when(to.getWorld()).thenReturn(world);
+        when(from.getBlockX()).thenReturn(15);
+        when(to.getBlockX()).thenReturn(16);
+        when(from.getBlockZ()).thenReturn(0);
+        when(to.getBlockZ()).thenReturn(0);
+        when(mockedProtection.isAllowed(to, null, RegionFlag.HOSTILE_MOB_ENTRY)).thenReturn(false);
+
+        listener.onMobMove(event);
+
+        verify(mockedProtection).isAllowed(to, null, RegionFlag.HOSTILE_MOB_ENTRY);
+        verify(event).setCancelled(true);
+    }
+
+    @Test
+    void passiveMobMoveUsesPassiveEntryFlag() {
+        ProtectionManager mockedProtection = mock(ProtectionManager.class);
+        listener = new ProtectionListeners(mock(Tweaks.class), mockedProtection,
+                mock(RegionSelectionManager.class));
+        org.bukkit.entity.Mob mob = mock(org.bukkit.entity.Mob.class);
+        EntityMoveEvent event = mock(EntityMoveEvent.class);
+        org.bukkit.World world = mock(org.bukkit.World.class);
+        Location from = mock(Location.class);
+        Location to = mock(Location.class);
+        when(event.hasChangedBlock()).thenReturn(true);
+        when(event.getEntity()).thenReturn(mob);
+        when(event.getFrom()).thenReturn(from);
+        when(event.getTo()).thenReturn(to);
+        when(from.getWorld()).thenReturn(world);
+        when(to.getWorld()).thenReturn(world);
+        when(from.getBlockX()).thenReturn(15);
+        when(to.getBlockX()).thenReturn(16);
+        when(from.getBlockZ()).thenReturn(0);
+        when(to.getBlockZ()).thenReturn(0);
+        when(mockedProtection.isAllowed(to, null, RegionFlag.PASSIVE_MOB_ENTRY)).thenReturn(false);
+
+        listener.onMobMove(event);
+
+        verify(mockedProtection).isAllowed(to, null, RegionFlag.PASSIVE_MOB_ENTRY);
+        verify(event).setCancelled(true);
+    }
+
+    @Test
+    void mobMoveWithinChunkIsIgnored() {
+        ProtectionManager mockedProtection = mock(ProtectionManager.class);
+        listener = new ProtectionListeners(mock(Tweaks.class), mockedProtection,
+                mock(RegionSelectionManager.class));
+        org.bukkit.entity.Mob mob = mock(org.bukkit.entity.Mob.class);
+        EntityMoveEvent event = mock(EntityMoveEvent.class);
+        org.bukkit.World world = mock(org.bukkit.World.class);
+        Location from = mock(Location.class);
+        Location to = mock(Location.class);
+        when(event.hasChangedBlock()).thenReturn(true);
+        when(event.getEntity()).thenReturn(mob);
+        when(event.getFrom()).thenReturn(from);
+        when(event.getTo()).thenReturn(to);
+        when(from.getWorld()).thenReturn(world);
+        when(to.getWorld()).thenReturn(world);
+        when(from.getBlockX()).thenReturn(1);
+        when(to.getBlockX()).thenReturn(2);
+        when(from.getBlockZ()).thenReturn(0);
+        when(to.getBlockZ()).thenReturn(0);
+
+        listener.onMobMove(event);
+
+        verifyNoInteractions(mockedProtection);
         verify(event, never()).setCancelled(true);
     }
 

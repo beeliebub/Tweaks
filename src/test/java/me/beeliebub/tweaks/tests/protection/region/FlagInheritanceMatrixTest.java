@@ -94,7 +94,8 @@ class FlagInheritanceMatrixTest {
 
     @ParameterizedTest(name = "[parent only] {0} silent rule denies outsider via legacy default")
     @EnumSource(value = RegionFlag.class, mode = EnumSource.Mode.EXCLUDE,
-            names = {"ALLOW_BLOCK_BREAK", "DENY_BLOCK_BREAK", "ALLOW_BLOCK_PLACE", "DENY_BLOCK_PLACE", "ENTRY"})
+            names = {"ALLOW_BLOCK_BREAK", "DENY_BLOCK_BREAK", "ALLOW_BLOCK_PLACE", "DENY_BLOCK_PLACE",
+                    "ENTRY", "HOSTILE_MOB_ENTRY", "PASSIVE_MOB_ENTRY"})
     void parentSilentDeniesOutsider(RegionFlag flag) {
         mgr.regions().put("home", new Region("home", PARENT_OWNER, List.of(),
                 ruleFor(flag, null)));
@@ -131,12 +132,22 @@ class FlagInheritanceMatrixTest {
     }
 
     private static Stream<Arguments> inheritanceCasesAcrossAllBooleanFlags() {
-        return Stream.of(
+                return Stream.of(
                         RegionFlag.BLOCK_BREAK, RegionFlag.BLOCK_PLACE, RegionFlag.CONTAINER_ACCESS,
                         RegionFlag.INTERACT, RegionFlag.REDSTONE, RegionFlag.EXPLOSION,
-                        RegionFlag.PVP, RegionFlag.MOB_GRIEFING)
+                        RegionFlag.PVP, RegionFlag.MOB_GRIEFING,
+                        RegionFlag.HOSTILE_MOB_ENTRY, RegionFlag.PASSIVE_MOB_ENTRY)
                 .flatMap(flag -> inheritanceCases().map(args -> Arguments.of(
-                        flag, args.get()[0], args.get()[1], args.get()[2], args.get()[3])));
+                        flag, args.get()[0], args.get()[1],
+                        isOptInEntryFlag(flag) && args.get()[0] == null && args.get()[1] == null
+                                ? true : args.get()[2],
+                        args.get()[3])));
+    }
+
+    private static boolean isOptInEntryFlag(RegionFlag flag) {
+        return flag == RegionFlag.ENTRY
+                || flag == RegionFlag.HOSTILE_MOB_ENTRY
+                || flag == RegionFlag.PASSIVE_MOB_ENTRY;
     }
 
     @ParameterizedTest(name = "[child={2} parent={1}] {0}: {4}")
@@ -164,7 +175,7 @@ class FlagInheritanceMatrixTest {
         Location loc = locInChunkWithPdc(List.of("home"));
         for (RegionFlag other : RegionFlag.values()) {
             if (other.isMaterialFlag() || other == permitted) continue;
-            if (other == RegionFlag.ENTRY) {
+            if (isOptInEntryFlag(other)) {
                 assertTrue(mgr.isAllowed(loc, OUTSIDER, other),
                         permitted + "=true must not make the unconfigured ENTRY flag restrictive");
                 continue;

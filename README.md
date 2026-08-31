@@ -569,6 +569,23 @@ When two of the player's groups share an ancestor in the inheritance graph, that
 - **Main Menu**: Entry point with `Groups` and `Players` buttons.
 - **Groups Hub**: Manage group permissions (organized by category), member list (toggle-based), and inheritance. The **+ Create Group** button opens a name-entry dialog; **Delete Group** is hidden for the protected `default` group.
 - **Users Hub**: Manage player-specific overrides (organized by category) and additional group memberships. The **Edit Groups** panel lists non-default groups with a `✓` marker on the ones the player already belongs to — click any entry to toggle membership. The Players list contains online users only; use **⌕ Search Player** to look up an offline player who has previously joined.
+- Dialog changes are saved from an immutable snapshot through the ordered YAML writer, so disk I/O does not block the server thread; the confirmation and live permission refresh follow the durable write.
+
+**External permission catalogs**: Place trusted UTF-8 `*.txt` files in
+`plugins/Tweaks/external-permissions/`. Each non-comment line is `node` or `node | description`,
+and an optional `# name: Display Name` header names the category. Nodes are lowercased, duplicate
+nodes within a file keep their first entry, and a missing description falls back to the node itself.
+Without a header, the category name is derived from the filename stem. Files are UTF-8; files
+larger than 256 KB are skipped with a warning, and parsing stops after 5,000 lines with a warning.
+The files are re-read whenever Edit Permissions opens, so new categories appear without a restart.
+Their category keys use the `external:<filename-stem>` namespace, including for `tools.txt`, to keep
+them separate from built-in categories. External nodes are also suggested by `/tprm` addperm and
+delperm tab completion.
+
+This directory is trusted admin input and deliberately does not filter dangerous nodes: `*` or
+`tweaks.admin.permissions` can turn full administrative access into a one-click grant. If a file
+is deleted after a node was granted, the node remains stored and applied; revoke it from **Unlisted**
+or with `/tprm user <name> delperm <node>`.
 
 ---
 
@@ -826,7 +843,8 @@ When DiscordSRV is installed and `discord.channel-id` is configured, each commit
 posts a yellow winner card to that Discord channel. The card uses the winner's name and avatar;
 the bot needs **Manage Webhooks** for the channel. The announcement channel is addressed by its
 numeric ID and must not be added to DiscordSRV's `Channels:` map, which would make it a two-way
-chat bridge.
+chat bridge. Refused, not-enough-entry, and abandoned-payment outcomes remain in-game and in the
+console log without posting a Discord card.
 
 ### Ranks
 
@@ -946,15 +964,19 @@ Alias: `/di`.
 
 ### Display Chests
 
-Render a floating preview of chest contents as a non-solid `ItemDisplay` entity.
+Render a floating preview of chest contents as a non-solid `ItemDisplay` entity. Display Chest is
+open to all players; it has no permission node.
 
 | Command | Permission | What it does |
 |---|---|---|
-| `/displaychest [hand\|side\|hand side\|off]` | `tweaks.admin.displaychest` | Toggle setup/removal mode. While on, **left-click** any chest to spawn or update its display. |
+| `/displaychest [hand] [side] [<material>] [name:"<text>"]` | None | Toggle setup mode. While on, **left- or right-click** any chest to spawn or update its display. |
+| `/displaychest off` | None | Toggle removal mode; clicking a chest removes top and side displays. |
 
 **How it works**:
 - **Source Priority**: By default, the plugin clones the item in **Slot 0** (the top-left slot) of the chest.
 - **Hand Mode**: Use `/displaychest hand` to enter live-hand mode. In this mode, clicking a chest will use whatever item you are **currently holding** at that moment, rather than the chest's contents.
+- **Material Override**: Add one item material such as `DIAMOND_SWORD` to use it regardless of hand mode or chest Slot 0. Material names are resolved strictly and must be usable items; unknown, air, block-only, or multiple material tokens are rejected.
+- **Display Names**: Add `name:"<text>"` anywhere in the command. Names support legacy `&` codes and `&#rrggbb` hex colors, and appear only when a player looks directly at the display. Names persist with the display across chunk unloads and restarts.
 - **Side Mode**: Use `/displaychest side` (or `/displaychest hand side`) to embed the item flush with the clicked face instead of floating it above the container.
   - **Block Items**: Render embedded inside the block with only the clicked face visible (flush with the surface).
   - **Non-Block Items**: Render flat against the face, similar to an item frame.
@@ -1082,6 +1104,8 @@ free/practice hands produce no line. Inactivity forfeitures are reported as loss
 #### General Mechanics
 
 - **Inactivity Timeout**: If a game sits idle for **10 minutes** (no hit/stand/deal actions), the session is evicted. Any escrowed bets are forfeited. Setup/betting phases time out after **3 minutes**.
+- **One Game per Table**: Each physical table can host one active game. Another player is refused
+  while it is occupied, while the current player can still clear a finished board immediately.
 - **Rendering**: Cards lie flat on the table surface. Jacks, Queens, and Kings feature custom player-head portraits.
 - **Orientation**: Card spreads automatically use the table's wide axis (X or Z) for all button facings. Upright orientation is deterministic via per-facing yaw: North=180, South=0, East=90, West=270.
 - **Face-down Cards**: The dealer's hole card remains face-down until the player stands to prevent information leaks.
@@ -1093,6 +1117,8 @@ Admins can build and register Blackjack tables in the world.
 - **Footprint**: A table must be a solid **2×3** (or 3×2) block area (e.g., stone, wood, etc.). No carpet is required.
 - **Controls**: Three wall-mounted buttons (LEFT/MIDDLE/RIGHT) must be placed on one of the 3-long sides.
 - **Registration**: Stand near the table and run `/blackjack createtable <bet> [hexColor]`, then right-click the **MIDDLE** button.
+- **Safety**: Removing a table is refused while its game is active, and registering an already-used
+  middle button is refused so the table's persisted record is not duplicated.
 - **Bet**: Use any positive integer for a currency-backed table, or `0`/`free` for a no-stakes practice table.
 - **Card Backs**: The optional `[hexColor]` argument (e.g., `#FF8800` or `FF8800`) sets a custom tint for card backs at that table.
 
@@ -1114,14 +1140,16 @@ An in-world roulette wheel — a real physical build the server team constructed
   refused; rejected winnings, rakeback, or shutdown refunds are routed to the House account for
   recovery rather than discarded.
 - **Settlement summary**: Your personal result message shows the amount wagered and the amount actually won (winnings only, not your returned stake) — e.g. a $100 stake winning at 36:1 shows wagered $100, won $3,600.
-- **Big win announcements**: If your winnings reach 8x your wager, the whole server is notified.
+- **Big win announcements**: If your winnings reach the configured big-win multiplier (default 8x your wager), the whole server is notified.
 - **House balance**: A hologram over each wheel shows the single server-wide house balance — the same
   account Blackjack's losses and each Roulette player's net losses feed.
 
 When DiscordSRV is installed and `discord.channel-id` is configured, every bettor gets one grouped
-`diff` line showing their signed net change, including break-even results. A big-win event is not
-duplicated with a second Discord message. Discord settlement lines are emitted for money outcomes
-even when the wheel is settling during chunk unload or shutdown.
+`diff` line showing their signed net change, including break-even results. A presentation-enabled
+big win adds ` (BIG WIN!)` to that bettor's grouped line; it does not create a second Discord
+message, and the private follow-up stays plain. Discord settlement lines are emitted for money
+outcomes even when the wheel is settling during chunk unload or shutdown, but those teardown lines
+are not marked.
 
 #### Discord Betting
 
@@ -1298,9 +1326,10 @@ Flags control what non-members can do in a region. Rules can target specific gro
 
 - **Defaults**: If `[name]` is omitted, it defaults to the region you are currently standing in.
 - **Targets**: `owner`, `manager`, `member`, `default` (everyone), or a permission group name (e.g. `admin`).
-- **Boolean Flags**: `BLOCK_BREAK`, `BLOCK_PLACE`, `CONTAINER_ACCESS`, `INTERACT`, `REDSTONE`, `EXPLOSION`, `PVP`, `MOB_GRIEFING`, `MOB_SPAWNING`, `INVINCIBILITY`, `ENTRY`.
+- **Boolean Flags**: `BLOCK_BREAK`, `BLOCK_PLACE`, `CONTAINER_ACCESS`, `INTERACT`, `REDSTONE`, `EXPLOSION`, `PVP`, `MOB_GRIEFING`, `MOB_SPAWNING`, `INVINCIBILITY`, `ENTRY`, `HOSTILE_MOB_ENTRY`, `PASSIVE_MOB_ENTRY`.
   - Use `true|false` as the value.
-- **EntityType-Specific Flags**: `ALLOW_MOB_SPAWN`, `DENY_MOB_SPAWN`. (No-op pending entity-list storage).
+- **EntityType-Specific Flags**: `ALLOW_MOB_SPAWN`, `DENY_MOB_SPAWN` control listed creature types
+  at spawn time; they are separate from movement-entry flags.
 - **Material-Specific Flags**: `ALLOW_BLOCK_BREAK`, `DENY_BLOCK_BREAK`, `ALLOW_BLOCK_PLACE`, `DENY_BLOCK_PLACE`.
   - Use a space-separated list of block materials as the value.
 - **Gamerule Overrides**: Region flags take precedence over world gamerules. For example, if `MOB_GRIEFING` is set to `true` in a region, creepers will destroy blocks there even if the world's `mobGriefing` is `false`.
@@ -1308,6 +1337,12 @@ Flags control what non-members can do in a region. Rules can target specific gro
   - When `ENTRY` is set to `false` for `default`, non-members are blocked at the border and shown an action-bar message.
   - Per-role overrides work the same as all other boolean flags (e.g. `ENTRY true manager` to permit managers).
   - Players who respawn inside an ENTRY-denied region are redirected to the world's default spawn point.
+- **Mob Entry Flags**: `HOSTILE_MOB_ENTRY` and `PASSIVE_MOB_ENTRY` control movement of the matching
+  mob categories across a region's chunk boundary. Hostile means Paper's `Enemy` type; passive means
+  every other `Mob`. They are checked only after a mob changes block and crosses a chunk boundary;
+  an unset flag is permissive, and spawn controls (`MOB_SPAWNING` plus the entity-type lists) remain
+  separate. Mob movement has no player identity, so only `default`-target rules can match. Denied
+  movement may visibly stutter at the boundary as the entity is repeatedly pushed back.
 
 ### Administrative Region Tools
 
@@ -1348,7 +1383,8 @@ When an action occurs, the system checks rules in this order:
 1.  **Material Lists**: If the block is in a `DENY` list, the action is blocked. If in an `ALLOW` list, it's permitted.
 2.  **Targeted Boolean Rules**: The most specific rule wins: `GROUP` > `OWNER` > `MANAGER` > `MEMBER` > `DEFAULT`.
 3.  **Hierarchy**: If no rule is found in the current region, the system walks up to the **parent region** and repeats the check.
-4.  **Wilderness Default**: If no rule is found in the entire hierarchy, members are allowed and non-members are blocked.
+4.  **Wilderness Default**: If no rule is found in the entire hierarchy, members are allowed and
+    non-members are blocked; `ENTRY` and both mob-entry flags are permissive until a rule resolves.
 
 ---
 
@@ -1385,7 +1421,8 @@ When an action occurs, the system checks rules in this order:
 | Right-click an Augment Gem (air or block) | Open the gem-first augment menu. |
 | `/afk` | Toggle AFK status. |
 | `/fullmoon` | Show estimate for next full moon. |
-| `/displaychest [hand\|off]` | Toggle display chest setup mode. |
+| `/displaychest [hand] [side] [<material>] [name:"<text>"]` | Toggle open display chest setup mode; click a chest to place or update a display. |
+| `/displaychest off` | Toggle display chest removal mode. |
 | `/tprm [gui\|group\|user]` | Manage server-side permissions. Alias: `/perms`. |
 | `/help [section]` | Show comprehensive help menu. |
 | `/region <subcommand>` | Land protection management. Alias: `/rg`. |
@@ -1489,7 +1526,8 @@ When an action occurs, the system checks rules in this order:
 | `/survival` | `tweaks.admin.gamemode` | Switch your gamemode to Survival. |
 | `/creative` | `tweaks.admin.gamemode` | Switch your gamemode to Creative. |
 | `/resource settarget [p] <t>` | `tweaks.admin.resource.settarget.self/other` | Override a player's Resource Hunt target. |
-| `/displaychest [hand\|off]` | `tweaks.admin.displaychest` | Toggle display chest setup/removal mode. |
+| `/displaychest [hand] [side] [<material>] [name:"<text>"]` | None | Toggle display chest setup mode. |
+| `/displaychest off` | None | Toggle display chest removal mode. |
 
 ---
 

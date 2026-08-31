@@ -5,9 +5,13 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link Messages}, focused on the factory methods that take parameters —
@@ -228,5 +232,32 @@ class MessagesTest {
         assertMessage(Messages.rankEditPromptBody("$5,000"),
                 "Current value: $5,000. Enter a new value below.", NamedTextColor.GRAY);
         assertMessage(Messages.rankEditValueInputLabel(), "Value", NamedTextColor.YELLOW);
+    }
+    @Test
+    void dialogActionTooltipsDescribeTheirSpecificActions() {
+        ItemStack target = mock(ItemStack.class);
+        ItemMeta targetMeta = mock(ItemMeta.class);
+        when(target.getItemMeta()).thenReturn(targetMeta);
+        when(targetMeta.hasDisplayName()).thenReturn(true);
+        when(targetMeta.displayName()).thenReturn(Component.text("Diamond Pickaxe"));
+        assertTrue(fullContent(Messages.TOOLS.repairKitTargetTooltip(
+                target, 1, 3)).contains("Repairs remaining: 2/3."));
+        assertEquals("Page 2 of 3.", fullContent(Messages.TOOLS.repairKitPageTooltip(2, 3)));
+        assertNotEquals(fullContent(Messages.TOOLS.augmentListLabel()),
+                fullContent(Messages.TOOLS.augmentListTooltip()));
+        assertTrue(fullContent(Messages.TOOLS.augmentEntryTooltip(true)).contains("deactivate"));
+        assertTrue(fullContent(Messages.TOOLS.augmentNoGemsTooltip()).contains("compatible augment gem"));
+        assertTrue(fullContent(Messages.TOOLS.augmentNoToolsTooltip()).contains("compatible tool"));
+        assertEquals("Return to the Augments menu.", fullContent(Messages.TOOLS.augmentReturnToHubTooltip()));
+        assertEquals(TextDecoration.State.FALSE,
+                Messages.TOOLS.augmentListTooltip().decoration(TextDecoration.ITALIC));
+
+        assertTrue(fullContent(Messages.CONFIG.saveScalarTooltip("Timeout")).contains("Timeout"));
+        assertTrue(fullContent(Messages.CONFIG.addListEntrySaveTooltip("Worlds")).contains("Worlds list"));
+        assertTrue(fullContent(Messages.CONFIG.saveGridCellTooltip(4)).contains("recipe cell 4"));
+        assertTrue(fullContent(Messages.CONFIG.saveMapEntryTooltip("Rewards", "gold")).contains("gold"));
+        assertTrue(fullContent(Messages.CONFIG.addMapEntrySaveTooltip("Rewards")).contains("key and value"));
+        assertTrue(fullContent(Messages.CONFIG.saveWorldProfileTooltip()).contains("tag and color"));
+        assertTrue(fullContent(Messages.CONFIG.addWorldProfileTooltip()).contains("world profile"));
     }
 }

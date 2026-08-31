@@ -359,6 +359,21 @@ public final class MinigameMessages {
         return Messages.MM.deserialize("<red>Your game is still in progress. Use the LEFT or RIGHT buttons.</red>");
     }
 
+    /** Explains that another player is using the selected Blackjack table. */
+    public Component blackjackTableOccupied() {
+        return Messages.MM.deserialize("<red>Someone is already playing at this table.</red>");
+    }
+
+    /** Explains that an administrator cannot remove a table during an active game. */
+    public Component blackjackTableBusy() {
+        return Messages.MM.deserialize("<red>A game is in progress at this table.</red>");
+    }
+
+    /** Explains that a table cannot be registered twice at the same button. */
+    public Component blackjackTableExists() {
+        return Messages.MM.deserialize("<red>A table is already registered here.</red>");
+    }
+
     /** Explains that a player's balance cannot cover a Blackjack table bet. */
     public Component blackjackCannotAfford(int bet, long balance) {
         return Messages.MM.deserialize("<red>You cannot afford a bet of $" + bet + ". Your balance is $" + balance + ".</red>");

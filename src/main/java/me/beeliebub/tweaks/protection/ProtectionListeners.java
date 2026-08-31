@@ -1,5 +1,6 @@
 package me.beeliebub.tweaks.protection;
 
+import io.papermc.paper.event.entity.EntityMoveEvent;
 import me.beeliebub.tweaks.Tweaks;
 import me.beeliebub.tweaks.core.Messages;
 import me.beeliebub.tweaks.core.ProtectionMessages.Text;
@@ -18,6 +19,8 @@ import org.bukkit.Material;
 import org.bukkit.Tag;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Enemy;
+import org.bukkit.entity.Mob;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -324,6 +327,31 @@ public final class ProtectionListeners implements Listener {
             player.sendActionBar(Messages.PROTECTION.text(Text.ENTRY_DENIED));
             notifyAdminBypassHint(player);
             logDenied(LoggingPaths.PROTECTION_ENTRY, player, to, RegionFlag.ENTRY);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onMobMove(EntityMoveEvent event) {
+        if (!event.hasChangedBlock()) return;
+
+        RegionFlag flag;
+        if (event.getEntity() instanceof Enemy) {
+            flag = RegionFlag.HOSTILE_MOB_ENTRY;
+        } else if (event.getEntity() instanceof Mob) {
+            flag = RegionFlag.PASSIVE_MOB_ENTRY;
+        } else {
+            return;
+        }
+
+        Location from = event.getFrom();
+        Location to = event.getTo();
+        if (to == null) return;
+        if (from.getWorld() == to.getWorld()
+                && GeometryUtil.blockToChunk(from.getBlockX()) == GeometryUtil.blockToChunk(to.getBlockX())
+                && GeometryUtil.blockToChunk(from.getBlockZ()) == GeometryUtil.blockToChunk(to.getBlockZ())) return;
+
+        if (!protection.isAllowed(to, null, flag)) {
+            event.setCancelled(true);
         }
     }
 

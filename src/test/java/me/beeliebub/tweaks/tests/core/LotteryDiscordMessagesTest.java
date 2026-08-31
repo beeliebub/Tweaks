@@ -27,12 +27,4 @@ class LotteryDiscordMessagesTest {
         assertEquals("[Lottery] bad\\`\\*\\_\\~\\|\\>\\\\name next won $10", value);
     }
 
-    @Test
-    void broadcastFamiliesHaveStableWording() {
-        assertEquals("[Lottery] Not enough entries to draw",
-                Messages.LOTTERY_DISCORD.notEnoughEntries());
-        assertEquals("[Lottery] No House growth since the last draw",
-                Messages.LOTTERY_DISCORD.noGrowth());
-        assertTrue(Messages.LOTTERY_DISCORD.paymentAbandoned(3).contains("3 entries were kept"));
-    }
 }

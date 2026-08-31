@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.permissions;
 
+import me.beeliebub.tweaks.utils.YamlStore;
 import org.bukkit.Bukkit;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -20,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
@@ -29,38 +33,108 @@ public class PermissionManager implements Listener {
     private final JavaPlugin plugin;
     private final File groupsFile;
     private final File usersFile;
+    private final YamlStore permissionStore;
 
     private final Map<String, PermissionGroup> groups;
     private final Map<UUID, UserPermissions> users;
     private final Map<UUID, PermissionAttachment> attachments = new ConcurrentHashMap<>();
+    private volatile boolean storageHealthy = true;
 
     public PermissionManager(JavaPlugin plugin) {
         this.plugin = plugin;
         this.groupsFile = new File(plugin.getDataFolder(), "groups.yml");
         this.usersFile = new File(plugin.getDataFolder(), "users.yml");
+        this.permissionStore = new YamlStore(plugin, plugin.getDataFolder(), "permission data");
         this.groups = loadGroups();
         this.users = loadUsers();
 
         // Ensure at least a 'default' group exists
         if (!groups.containsKey("default")) {
             groups.put("default", new PermissionGroup("default"));
-            saveGroups();
+            if (storageHealthy) {
+                try {
+                    saveGroups();
+                } catch (IllegalStateException error) {
+                    plugin.getLogger().log(Level.SEVERE,
+                            "Could not persist the initial default permission group", error);
+                }
+            }
         }
     }
 
     public void saveGroups() {
-        saveGroupsToDisk(groups.values());
+        ensureStorageHealthy();
+        if (!saveGroupsToDisk(groups.values())) {
+            storageHealthy = false;
+            throw new IllegalStateException("groups.yml could not be saved");
+        }
     }
 
     public void saveUsers() {
-        saveUsersToDisk(users.values());
+        ensureStorageHealthy();
+        if (!saveUsersToDisk(users.values())) {
+            storageHealthy = false;
+            throw new IllegalStateException("users.yml could not be saved");
+        }
+    }
+
+    /**
+     * Persists an immutable snapshot of the current groups without doing disk I/O on the server
+     * thread. The returned future is the durability signal; a false result means the write did
+     * not land and subsequent permission writes are refused until restart.
+     */
+    public CompletableFuture<Boolean> saveGroupsAsync() {
+        ensureStorageHealthy();
+        StateSnapshot snapshot = snapshotState();
+        try {
+            return permissionStore.writeAsync("groups", config -> writeGroups(config, snapshot.groups().values()))
+                    .handle((ignored, error) -> {
+                        if (error != null) {
+                            storageHealthy = false;
+                            return false;
+                        }
+                        return true;
+                    });
+        } catch (RuntimeException error) {
+            storageHealthy = false;
+            plugin.getLogger().log(Level.SEVERE, "Could not queue groups.yml for saving", error);
+            return CompletableFuture.completedFuture(false);
+        }
+    }
+
+    /** Persists an immutable snapshot of the current users without blocking the server thread. */
+    public CompletableFuture<Boolean> saveUsersAsync() {
+        ensureStorageHealthy();
+        StateSnapshot snapshot = snapshotState();
+        try {
+            return permissionStore.writeAsync("users", config -> writeUsers(config, snapshot.users().values()))
+                    .handle((ignored, error) -> {
+                        if (error != null) {
+                            storageHealthy = false;
+                            return false;
+                        }
+                        return true;
+                    });
+        } catch (RuntimeException error) {
+            storageHealthy = false;
+            plugin.getLogger().log(Level.SEVERE, "Could not queue users.yml for saving", error);
+            return CompletableFuture.completedFuture(false);
+        }
     }
 
     private Map<String, PermissionGroup> loadGroups() {
         Map<String, PermissionGroup> loaded = new ConcurrentHashMap<>();
         if (!groupsFile.exists()) return loaded;
 
-        YamlConfiguration config = YamlConfiguration.loadConfiguration(groupsFile);
+        YamlConfiguration config = new YamlConfiguration();
+        try {
+            config.load(groupsFile);
+        } catch (IOException | InvalidConfigurationException error) {
+            storageHealthy = false;
+            plugin.getLogger().log(Level.SEVERE,
+                    "Could not load groups.yml; preserving the file and disabling permission writes", error);
+            return loaded;
+        }
         for (String key : config.getKeys(false)) {
             PermissionGroup group = new PermissionGroup(key);
             group.setParentName(config.getString(key + ".parent"));
@@ -71,16 +145,19 @@ public class PermissionManager implements Listener {
         return loaded;
     }
 
-    private void saveGroupsToDisk(Collection<PermissionGroup> groups) {
-        YamlConfiguration config = new YamlConfiguration();
+    private boolean saveGroupsToDisk(Collection<PermissionGroup> groups) {
+        try {
+            permissionStore.writeAsync("groups", config -> writeGroups(config, groups)).join();
+            return true;
+        } catch (CompletionException error) {
+            return false;
+        }
+    }
+
+    private static void writeGroups(YamlConfiguration config, Collection<PermissionGroup> groups) {
         for (PermissionGroup group : groups) {
             config.set(group.getName() + ".parent", group.getParentName());
             config.set(group.getName() + ".permissions", new ArrayList<>(group.getPermissions()));
-        }
-        try {
-            config.save(groupsFile);
-        } catch (IOException e) {
-            plugin.getLogger().log(Level.SEVERE, "Could not save groups.yml", e);
         }
     }
 
@@ -88,7 +165,15 @@ public class PermissionManager implements Listener {
         Map<UUID, UserPermissions> loaded = new ConcurrentHashMap<>();
         if (!usersFile.exists()) return loaded;
 
-        YamlConfiguration config = YamlConfiguration.loadConfiguration(usersFile);
+        YamlConfiguration config = new YamlConfiguration();
+        try {
+            config.load(usersFile);
+        } catch (IOException | InvalidConfigurationException error) {
+            storageHealthy = false;
+            plugin.getLogger().log(Level.SEVERE,
+                    "Could not load users.yml; preserving the file and disabling permission writes", error);
+            return loaded;
+        }
         for (String key : config.getKeys(false)) {
             try {
                 UUID uuid = UUID.fromString(key);
@@ -116,17 +201,26 @@ public class PermissionManager implements Listener {
         return loaded;
     }
 
-    private void saveUsersToDisk(Collection<UserPermissions> users) {
-        YamlConfiguration config = new YamlConfiguration();
+    private boolean saveUsersToDisk(Collection<UserPermissions> users) {
+        try {
+            permissionStore.writeAsync("users", config -> writeUsers(config, users)).join();
+            return true;
+        } catch (CompletionException error) {
+            return false;
+        }
+    }
+
+    private static void writeUsers(YamlConfiguration config, Collection<UserPermissions> users) {
         for (UserPermissions user : users) {
             String key = user.getUuid().toString();
             config.set(key + ".group", new ArrayList<>(user.getGroups()));
             config.set(key + ".permissions", new ArrayList<>(user.getPermissions()));
         }
-        try {
-            config.save(usersFile);
-        } catch (IOException e) {
-            plugin.getLogger().log(Level.SEVERE, "Could not save users.yml", e);
+    }
+
+    private void ensureStorageHealthy() {
+        if (!storageHealthy) {
+            throw new IllegalStateException("permission storage is unavailable; refusing to overwrite it");
         }
     }
 
@@ -137,6 +231,75 @@ public class PermissionManager implements Listener {
     public Map<UUID, UserPermissions> getUsers() {
         return users;
     }
+
+    /** Captures mutable permission state so an administrative write can be rolled back safely. */
+    StateSnapshot snapshotState() {
+        Map<String, PermissionGroup> groupCopy = new java.util.HashMap<>();
+        groups.forEach((key, source) -> {
+            PermissionGroup copy = new PermissionGroup(source.getName());
+            copy.setParentName(source.getParentName());
+            source.getPermissions().forEach(copy::addPermission);
+            groupCopy.put(key, copy);
+        });
+
+        Map<UUID, UserPermissions> userCopy = new java.util.HashMap<>();
+        users.forEach((uuid, source) -> {
+            UserPermissions copy = new UserPermissions(uuid);
+            source.getGroups().forEach(copy::addGroup);
+            source.getPermissions().forEach(copy::addPermission);
+            userCopy.put(uuid, copy);
+        });
+        return new StateSnapshot(groupCopy, userCopy);
+    }
+
+    /** Restores a prior mutable state after a failed persistence operation. */
+    void restoreState(StateSnapshot snapshot) {
+        groups.clear();
+        snapshot.groups().forEach((key, source) -> {
+            PermissionGroup copy = new PermissionGroup(source.getName());
+            copy.setParentName(source.getParentName());
+            source.getPermissions().forEach(copy::addPermission);
+            groups.put(key, copy);
+        });
+
+        users.clear();
+        snapshot.users().forEach((uuid, source) -> {
+            UserPermissions copy = new UserPermissions(uuid);
+            source.getGroups().forEach(copy::addGroup);
+            source.getPermissions().forEach(copy::addPermission);
+            users.put(uuid, copy);
+        });
+    }
+
+    /** Returns whether the live state still matches the supplied snapshot. */
+    boolean stateMatches(StateSnapshot snapshot) {
+        return groupsMatch(snapshot.groups()) && usersMatch(snapshot.users());
+    }
+
+    private boolean groupsMatch(Map<String, PermissionGroup> expected) {
+        if (!groups.keySet().equals(expected.keySet())) return false;
+        for (String key : groups.keySet()) {
+            PermissionGroup actual = groups.get(key);
+            PermissionGroup wanted = expected.get(key);
+            if (!actual.getName().equals(wanted.getName())
+                    || !java.util.Objects.equals(actual.getParentName(), wanted.getParentName())
+                    || !actual.getPermissions().equals(wanted.getPermissions())) return false;
+        }
+        return true;
+    }
+
+    private boolean usersMatch(Map<UUID, UserPermissions> expected) {
+        if (!users.keySet().equals(expected.keySet())) return false;
+        for (UUID uuid : users.keySet()) {
+            UserPermissions actual = users.get(uuid);
+            UserPermissions wanted = expected.get(uuid);
+            if (!actual.getGroups().equals(wanted.getGroups())
+                    || !actual.getPermissions().equals(wanted.getPermissions())) return false;
+        }
+        return true;
+    }
+
+    record StateSnapshot(Map<String, PermissionGroup> groups, Map<UUID, UserPermissions> users) {}
 
     public UserPermissions getUserPermissions(UUID uuid) {
         return users.computeIfAbsent(uuid, UserPermissions::new);
@@ -245,7 +408,15 @@ public class PermissionManager implements Listener {
             }
         }
         attachments.clear();
-        saveGroups();
-        saveUsers();
+        try {
+            saveGroups();
+        } catch (IllegalStateException error) {
+            plugin.getLogger().log(Level.SEVERE, "Permission groups were not saved during shutdown", error);
+        }
+        try {
+            saveUsers();
+        } catch (IllegalStateException error) {
+            plugin.getLogger().log(Level.SEVERE, "Permission users were not saved during shutdown", error);
+        }
     }
 }

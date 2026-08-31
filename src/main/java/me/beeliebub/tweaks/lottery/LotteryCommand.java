@@ -223,8 +223,6 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                 case LotteryManager.DrawResult.InFlight ignored -> sender.sendMessage(Messages.LOTTERY.drawInFlight());
                 case LotteryManager.DrawResult.NotEnoughEntrants notEnough -> {
                     Bukkit.broadcast(Messages.LOTTERY.notEnoughEntries());
-                    announceCardSafely(Messages.LOTTERY_DISCORD.notEnoughEntries(),
-                            Messages.LOTTERY_DISCORD.YELLOW, null);
                     if (notEnough.rolledIn() > 0) {
                         sender.sendMessage(Messages.LOTTERY.rollInDetail(notEnough.rolledIn(), notEnough.fallback(),
                                 notEnough.baseline()));
@@ -233,12 +231,8 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                 case LotteryManager.DrawResult.Refused refused -> {
                     if (refused.reason() == LotteryMath.RefusalReason.NO_GROWTH) {
                         Bukkit.broadcast(Messages.LOTTERY.noGrowthBroadcast());
-                        announceCardSafely(Messages.LOTTERY_DISCORD.noGrowth(),
-                                Messages.LOTTERY_DISCORD.YELLOW, null);
                     } else if (refused.reason() == LotteryMath.RefusalReason.NOT_ENOUGH_ENTRANTS) {
                         Bukkit.broadcast(Messages.LOTTERY.notEnoughEntries());
-                        announceCardSafely(Messages.LOTTERY_DISCORD.notEnoughEntries(),
-                                Messages.LOTTERY_DISCORD.YELLOW, null);
                     } else {
                         sender.sendMessage(Messages.LOTTERY.drawRefused(refused.reason()));
                     }
@@ -247,8 +241,6 @@ public final class LotteryCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Messages.LOTTERY.paymentAbandoned(abandoned.outcome().name(),
                             abandoned.entrantCount()));
                     Bukkit.broadcast(Messages.LOTTERY.paymentAbandonedBroadcast(abandoned.entrantCount()));
-                    announceCardSafely(Messages.LOTTERY_DISCORD.paymentAbandoned(abandoned.entrantCount()),
-                            Messages.LOTTERY_DISCORD.YELLOW, null);
                 }
                 case LotteryManager.DrawResult.PaymentPending pending ->
                         sender.sendMessage(Messages.LOTTERY.paymentPending(pending.paymentId(), pending.outcome().name()));

@@ -38,7 +38,9 @@ class RegionWriterTest {
                 "plot",
                 OWNER,
                 List.of(MEMBER),
-                Map.of(RegionFlag.PVP, Map.of(FlagTarget.DEFAULT, false, FlagTarget.OWNER, true)),
+                Map.of(
+                        RegionFlag.PVP, Map.of(FlagTarget.DEFAULT, false, FlagTarget.OWNER, true),
+                        RegionFlag.HOSTILE_MOB_ENTRY, Map.of(FlagTarget.DEFAULT, false)),
                 Map.of(RegionFlag.ALLOW_BLOCK_BREAK, Set.of(Material.STONE, Material.DIRT)),
                 "parent_id",
                 new Region.RegionBounds(-3, 4, 2, 7));
@@ -64,6 +66,8 @@ class RegionWriterTest {
         assertEquals(7, back.bounds().maxChunkZ());
         assertEquals(Map.of(FlagTarget.DEFAULT, false, FlagTarget.OWNER, true),
                 back.rulesFor(RegionFlag.PVP));
+        assertEquals(Map.of(FlagTarget.DEFAULT, false),
+                back.rulesFor(RegionFlag.HOSTILE_MOB_ENTRY));
         assertEquals(Set.of(Material.STONE, Material.DIRT),
                 back.materialsFor(RegionFlag.ALLOW_BLOCK_BREAK));
     }

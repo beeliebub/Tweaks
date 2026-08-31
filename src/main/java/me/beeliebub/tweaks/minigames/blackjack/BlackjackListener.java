@@ -269,11 +269,18 @@ public final class BlackjackListener implements Listener {
         Location center = BlackjackTableStore.findTableCenterFromButton(button, facing);
         if (center == null) {
             player.sendMessage(Messages.MINIGAMES.blackjackTableSurfaceRequired());
+            pendingSetups.put(player.getUniqueId(), pending);
             return;
         }
 
         // Persist the table and bring it live in this (already-loaded) chunk.
         Location middleButtonLoc = button.getLocation();
+        if (tableStore.lookupButton(BlackjackTableStore.blockKey(middleButtonLoc)) != null
+                || tableStore.hasTableAtCenter(center)) {
+            player.sendMessage(Messages.MINIGAMES.blackjackTableExists());
+            pendingSetups.put(player.getUniqueId(), pending);
+            return;
+        }
         BlackjackTableStore.TableEntry entry = new BlackjackTableStore.TableEntry(
                 center, bet, middleButtonLoc, facing, backColor);
         tableStore.persistTable(entry);
@@ -292,6 +299,10 @@ public final class BlackjackListener implements Listener {
     // ---- Removal handler ----------------------------------------------------
 
     private void handleRemoval(Player player, BlackjackTableStore.TableEntry table) {
+        if (sessionManager.isTableOccupied(BlackjackTableStore.blockKey(table.center()))) {
+            player.sendMessage(Messages.MINIGAMES.blackjackTableBusy());
+            return;
+        }
         pendingRemovals.remove(player.getUniqueId());
 
         Location center = table.center();

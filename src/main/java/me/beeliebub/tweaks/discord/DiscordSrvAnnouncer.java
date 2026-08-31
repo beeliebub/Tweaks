@@ -210,26 +210,25 @@ final class DiscordSrvAnnouncer implements DiscordAnnouncer {
         try {
             String channelId = configuredAnnouncementChannel();
             if (channelId.isBlank() || !DiscordSRV.isReady) return;
-            TextChannel channel = DiscordUtil.getTextChannelById(channelId);
-            if (channel == null) return;
             String webhookName = configuredWebhookName();
             String webhookAvatarUrl = configuredWebhookAvatarUrl();
-
             MessageEmbed embed = new EmbedBuilder()
                     .setDescription(message)
                     .setColor(color)
                     .build();
-            if (subject != null) {
-                WebhookUtil.deliverMessage(channel, subject, webhookName, "", embed);
-                return;
-            }
 
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
                 try {
-                    // This overload resolves or creates the channel webhook before its own
-                    // scheduleAsync flag is consulted, so it must never be called on the server
-                    // thread when the per-channel webhook cache is cold.
-                    WebhookUtil.deliverMessage(channel, webhookName, webhookAvatarUrl, "", embed);
+                    TextChannel channel = DiscordUtil.getTextChannelById(channelId);
+                    if (channel == null) return;
+                    if (subject != null) {
+                        WebhookUtil.deliverMessage(channel, subject, webhookName, "", embed);
+                    } else {
+                        // This overload resolves or creates the channel webhook before its own
+                        // scheduleAsync flag is consulted, so it must never be called on the
+                        // server thread when the per-channel webhook cache is cold.
+                        WebhookUtil.deliverMessage(channel, webhookName, webhookAvatarUrl, "", embed);
+                    }
                 } catch (Throwable throwable) {
                     logFailure("Discord announcement delivery failed", throwable);
                 }

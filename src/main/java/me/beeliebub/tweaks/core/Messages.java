@@ -223,6 +223,12 @@ public final class Messages {
         return Component.text("That amount would overflow the house account.", NamedTextColor.RED);
     }
 
+    /** Explains that an administrative house-account credit could not be persisted. */
+    public static Component housePersistenceFailed() {
+        return Component.text("The house credit could not be saved; no durable change was confirmed.",
+                NamedTextColor.RED);
+    }
+
     /** Explains that a payment target is neither online nor known to this server. */
     public static Component houseUnknownPlayer(String name) {
         return Component.text("Unknown player: " + name, NamedTextColor.RED);

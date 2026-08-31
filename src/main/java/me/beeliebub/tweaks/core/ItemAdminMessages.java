@@ -2,6 +2,7 @@ package me.beeliebub.tweaks.core;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Material;
 
 /**
  * Player-feedback factories for {@code me.beeliebub.tweaks.itemadmin}.
@@ -135,6 +136,12 @@ public final class ItemAdminMessages {
 
     /** Announces one enabled Display Chest setup-mode variant. */
     public Component displayChestSetupEnabled(boolean useHand, boolean embedSide) {
+        return displayChestSetupEnabled(useHand, embedSide, null, null);
+    }
+
+    /** Announces Display Chest setup mode and any pending material/name overrides. */
+    public Component displayChestSetupEnabled(boolean useHand, boolean embedSide,
+                                              Material material, Component name) {
         String message;
         if (useHand && embedSide) {
             message = "Display Chest setup mode ENABLED (hand + side). Currently-held item is used on each click. Item embeds on the clicked face.";
@@ -145,7 +152,33 @@ public final class ItemAdminMessages {
         } else {
             message = "Display Chest setup mode ENABLED. Click a chest to display its top-left item. Item floats above the chest.";
         }
-        return Component.text(message, NamedTextColor.GREEN);
+        Component result = Component.text(message, NamedTextColor.GREEN);
+        if (material != null) {
+            result = result.append(Component.text(" Material override: " + material.name() + ".",
+                    NamedTextColor.GREEN));
+        }
+        if (name != null) {
+            result = result.append(Component.text(" Display name: ", NamedTextColor.GREEN)).append(name);
+        }
+        return result;
+    }
+
+    /** Explains that a quoted Display Chest name was not terminated. */
+    public Component displayChestUnterminatedName() {
+        return Component.text("Display Chest name is missing its closing quote. Usage: /displaychest [hand] [side] [<material>] [name:\"<text>\"] | /displaychest off",
+                NamedTextColor.RED);
+    }
+
+    /** Explains that a Display Chest command contained more than one material. */
+    public Component displayChestMultipleMaterials() {
+        return Component.text("Choose at most one Display Chest material. Usage: /displaychest [hand] [side] [<material>] [name:\"<text>\"] | /displaychest off",
+                NamedTextColor.RED);
+    }
+
+    /** Explains that the requested Display Chest material is not a usable item. */
+    public Component displayChestUnknownMaterial(String material) {
+        return Component.text("Unknown or non-item Display Chest material: " + material + ".",
+                NamedTextColor.RED);
     }
 
     /** Announces that Display Chest setup mode was disabled. */

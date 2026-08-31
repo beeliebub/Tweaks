@@ -1,6 +1,8 @@
 package me.beeliebub.tweaks.itemadmin;
 
 import me.beeliebub.tweaks.core.Messages;
+import me.beeliebub.tweaks.utils.ColorUtil;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -34,9 +36,11 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -50,6 +54,11 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
     // ~0.51-from-face non-block side sprites (~1.01 from block center).
     private static final double REMOVE_RADIUS_SQUARED = 4.0;
 
+    // A side placement replaces only the display on the clicked chest face. The
+    // radius covers both the embedded block-item offset (0.30) and the non-block
+    // offset (0.51), without removing displays on the opposite or adjacent faces.
+    private static final double SIDE_REPLACE_RADIUS_SQUARED = 0.25;
+
     private final Set<UUID> setupModePlayers = new HashSet<>();
     private final Set<UUID> removalModePlayers = new HashSet<>();
     // 'hand' mode: resolve the player's CURRENT main-hand item at click time,
@@ -58,6 +67,8 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
     // 'side' mode: the next setup click should embed the item flush with the
     // clicked face of the chest instead of floating it above the chest.
     private final Set<UUID> embedSidePlayers = new HashSet<>();
+    private final Map<UUID, Material> pendingMaterial = new HashMap<>();
+    private final Map<UUID, Component> pendingName = new HashMap<>();
     private final NamespacedKey pdcKey;
 
     public DisplayChestSystem(JavaPlugin plugin) {
@@ -73,8 +84,17 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
             return true;
         }
 
-        // 'off' is exclusive — never combines with hand/side.
-        for (String arg : args) {
+        NameParseResult nameResult = consumeNameArguments(args);
+
+        if (!nameResult.valid()) {
+            player.sendMessage(Messages.ITEM_ADMIN.displayChestUnterminatedName());
+            return true;
+        }
+
+        // 'off' is exclusive — never combines with hand/side or any other option.
+        // Inspect the name-stripped arguments so a word such as "off" inside a quoted
+        // display name is not mistaken for the mode switch.
+        for (String arg : nameResult.remaining()) {
             if (arg.equalsIgnoreCase("off")) {
                 boolean enabled = toggleRemovalMode(player.getUniqueId());
                 if (enabled) {
@@ -88,17 +108,39 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
 
         boolean handFlag = false;
         boolean sideFlag = false;
-        for (String arg : args) {
+        List<String> materialTokens = new ArrayList<>();
+        for (String arg : nameResult.remaining()) {
             String lower = arg.toLowerCase(Locale.ROOT);
             if (lower.equals("hand")) handFlag = true;
             else if (lower.equals("side")) sideFlag = true;
+            else materialTokens.add(arg);
+        }
+
+        if (materialTokens.size() > 1) {
+            player.sendMessage(Messages.ITEM_ADMIN.displayChestMultipleMaterials());
+            return true;
+        }
+
+        Material material = null;
+        if (!materialTokens.isEmpty()) {
+            String materialToken = materialTokens.get(0);
+            material = Material.getMaterial(materialToken.toUpperCase(Locale.ROOT));
+            if (material == null || !material.isItem() || material.isAir()) {
+                player.sendMessage(Messages.ITEM_ADMIN.displayChestUnknownMaterial(materialToken));
+                return true;
+            }
         }
 
         boolean enabled = toggleSetupMode(player.getUniqueId());
         if (enabled) {
             setUseCurrentHand(player.getUniqueId(), handFlag);
             setEmbedSide(player.getUniqueId(), sideFlag);
-            player.sendMessage(Messages.ITEM_ADMIN.displayChestSetupEnabled(handFlag, sideFlag));
+            Component parsedName = nameResult.name() == null || nameResult.name().isEmpty()
+                    ? null : ColorUtil.parse(nameResult.name());
+            if (material != null) pendingMaterial.put(player.getUniqueId(), material);
+            if (parsedName != null) pendingName.put(player.getUniqueId(), parsedName);
+            player.sendMessage(Messages.ITEM_ADMIN.displayChestSetupEnabled(handFlag, sideFlag,
+                    material, parsedName));
         } else {
             player.sendMessage(Messages.ITEM_ADMIN.displayChestSetupDisabled());
         }
@@ -111,24 +153,30 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
         if (args.length == 0) return List.of();
         String partial = args[args.length - 1].toLowerCase(Locale.ROOT);
 
+        List<String> options = new ArrayList<>();
         if (args.length == 1) {
-            return filterPrefix(List.of("hand", "side", "off"), partial);
-        }
-
-        if (args.length == 2) {
+            options.addAll(List.of("hand", "side", "off"));
+        } else if (args.length == 2) {
             String first = args[0].toLowerCase(Locale.ROOT);
-            List<String> options = new ArrayList<>();
             if (first.equals("hand")) options.add("side");
             else if (first.equals("side")) options.add("hand");
-            return filterPrefix(options, partial);
+        } else {
+            String first = args[0].toLowerCase(Locale.ROOT);
+            if (!first.equals("hand") && !first.equals("side")) {
+                options.addAll(List.of("hand", "side"));
+            }
         }
-        return List.of();
+        for (Material material : Material.values()) {
+            if (material.isItem() && !material.isAir()) options.add(material.name());
+        }
+        options.add("name:\"");
+        return filterPrefix(options, partial);
     }
 
     private static List<String> filterPrefix(List<String> options, String prefix) {
         List<String> out = new ArrayList<>(options.size());
         for (String opt : options) {
-            if (opt.startsWith(prefix)) out.add(opt);
+            if (opt.toLowerCase(Locale.ROOT).startsWith(prefix)) out.add(opt);
         }
         return out;
     }
@@ -182,12 +230,16 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
             setupModePlayers.remove(playerId);
             useCurrentHandPlayers.remove(playerId);
             embedSidePlayers.remove(playerId);
+            pendingMaterial.remove(playerId);
+            pendingName.remove(playerId);
             return false;
         } else {
             removalModePlayers.remove(playerId);
             setupModePlayers.add(playerId);
             useCurrentHandPlayers.remove(playerId);
             embedSidePlayers.remove(playerId);
+            pendingMaterial.remove(playerId);
+            pendingName.remove(playerId);
             return true;
         }
     }
@@ -220,6 +272,10 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
             return false;
         } else {
             setupModePlayers.remove(playerId);
+            useCurrentHandPlayers.remove(playerId);
+            embedSidePlayers.remove(playerId);
+            pendingMaterial.remove(playerId);
+            pendingName.remove(playerId);
             removalModePlayers.add(playerId);
             return true;
         }
@@ -302,6 +358,7 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
 
         ItemDisplay display = (ItemDisplay) block.getWorld().spawnEntity(center, EntityType.ITEM_DISPLAY);
         display.setItemStack(sourceItem);
+        applyPendingName(display, player);
         display.setBillboard(Display.Billboard.VERTICAL);
 
         // Bake a 180° Y-axis rotation into the model transform so the item's
@@ -346,9 +403,11 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
                 new Quaternionf());
 
         Chunk chunk = block.getChunk();
+        removeDisplaysWithinRadius(chunk, displayLoc, SIDE_REPLACE_RADIUS_SQUARED);
         ItemDisplay display = (ItemDisplay) block.getWorld()
                 .spawnEntity(displayLoc, EntityType.ITEM_DISPLAY);
         display.setItemStack(sourceItem);
+        applyPendingName(display, player);
         display.setBillboard(Display.Billboard.FIXED);
         if (!isBlockItem) {
             display.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.FIXED);
@@ -359,10 +418,15 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
     }
 
     // Source priority for the displayed item:
-    //   1. /displaychest hand mode + clicking player -> player's CURRENT main hand (live).
-    //   2. Explicit handOverride argument (legacy callers).
-    //   3. Slot 0 of the chest.
+    //   1. Explicit material from /displaychest (clicking player).
+    //   2. /displaychest hand mode + clicking player -> player's CURRENT main hand (live).
+    //   3. Explicit handOverride argument (legacy callers).
+    //   4. Slot 0 of the chest.
     private ItemStack resolveSourceItem(Player player, Inventory inventory, ItemStack handOverride) {
+        if (player != null) {
+            Material override = pendingMaterial.get(player.getUniqueId());
+            if (override != null) return new ItemStack(override, 1);
+        }
         if (player != null && useCurrentHandPlayers.contains(player.getUniqueId())) {
             ItemStack live = player.getInventory().getItemInMainHand();
             if (live.getType() != Material.AIR) {
@@ -378,6 +442,58 @@ public class DisplayChestSystem implements CommandExecutor, TabCompleter, Listen
         }
         return cloneSingle(slotZero);
     }
+
+    private void applyPendingName(ItemDisplay display, Player player) {
+        if (player == null) return;
+        Component name = pendingName.get(player.getUniqueId());
+        if (name != null) display.customName(name);
+    }
+
+    private static NameParseResult consumeNameArguments(String[] args) {
+        List<String> remaining = new ArrayList<>();
+        String name = null;
+        boolean foundName = false;
+        for (int i = 0; i < args.length; i++) {
+            String arg = args[i];
+            if (!startsNameArgument(arg)) {
+                remaining.add(arg);
+                continue;
+            }
+            if (foundName) return new NameParseResult(List.of(), null, false);
+            foundName = true;
+
+            String first = arg.substring(NAME_ARGUMENT_PREFIX.length());
+            StringBuilder value = new StringBuilder();
+            boolean closed = false;
+            if (first.endsWith("\"")) {
+                value.append(first, 0, first.length() - 1);
+                closed = true;
+            } else {
+                value.append(first);
+                for (int j = i + 1; j < args.length; j++) {
+                    String next = args[j];
+                    value.append(' ').append(next);
+                    i = j;
+                    if (next.endsWith("\"")) {
+                        value.setLength(value.length() - 1);
+                        closed = true;
+                        break;
+                    }
+                }
+            }
+            if (!closed) return new NameParseResult(List.copyOf(remaining), null, false);
+            name = value.toString();
+        }
+        return new NameParseResult(List.copyOf(remaining), name, true);
+    }
+
+    private static boolean startsNameArgument(String arg) {
+        return arg.regionMatches(true, 0, NAME_ARGUMENT_PREFIX, 0, NAME_ARGUMENT_PREFIX.length());
+    }
+
+    private static final String NAME_ARGUMENT_PREFIX = "name:\"";
+
+    private record NameParseResult(List<String> remaining, String name, boolean valid) {}
 
     private static ItemStack cloneSingle(ItemStack item) {
         ItemStack copy = item.clone();

@@ -204,7 +204,7 @@ public final class ConfigGUI {
 
         ActionButton save = ActionButton.builder(
                         Messages.CONFIG.saveLabel().decoration(TextDecoration.ITALIC, false))
-                .tooltip(Messages.CONFIG.saveTooltip())
+                .tooltip(Messages.CONFIG.saveScalarTooltip(setting.displayName()))
                 .action(DialogAction.customClick(
                         (view, audience) -> {
                             if (audience instanceof Player p && authorized(p)) {
@@ -320,7 +320,7 @@ public final class ConfigGUI {
     private static void openAddEntryDialog(Player player, ConfigValueEditor valueEditor, String categoryKey, ConfigSetting setting) {
         ActionButton add = ActionButton.builder(
                         Messages.CONFIG.saveLabel().decoration(TextDecoration.ITALIC, false))
-                .tooltip(Messages.CONFIG.saveTooltip())
+                .tooltip(Messages.CONFIG.addListEntrySaveTooltip(setting.displayName()))
                 .action(DialogAction.customClick(
                         (view, audience) -> {
                             if (audience instanceof Player p && authorized(p)) {
@@ -379,7 +379,7 @@ public final class ConfigGUI {
     private static void openGridCellEditor(Player player, ConfigValueEditor valueEditor,
                                            String categoryKey, ConfigSetting setting, int index) {
         ActionButton save = ActionButton.builder(Messages.CONFIG.saveLabel().decoration(TextDecoration.ITALIC, false))
-                .tooltip(Messages.CONFIG.saveTooltip())
+                .tooltip(Messages.CONFIG.saveGridCellTooltip(index))
                 .action(DialogAction.customClick((view, audience) -> {
                     if (audience instanceof Player p && authorized(p)) {
                         EditResult result = valueEditor.materialGridCell(setting, String.valueOf(index), view.getText("material"));
@@ -438,7 +438,7 @@ public final class ConfigGUI {
     private static void openMapEntryEditor(Player player, ConfigValueEditor valueEditor, String categoryKey, ConfigSetting setting, String key) {
         ActionButton save = ActionButton.builder(
                         Messages.CONFIG.saveLabel().decoration(TextDecoration.ITALIC, false))
-                .tooltip(Messages.CONFIG.saveTooltip())
+                .tooltip(Messages.CONFIG.saveMapEntryTooltip(setting.displayName(), key))
                 .action(DialogAction.customClick(
                         (view, audience) -> {
                             if (audience instanceof Player p && authorized(p)) {
@@ -474,7 +474,7 @@ public final class ConfigGUI {
     private static void openAddMapEntryDialog(Player player, ConfigValueEditor valueEditor, String categoryKey, ConfigSetting setting) {
         ActionButton add = ActionButton.builder(
                         Messages.CONFIG.saveLabel().decoration(TextDecoration.ITALIC, false))
-                .tooltip(Messages.CONFIG.saveTooltip())
+                .tooltip(Messages.CONFIG.addMapEntrySaveTooltip(setting.displayName()))
                 .action(DialogAction.customClick(
                         (view, audience) -> {
                             if (audience instanceof Player p && authorized(p)) {
@@ -601,7 +601,7 @@ public final class ConfigGUI {
     private static void openEditWorldProfileDialog(Player player, ConfigValueEditor valueEditor, String worldKey) {
         ActionButton save = ActionButton.builder(
                         Messages.CONFIG.saveLabel().decoration(TextDecoration.ITALIC, false))
-                .tooltip(Messages.CONFIG.saveTooltip())
+                .tooltip(Messages.CONFIG.saveWorldProfileTooltip())
                 .action(DialogAction.customClick(
                         (view, audience) -> {
                             if (audience instanceof Player p && authorized(p)) {
@@ -643,7 +643,7 @@ public final class ConfigGUI {
     private static void openAddWorldProfileDialog(Player player, ConfigValueEditor valueEditor) {
         ActionButton add = ActionButton.builder(
                         Messages.CONFIG.saveLabel().decoration(TextDecoration.ITALIC, false))
-                .tooltip(Messages.CONFIG.saveTooltip())
+                .tooltip(Messages.CONFIG.addWorldProfileTooltip())
                 .action(DialogAction.customClick(
                         (view, audience) -> {
                             if (audience instanceof Player p && authorized(p)) {

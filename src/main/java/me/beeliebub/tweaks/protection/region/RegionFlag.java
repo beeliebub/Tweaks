@@ -22,9 +22,13 @@ package me.beeliebub.tweaks.protection.region;
 // Identical structure for BLOCK_PLACE. DENY wins over ALLOW if a material is
 // listed in both — the safer choice for accidental config conflicts.
 //
-// MOB_SPAWNING / INVINCIBILITY:
+// MOB_SPAWNING / MOB_ENTRY / INVINCIBILITY:
 //   * MOB_SPAWNING (boolean) — region admins can set false to suppress
 //     vanilla creature spawning in a region.
+//   * HOSTILE_MOB_ENTRY and PASSIVE_MOB_ENTRY (boolean) — movement into a
+//     region by the corresponding Mob category is checked only when the
+//     entity crosses a block and chunk boundary. Unset rules are permissive,
+//     matching ENTRY's opt-in behavior; explicit targeted rules still apply.
 //   * INVINCIBILITY (boolean) — when true for a player's audience, the
 //     protection listener cancels EntityDamageEvent and FoodLevelChangeEvent
 //     for that player.
@@ -44,6 +48,8 @@ public enum RegionFlag {
     MOB_SPAWNING,
     INVINCIBILITY,
     ENTRY,
+    HOSTILE_MOB_ENTRY,
+    PASSIVE_MOB_ENTRY,
     ALLOW_BLOCK_BREAK,
     DENY_BLOCK_BREAK,
     ALLOW_BLOCK_PLACE,

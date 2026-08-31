@@ -17,7 +17,9 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -27,6 +29,7 @@ import java.util.stream.Collectors;
 public class PermissionCommand implements CommandExecutor, TabCompleter {
     private final PermissionManager manager;
     private final JavaPlugin plugin;
+    private final List<String> externalPermissionSuggestions;
 
     public PermissionCommand(PermissionManager manager) {
         this(null, manager);
@@ -35,6 +38,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
     public PermissionCommand(JavaPlugin plugin, PermissionManager manager) {
         this.plugin = plugin;
         this.manager = manager;
+        this.externalPermissionSuggestions = loadExternalPermissionSuggestions(plugin, manager);
     }
 
     @Override
@@ -89,7 +93,10 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 manager.getGroups().put(name, new PermissionGroup(name));
-                manager.saveGroups();
+                if (!persistGroups(sender)) {
+                    manager.getGroups().remove(name);
+                    return true;
+                }
                 sender.sendMessage(Messages.PERMISSIONS.groupCreated(name));
                 log(sender, LoggingPaths.PERMISSIONS_GROUP, "created group " + name);
             }
@@ -98,9 +105,12 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Messages.PERMISSIONS.defaultGroupCannotBeDeleted());
                     return true;
                 }
+                PermissionManager.StateSnapshot previous = manager.snapshotState();
                 if (manager.deleteGroup(name)) {
-                    manager.saveGroups();
-                    manager.saveUsers();
+                    if (!persistGroups(sender) || !persistUsers(sender)) {
+                        manager.restoreState(previous);
+                        return true;
+                    }
                     manager.refreshAllOnlinePlayers();
                     sender.sendMessage(Messages.PERMISSIONS.groupDeleted(name));
                     log(sender, LoggingPaths.PERMISSIONS_GROUP, "deleted group " + name);
@@ -119,7 +129,10 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 group.addPermission(args[3]);
-                manager.saveGroups();
+                if (!persistGroups(sender)) {
+                    group.removePermission(args[3]);
+                    return true;
+                }
                 manager.refreshAllOnlinePlayers();
                 sender.sendMessage(Messages.PERMISSIONS.groupPermissionAdded(name));
                 log(sender, LoggingPaths.PERMISSIONS_PERMISSION, "granted " + args[3] + " to group " + name);
@@ -135,7 +148,10 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 group.removePermission(args[3]);
-                manager.saveGroups();
+                if (!persistGroups(sender)) {
+                    group.addPermission(args[3]);
+                    return true;
+                }
                 manager.refreshAllOnlinePlayers();
                 sender.sendMessage(Messages.PERMISSIONS.groupPermissionRemoved(name));
                 log(sender, LoggingPaths.PERMISSIONS_PERMISSION, "revoked " + args[3] + " from group " + name);
@@ -155,8 +171,12 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Messages.PERMISSIONS.parentGroupNotFound());
                     return true;
                 }
+                String previousParent = group.getParentName();
                 group.setParentName(parent);
-                manager.saveGroups();
+                if (!persistGroups(sender)) {
+                    group.setParentName(previousParent);
+                    return true;
+                }
                 manager.refreshAllOnlinePlayers();
                 sender.sendMessage(Messages.PERMISSIONS.groupInheritanceSet(name, parent));
                 log(sender, LoggingPaths.PERMISSIONS_GROUP, "set parent of " + name + " to " + parent);
@@ -186,8 +206,12 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Messages.PERMISSIONS.userAddPermissionUsage());
                     return;
                 }
-                manager.getUserPermissions(uuid).addPermission(args[3]);
-                manager.saveUsers();
+                UserPermissions user = manager.getUserPermissions(uuid);
+                user.addPermission(args[3]);
+                if (!persistUsers(sender)) {
+                    user.removePermission(args[3]);
+                    return;
+                }
                 refreshPlayer(uuid);
                 sender.sendMessage(Messages.PERMISSIONS.userPermissionAdded(target.getName()));
                 log(sender, LoggingPaths.PERMISSIONS_PERMISSION, "granted " + args[3] + " to user " + uuid);
@@ -197,8 +221,12 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Messages.PERMISSIONS.userRemovePermissionUsage());
                     return;
                 }
-                manager.getUserPermissions(uuid).removePermission(args[3]);
-                manager.saveUsers();
+                UserPermissions user = manager.getUserPermissions(uuid);
+                user.removePermission(args[3]);
+                if (!persistUsers(sender)) {
+                    user.addPermission(args[3]);
+                    return;
+                }
                 refreshPlayer(uuid);
                 sender.sendMessage(Messages.PERMISSIONS.userPermissionRemoved(target.getName()));
                 log(sender, LoggingPaths.PERMISSIONS_PERMISSION, "revoked " + args[3] + " from user " + uuid);
@@ -214,9 +242,14 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                     return;
                 }
                 UserPermissions u = manager.getUserPermissions(uuid);
+                List<String> previousGroups = new ArrayList<>(u.getGroups());
                 u.getGroups().clear();
                 if (group != null) u.addGroup(group);
-                manager.saveUsers();
+                if (!persistUsers(sender)) {
+                    u.getGroups().clear();
+                    previousGroups.forEach(u::addGroup);
+                    return;
+                }
                 refreshPlayer(uuid);
                 sender.sendMessage(Messages.PERMISSIONS.userGroupSet(target.getName(), group));
                 log(sender, LoggingPaths.PERMISSIONS_USER_GROUPS, "set user " + uuid + " groups to " + group);
@@ -244,6 +277,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
                     } else {
                         plugin.getLogger().log(java.util.logging.Level.WARNING,
                                 "Permission player lookup failed for " + input, error);
+                        sender.sendMessage(Messages.PERMISSIONS.playerLookupFailed(input));
                     }
                     return;
                 }
@@ -278,6 +312,26 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
         Messages.PERMISSIONS.commandUsage().forEach(sender::sendMessage);
     }
 
+    private boolean persistGroups(CommandSender sender) {
+        try {
+            manager.saveGroups();
+            return true;
+        } catch (IllegalStateException error) {
+            sender.sendMessage(Messages.PERMISSIONS.storageFailed());
+            return false;
+        }
+    }
+
+    private boolean persistUsers(CommandSender sender) {
+        try {
+            manager.saveUsers();
+            return true;
+        } catch (IllegalStateException error) {
+            sender.sendMessage(Messages.PERMISSIONS.storageFailed());
+            return false;
+        }
+    }
+
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (!sender.hasPermission(Permissions.ADMIN_PERMISSIONS)) return Collections.emptyList();
@@ -296,7 +350,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
             if (args.length == 4) {
                 String action = args[2].toLowerCase();
                 if (action.equals("addperm") || action.equals("delperm")) {
-                    return filter(Permissions.getAllPermissions(), args[3]);
+                    return filter(permissionSuggestions(), args[3]);
                 }
                 if (action.equals("inherited-from")) {
                     List<String> groups = new ArrayList<>(manager.getGroups().keySet());
@@ -316,7 +370,7 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
             if (args.length == 4) {
                 String action = args[2].toLowerCase();
                 if (action.equals("addperm") || action.equals("delperm")) {
-                    return filter(Permissions.getAllPermissions(), args[3]);
+                    return filter(permissionSuggestions(), args[3]);
                 }
                 if (action.equals("setgroup")) {
                     List<String> groups = new ArrayList<>(manager.getGroups().keySet());
@@ -332,5 +386,37 @@ public class PermissionCommand implements CommandExecutor, TabCompleter {
     private List<String> filter(List<String> list, String prefix) {
         String p = prefix.toLowerCase();
         return list.stream().filter(s -> s.toLowerCase().startsWith(p)).collect(Collectors.toList());
+    }
+
+    private List<String> permissionSuggestions() {
+        Set<String> permissions = new LinkedHashSet<>(Permissions.getAllPermissions());
+        permissions.addAll(externalPermissionSuggestions);
+        return new ArrayList<>(permissions);
+    }
+
+    /**
+     * Tab completion is called once per keystroke, so the administrator-owned catalog is read
+     * once when this command is wired instead of doing filesystem I/O on every completion.
+     * Permission dialogs deliberately keep their fresh-on-open scan contract.
+     */
+    private static List<String> loadExternalPermissionSuggestions(JavaPlugin plugin,
+                                                                    PermissionManager manager) {
+        JavaPlugin catalogPlugin = plugin;
+        if (catalogPlugin == null && manager != null) {
+            catalogPlugin = manager.getPlugin();
+        }
+        if (catalogPlugin == null) return List.of();
+
+        Set<String> permissions = new LinkedHashSet<>();
+        try {
+            ExternalPermissionCatalog catalog = new ExternalPermissionCatalog(catalogPlugin);
+            for (ExternalPermissionCatalog.ExternalCategory category : catalog.scan()) {
+                category.nodes().forEach(node -> permissions.add(node.node()));
+            }
+        } catch (RuntimeException error) {
+            catalogPlugin.getLogger().log(java.util.logging.Level.WARNING,
+                    "Could not load external permissions for tab completion", error);
+        }
+        return List.copyOf(permissions);
     }
 }

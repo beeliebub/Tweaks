@@ -15,19 +15,6 @@ public final class LotteryDiscordMessages {
         return "[Lottery] " + escapeMarkdown(name) + " won " + money(amount);
     }
 
-    public String notEnoughEntries() {
-        return "[Lottery] Not enough entries to draw";
-    }
-
-    public String noGrowth() {
-        return "[Lottery] No House growth since the last draw";
-    }
-
-    public String paymentAbandoned(int entrantCount) {
-        return "[Lottery] Lottery draw abandoned: no money moved and its " + entrantCount
-                + " entries were kept. It is safe to draw again.";
-    }
-
     private static String money(long amount) {
         return "$" + NumberFormat.getIntegerInstance(Locale.US).format(amount);
     }

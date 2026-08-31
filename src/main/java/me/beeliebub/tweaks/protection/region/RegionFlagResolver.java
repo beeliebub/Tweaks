@@ -42,11 +42,13 @@ final class RegionFlagResolver {
                 if (!resolved.get()) return false;
                 continue;
             }
-            // ENTRY is opt-in: a claimed region with no effective ENTRY rule
-            // must not become an accidental no-entry zone merely because it
-            // is protected. Explicit matching ENTRY rules still use normal
-            // targeted resolution above.
-            if (flag == RegionFlag.ENTRY) continue;
+            // Entry movement flags are opt-in: a claimed region with no
+            // effective rule must not become an accidental no-entry zone
+            // merely because it is protected. Explicit matching rules still
+            // use normal targeted resolution above.
+            if (flag == RegionFlag.ENTRY
+                    || flag == RegionFlag.HOSTILE_MOB_ENTRY
+                    || flag == RegionFlag.PASSIVE_MOB_ENTRY) continue;
             if (ProtectionManager.isGlobal(leaf)) continue;
             if (actor != null && leaf.isMember(actor, groups)) continue;
             return false;
